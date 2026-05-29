@@ -5,12 +5,12 @@ x-gpu-worker-common: &gpu-worker-common
   restart: unless-stopped
   environment:
     PROJECTS_ROOT: /workspace/projects
-    LOG_LEVEL: INFO
-    MAX_TENSOR_ITEMS: "12582912"
-    MAX_LOADED_MODELS: "0"
-    GPU_QUEUE_LIMIT: "1"
-    WARMUP_MODELS: ""
-    API_TOKEN: ""
+    LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    MAX_TENSOR_ITEMS: ${MAX_TENSOR_ITEMS:-12582912}
+    MAX_LOADED_MODELS: ${MAX_LOADED_MODELS:-0}
+    GPU_QUEUE_LIMIT: ${GPU_QUEUE_LIMIT:-1}
+    WARMUP_MODELS: ${WARMUP_MODELS:-}
+    API_TOKEN: ${API_TOKEN:-}
   volumes:
     - gpu-share-volume:/workspace/projects:ro
   networks:
@@ -31,20 +31,20 @@ services:
       - "127.0.0.1:9001:8000"
     environment:
       PROJECTS_ROOT: /workspace/projects
-      LOG_LEVEL: INFO
-      MAX_TENSOR_ITEMS: "12582912"
-      MAX_LOADED_MODELS: "0"
-      GPU_QUEUE_LIMIT: "1"
-      WARMUP_MODELS: ""
-      API_TOKEN: ""
-      NVIDIA_VISIBLE_DEVICES: "0"
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      MAX_TENSOR_ITEMS: ${MAX_TENSOR_ITEMS:-12582912}
+      MAX_LOADED_MODELS: ${MAX_LOADED_MODELS:-0}
+      GPU_QUEUE_LIMIT: ${GPU_QUEUE_LIMIT:-1}
+      WARMUP_MODELS: ${WARMUP_MODELS:-}
+      API_TOKEN: ${API_TOKEN:-}
+      NVIDIA_VISIBLE_DEVICES: ${GPU_WORKER_0_DEVICE:-0}
       NVIDIA_DRIVER_CAPABILITIES: "compute,utility"
     deploy:
       resources:
         reservations:
           devices:
             - driver: nvidia
-              device_ids: ["0"]
+              device_ids: ["${GPU_WORKER_0_DEVICE:-0}"]
               capabilities: ["gpu"]
 
   gpu-worker-1:
@@ -55,20 +55,20 @@ services:
       - "127.0.0.1:9002:8000"
     environment:
       PROJECTS_ROOT: /workspace/projects
-      LOG_LEVEL: INFO
-      MAX_TENSOR_ITEMS: "12582912"
-      MAX_LOADED_MODELS: "0"
-      GPU_QUEUE_LIMIT: "1"
-      WARMUP_MODELS: ""
-      API_TOKEN: ""
-      NVIDIA_VISIBLE_DEVICES: "1"
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      MAX_TENSOR_ITEMS: ${MAX_TENSOR_ITEMS:-12582912}
+      MAX_LOADED_MODELS: ${MAX_LOADED_MODELS:-0}
+      GPU_QUEUE_LIMIT: ${GPU_QUEUE_LIMIT:-1}
+      WARMUP_MODELS: ${WARMUP_MODELS:-}
+      API_TOKEN: ${API_TOKEN:-}
+      NVIDIA_VISIBLE_DEVICES: ${GPU_WORKER_1_DEVICE:-1}
       NVIDIA_DRIVER_CAPABILITIES: "compute,utility"
     deploy:
       resources:
         reservations:
           devices:
             - driver: nvidia
-              device_ids: ["1"]
+              device_ids: ["${GPU_WORKER_1_DEVICE:-1}"]
               capabilities: ["gpu"]
 
 networks:
