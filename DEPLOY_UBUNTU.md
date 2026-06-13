@@ -333,7 +333,39 @@ docker compose up -d --build
 
 构建镜像时会访问 Docker Hub、Ubuntu apt 源、deadsnakes Python 3.12 PPA 和 Python 包镜像源。Dockerfile 已将 Ubuntu apt 源切到清华镜像，并使用 `python3.12 -m ensurepip` 初始化 pip，避免访问 `bootstrap.pypa.io`。服务器如果不能访问外网，建议在能联网的机器上构建镜像后推送到内网镜像仓库。
 
-查看容器：
+### 8.1 离线/无网部署镜像搬运
+
+如果部署服务器处于完全无互联网的环境（如内网物理机或隔离专网），无法执行在线 build。可以采用“有网构建 - 离线搬运”的方案：
+
+1. **在有网的开发机上构建镜像**：
+   ```bash
+   docker compose build
+   ```
+   构建完成后，镜像会被打上 `portrait-hub:latest` 的标签。
+
+2. **导出镜像为归档文件**：
+   ```bash
+   docker save -o portrait-hub-latest.tar portrait-hub:latest
+   ```
+
+3. **搬运至无网服务器**：
+   通过移动硬盘或内网中转将 `portrait-hub-latest.tar` 归档文件以及项目代码拷贝到目标无网服务器。
+
+4. **在无网服务器上导入镜像**：
+   ```bash
+   docker load -i portrait-hub-latest.tar
+   ```
+
+5. **在无网服务器上直接启动服务**：
+   在项目目录内执行：
+   ```bash
+   docker compose up -d
+   ```
+   Docker Compose 会自动匹配并拉起本地已导入的 `portrait-hub:latest` 镜像，无需任何联网请求。
+
+> **注意事项**：如果在无网环境下需要接入局域网内部视频流（如私有 RTSP 流地址），请务必在 `.env` 中将 `ALLOW_PRIVATE_STREAM_HOSTS` 设置为 `true`。否则，服务默认将拦截私网/局域网 IP 以防范 SSRF 安全漏洞。
+
+### 8.2 查看容器：
 
 ```bash
 docker compose ps

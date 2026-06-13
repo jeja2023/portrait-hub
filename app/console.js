@@ -53,6 +53,24 @@ function setView(view) {
   document.querySelectorAll("[data-nav]").forEach((item) => item.setAttribute("aria-pressed", String(item.dataset.nav === view)));
 }
 
+// 事件处理器包装函数，统一处理 loading 状态及错误捕获展示
+function wrapHandler(fn) {
+  return async (...args) => {
+    try {
+      setStatus("处理中...");
+      await fn(...args);
+      setStatus("就绪");
+    } catch (error) {
+      let msg = error.message || String(error);
+      try {
+        const parsed = JSON.parse(msg);
+        msg = parsed.detail || parsed.message || msg;
+      } catch {}
+      setStatus(msg, true);
+    }
+  };
+}
+
 async function refreshModels() {
   renderJson("#models-json", await api("/v1/models"));
 }
@@ -71,13 +89,7 @@ async function refreshAdmin() {
 }
 
 async function refreshAll() {
-  try {
-    setStatus("Refreshing");
-    await Promise.allSettled([refreshModels(), refreshGallery(), refreshStreams(), refreshAdmin()]);
-    setStatus("Ready");
-  } catch (error) {
-    setStatus(String(error.message || error), true);
-  }
+  await Promise.allSettled([refreshModels(), refreshGallery(), refreshStreams(), refreshAdmin()]);
 }
 
 function saveAuth() {
@@ -87,84 +99,141 @@ function saveAuth() {
   localStorage.setItem("portraitHubTenant", state.tenantId);
   localStorage.setItem("portraitHubApiKey", state.apiKey);
   localStorage.setItem("portraitHubBearer", state.bearer);
-  setStatus("Saved");
+  setStatus("保存成功");
 }
 
 function modelId() {
-  return encodeURIComponent(qs("#model-id-input").value.trim());
+  const val = qs("#model-id-input").value.trim();
+  if (!val) {
+    setStatus("请输入模型ID", true);
+    return null;
+  }
+  return encodeURIComponent(val);
 }
 
 function selectedJobId() {
-  return encodeURIComponent(qs("#job-id-input").value.trim());
+  const val = qs("#job-id-input").value.trim();
+  if (!val) {
+    setStatus("请输入任务ID", true);
+    return null;
+  }
+  return encodeURIComponent(val);
 }
 
 function selectedStreamId() {
-  return encodeURIComponent(qs("#stream-id-input").value.trim());
+  const val = qs("#stream-id-input").value.trim();
+  if (!val) {
+    setStatus("请输入视频流ID", true);
+    return null;
+  }
+  return encodeURIComponent(val);
 }
 
 function setupEvents() {
   document.querySelectorAll("[data-nav]").forEach((button) => button.addEventListener("click", () => setView(button.dataset.nav)));
   qs("#save-auth-button").addEventListener("click", saveAuth);
-  qs("#refresh-button").addEventListener("click", refreshAll);
-  qs("#gallery-refresh-button").addEventListener("click", refreshGallery);
-  qs("#streams-refresh-button").addEventListener("click", refreshStreams);
-  qs("#admin-refresh-button").addEventListener("click", refreshAdmin);
+  qs("#refresh-button").addEventListener("click", wrapHandler(refreshAll));
+  qs("#gallery-refresh-button").addEventListener("click", wrapHandler(refreshGallery));
+  qs("#streams-refresh-button").addEventListener("click", wrapHandler(refreshStreams));
+  qs("#admin-refresh-button").addEventListener("click", wrapHandler(refreshAdmin));
 
-  qs("#load-model-button").addEventListener("click", async () => renderJson("#models-json", await api(`/v1/models/${modelId()}/load`, { method: "POST" })));
-  qs("#unload-model-button").addEventListener("click", async () => renderJson("#models-json", await api(`/v1/models/${modelId()}/unload`, { method: "POST" })));
+  qs("#load-model-button").addEventListener("click", wrapHandler(async () => {
+    const id = modelId();
+    if (!id) return;
+    renderJson("#models-json", await api(`/v1/models/${id}/load`, { method: "POST" }));
+  }));
+  qs("#unload-model-button").addEventListener("click", wrapHandler(async () => {
+    const id = modelId();
+    if (!id) return;
+    renderJson("#models-json", await api(`/v1/models/${id}/unload`, { method: "POST" }));
+  }));
 
-  qs("#enroll-form").addEventListener("submit", async (event) => {
+  qs("#enroll-form").addEventListener("submit", wrapHandler(async (event) => {
     event.preventDefault();
     const body = new FormData(event.target);
     renderJson("#gallery-json", await api("/v1/gallery/enroll", { method: "POST", body }));
-  });
+  }));
 
-  qs("#search-form").addEventListener("submit", async (event) => {
+  qs("#search-form").addEventListener("submit", wrapHandler(async (event) => {
     event.preventDefault();
     const body = new FormData(event.target);
     renderJson("#gallery-json", await api("/v1/gallery/search", { method: "POST", body }));
-  });
+  }));
 
-  qs("#job-form").addEventListener("submit", async (event) => {
+  qs("#job-form").addEventListener("submit", wrapHandler(async (event) => {
     event.preventDefault();
     const body = new FormData(event.target);
     renderJson("#jobs-json", await api("/v1/jobs/video", { method: "POST", body }));
-  });
-  qs("#job-get-button").addEventListener("click", async () => renderJson("#jobs-json", await api(`/v1/jobs/${selectedJobId()}`)));
-  qs("#job-result-button").addEventListener("click", async () => renderJson("#jobs-json", await api(`/v1/jobs/${selectedJobId()}/result`)));
-  qs("#job-cancel-button").addEventListener("click", async () => renderJson("#jobs-json", await api(`/v1/jobs/${selectedJobId()}/cancel`, { method: "POST" })));
+  }));
+  qs("#job-get-button").addEventListener("click", wrapHandler(async () => {
+    const id = selectedJobId();
+    if (!id) return;
+    renderJson("#jobs-json", await api(`/v1/jobs/${id}`));
+  }));
+  qs("#job-result-button").addEventListener("click", wrapHandler(async () => {
+    const id = selectedJobId();
+    if (!id) return;
+    renderJson("#jobs-json", await api(`/v1/jobs/${id}/result`));
+  }));
+  qs("#job-cancel-button").addEventListener("click", wrapHandler(async () => {
+    const id = selectedJobId();
+    if (!id) return;
+    renderJson("#jobs-json", await api(`/v1/jobs/${id}/cancel`, { method: "POST" }));
+  }));
 
-  qs("#stream-form").addEventListener("submit", async (event) => {
+  qs("#stream-form").addEventListener("submit", wrapHandler(async (event) => {
     event.preventDefault();
+    const url = qs("#stream-url-input").value.trim();
+    if (!url) {
+      setStatus("请输入视频流地址", true);
+      return;
+    }
     const payload = {
-      stream_url: qs("#stream-url-input").value.trim(),
+      stream_url: url,
       name: qs("#stream-name-input").value.trim() || null,
       settings: {},
       metadata: {},
     };
     renderJson("#streams-json", await api("/v1/streams", { method: "POST", json: payload }));
-  });
-  qs("#stream-start-button").addEventListener("click", async () => renderJson("#streams-json", await api(`/v1/streams/${selectedStreamId()}/start`, { method: "POST" })));
-  qs("#stream-stop-button").addEventListener("click", async () => renderJson("#streams-json", await api(`/v1/streams/${selectedStreamId()}/stop`, { method: "POST" })));
-  qs("#stream-events-button").addEventListener("click", async () => renderJson("#streams-json", await api(`/v1/streams/${selectedStreamId()}/events`)));
+  }));
+  qs("#stream-start-button").addEventListener("click", wrapHandler(async () => {
+    const id = selectedStreamId();
+    if (!id) return;
+    renderJson("#streams-json", await api(`/v1/streams/${id}/start`, { method: "POST" }));
+  }));
+  qs("#stream-stop-button").addEventListener("click", wrapHandler(async () => {
+    const id = selectedStreamId();
+    if (!id) return;
+    renderJson("#streams-json", await api(`/v1/streams/${id}/stop`, { method: "POST" }));
+  }));
+  qs("#stream-events-button").addEventListener("click", wrapHandler(async () => {
+    const id = selectedStreamId();
+    if (!id) return;
+    renderJson("#streams-json", await api(`/v1/streams/${id}/events`));
+  }));
 
-  qs("#threshold-form").addEventListener("submit", async (event) => {
+  qs("#threshold-form").addEventListener("submit", wrapHandler(async (event) => {
     event.preventDefault();
+    const profile = qs("#threshold-profile-input").value.trim();
+    if (!profile) {
+      setStatus("请输入阈值方案类型", true);
+      return;
+    }
     const payload = {};
     const body = qs("#threshold-body-input").value;
     const face = qs("#threshold-face-input").value;
     if (body !== "") payload.body = Number(body);
     if (face !== "") payload.face = Number(face);
-    renderJson("#admin-json", await api(`/v1/thresholds/${encodeURIComponent(qs("#threshold-profile-input").value.trim())}`, { method: "PUT", json: payload }));
-  });
+    renderJson("#admin-json", await api(`/v1/thresholds/${encodeURIComponent(profile)}`, { method: "PUT", json: payload }));
+  }));
 
-  qs("#retention-form").addEventListener("submit", async (event) => {
+  qs("#retention-form").addEventListener("submit", wrapHandler(async (event) => {
     event.preventDefault();
     renderJson("#admin-json", await api("/v1/admin/retention/cleanup", {
       method: "POST",
       json: { retention_days: Number(qs("#retention-days-input").value), confirm: qs("#retention-confirm-input").value },
     }));
-  });
+  }));
 }
 
 function init() {
@@ -173,7 +242,7 @@ function init() {
   qs("#bearer-input").value = state.bearer;
   setupEvents();
   setView(state.view);
-  refreshAll();
+  wrapHandler(refreshAll)();
 }
 
 init();

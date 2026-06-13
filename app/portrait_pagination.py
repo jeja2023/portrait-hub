@@ -32,8 +32,8 @@ def bounded_limit(value: int | None, *, default: int, max_limit: int, field_name
         limit = int(raw)
     except (TypeError, ValueError) as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"{field_name} must be an integer") from exc
-    if limit < 1:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"{field_name} must be >= 1")
+    if limit < 0:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"{field_name} must be >= 0")
     if limit > max_limit:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
