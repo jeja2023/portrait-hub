@@ -41,6 +41,8 @@ nvidia-smi
 
 能看到 GPU 列表、驱动版本、显存信息，就可以继续。
 
+> 镜像基于 CUDA 12.4（`onnxruntime-gpu==1.20.1`，需 cuDNN 9）。宿主机 NVIDIA 驱动需满足 CUDA 12.4 的最低版本要求（Linux ≥ 550.54.14）。驱动过低会导致容器内 `CUDAExecutionProvider` 加载失败而静默回退 CPU。`nvidia-smi` 右上角的 `CUDA Version` 表示驱动支持的最高 CUDA 版本，需 ≥ 12.4。
+
 如果没有驱动，可以用 Ubuntu 推荐驱动安装：
 
 ```bash
@@ -129,7 +131,7 @@ sudo systemctl restart docker
 验证 GPU 容器：
 
 ```bash
-docker run --rm --gpus all nvidia/cuda:11.8.0-base-ubuntu22.04 nvidia-smi
+docker run --rm --gpus all nvidia/cuda:12.4.1-base-ubuntu22.04 nvidia-smi
 ```
 
 能在容器内看到 GPU 列表，说明 Docker GPU 环境正常。
@@ -712,7 +714,7 @@ python -c "import onnxruntime as ort; print(ort.get_available_providers())"
 
 ```bash
 nvidia-smi
-docker run --rm --gpus all nvidia/cuda:11.8.0-base-ubuntu22.04 nvidia-smi
+docker run --rm --gpus all nvidia/cuda:12.4.1-base-ubuntu22.04 nvidia-smi
 docker compose logs --tail=100 gpu-worker-0
 ```
 

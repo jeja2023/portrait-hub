@@ -21,7 +21,7 @@ from app.settings import (
 )
 
 try:  # pragma: no cover - optional production dependency
-    import boto3
+    import boto3  # type: ignore[import-not-found]  # optional, from requirements-prod-optional.txt
 except Exception:  # pragma: no cover - exercised when dependency is absent
     boto3 = None
 

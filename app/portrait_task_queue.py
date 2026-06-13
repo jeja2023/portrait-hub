@@ -9,7 +9,7 @@ from app.portrait_state import append_jsonl, handle_state_write_error
 from app.settings import REDIS_URL, TASK_QUEUE_BACKEND, TASK_QUEUE_STATE_PATH
 
 try:  # pragma: no cover - optional production dependency
-    import redis
+    import redis  # type: ignore[import-not-found]  # optional, from requirements-prod-optional.txt
 except Exception:  # pragma: no cover - exercised when dependency is absent
     redis = None
 

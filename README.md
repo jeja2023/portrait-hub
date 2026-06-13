@@ -114,7 +114,7 @@ v1 已加入的生产加固：
 
 Ubuntu 服务器完整部署步骤见 [DEPLOY_UBUNTU.md](DEPLOY_UBUNTU.md)。
 
-运行镜像基于 `nvidia/cuda:11.8.0-cudnn8-runtime-ubuntu22.04`，容器内使用 Python 3.12。当前依赖固定为 `onnxruntime-gpu==1.18.0`，需要 CUDA 11.x 运行库。
+运行镜像基于 `nvidia/cuda:12.4.1-cudnn-runtime-ubuntu22.04`，容器内使用 Python 3.12。当前依赖固定为 `onnxruntime-gpu==1.20.1`，需要 CUDA 12.x 运行库与 cuDNN 9（CUDA 12 的镜像 tag 使用不带数字的 `-cudnn-`，内置 cuDNN 9）。宿主机 NVIDIA 驱动需满足 CUDA 12.4 的最低版本要求（Linux ≥ 550.54.14）。
 
 ## 目录结构
 
@@ -174,7 +174,7 @@ gpu-services/
 - Docker 能运行 GPU 容器，例如：
 
 ```bash
-docker run --rm --gpus all nvidia/cuda:11.8.0-base-ubuntu22.04 nvidia-smi
+docker run --rm --gpus all nvidia/cuda:12.4.1-base-ubuntu22.04 nvidia-smi
 ```
 
 ## 首次部署

@@ -11,8 +11,8 @@ from app.portrait_response import HEALTH_CHECK_FAILED, exception_log_summary
 from app.settings import POSTGRES_CONNECT_TIMEOUT_SECONDS, POSTGRES_DSN
 
 try:  # pragma: no cover - optional production dependency
-    import psycopg
-    from psycopg.rows import dict_row
+    import psycopg  # type: ignore[import-not-found]  # optional, from requirements-prod-optional.txt
+    from psycopg.rows import dict_row  # type: ignore[import-not-found]
 except Exception:  # pragma: no cover - exercised when dependency is absent
     psycopg = None
     dict_row = None

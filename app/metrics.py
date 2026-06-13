@@ -73,7 +73,7 @@ def observe_histogram(metric: str, value: float) -> None:
 
 def gpu_memory_metrics() -> list[dict[str, int]]:
     try:  # pragma: no cover - requires an NVIDIA runtime
-        import pynvml
+        import pynvml  # type: ignore[import-not-found]  # optional, from nvidia-ml-py (requirements-prod-optional.txt)
     except Exception:
         return []
     try:  # pragma: no cover - requires an NVIDIA runtime
