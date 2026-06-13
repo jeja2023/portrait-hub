@@ -7,8 +7,26 @@ from app.inference_reid import infer_reid_images
 from app.metrics import observe
 from app.model_package import get_model_path
 from app.model_refs import cache_key
+from app.portrait_tracking import associate_person_tracks
 from app.runtime import get_or_load_model, touch_model
-from app.vision import crop_person
+from app.vision import crop_person, person_crop_quality
+
+
+def merge_person_quality(person: dict[str, Any], crop_quality: dict[str, Any]) -> None:
+    existing = person.get("quality") if isinstance(person.get("quality"), dict) else {}
+    detection_score = max(0.0, min(1.0, float(person.get("score", 0.0))))
+    crop_score = max(0.0, min(1.0, float(crop_quality.get("score", 0.0))))
+    existing_score = max(0.0, min(1.0, float(existing.get("score", detection_score))))
+    fused_score = crop_score * 0.58 + existing_score * 0.22 + detection_score * 0.20
+    person["crop_quality"] = crop_quality
+    person["quality"] = {
+        **existing,
+        "score": round(fused_score, 6),
+        "crop_score": round(crop_score, 6),
+        "detection_score": round(detection_score, 6),
+        "source": "crop_detection_fusion",
+        "usable": bool(crop_quality.get("usable", False)),
+    }
 
 
 async def infer_tracks_for_images(
@@ -50,6 +68,8 @@ async def infer_tracks_for_images(
     for frame in frames:
         image = images[frame["frame_index"]]
         for person_index, person in enumerate(frame["persons"]):
+            crop_quality = person_crop_quality(image, person["box"])
+            merge_person_quality(person, crop_quality)
             crop = crop_person(image, person["box"])
             if crop is not None:
                 crops.append(crop)
@@ -63,8 +83,10 @@ async def infer_tracks_for_images(
             person = frames[frame_index]["persons"][person_index]
             person["embedding_dim"] = int(embeddings.shape[1])
             person["embedding_index"] = index
+            tracking_embedding = [round(float(value), 8) for value in embeddings[index].tolist()]
+            person["_tracking_embedding"] = tracking_embedding
             if include_embeddings:
-                person["embedding"] = [round(float(value), 8) for value in embeddings[index].tolist()]
+                person["embedding"] = tracking_embedding
     else:
         embedding_meta = {
             "input_shape": [0],
@@ -79,6 +101,7 @@ async def infer_tracks_for_images(
             },
         }
 
+    tracking_meta = associate_person_tracks(frames, include_template_embeddings=include_embeddings)
     person_count = sum(frame["person_count"] for frame in frames)
     await touch_model(detector_key, detector_bundle)
     await touch_model(reid_key, reid_bundle)
@@ -97,6 +120,9 @@ async def infer_tracks_for_images(
         "detector_meta": detector_meta,
         "embedding_meta": embedding_meta,
         "frames": frames,
+        "tracks": tracking_meta["tracks"],
+        "track_count": tracking_meta["track_count"],
+        "tracker": {key: value for key, value in tracking_meta.items() if key != "tracks"},
         "person_count": person_count,
         "embedding_count": embedding_count,
     }

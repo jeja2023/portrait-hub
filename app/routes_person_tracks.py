@@ -7,19 +7,21 @@ import onnxruntime as ort
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, Response, UploadFile, status
 
 from app.core import *
+from app.portrait_auth import permission_dependency
+from app.portrait_response import exception_log_summary, raise_internal_error
 from app.settings import APP_VERSION
 
 
 router = APIRouter()
 
 
-@router.post("/infer/person-tracks", dependencies=[Depends(require_api_token)])
+@router.post("/infer/person-tracks", dependencies=[Depends(require_api_token), Depends(permission_dependency("infer"))])
 async def infer_person_tracks(
     request: Request,
     files: list[UploadFile] = File(...),
-    detector_project_name: str = Form("cross_camera_tracking"),
+    detector_project_name: str = Form("portrait_hub"),
     detector_model_name: str = Form("yolov8n.onnx"),
-    reid_project_name: str = Form("cross_camera_tracking"),
+    reid_project_name: str = Form("portrait_hub"),
     reid_model_name: str = Form("osnet_ibn_x1_0.onnx"),
     confidence: float = Form(0.25),
     iou: float = Form(0.45),
@@ -30,13 +32,12 @@ async def infer_person_tracks(
     observe("tracks_requests_total")
     total_start = now()
 
-    try:
-        detector_project_name = validate_path_name(detector_project_name)
-        detector_model_name = validate_path_name(detector_model_name)
-        reid_project_name = validate_path_name(reid_project_name)
-        reid_model_name = validate_path_name(reid_model_name)
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    detector_project_name, detector_model_name, reid_project_name, reid_model_name = validate_model_reference_parts(
+        detector_project_name,
+        detector_model_name,
+        reid_project_name,
+        reid_model_name,
+    )
 
     if not files:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="at least one image file is required")
@@ -93,11 +94,8 @@ async def infer_person_tracks(
         raise
     except Exception as exc:
         observe("tracks_errors_total")
-        logger.exception("person track inference failed")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"person track inference runtime error: {exc}",
-        ) from exc
+        logger.warning("person track inference failed: request_id=%s error=%s", request_id, exception_log_summary(exc))
+        raise_internal_error(request_id, "person track inference runtime error")
 
     return {
         "status": "success",
@@ -129,6 +127,9 @@ async def infer_person_tracks(
             "embedding_count": result["embedding_count"],
         },
         "frames": result["frames"],
+        "tracks": result["tracks"],
+        "track_count": result["track_count"],
+        "tracker": result["tracker"],
         "frame_count": len(result["frames"]),
         "person_count": result["person_count"],
         "embedding_count": result["embedding_count"],

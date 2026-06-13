@@ -60,7 +60,6 @@ async def infer_person_frames(
         frames.append(
             {
                 "frame_index": index,
-                "filename": filenames[index],
                 "width": meta["original_width"],
                 "height": meta["original_height"],
                 "persons": persons,
@@ -135,7 +134,6 @@ async def infer_detection_images(
         frames.append(
             {
                 "image_index": index,
-                "filename": filenames[index],
                 "width": meta["original_width"],
                 "height": meta["original_height"],
                 "detections": detections,

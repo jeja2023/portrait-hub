@@ -49,7 +49,8 @@ def yolo_detections(
         class_ids = np.argmax(class_scores, axis=1)
         scores = objectness * class_scores[np.arange(class_scores.shape[0]), class_ids]
 
-    mask = scores >= confidence_threshold
+    finite_mask = np.isfinite(boxes_xywh).all(axis=1) & np.isfinite(scores)
+    mask = finite_mask & (scores >= confidence_threshold)
     if class_filter_ids is not None:
         mask = mask & np.isin(class_ids, list(class_filter_ids))
     if not np.any(mask):
@@ -58,6 +59,14 @@ def yolo_detections(
     boxes = restore_boxes(xywh_to_xyxy(boxes_xywh[mask]), meta)
     scores = scores[mask]
     class_ids = class_ids[mask]
+    widths = boxes[:, 2] - boxes[:, 0]
+    heights = boxes[:, 3] - boxes[:, 1]
+    valid_boxes = np.isfinite(boxes).all(axis=1) & (widths >= 1.0) & (heights >= 1.0)
+    if not np.any(valid_boxes):
+        return []
+    boxes = boxes[valid_boxes]
+    scores = scores[valid_boxes]
+    class_ids = class_ids[valid_boxes]
     keep = nms(boxes, scores, iou_threshold)[:max_detections]
 
     detections: list[dict[str, Any]] = []

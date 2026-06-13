@@ -53,6 +53,13 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def validate_model_key_part(value: str, key: str, field: str, result: CheckResult) -> bool:
+    if value.strip() != value or value in {".", ".."} or "/" in value or "\\" in value:
+        result.error(f"model key {field} must not contain path separators, whitespace padding, or relative path segments: {key}")
+        return False
+    return True
+
+
 def split_model_key(key: str, result: CheckResult) -> tuple[str, str] | None:
     if "/" not in key:
         result.error(f"model key must be project/model.onnx: {key}")
@@ -61,11 +68,9 @@ def split_model_key(key: str, result: CheckResult) -> tuple[str, str] | None:
     if not project or not model:
         result.error(f"model key must include project and model name: {key}")
         return None
-    if any(part in {".", ".."} for part in Path(project).parts + Path(model).parts):
-        result.error(f"model key must not contain relative path segments: {key}")
+    if not validate_model_key_part(project, key, "project", result):
         return None
-    if Path(project).is_absolute() or Path(model).is_absolute():
-        result.error(f"model key must be relative: {key}")
+    if not validate_model_key_part(model, key, "model", result):
         return None
     return project, model
 
@@ -80,31 +85,86 @@ def safe_sidecar(model_path: Path, relative_path: str, result: CheckResult) -> P
     return sidecar
 
 
-def alias_target(alias_name: str, alias_config: Any, result: CheckResult) -> str | None:
+def model_artifact_path(key: str, config: dict[str, Any], models_root: Path, project: str, model: str, result: CheckResult) -> Path | None:
+    artifact = section(config, "artifact")
+    raw_path = artifact.get("path")
+    if isinstance(raw_path, str) and raw_path.strip():
+        configured_path = Path(raw_path.strip())
+        if configured_path.is_absolute():
+            result.error(f"{key}: artifact.path must be relative to models root")
+            return None
+        model_path = (models_root / configured_path).resolve()
+    else:
+        model_path = (models_root / project / model).resolve()
+    try:
+        model_path.relative_to(models_root.resolve())
+    except ValueError:
+        result.error(f"{key}: model path escapes models root")
+        return None
+    return model_path
+
+
+def alias_weight(alias_name: str, raw_weight: Any, result: CheckResult) -> int | None:
+    try:
+        weight = int(raw_weight or 0)
+    except (TypeError, ValueError):
+        result.error(f"alias rollout weight must be an integer: {alias_name}")
+        return None
+    if weight < 0:
+        result.error(f"alias rollout weight must be >= 0: {alias_name}")
+        return None
+    return weight
+
+
+def alias_targets(alias_name: str, alias_config: Any, result: CheckResult) -> list[str]:
+    def validated_target(target: str) -> str | None:
+        if not target:
+            return None
+        return target if split_model_key(target, result) is not None else None
+
     if isinstance(alias_config, str):
-        return alias_config.strip()
+        target = validated_target(alias_config)
+        return [target] if target else []
     if not isinstance(alias_config, dict):
         result.error(f"alias config must be string or mapping: {alias_name}")
-        return None
+        return []
 
     target = alias_config.get("target")
     if isinstance(target, str) and target.strip():
-        return target.strip()
+        target_value = validated_target(target)
+        return [target_value] if target_value else []
 
     project_name = alias_config.get("project_name")
     model_name = alias_config.get("model_name")
     if isinstance(project_name, str) and isinstance(model_name, str):
-        return f"{project_name.strip()}/{model_name.strip()}"
+        target_value = validated_target(f"{project_name}/{model_name}")
+        return [target_value] if target_value else []
 
     rollout = alias_config.get("rollout")
+    if isinstance(rollout, dict):
+        rollout = rollout.get("targets") or rollout.get("candidates")
     if isinstance(rollout, list) and rollout:
-        candidates = [item for item in rollout if isinstance(item, dict) and isinstance(item.get("target"), str)]
+        candidates = []
+        for item in rollout:
+            if not isinstance(item, dict) or not isinstance(item.get("target"), str):
+                continue
+            weight = alias_weight(alias_name, item.get("weight", 0), result)
+            if weight is None:
+                continue
+            target = validated_target(str(item["target"]))
+            if target:
+                candidates.append((weight, target))
         if candidates:
-            candidates.sort(key=lambda item: int(item.get("weight", 0) or 0), reverse=True)
-            return str(candidates[0]["target"]).strip()
+            candidates.sort(key=lambda item: item[0], reverse=True)
+            return [target for _, target in candidates]
 
     result.error(f"alias has no target: {alias_name}")
-    return None
+    return []
+
+
+def alias_target(alias_name: str, alias_config: Any, result: CheckResult) -> str | None:
+    targets = alias_targets(alias_name, alias_config, result)
+    return targets[0] if targets else None
 
 
 def section(config: dict[str, Any], name: str) -> dict[str, Any]:
@@ -174,11 +234,8 @@ def validate_model(
         return model_info
 
     project, model = split
-    model_path = (models_root / project / model).resolve()
-    try:
-        model_path.relative_to(models_root.resolve())
-    except ValueError:
-        result.error(f"{key}: model path escapes models root")
+    model_path = model_artifact_path(key, config, models_root, project, model, result)
+    if model_path is None:
         return model_info
 
     model_info["path"] = str(model_path)
@@ -219,7 +276,7 @@ def validate_model(
 def validate_config(args: argparse.Namespace) -> dict[str, Any]:
     result = CheckResult()
     config_path = Path(args.config).resolve()
-    models_root = Path(args.models_root or os.getenv("MODELS_ROOT", "/models")).resolve()
+    models_root = Path(args.models_root or os.getenv("MODELS_ROOT", "models")).resolve()
     raw = load_yaml(config_path, result)
     models = raw.get("models", raw)
     aliases = raw.get("aliases", {})
@@ -248,10 +305,12 @@ def validate_config(args: argparse.Namespace) -> dict[str, Any]:
 
     alias_info = {}
     for name, config in aliases.items():
-        target = alias_target(str(name), config, result)
+        targets = alias_targets(str(name), config, result)
+        target = targets[0] if targets else None
         alias_info[str(name)] = target
-        if target and target not in models:
-            result.warn(f"alias target is not in models mapping: {name} -> {target}")
+        for item in targets:
+            if item not in models:
+                result.error(f"alias target is not in models mapping: {name} -> {item}")
 
     checked_models = [
         validate_model(
@@ -280,7 +339,7 @@ def validate_config(args: argparse.Namespace) -> dict[str, Any]:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Validate model package files referenced by models.yml.")
     parser.add_argument("--config", default="models.yml", help="Path to models.yml.")
-    parser.add_argument("--models-root", default=None, help="Shared model root. Defaults to MODELS_ROOT or /models.")
+    parser.add_argument("--models-root", default=None, help="Model root. Defaults to MODELS_ROOT or models.")
     parser.add_argument("--model-id", action="append", help="Only validate this model key or alias. Can be repeated.")
     parser.add_argument("--strict-hash", action="store_true", help="Require artifact.sha256 and verify it.")
     parser.add_argument("--strict-sidecars", action="store_true", help="Require model cards and labels where applicable.")

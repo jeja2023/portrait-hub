@@ -1,0 +1,59 @@
+capabilities:
+  face_detection:
+    status: fallback
+    model_id: opencv/haarcascade_frontalface_default
+    adapter: haar_face_detection
+    production_adapter: scrfd
+    production_model: SCRFD ONNX
+    input_size: [640, 640]
+    output:
+      decoded: false
+      bbox_scale: stride
+      confidence: 0.35
+      iou: 0.45
+    fallback_model_id: opencv/haarcascade_frontalface_default
+  face_embedding:
+    status: fallback
+    model_id: portrait_hub/image_fingerprint_v1
+    adapter: image_fingerprint
+    production_adapter: arcface
+    production_model: ArcFace / InsightFace ONNX
+    input_size: [112, 112]
+    preprocess: rgb_minus_127p5_div_128
+    embedding_dim: 64
+    production_embedding_dim: 512
+    normalize: l2
+    fallback_model_id: portrait_hub/image_fingerprint_v1
+  pose:
+    status: placeholder
+    model_id: portrait_hub/geometric_pose_placeholder
+    adapter: geometric_pose_placeholder
+    production_adapter: rtmpose
+    production_model: RTMPose ONNX
+    input_size: [256, 192]
+    keypoint_schema: coco17
+    preprocess: imagenet
+    fallback_model_id: portrait_hub/geometric_pose_placeholder
+  gait:
+    status: fallback
+    model_id: portrait_hub/tracklet_fingerprint_v1
+    adapter: tracklet_fingerprint
+    production_adapter: opengait
+    production_model: OpenGait / Gait3D ONNX export
+    input_size: [64, 44]
+    sequence_layout: ntchw
+    embedding_dim: 64
+    production_embedding_dim: 256
+    normalize: l2
+    sequence_input: true
+    fallback_model_id: portrait_hub/tracklet_fingerprint_v1
+  appearance:
+    status: fallback
+    model_id: portrait_hub/color_histogram_v1
+    adapter: color_histogram
+    production_adapter: attribute_reid
+    production_model: human parsing / clothing attribute ONNX
+    embedding_dim: 64
+    production_embedding_dim: 256
+    normalize: l2
+    fallback_model_id: portrait_hub/color_histogram_v1

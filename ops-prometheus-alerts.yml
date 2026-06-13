@@ -1,0 +1,31 @@
+groups:
+  - name: portrait-hub
+    rules:
+      - alert: PortraitHubHighErrorRate
+        expr: sum(rate(gpu_worker_requests_total{status=~"5.."}[5m])) / clamp_min(sum(rate(gpu_worker_requests_total[5m])), 1) > 0.02
+        for: 10m
+        labels:
+          severity: page
+        annotations:
+          summary: PortraitHub 5xx rate is above 2%
+      - alert: PortraitHubHighInferenceLatency
+        expr: histogram_quantile(0.95, sum(rate(gpu_worker_inference_duration_seconds_bucket[5m])) by (le)) > 2
+        for: 10m
+        labels:
+          severity: ticket
+        annotations:
+          summary: PortraitHub inference p95 latency is above 2s
+      - alert: PortraitHubGpuMemoryNearLimit
+        expr: gpu_worker_gpu_memory_used_bytes / clamp_min(gpu_worker_gpu_memory_total_bytes, 1) > 0.90
+        for: 5m
+        labels:
+          severity: page
+        annotations:
+          summary: PortraitHub GPU memory usage is above 90%
+      - alert: PortraitHubGpuQueueBacklog
+        expr: max(gpu_worker_gpu_device_queue_depth) > 0
+        for: 15m
+        labels:
+          severity: ticket
+        annotations:
+          summary: PortraitHub GPU queue has sustained backlog

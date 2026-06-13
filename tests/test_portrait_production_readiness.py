@@ -1,0 +1,219 @@
+from pathlib import Path
+
+import yaml
+
+from tools.portrait_cutover_check import run_cutover_check, sha256_file
+from tools.portrait_production_readiness import check_capabilities, check_model_files, check_templates, configured_model_path
+
+
+def test_readiness_model_check_uses_artifact_path(workspace_tmp_path: Path) -> None:
+    root = workspace_tmp_path / "readiness"
+    models_root = root / "models"
+    models_root.mkdir(parents=True)
+    (models_root / "detector.onnx").write_bytes(b"fake onnx")
+    (root / "models.yml").write_text(
+        yaml.safe_dump(
+            {
+                "models": {
+                    "portrait_hub/detector.onnx": {
+                        "artifact": {"path": "detector.onnx"},
+                        "task": "detection",
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    checks = check_model_files(root, models_root)
+
+    assert checks == [
+        {
+            "name": "model_file:portrait_hub/detector.onnx",
+            "ok": True,
+            "path": str((models_root / "detector.onnx").resolve()),
+            "error": None,
+        }
+    ]
+
+
+def test_readiness_model_check_rejects_escaping_artifact_path(workspace_tmp_path: Path) -> None:
+    models_root = (workspace_tmp_path / "models").resolve()
+    models_root.mkdir(parents=True)
+
+    path, error = configured_model_path(
+        "portrait_hub/detector.onnx",
+        {"artifact": {"path": "../detector.onnx"}},
+        models_root,
+    )
+
+    assert path is None
+    assert error == "model artifact path escapes models root"
+
+
+def test_ci_security_audit_workflow_runs_pip_audit() -> None:
+    workflow = Path(".github/workflows/security-audit.yml")
+
+    assert workflow.exists()
+    content = workflow.read_text(encoding="utf-8")
+    assert "pip-audit" in content
+    assert "python tools/security_audit.py" in content
+    assert "cron:" in content
+
+
+def test_readiness_templates_include_cutover_and_worker_artifacts() -> None:
+    checks = {item["name"]: item for item in check_templates(Path("."))}
+
+    for item in [
+        "tools/portrait_cutover_check.py",
+        "tools/portrait_model_regression.py",
+        "tools/portrait_stream_worker_health.py",
+        "examples/production-models.example.yml",
+        "examples/production-model-capabilities.example.yml",
+        "deploy/portrait-stream-worker.service",
+        "deploy/k8s-stream-worker.yaml",
+        ".github/workflows/ci.yml",
+    ]:
+        assert checks[f"template:{item}"]["ok"] is True
+
+
+def test_readiness_accepts_ready_or_production_capabilities(workspace_tmp_path: Path) -> None:
+    root = workspace_tmp_path / "ready-capabilities"
+    root.mkdir()
+    (root / "model-capabilities.yml").write_text(
+        yaml.safe_dump(
+            {
+                "capabilities": {
+                    "face_embedding": {
+                        "status": "production",
+                        "model_id": "portrait_hub/arcface.onnx",
+                        "fallback_model_id": "portrait_hub/image_fingerprint_v1",
+                    },
+                    "gait": {
+                        "status": "ready",
+                        "model_id": "portrait_hub/opengait.onnx",
+                        "fallback_model_id": "portrait_hub/tracklet_fingerprint_v1",
+                    },
+                    "appearance": {
+                        "status": "fallback",
+                        "model_id": "portrait_hub/color_histogram_v1",
+                        "fallback_model_id": "portrait_hub/color_histogram_v1",
+                    },
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    checks = {item["name"]: item for item in check_capabilities(root)}
+
+    assert checks["capability:face_embedding"]["ok"] is True
+    assert checks["capability:gait"]["ok"] is True
+    assert checks["capability:appearance"]["ok"] is False
+
+
+def test_cutover_check_passes_with_real_artifact_hashes(workspace_tmp_path: Path) -> None:
+    root = workspace_tmp_path / "cutover"
+    models_root = root / "models"
+    models_root.mkdir(parents=True)
+    artifacts = {
+        "portrait_hub/scrfd_10g.onnx": "scrfd_10g.onnx",
+        "portrait_hub/arcface_r100.onnx": "arcface_r100.onnx",
+        "portrait_hub/rtmpose_coco17.onnx": "rtmpose_coco17.onnx",
+        "portrait_hub/opengait_gait3d.onnx": "opengait_gait3d.onnx",
+    }
+    for model_id, filename in artifacts.items():
+        (models_root / filename).write_bytes(f"fake artifact for {model_id}".encode("utf-8"))
+    models = {
+        model_id: {
+            "task": model_id.split("/")[-1].split("_", 1)[0],
+            "artifact": {"path": filename, "sha256": sha256_file(models_root / filename)},
+        }
+        for model_id, filename in artifacts.items()
+    }
+    models_path = root / "models.yml"
+    capabilities_path = root / "model-capabilities.yml"
+    models_path.write_text(yaml.safe_dump({"models": models}), encoding="utf-8")
+    capabilities_path.write_text(
+        yaml.safe_dump(
+            {
+                "capabilities": {
+                    "face_detection": {
+                        "status": "production",
+                        "model_id": "portrait_hub/scrfd_10g.onnx",
+                        "adapter": "scrfd",
+                        "fallback_model_id": "opencv/haarcascade_frontalface_default",
+                    },
+                    "face_embedding": {
+                        "status": "production",
+                        "model_id": "portrait_hub/arcface_r100.onnx",
+                        "adapter": "arcface",
+                        "embedding_dim": 512,
+                        "fallback_model_id": "portrait_hub/image_fingerprint_v1",
+                    },
+                    "pose": {
+                        "status": "production",
+                        "model_id": "portrait_hub/rtmpose_coco17.onnx",
+                        "adapter": "rtmpose",
+                        "fallback_model_id": "portrait_hub/geometric_pose_placeholder",
+                    },
+                    "gait": {
+                        "status": "production",
+                        "model_id": "portrait_hub/opengait_gait3d.onnx",
+                        "adapter": "opengait",
+                        "embedding_dim": 256,
+                        "fallback_model_id": "portrait_hub/tracklet_fingerprint_v1",
+                    },
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    report = run_cutover_check(
+        root=root,
+        models_root=models_root,
+        models_config_path=models_path,
+        capabilities_path=capabilities_path,
+        regression_manifest=Path("examples/portrait-model-regression.example.yml").resolve(),
+        validate_onnx=False,
+    )
+
+    assert report["ok"] is True
+
+
+def test_cutover_check_fails_when_capability_still_uses_fallback(workspace_tmp_path: Path) -> None:
+    root = workspace_tmp_path / "cutover-fallback"
+    models_root = root / "models"
+    models_root.mkdir(parents=True)
+    models_path = root / "models.yml"
+    capabilities_path = root / "model-capabilities.yml"
+    models_path.write_text(yaml.safe_dump({"models": {}}), encoding="utf-8")
+    capabilities_path.write_text(
+        yaml.safe_dump(
+            {
+                "capabilities": {
+                    "face_detection": {
+                        "status": "fallback",
+                        "model_id": "opencv/haarcascade_frontalface_default",
+                        "adapter": "haar_face_detection",
+                        "fallback_model_id": "opencv/haarcascade_frontalface_default",
+                    },
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    report = run_cutover_check(
+        root=root,
+        models_root=models_root,
+        models_config_path=models_path,
+        capabilities_path=capabilities_path,
+        regression_manifest=Path("examples/portrait-model-regression.example.yml").resolve(),
+        validate_onnx=False,
+    )
+
+    assert report["ok"] is False
+    failed = {item["name"] for item in report["checks"] if not item["ok"]}
+    assert "capability:face_detection" in failed

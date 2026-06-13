@@ -10,6 +10,8 @@ from typing import Any
 
 import yaml
 
+from tools.report_redaction import safe_report_repr
+
 
 @dataclass
 class CompareResult:
@@ -34,13 +36,26 @@ def load_manifest(path: Path) -> dict[str, Any]:
     return raw
 
 
+def manifest_relative_path(base_dir: Path, raw_path: str, field_name: str) -> Path:
+    candidate = Path(raw_path)
+    if candidate.is_absolute():
+        raise ValueError(f"{field_name} must be relative to the regression manifest directory")
+    base = base_dir.resolve()
+    resolved = (base / candidate).resolve()
+    try:
+        resolved.relative_to(base)
+    except ValueError as exc:
+        raise ValueError(f"{field_name} must stay within the regression manifest directory") from exc
+    return resolved
+
+
 def load_expected(case: dict[str, Any], base_dir: Path) -> Any:
     if "expected" in case:
         return case["expected"]
     expected_path = case.get("expected_path")
     if not isinstance(expected_path, str):
         return None
-    path = (base_dir / expected_path).resolve()
+    path = manifest_relative_path(base_dir, expected_path, "case.expected_path")
     with path.open("r", encoding="utf-8") as file:
         if path.suffix.lower() == ".json":
             return json.load(file)
@@ -85,7 +100,7 @@ def compare_values(
         return
 
     if actual != expected:
-        result.error(path, f"expected {expected!r}, got {actual!r}")
+        result.error(path, f"expected {safe_report_repr(expected, path)}, got {safe_report_repr(actual, path)}")
 
 
 def open_case_files(case: dict[str, Any], base_dir: Path) -> tuple[list[tuple[str, tuple[str, Any, str]]], list[Any]]:
@@ -95,25 +110,32 @@ def open_case_files(case: dict[str, Any], base_dir: Path) -> tuple[list[tuple[st
     if not isinstance(files, dict):
         raise ValueError("case.files must be a mapping of form field to path or paths")
 
-    for field, raw_paths in files.items():
-        paths = raw_paths if isinstance(raw_paths, list) else [raw_paths]
-        for raw_path in paths:
-            if not isinstance(raw_path, str):
-                raise ValueError(f"file path for field {field} must be a string")
-            path = (base_dir / raw_path).resolve()
-            handle = path.open("rb")
-            handles.append(handle)
-            file_items.append((field, (path.name, handle, "application/octet-stream")))
+    try:
+        for field, raw_paths in files.items():
+            paths = raw_paths if isinstance(raw_paths, list) else [raw_paths]
+            for raw_path in paths:
+                if not isinstance(raw_path, str):
+                    raise ValueError(f"file path for field {field} must be a string")
+                path = manifest_relative_path(base_dir, raw_path, f"case.files.{field}")
+                handle = path.open("rb")
+                handles.append(handle)
+                file_items.append((field, (path.name, handle, "application/octet-stream")))
+    except Exception:
+        for handle in handles:
+            handle.close()
+        raise
     return file_items, handles
 
 
-def run_case(client: Any, base_url: str, token: str | None, case: dict[str, Any], base_dir: Path) -> dict[str, Any]:
+def run_case(client: Any, base_url: str, token: str | None, tenant_id: str, case: dict[str, Any], base_dir: Path) -> dict[str, Any]:
     method = str(case.get("method", "GET")).upper()
     path = str(case.get("path") or case.get("endpoint") or "")
     if not path.startswith("/"):
         raise ValueError("case.path must start with /")
 
     headers = dict(case.get("headers") or {})
+    if tenant_id:
+        headers.setdefault("X-Tenant-ID", tenant_id)
     if token:
         headers.setdefault("Authorization", f"Bearer {token}")
         headers.setdefault("X-API-Key", token)
@@ -152,6 +174,7 @@ def run_regression(args: argparse.Namespace) -> dict[str, Any]:
     cases = manifest.get("cases")
     if not isinstance(cases, list):
         raise ValueError("manifest must include cases list")
+    tenant_id = str(manifest.get("tenant_id", args.tenant_id))
 
     results = []
     with httpx.Client(timeout=args.timeout) as client:
@@ -161,7 +184,8 @@ def run_regression(args: argparse.Namespace) -> dict[str, Any]:
             name = str(case.get("name") or f"case_{index}")
             expected_status = int(case.get("expected_status", 200))
             tolerance = float(case.get("tolerance", manifest.get("tolerance", args.tolerance)))
-            actual = run_case(client, args.base_url, args.token, case, base_dir)
+            case_tenant_id = str(case.get("tenant_id", tenant_id))
+            actual = run_case(client, args.base_url, args.token, case_tenant_id, case, base_dir)
             comparison = CompareResult()
             if actual["status_code"] != expected_status:
                 comparison.error("$status_code", f"expected {expected_status}, got {actual['status_code']}")
@@ -185,6 +209,7 @@ def main() -> int:
     parser.add_argument("--manifest", required=True, help="Regression manifest YAML/JSON.")
     parser.add_argument("--base-url", default="http://127.0.0.1:9001", help="Service base URL.")
     parser.add_argument("--token", default=None, help="API token for protected endpoints.")
+    parser.add_argument("--tenant-id", default="default", help="Default tenant id sent as X-Tenant-ID.")
     parser.add_argument("--timeout", type=float, default=30.0, help="Request timeout in seconds.")
     parser.add_argument("--tolerance", type=float, default=1e-6, help="Default float comparison tolerance.")
     parser.add_argument("--json", action="store_true", help="Print machine-readable JSON.")

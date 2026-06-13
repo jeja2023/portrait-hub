@@ -7,29 +7,27 @@ import onnxruntime as ort
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, Response, UploadFile, status
 
 from app.core import *
+from app.portrait_auth import permission_dependency
+from app.portrait_response import exception_log_summary, raise_internal_error
 from app.settings import APP_VERSION
 
 
 router = APIRouter()
 
 
-@router.post("/infer/person-embeddings", dependencies=[Depends(require_api_token)])
+@router.post("/infer/person-embeddings", dependencies=[Depends(require_api_token), Depends(permission_dependency("infer"))])
 async def infer_person_embeddings(
     request: Request,
     files: list[UploadFile] = File(...),
-    project_name: str = Form("cross_camera_tracking"),
+    project_name: str = Form("portrait_hub"),
     model_name: str = Form("osnet_ibn_x1_0.onnx"),
-    include_vectors: bool = Form(True),
+    include_vectors: bool = Form(False),
 ) -> dict[str, Any]:
     request_id = request_id_from_headers(request)
     observe("embeddings_requests_total")
     total_start = now()
 
-    try:
-        project_name = validate_path_name(project_name)
-        model_name = validate_path_name(model_name)
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    project_name, model_name = validate_model_reference_parts(project_name, model_name)
 
     if not files:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="at least one image file is required")
@@ -54,10 +52,9 @@ async def infer_person_embeddings(
         observe("postprocess_seconds_sum", infer_meta["timing"]["postprocess_seconds"])
 
         items = []
-        for index, filename in enumerate(filenames):
+        for index, _filename in enumerate(filenames):
             item: dict[str, Any] = {
                 "index": index,
-                "filename": filename,
                 "embedding_dim": infer_meta["embedding_dim"],
             }
             if include_vectors:
@@ -88,11 +85,8 @@ async def infer_person_embeddings(
         raise
     except Exception as exc:
         observe("embeddings_errors_total")
-        logger.exception("embedding inference failed for model: %s", key)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"embedding inference runtime error: {exc}",
-        ) from exc
+        logger.warning("embedding inference failed: request_id=%s error=%s", request_id, exception_log_summary(exc))
+        raise_internal_error(request_id, "embedding inference runtime error")
 
     return {
         "status": "success",

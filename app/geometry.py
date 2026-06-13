@@ -1,6 +1,7 @@
 import numpy as np
 from PIL import Image
 
+from app.media.quality import assess_image_quality, clamp01
 from app.schemas import LetterboxMeta
 
 
@@ -64,3 +65,60 @@ def crop_person(image: Image.Image, box: list[float], min_size: int = 2) -> Imag
     if right - left < min_size or bottom - top < min_size:
         return None
     return image.crop((left, top, right, bottom))
+
+
+def person_crop_quality(image: Image.Image, box: list[float], min_size: int = 2) -> dict[str, object]:
+    width, height = image.size
+    if len(box) < 4 or width <= 0 or height <= 0:
+        return {
+            "usable": False,
+            "score": 0.0,
+            "reason": "invalid_box",
+        }
+    x1, y1, x2, y2 = [float(value) for value in box[:4]]
+    clipped = [
+        max(0.0, min(float(width), x1)),
+        max(0.0, min(float(height), y1)),
+        max(0.0, min(float(width), x2)),
+        max(0.0, min(float(height), y2)),
+    ]
+    box_width = max(0.0, clipped[2] - clipped[0])
+    box_height = max(0.0, clipped[3] - clipped[1])
+    if box_width < min_size or box_height < min_size:
+        return {
+            "usable": False,
+            "score": 0.0,
+            "reason": "crop_too_small",
+            "clipped_box": [round(value, 3) for value in clipped],
+        }
+    crop = image.crop(tuple(int(round(value)) for value in clipped))
+    quality = assess_image_quality(crop)
+    area_ratio = clamp01((box_width * box_height) / max(1.0, float(width * height)))
+    aspect_ratio = box_width / max(1.0, box_height)
+    person_aspect_score = clamp01(1.0 - abs(aspect_ratio - 0.45) / 1.10)
+    clipped_area = max(0.0, (x2 - x1) * (y2 - y1))
+    visible_area = box_width * box_height
+    truncation = clamp01(1.0 - visible_area / clipped_area) if clipped_area > 0 else 1.0
+    area_score = clamp01(area_ratio / 0.18)
+    score = clamp01(
+        float(quality.get("score", 0.0)) * 0.52
+        + area_score * 0.18
+        + person_aspect_score * 0.18
+        + (1.0 - truncation) * 0.12
+    )
+    usable = score >= 0.15 and truncation <= 0.65
+    return {
+        "usable": usable,
+        "score": round(score, 6),
+        "crop_quality_score": quality.get("score", 0.0),
+        "area_ratio": round(area_ratio, 6),
+        "area_score": round(area_score, 6),
+        "aspect_ratio": round(aspect_ratio, 6),
+        "person_aspect_score": round(person_aspect_score, 6),
+        "truncation": round(truncation, 6),
+        "clipped_box": [round(value, 3) for value in clipped],
+        "crop_width": int(crop.width),
+        "crop_height": int(crop.height),
+        "reason": "ok" if usable else "low_crop_quality",
+        "quality": quality,
+    }

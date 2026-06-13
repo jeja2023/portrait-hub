@@ -7,6 +7,8 @@ import onnxruntime as ort
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, Response, UploadFile, status
 
 from app.core import *
+from app.portrait_auth import permission_dependency
+from app.portrait_response import MODEL_READINESS_CHECK_FAILED, exception_log_summary
 from app.settings import APP_VERSION
 
 
@@ -23,9 +25,6 @@ async def health() -> dict[str, Any]:
     return {
         "status": "healthy",
         "version": APP_VERSION,
-        "models_root": str(MODELS_ROOT),
-        "loaded_models": sorted(MODEL_REGISTRY.keys()),
-        "available_providers": ort.get_available_providers(),
     }
 
 
@@ -35,12 +34,12 @@ async def ready() -> dict[str, Any]:
     if "CUDAExecutionProvider" not in available:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail={"status": "not_ready", "available_providers": available},
+            detail={"status": "not_ready"},
         )
-    return {"status": "ready", "available_providers": available}
+    return {"status": "ready"}
 
 
-@router.get("/ready/deep", dependencies=[Depends(require_api_token)])
+@router.get("/ready/deep", dependencies=[Depends(require_api_token), Depends(permission_dependency("models:read"))])
 async def ready_deep(
     load_models: bool = Query(False),
     dummy_inference: bool = Query(False),
@@ -57,7 +56,7 @@ async def ready_deep(
                 "model": key,
                 "type": config.get("type"),
                 "exists": True,
-                "path": str(model_path),
+                "path_checked": True,
             }
             if load_models or dummy_inference:
                 bundle, cold_loaded, load_seconds = await get_or_load_model(key, model_path)
@@ -86,8 +85,9 @@ async def ready_deep(
                     )
             checks.append(item)
         except Exception as exc:
+            logger.warning("deep readiness model check failed for %s: %s", key, exception_log_summary(exc))
             ok = False
-            checks.append({"model": key, "ok": False, "error": str(exc)})
+            checks.append({"model": key, "ok": False, "error": MODEL_READINESS_CHECK_FAILED})
 
     if not ok:
         raise HTTPException(
@@ -97,6 +97,6 @@ async def ready_deep(
     return {"status": "ready", "available_providers": available, "checks": checks}
 
 
-@router.get("/metrics")
+@router.get("/metrics", dependencies=[Depends(require_api_token), Depends(permission_dependency("metrics:read"))])
 async def metrics() -> Response:
     return Response(content=prometheus_metrics(), media_type="text/plain; version=0.0.4")

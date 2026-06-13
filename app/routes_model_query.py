@@ -1,15 +1,19 @@
 import asyncio
+from copy import deepcopy
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 
 from app.core import *
+from app.portrait_audit import audit_event
+from app.portrait_auth import permission_dependency
+from app.portrait_security import tenant_id_from_request
 
 
 router = APIRouter()
 
 
-@router.get("/models", dependencies=[Depends(require_api_token)])
+@router.get("/models", dependencies=[Depends(require_api_token), Depends(permission_dependency("models:read"))])
 async def models() -> dict[str, Any]:
     return {
         "loaded_models": [
@@ -20,40 +24,61 @@ async def models() -> dict[str, Any]:
     }
 
 
-@router.get("/model-configs", dependencies=[Depends(require_api_token)])
+@router.get("/model-configs", dependencies=[Depends(require_api_token), Depends(permission_dependency("models:read"))])
 async def model_configs() -> dict[str, Any]:
     return {
-        "config_path": str(MODEL_CONFIG_PATH),
-        "models": MODEL_CONFIGS,
+        "config_loaded": True,
+        "models": {
+            key: public_model_config(key, config, loaded=key in MODEL_REGISTRY)
+            for key, config in sorted(MODEL_CONFIGS.items())
+        },
         "aliases": MODEL_ALIASES,
         "count": len(MODEL_CONFIGS),
         "alias_count": len(MODEL_ALIASES),
     }
 
 
-@router.post("/reload-config", dependencies=[Depends(require_api_token)])
-async def reload_config() -> dict[str, Any]:
+@router.post("/reload-config", dependencies=[Depends(require_api_token), Depends(permission_dependency("models:write"))])
+async def reload_config(request: Request) -> dict[str, Any]:
+    request_id = request_id_from_headers(request)
+    tenant_id = tenant_id_from_request(request)
+    previous_configs = deepcopy(MODEL_CONFIGS)
+    previous_aliases = deepcopy(MODEL_ALIASES)
     model_configs, model_aliases = reload_model_config_state()
+    try:
+        audit_event(
+            "model_config_reloaded",
+            request_id=request_id,
+            tenant_id=tenant_id,
+            model_count=len(model_configs),
+            alias_count=len(model_aliases),
+        )
+    except Exception:
+        MODEL_CONFIGS.clear()
+        MODEL_CONFIGS.update(previous_configs)
+        MODEL_ALIASES.clear()
+        MODEL_ALIASES.update(previous_aliases)
+        raise
     return {
         "status": "success",
-        "config_path": str(MODEL_CONFIG_PATH),
-        "models": model_configs,
+        "request_id": request_id,
+        "config_loaded": True,
+        "models": {
+            key: public_model_config(key, config, loaded=key in MODEL_REGISTRY)
+            for key, config in sorted(model_configs.items())
+        },
         "aliases": model_aliases,
         "count": len(model_configs),
         "alias_count": len(model_aliases),
     }
 
 
-@router.get("/model-info", dependencies=[Depends(require_api_token)])
+@router.get("/model-info", dependencies=[Depends(require_api_token), Depends(permission_dependency("models:read"))])
 async def model_info(
     project_name: str = Query(..., min_length=1, max_length=128),
     model_name: str = Query(..., min_length=1, max_length=256),
 ) -> dict[str, Any]:
-    try:
-        project_name = validate_path_name(project_name)
-        model_name = validate_path_name(model_name)
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    project_name, model_name = validate_model_reference_parts(project_name, model_name)
 
     req = ModelRequest(project_name=project_name, model_name=model_name)
     key = cache_key(req.project_name, req.model_name)
@@ -63,12 +88,12 @@ async def model_info(
         **bundle_info(key, bundle),
         "cold_loaded": cold_loaded,
         "load_seconds": load_seconds,
-        "config": model_config(key),
+        "config": public_model_config(key, model_config(key), loaded=True),
         "package": model_package_info(key, model_path, bundle["model_hash"]),
     }
 
 
-@router.get("/model-package", dependencies=[Depends(require_api_token)])
+@router.get("/model-package", dependencies=[Depends(require_api_token), Depends(permission_dependency("models:read"))])
 async def model_package(
     model_id: str | None = Query(None),
     project_name: str | None = Query(None, min_length=1, max_length=128),
@@ -87,9 +112,9 @@ async def model_package(
             "project_name": project,
             "model_name": model,
             "key": key,
-            "path": str(model_path),
+            "artifact_resolved": True,
             "hash": digest,
         },
-        "config": model_config(key),
+        "config": public_model_config(key, model_config(key), loaded=key in MODEL_REGISTRY),
         "package": model_package_info(key, model_path, digest),
     }

@@ -1,0 +1,59 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: portrait-stream-worker
+  labels:
+    app: portrait-stream-worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: portrait-stream-worker
+  template:
+    metadata:
+      labels:
+        app: portrait-stream-worker
+    spec:
+      containers:
+        - name: stream-worker
+          image: portrait-hub:latest
+          command: ["python", "-m", "app.portrait_stream_worker_daemon"]
+          envFrom:
+            - secretRef:
+                name: portrait-hub-secrets
+            - configMapRef:
+                name: portrait-hub-config
+          volumeMounts:
+            - name: models
+              mountPath: /models
+              readOnly: true
+            - name: model-config
+              mountPath: /workspace/models.yml
+              subPath: models.yml
+              readOnly: true
+            - name: model-capabilities
+              mountPath: /workspace/model-capabilities.yml
+              subPath: model-capabilities.yml
+              readOnly: true
+            - name: runtime-state
+              mountPath: /workspace/runtime-state
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "512Mi"
+            limits:
+              cpu: "2"
+              memory: "2Gi"
+      volumes:
+        - name: models
+          persistentVolumeClaim:
+            claimName: portrait-models
+        - name: model-config
+          configMap:
+            name: portrait-hub-models
+        - name: model-capabilities
+          configMap:
+            name: portrait-hub-capabilities
+        - name: runtime-state
+          persistentVolumeClaim:
+            claimName: portrait-runtime-state

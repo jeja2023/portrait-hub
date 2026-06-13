@@ -190,9 +190,10 @@ nano .env
 
 ```dotenv
 LOG_LEVEL=INFO
-MODELS_HOST_DIR=../shared-models
+MODELS_HOST_DIR=./models
 MODEL_CONFIG_HOST_FILE=./models.yml
 MODEL_CONFIG_PATH=/workspace/models.yml
+MODEL_CONFIG_READ_FAIL_CLOSED=true
 MAX_TENSOR_ITEMS=12582912
 MAX_LOADED_MODELS=0
 GPU_QUEUE_LIMIT=1
@@ -201,6 +202,7 @@ MODEL_QUEUE_TIMEOUT_SECONDS=0
 ENABLE_TENSORRT=false
 ALLOW_STREAM_URLS=false
 RUNTIME_STATE_HOST_DIR=./runtime-state
+STATE_READ_FAIL_CLOSED=true
 ROLLOUT_AUDIT_PATH=/workspace/runtime-state/rollout-audit.jsonl
 WARMUP_MODELS=
 API_TOKEN=change-me-to-a-long-random-token
@@ -212,8 +214,10 @@ GPU_WORKER_1_DEVICE=1
 
 - `API_TOKEN` 建议生产环境设置为长随机字符串。
 - `MODEL_CONFIG_HOST_FILE` 默认指向当前目录的 `models.yml`，该文件会可写挂载进容器；别名切换、灰度和回滚写回后可持久化。
+- `MODEL_CONFIG_READ_FAIL_CLOSED=true` 会让缺失、损坏或根节点格式错误的 `models.yml` 直接导致启动/重载失败，避免静默退化为空配置。
 - `RUNTIME_STATE_HOST_DIR` 默认保存审计日志等运行期文件，容器重建后不会丢失。
-- `WARMUP_MODELS` 可写成 `person_service/reid.onnx,person_service/face.onnx`。
+- `STATE_READ_FAIL_CLOSED=true` 会让已有 JSON 状态文件损坏或根结构错误时直接失败，避免重启后静默丢失 gallery、任务、流和阈值状态。
+- `WARMUP_MODELS` 可写成 `portrait_hub/yolov8n.onnx,portrait_hub/osnet_ibn_x1_0.onnx`。
 - `MODEL_CONCURRENCY_LIMIT` 和 `GPU_QUEUE_LIMIT` 建议先保持 `1`，压测后再提高。
 - `ENABLE_TENSORRT=true` 只在确认容器内 ONNX Runtime 暴露 `TensorrtExecutionProvider` 后开启。
 - 如果服务器只有 1 张 GPU，先删除或注释 `docker-compose.yml` 里的 `gpu-worker-1` 服务，或者只启动 `gpu-worker-0`。
@@ -232,58 +236,60 @@ openssl rand -hex 32
 ~/project/
 ├── gpu-services/
 ├── other-project/
-└── shared-models/
+└── models/
 ```
 
 如果本项目在 `~/project/gpu-services`，模型目录就是：
 
 ```text
-~/project/shared-models
+~/project/gpu-services/models
 ```
 
 创建目录：
 
 ```bash
 cd /opt/gpu-services
-mkdir -p ../shared-models
+mkdir -p ./models
 ```
 
 准备本地模型目录，例如：
 
 ```bash
-mkdir -p /opt/model-upload/person_service
-cp /path/to/your_model.onnx /opt/model-upload/person_service/
+mkdir -p /opt/model-upload/portrait_hub
+cp /path/to/yolov8n.onnx /opt/model-upload/portrait_hub/
+cp /path/to/osnet_ibn_x1_0.onnx /opt/model-upload/portrait_hub/
 ```
 
 把模型复制到共享目录，目录必须是 `项目名/模型文件`：
 
 ```bash
-mkdir -p ../shared-models/person_service
-cp /opt/model-upload/person_service/*.onnx ../shared-models/person_service/
+mkdir -p ./models
+cp /opt/model-upload/portrait_hub/*.onnx ./models/
 ```
 
 检查共享目录内模型：
 
 ```bash
-find ../shared-models -maxdepth 3 -type f -name '*.onnx' -print
+find ./models -maxdepth 2 -type f -name '*.onnx' -print
 ```
 
 预期类似：
 
 ```text
-../shared-models/person_service/your_model.onnx
+./models/yolov8n.onnx
+./models/osnet_ibn_x1_0.onnx
 ```
 
 如果你之前已经按旧结构放过模型，例如：
 
 ```text
-../shared-models/person_service/models/your_model.onnx
+./models/portrait_hub/models/yolov8n.onnx
 ```
 
 可以迁移成新结构：
 
 ```bash
-for d in ../shared-models/*/models; do
+for d in ./models/*/models; do
   [ -d "$d" ] || continue
   project="$(dirname "$d")"
   cp "$d"/*.onnx "$project"/
@@ -298,7 +304,7 @@ done
 python3 -m pip install -r requirements-dev.txt
 python3 tools/validate_model_package.py \
   --config models.yml \
-  --models-root ../shared-models \
+  --models-root ./models \
   --strict-hash \
   --strict-sidecars
 ```
@@ -366,7 +372,7 @@ curl http://127.0.0.1:9001/ready
 TOKEN="你的API_TOKEN"
 ```
 
-推荐用内置 smoke test 做一次完整接口检查：
+推荐用内置冒烟测试做一次完整接口检查：
 
 ```bash
 python3 tools/service_smoke_test.py \
@@ -376,7 +382,7 @@ python3 tools/service_smoke_test.py \
   --model-id person_detector_default
 ```
 
-如果需要在上线前加载模型并跑 dummy inference：
+如果需要在上线前加载模型并跑虚拟推理：
 
 ```bash
 python3 tools/service_smoke_test.py \
@@ -405,8 +411,8 @@ curl -X POST http://127.0.0.1:9001/rollout/aliases/switch \
   -H "Content-Type: application/json" \
   -d '{
     "alias_name": "person_detector_default",
-    "target_model_id": "cross_camera_tracking/person_detector_yolov8n_v1.1.0_fp32.onnx",
-    "expected_current_target": "cross_camera_tracking/yolov8n.onnx",
+    "target_model_id": "portrait_hub/person_detector_yolov8n_v1.1.0_fp32.onnx",
+    "expected_current_target": "portrait_hub/yolov8n.onnx",
     "dry_run": true
   }'
 ```
@@ -434,11 +440,11 @@ curl -X POST http://127.0.0.1:9001/rollout/aliases/weighted \
   -H "Content-Type: application/json" \
   -d '{
     "alias_name": "person_detector_default",
-    "expected_current_target": "cross_camera_tracking/yolov8n.onnx",
+    "expected_current_target": "portrait_hub/yolov8n.onnx",
     "dry_run": true,
     "targets": [
-      {"target_model_id": "cross_camera_tracking/yolov8n.onnx", "weight": 90, "status": "active"},
-      {"target_model_id": "cross_camera_tracking/person_detector_yolov8n_v1.1.0_fp32.onnx", "weight": 10, "status": "candidate"}
+      {"target_model_id": "portrait_hub/yolov8n.onnx", "weight": 90, "status": "active"},
+      {"target_model_id": "portrait_hub/person_detector_yolov8n_v1.1.0_fp32.onnx", "weight": 10, "status": "candidate"}
     ]
   }'
 ```
@@ -455,7 +461,7 @@ curl -H "Authorization: Bearer $TOKEN" \
 ```bash
 python3 tools/worker_control.py --action health
 python3 tools/worker_control.py --action reload-config --token "$TOKEN"
-python3 tools/worker_control.py --action warmup --token "$TOKEN" --model cross_camera_tracking/yolov8n.onnx
+python3 tools/worker_control.py --action warmup --token "$TOKEN" --model portrait_hub/yolov8n.onnx
 ```
 
 如果 worker 端口不是默认的 `9001/9002`，可以重复传入 `--base-url`：
@@ -472,7 +478,7 @@ python3 tools/worker_control.py \
 
 ```bash
 curl -H "Authorization: Bearer $TOKEN" \
-  "http://127.0.0.1:9001/model-info?project_name=person_service&model_name=your_model.onnx"
+  "http://127.0.0.1:9001/model-info?project_name=portrait_hub&model_name=yolov8n.onnx"
 ```
 
 查看模型配置：
@@ -495,7 +501,7 @@ curl -H "Authorization: Bearer $TOKEN" \
 curl -X POST http://127.0.0.1:9001/warmup \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"models":[{"project_name":"person_service","model_name":"your_model.onnx"}]}'
+  -d '{"models":[{"project_name":"portrait_hub","model_name":"yolov8n.onnx"}]}'
 ```
 
 查看 Prometheus 指标：
@@ -511,7 +517,7 @@ curl -X POST http://127.0.0.1:9001/predict \
   -H "Authorization: Bearer $TOKEN" \
   -H "X-Request-ID: test-001" \
   -H "Content-Type: application/json" \
-  -d '{"project_name":"person_service","model_name":"your_model.onnx","tensor_data":[[[[0.1,0.2,0.3]]]]}'
+  -d '{"project_name":"portrait_hub","model_name":"yolov8n.onnx","tensor_data":[[[[0.1,0.2,0.3]]]]}'
 ```
 
 注意：上面的 `tensor_data` 只是格式示例，实际 shape 必须匹配 ONNX 模型输入。
@@ -522,7 +528,7 @@ curl -X POST http://127.0.0.1:9001/predict \
 curl -X POST http://127.0.0.1:9001/infer/persons \
   -H "Authorization: Bearer $TOKEN" \
   -H "X-Request-ID: persons-test-001" \
-  -F "project_name=cross_camera_tracking" \
+  -F "project_name=portrait_hub" \
   -F "model_name=yolov8n.onnx" \
   -F "confidence=0.25" \
   -F "iou=0.45" \
@@ -537,7 +543,7 @@ ReID 向量请求示例：
 ```bash
 curl -X POST http://127.0.0.1:9001/infer/person-embeddings \
   -H "Authorization: Bearer $TOKEN" \
-  -F "project_name=cross_camera_tracking" \
+  -F "project_name=portrait_hub" \
   -F "model_name=osnet_ibn_x1_0.onnx" \
   -F "include_vectors=true" \
   -F "files=@person-001.jpg"
@@ -548,9 +554,9 @@ curl -X POST http://127.0.0.1:9001/infer/person-embeddings \
 ```bash
 curl -X POST http://127.0.0.1:9001/infer/person-tracks \
   -H "Authorization: Bearer $TOKEN" \
-  -F "detector_project_name=cross_camera_tracking" \
+  -F "detector_project_name=portrait_hub" \
   -F "detector_model_name=yolov8n.onnx" \
-  -F "reid_project_name=cross_camera_tracking" \
+  -F "reid_project_name=portrait_hub" \
   -F "reid_model_name=osnet_ibn_x1_0.onnx" \
   -F "include_embeddings=false" \
   -F "files=@frame-001.jpg" \
@@ -586,7 +592,7 @@ curl -X POST http://127.0.0.1:9001/infer/stream/person-tracks \
 ```bash
 curl -X POST http://127.0.0.1:9001/debug/model-output \
   -H "Authorization: Bearer $TOKEN" \
-  -F "project_name=cross_camera_tracking" \
+  -F "project_name=portrait_hub" \
   -F "model_name=yolov8n.onnx" \
   -F "model_type=yolo" \
   -F "file=@frame-001.jpg"
@@ -638,8 +644,8 @@ http://gpu-worker-1:8000/predict
 复制新模型：
 
 ```bash
-mkdir -p ../shared-models/person_service
-cp /opt/model-upload/person_service/your_model.onnx ../shared-models/person_service/your_model.onnx
+mkdir -p ./models
+cp /opt/model-upload/portrait_hub/yolov8n.onnx ./models/yolov8n.onnx
 ```
 
 重载单个 worker 的模型：
@@ -648,7 +654,7 @@ cp /opt/model-upload/person_service/your_model.onnx ../shared-models/person_serv
 curl -X POST http://127.0.0.1:9001/reload \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"project_name":"person_service","model_name":"your_model.onnx"}'
+  -d '{"project_name":"portrait_hub","model_name":"yolov8n.onnx"}'
 ```
 
 也可以直接重启 worker：
@@ -722,13 +728,13 @@ docker compose logs --tail=100 gpu-worker-0
 确认模型路径：
 
 ```bash
-find ../shared-models -maxdepth 3 -type f -print
+find ./models -maxdepth 2 -type f -print
 ```
 
 服务要求路径：
 
 ```text
-../shared-models/<project_name>/<model_name>
+./models/<artifact.path from models.yml>
 ```
 
 请求里的 `project_name` 和 `model_name` 必须和共享目录里的目录、文件名完全一致。

@@ -35,7 +35,7 @@
 - 模型配置：输入输出、任务类型、后处理参数。
 - 模型卡：版本、指标、适用场景和限制。
 - labels：类别或标签定义。
-- 样例数据：用于 smoke test。
+- 样例数据：用于冒烟测试。
 - 验收指标：用于服务侧上线验证。
 
 算法侧不应要求推理服务理解训练框架内部细节，例如 PyTorch checkpoint 的网络结构、训练脚本参数、数据增强策略等。这些可以写入模型卡，但不作为服务运行时依赖。
@@ -334,7 +334,7 @@ shared-models/
 
 ```text
 shared-models/
-  cross_camera_tracking/
+  portrait_hub/
     person_detector_yolov8n_v1.0.0_fp32.onnx
     person_detector_yolov8n_v1.0.0_fp32.model-card.yml
     person_detector_yolov8n_v1.0.0_fp32.labels.txt
@@ -411,7 +411,7 @@ limitations:
 
 ```yaml
 models:
-  cross_camera_tracking/person_detector_yolov8n_v1.0.0_fp32.onnx:
+  portrait_hub/person_detector_yolov8n_v1.0.0_fp32.onnx:
     task: detection
     type: yolo
     runtime: onnxruntime
@@ -441,16 +441,16 @@ models:
 算法侧交付前应使用推理服务侧校验脚本做一次自检。假设 `gpu-services` 与 `shared-models` 同级：
 
 ```bash
-cd gpu-services
+cd portrait-hub
 python tools/validate_model_package.py \
   --config models.yml \
-  --models-root ../shared-models \
+  --models-root shared-models \
   --strict-hash \
   --strict-sidecars \
-  --model-id cross_camera_tracking/person_detector_yolov8n_v1.0.0_fp32.onnx
+  --model-id portrait_hub/person_detector_yolov8n_v1.0.0_fp32.onnx
 ```
 
-自检通过后再进入服务侧 smoke test、预热、灰度和回滚流程。未通过时应优先补齐模型卡、labels 或类别定义、sha256、输入输出契约和推荐阈值。
+自检通过后再进入服务侧冒烟测试、预热、灰度和回滚流程。未通过时应优先补齐模型卡、labels 或类别定义、sha256、输入输出契约和推荐阈值。
 
 如果模型包包含样例图片和期望输出，建议同时交付 `regression.yml`：
 
@@ -509,7 +509,7 @@ experiments:
     dataset: person_detection_dataset_v1.2.0
     model: yolov8n
     status: packaged
-    package: cross_camera_tracking/person_detector_yolov8n_v1.0.0_fp32.onnx
+    package: portrait_hub/person_detector_yolov8n_v1.0.0_fp32.onnx
 ```
 
 ## 13. 误差分析闭环
@@ -625,7 +625,7 @@ error_analysis/
 - 建立业务回归集。
 - 建立边界样本集。
 - 输出版本对比报告。
-- 为推理服务 smoke test 提供最小样例。
+- 为推理服务冒烟测试提供最小样例。
 
 验收：
 
@@ -641,7 +641,7 @@ error_analysis/
 - 把模型包放入 `shared-models` 或制品仓库。
 - 提供 `models.yml` 建议配置。
 - 推理服务执行模型包校验。
-- 推理服务执行 smoke test。
+- 推理服务执行冒烟测试。
 - 业务侧执行灰度验收。
 
 验收：
@@ -688,7 +688,7 @@ error_analysis/
 
 ```yaml
 decision:
-  model: cross_camera_tracking/person_detector_yolov8n_v1.0.0_fp32.onnx
+  model: portrait_hub/person_detector_yolov8n_v1.0.0_fp32.onnx
   recommendation: gray_release
   reason:
     - "固定测试集 mAP50 高于线上版本。"
@@ -697,7 +697,7 @@ decision:
     - smoke_test
     - model_package_check
     - latency_check
-  rollback_target: cross_camera_tracking/person_detector_yolov8n_v0.9.0_fp32.onnx
+  rollback_target: portrait_hub/person_detector_yolov8n_v0.9.0_fp32.onnx
 ```
 
 可选结论：

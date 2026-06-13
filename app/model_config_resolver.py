@@ -4,7 +4,7 @@ from typing import Any
 from fastapi import HTTPException, status
 
 from app.model_config_state import MODEL_ALIASES
-from app.model_refs import cache_key, split_cache_key, validate_path_name
+from app.model_refs import cache_key, split_cache_key, validate_model_reference_parts, validate_model_target
 
 
 def rollout_candidates(alias_config: dict[str, Any]) -> list[dict[str, Any]]:
@@ -21,6 +21,7 @@ def rollout_candidates(alias_config: dict[str, Any]) -> list[dict[str, Any]]:
         target = item.get("target")
         if not isinstance(target, str) or not target.strip():
             continue
+        target_value = validate_model_target(target)
         weight = item.get("weight", 0)
         try:
             weight_value = max(0, int(weight))
@@ -28,7 +29,7 @@ def rollout_candidates(alias_config: dict[str, Any]) -> list[dict[str, Any]]:
             weight_value = 0
         candidates.append(
             {
-                "target": target.strip(),
+                "target": target_value,
                 "weight": weight_value,
                 "status": item.get("status"),
             }
@@ -46,7 +47,7 @@ def weighted_rollout_target(
 ) -> tuple[str, int, int]:
     total_weight = sum(int(item["weight"]) for item in candidates if int(item["weight"]) > 0)
     if total_weight <= 0:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"alias rollout has no positive weights: {alias_name}")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="alias rollout has no positive weights")
     digest = hashlib.sha256(f"{alias_name}:{traffic_key}".encode("utf-8")).hexdigest()
     bucket = int(digest[:16], 16) % total_weight
     cursor = 0
@@ -62,18 +63,19 @@ def weighted_rollout_target(
 
 def alias_resolution(alias_name: str, alias_config: Any, traffic_key: str | None = None) -> dict[str, Any]:
     if isinstance(alias_config, str):
-        return {"alias": alias_name, "target": alias_config, "strategy": "static", "traffic_key": traffic_key}
+        return {"alias": alias_name, "target": validate_model_target(alias_config), "strategy": "static", "traffic_key": traffic_key}
     if not isinstance(alias_config, dict):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"invalid alias config: {alias_name}")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid alias config")
 
     target = alias_config.get("target")
     if isinstance(target, str) and target.strip():
-        return {"alias": alias_name, "target": target.strip(), "strategy": "static", "traffic_key": traffic_key}
+        return {"alias": alias_name, "target": validate_model_target(target), "strategy": "static", "traffic_key": traffic_key}
 
     project_name = alias_config.get("project_name")
     model_name = alias_config.get("model_name")
     if isinstance(project_name, str) and isinstance(model_name, str):
-        target = cache_key(validate_path_name(project_name), validate_path_name(model_name))
+        project, model = validate_model_reference_parts(project_name, model_name)
+        target = cache_key(project, model)
         return {"alias": alias_name, "target": target, "strategy": "static", "traffic_key": traffic_key}
 
     candidates = rollout_candidates(alias_config)
@@ -98,7 +100,7 @@ def alias_resolution(alias_name: str, alias_config: Any, traffic_key: str | None
             "candidates": candidates,
         }
 
-    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"alias has no target: {alias_name}")
+    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="alias has no target")
 
 
 def alias_target(alias_name: str, alias_config: Any, traffic_key: str | None = None) -> str:
@@ -112,11 +114,7 @@ def resolve_model_reference(
     traffic_key: str | None = None,
 ) -> tuple[str, str, str, str | None]:
     if project_name and model_name:
-        try:
-            project = validate_path_name(project_name)
-            model = validate_path_name(model_name)
-        except ValueError as exc:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        project, model = validate_model_reference_parts(project_name, model_name)
         return project, model, cache_key(project, model), model_id
 
     if not model_id:
@@ -125,7 +123,7 @@ def resolve_model_reference(
             detail="provide model_id or both project_name and model_name",
         )
 
-    model_ref = model_id.strip()
+    model_ref = model_id
     alias_name: str | None = None
     if model_ref in MODEL_ALIASES:
         alias_name = model_ref

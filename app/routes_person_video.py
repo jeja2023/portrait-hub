@@ -7,19 +7,22 @@ import onnxruntime as ort
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, Response, UploadFile, status
 
 from app.core import *
+from app.portrait_auth import permission_dependency
+from app.portrait_response import exception_log_summary, raise_internal_error
 from app.settings import APP_VERSION
+from app.video_io import public_video_metadata
 
 
 router = APIRouter()
 
 
-@router.post("/infer/video/person-tracks", dependencies=[Depends(require_api_token)])
+@router.post("/infer/video/person-tracks", dependencies=[Depends(require_api_token), Depends(permission_dependency("infer"))])
 async def infer_video_person_tracks(
     request: Request,
     file: UploadFile = File(...),
-    detector_project_name: str = Form("cross_camera_tracking"),
+    detector_project_name: str = Form("portrait_hub"),
     detector_model_name: str = Form("yolov8n.onnx"),
-    reid_project_name: str = Form("cross_camera_tracking"),
+    reid_project_name: str = Form("portrait_hub"),
     reid_model_name: str = Form("osnet_ibn_x1_0.onnx"),
     confidence: float = Form(0.25),
     iou: float = Form(0.45),
@@ -32,13 +35,12 @@ async def infer_video_person_tracks(
     observe("tracks_requests_total")
     total_start = now()
 
-    try:
-        detector_project_name = validate_path_name(detector_project_name)
-        detector_model_name = validate_path_name(detector_model_name)
-        reid_project_name = validate_path_name(reid_project_name)
-        reid_model_name = validate_path_name(reid_model_name)
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    detector_project_name, detector_model_name, reid_project_name, reid_model_name = validate_model_reference_parts(
+        detector_project_name,
+        detector_model_name,
+        reid_project_name,
+        reid_model_name,
+    )
 
     if not 0 <= confidence <= 1:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="confidence must be between 0 and 1")
@@ -55,7 +57,7 @@ async def infer_video_person_tracks(
         images, video_meta = await extract_video_frames_from_upload(file, frame_interval, max_frames)
         if not images:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="no frames could be extracted from video")
-        filenames = [f"{file.filename or 'video'}#frame-{frame_index}" for frame_index in video_meta["source_frame_indexes"]]
+        filenames = [f"video#frame-{frame_index}" for frame_index in video_meta["source_frame_indexes"]]
         result = await infer_tracks_for_images(
             images,
             filenames,
@@ -81,7 +83,7 @@ async def infer_video_person_tracks(
             request_id=request_id,
             detector_model=result["detector_key"],
             reid_model=result["reid_key"],
-            filename=file.filename,
+            filename_present=bool(file.filename),
             extracted_frames=len(images),
             person_count=result["person_count"],
             total_seconds=round(total_seconds, 6),
@@ -91,11 +93,8 @@ async def infer_video_person_tracks(
         raise
     except Exception as exc:
         observe("tracks_errors_total")
-        logger.exception("video person track inference failed")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"video person track inference runtime error: {exc}",
-        ) from exc
+        logger.warning("video person track inference failed: request_id=%s error=%s", request_id, exception_log_summary(exc))
+        raise_internal_error(request_id, "video person track inference runtime error")
 
     detector_meta = result["detector_meta"]
     embedding_meta = result["embedding_meta"]
@@ -103,7 +102,7 @@ async def infer_video_person_tracks(
         "status": "success",
         "request_id": request_id,
         "source_type": "video_upload",
-        "video": video_meta,
+        "video": public_video_metadata(video_meta),
         "detector_model": result["detector_key"],
         "reid_model": result["reid_key"],
         "timing": {
@@ -115,6 +114,9 @@ async def infer_video_person_tracks(
             "total_seconds": total_seconds,
         },
         "frames": result["frames"],
+        "tracks": result["tracks"],
+        "track_count": result["track_count"],
+        "tracker": result["tracker"],
         "frame_count": len(result["frames"]),
         "person_count": result["person_count"],
         "embedding_count": result["embedding_count"],

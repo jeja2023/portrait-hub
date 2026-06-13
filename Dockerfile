@@ -34,11 +34,17 @@ RUN sed -i \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt /tmp/requirements.txt
+COPY requirements-prod-optional.txt /tmp/requirements-prod-optional.txt
 RUN python -m pip install --no-cache-dir -r /tmp/requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
+ARG INSTALL_PROD_OPTIONAL=false
+RUN if [ "$INSTALL_PROD_OPTIONAL" = "true" ]; then \
+        python -m pip install --no-cache-dir -r /tmp/requirements-prod-optional.txt -i https://pypi.tuna.tsinghua.edu.cn/simple; \
+    fi
 
 COPY app /workspace/app
 COPY main.py /workspace/main.py
 COPY models.yml /workspace/models.yml
+COPY model-capabilities.yml /workspace/model-capabilities.yml
 
 EXPOSE 8000
 

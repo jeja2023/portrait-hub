@@ -8,6 +8,20 @@ from app.model_config import model_config
 from app.settings import CUDA_PROVIDERS, ENABLE_TENSORRT, TENSORRT_ENGINE_CACHE_ENABLE, TENSORRT_ENGINE_CACHE_PATH
 
 
+def cuda_providers_for_device(device_id: int | None = None) -> list[Any]:
+    if device_id is None:
+        return CUDA_PROVIDERS
+    providers: list[Any] = []
+    for provider in CUDA_PROVIDERS:
+        if isinstance(provider, tuple) and provider[0] == "CUDAExecutionProvider":
+            options = dict(provider[1])
+            options["device_id"] = int(device_id)
+            providers.append((provider[0], options))
+        else:
+            providers.append(provider)
+    return providers
+
+
 def io_meta(session: ort.InferenceSession) -> dict[str, Any]:
     return {
         "inputs": [
@@ -27,14 +41,15 @@ def io_meta(session: ort.InferenceSession) -> dict[str, Any]:
             for item in session.get_outputs()
         ],
     }
-def session_providers(cache_key_value: str | None = None) -> list[Any]:
+def session_providers(cache_key_value: str | None = None, device_id: int | None = None) -> list[Any]:
+    cuda_providers = cuda_providers_for_device(device_id)
     if cache_key_value is None:
-        return CUDA_PROVIDERS
+        return cuda_providers
 
     config = model_config(cache_key_value)
     runtime = str(config.get("runtime") or "onnxruntime").strip().lower()
     if runtime not in {"tensorrt", "onnxruntime-tensorrt", "trt"}:
-        return CUDA_PROVIDERS
+        return cuda_providers
     if not ENABLE_TENSORRT:
         raise RuntimeError("model requested TensorRT runtime but ENABLE_TENSORRT is false")
 
@@ -49,20 +64,21 @@ def session_providers(cache_key_value: str | None = None) -> list[Any]:
             {
                 "trt_engine_cache_enable": TENSORRT_ENGINE_CACHE_ENABLE,
                 "trt_engine_cache_path": TENSORRT_ENGINE_CACHE_PATH,
+                **({"device_id": int(device_id)} if device_id is not None else {}),
             },
         ),
-        *CUDA_PROVIDERS,
+        *cuda_providers,
     ]
 
 
-def create_session(model_path: Path, cache_key_value: str | None = None) -> ort.InferenceSession:
+def create_session(model_path: Path, cache_key_value: str | None = None, device_id: int | None = None) -> ort.InferenceSession:
     available = set(ort.get_available_providers())
     if "CUDAExecutionProvider" not in available:
         raise RuntimeError(
             f"CUDAExecutionProvider is not available. available providers: {sorted(available)}"
         )
 
-    requested_providers = session_providers(cache_key_value)
+    requested_providers = session_providers(cache_key_value, device_id=device_id)
     session = ort.InferenceSession(str(model_path), providers=requested_providers)
     active = session.get_providers()
     if requested_providers and isinstance(requested_providers[0], tuple) and requested_providers[0][0] == "TensorrtExecutionProvider":

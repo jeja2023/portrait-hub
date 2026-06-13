@@ -6,8 +6,9 @@ from fastapi import HTTPException, status
 
 from app.metrics import observe
 from app.observability import logger, now
+from app.portrait_response import exception_log_summary
 from app.runtime_sessions import input_dtype, run_session
-from app.runtime_state import GPU_SEMAPHORE
+from app.runtime_state import gpu_semaphore_for_device
 from app.schemas import ModelBundle
 from app.settings import MAX_TENSOR_ITEMS
 
@@ -38,6 +39,8 @@ async def acquire_with_timeout(semaphore: asyncio.Semaphore, timeout_seconds: fl
 async def run_model_bundle(bundle: ModelBundle, input_array: np.ndarray) -> tuple[list[np.ndarray], float, float]:
     session = bundle["session"]
     model_semaphore = bundle.get("semaphore")
+    gpu_device_id = bundle.get("gpu_device_id")
+    gpu_semaphore = gpu_semaphore_for_device(gpu_device_id)
     queue_timeout = float(bundle.get("queue_timeout_seconds", 0) or 0)
     queue_start = now()
     model_acquired = False
@@ -57,7 +60,7 @@ async def run_model_bundle(bundle: ModelBundle, input_array: np.ndarray) -> tupl
         elapsed = now() - queue_start
         remaining_timeout = max(0.001, queue_timeout - elapsed) if queue_timeout > 0 else 0
         await acquire_with_timeout(
-            GPU_SEMAPHORE,
+            gpu_semaphore,
             remaining_timeout,
             "GPU inference queue timeout",
         )
@@ -69,17 +72,58 @@ async def run_model_bundle(bundle: ModelBundle, input_array: np.ndarray) -> tupl
         inference_seconds = now() - inference_start
     finally:
         if gpu_acquired:
-            GPU_SEMAPHORE.release()
+            gpu_semaphore.release()
         if model_acquired:
             if model_semaphore is not None:
                 model_semaphore.release()
             else:
                 bundle["lock"].release()
 
-    bundle["inference_count"] += 1
+    batch_size = int(input_array.shape[0]) if input_array.ndim > 0 else 1
+    bundle["inference_count"] += max(1, batch_size)
     observe("queue_seconds_sum", queue_seconds)
     observe("inference_seconds_sum", inference_seconds)
     return raw_outputs, queue_seconds, inference_seconds
+
+
+async def run_model_bundle_batch(
+    bundle: ModelBundle,
+    inputs: list[np.ndarray],
+) -> tuple[list[np.ndarray], float, float, str]:
+    if not inputs:
+        return [], 0.0, 0.0, "empty"
+    if len(inputs) == 1:
+        raw_outputs, queue_seconds, inference_seconds = await run_model_bundle(bundle, inputs[0])
+        return raw_outputs, queue_seconds, inference_seconds, "single"
+    shapes = {tuple(input_array.shape[1:]) for input_array in inputs if input_array.ndim > 0}
+    dtypes = {str(input_array.dtype) for input_array in inputs}
+    if len(shapes) != 1 or len(dtypes) != 1:
+        output_groups: list[list[np.ndarray]] = []
+        queue_seconds_sum = 0.0
+        inference_seconds_sum = 0.0
+        for input_array in inputs:
+            raw_outputs, queue_seconds, inference_seconds = await run_model_bundle(bundle, input_array)
+            output_groups.append(raw_outputs)
+            queue_seconds_sum += queue_seconds
+            inference_seconds_sum += inference_seconds
+        return stack_outputs(output_groups), queue_seconds_sum, inference_seconds_sum, "per_item_mixed_shape"
+    try:
+        batched_input = np.concatenate(inputs, axis=0)
+        raw_outputs, queue_seconds, inference_seconds = await run_model_bundle(bundle, batched_input)
+        return raw_outputs, queue_seconds, inference_seconds, "batch"
+    except Exception as exc:
+        logger.warning("batch inference failed, falling back to per-item inference: %s", exception_log_summary(exc))
+    output_groups = []
+    queue_seconds_sum = 0.0
+    inference_seconds_sum = 0.0
+    for input_array in inputs:
+        raw_outputs, queue_seconds, inference_seconds = await run_model_bundle(bundle, input_array)
+        output_groups.append(raw_outputs)
+        queue_seconds_sum += queue_seconds
+        inference_seconds_sum += inference_seconds
+    return stack_outputs(output_groups), queue_seconds_sum, inference_seconds_sum, "per_item"
+
+
 def stack_outputs(output_groups: list[list[np.ndarray]]) -> list[np.ndarray]:
     if not output_groups:
         return []
@@ -101,7 +145,7 @@ async def run_yolo_frames(
         raw_outputs, queue_seconds, inference_seconds = await run_model_bundle(bundle, input_array)
         return raw_outputs, queue_seconds, inference_seconds, "batch"
     except Exception as exc:
-        logger.warning("batch inference failed, falling back to per-frame inference: %s", exc)
+        logger.warning("batch inference failed, falling back to per-frame inference: %s", exception_log_summary(exc))
 
     output_groups: list[list[np.ndarray]] = []
     queue_seconds_sum = 0.0

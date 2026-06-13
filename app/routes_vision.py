@@ -7,14 +7,16 @@ import onnxruntime as ort
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, Response, UploadFile, status
 
 from app.core import *
+from app.portrait_auth import permission_dependency
+from app.portrait_response import exception_log_summary, raise_internal_error
 from app.settings import APP_VERSION
 
 
 router = APIRouter()
 
 
-@router.post("/vision/infer", dependencies=[Depends(require_api_token)])
-@router.post("/vision/batch-infer", dependencies=[Depends(require_api_token)])
+@router.post("/vision/infer", dependencies=[Depends(require_api_token), Depends(permission_dependency("infer"))])
+@router.post("/vision/batch-infer", dependencies=[Depends(require_api_token), Depends(permission_dependency("infer"))])
 async def vision_infer(
     request: Request,
     files: list[UploadFile] = File(...),
@@ -83,10 +85,9 @@ async def vision_infer(
         elif task_name in {"reid", "embedding", "embeddings"}:
             embeddings, infer_meta = await infer_reid_images(bundle, key, images)
             results = []
-            for index, filename in enumerate(filenames):
+            for index, _filename in enumerate(filenames):
                 item: dict[str, Any] = {
                     "image_index": index,
-                    "filename": filename,
                     "width": images[index].width,
                     "height": images[index].height,
                     "embedding_dim": infer_meta["embedding_dim"],
@@ -99,7 +100,7 @@ async def vision_infer(
         else:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"unsupported vision task: {task_name}",
+                detail="unsupported vision task",
             )
 
         total_seconds = now() - total_start
@@ -137,11 +138,8 @@ async def vision_infer(
         raise
     except Exception as exc:
         observe("vision_errors_total")
-        logger.exception("vision inference failed")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"vision inference runtime error: {exc}",
-        ) from exc
+        logger.warning("vision inference failed: request_id=%s error=%s", request_id, exception_log_summary(exc))
+        raise_internal_error(request_id, "vision inference runtime error")
 
     return {
         "status": "success",

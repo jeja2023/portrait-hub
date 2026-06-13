@@ -5,6 +5,7 @@ x-gpu-worker-env: &gpu-worker-env
   # 模型目录在容器内的固定路径，代码会从这里读取 <project>/<model>.onnx。
   MODELS_ROOT: /models
   MODEL_CONFIG_PATH: ${MODEL_CONFIG_PATH:-/workspace/models.yml}
+  MODEL_CONFIG_READ_FAIL_CLOSED: ${MODEL_CONFIG_READ_FAIL_CLOSED:-true}
   # 以下变量来自 .env；冒号后的值是未配置时的默认值。
   LOG_LEVEL: ${LOG_LEVEL:-INFO}
   MAX_TENSOR_ITEMS: ${MAX_TENSOR_ITEMS:-12582912}
@@ -19,7 +20,12 @@ x-gpu-worker-env: &gpu-worker-env
   STREAM_FRAME_INTERVAL: ${STREAM_FRAME_INTERVAL:-15}
   MAX_STREAM_FRAMES: ${MAX_STREAM_FRAMES:-32}
   STREAM_READ_TIMEOUT_SECONDS: ${STREAM_READ_TIMEOUT_SECONDS:-10}
+  STREAM_WORKER_POLL_INTERVAL_SECONDS: ${STREAM_WORKER_POLL_INTERVAL_SECONDS:-5}
+  STREAM_WORKER_MAX_RECONNECTS: ${STREAM_WORKER_MAX_RECONNECTS:-3}
+  MAX_REQUEST_BODY_BYTES: ${MAX_REQUEST_BODY_BYTES:-805306368}
   ALLOW_STREAM_URLS: ${ALLOW_STREAM_URLS:-false}
+  ALLOW_PRIVATE_STREAM_HOSTS: ${ALLOW_PRIVATE_STREAM_HOSTS:-false}
+  STREAM_ALLOWED_HOSTS: ${STREAM_ALLOWED_HOSTS:-}
   MAX_LOADED_MODELS: ${MAX_LOADED_MODELS:-0}
   GPU_QUEUE_LIMIT: ${GPU_QUEUE_LIMIT:-1}
   MODEL_CONCURRENCY_LIMIT: ${MODEL_CONCURRENCY_LIMIT:-1}
@@ -28,6 +34,76 @@ x-gpu-worker-env: &gpu-worker-env
   TENSORRT_ENGINE_CACHE_ENABLE: ${TENSORRT_ENGINE_CACHE_ENABLE:-true}
   TENSORRT_ENGINE_CACHE_PATH: ${TENSORRT_ENGINE_CACHE_PATH:-/tmp/tensorrt-engine-cache}
   ROLLOUT_AUDIT_PATH: ${ROLLOUT_AUDIT_PATH:-/workspace/runtime-state/rollout-audit.jsonl}
+  RUNTIME_STATE_DIR: ${RUNTIME_STATE_DIR:-/workspace/runtime-state}
+  PORTRAIT_GALLERY_STATE_PATH: ${PORTRAIT_GALLERY_STATE_PATH:-/workspace/runtime-state/portrait-gallery.json}
+  PORTRAIT_THRESHOLDS_STATE_PATH: ${PORTRAIT_THRESHOLDS_STATE_PATH:-/workspace/runtime-state/portrait-thresholds.json}
+  PORTRAIT_AUDIT_PATH: ${PORTRAIT_AUDIT_PATH:-/workspace/runtime-state/portrait-audit.jsonl}
+  AUDIT_WRITE_FAIL_CLOSED: ${AUDIT_WRITE_FAIL_CLOSED:-true}
+  PORTRAIT_JOBS_STATE_PATH: ${PORTRAIT_JOBS_STATE_PATH:-/workspace/runtime-state/portrait-jobs.json}
+  PORTRAIT_STREAMS_STATE_PATH: ${PORTRAIT_STREAMS_STATE_PATH:-/workspace/runtime-state/portrait-streams.json}
+  JWT_SECRET: ${JWT_SECRET:-}
+  JWT_SECRET_ID: ${JWT_SECRET_ID:-primary}
+  JWT_SECRET_KEYRING: ${JWT_SECRET_KEYRING:-}
+  JWT_ISSUER: ${JWT_ISSUER:-portrait-hub}
+  JWT_AUDIENCE: ${JWT_AUDIENCE:-portrait-hub-api}
+  JWT_REQUIRE_EXP: ${JWT_REQUIRE_EXP:-true}
+  JWT_REQUIRE_ISS: ${JWT_REQUIRE_ISS:-true}
+  JWT_REQUIRE_AUD: ${JWT_REQUIRE_AUD:-true}
+  RBAC_ENABLED: ${RBAC_ENABLED:-false}
+  AUTH_REQUIRED: ${AUTH_REQUIRED:-true}
+  DEBUG_ENDPOINTS_ENABLED: ${DEBUG_ENDPOINTS_ENABLED:-false}
+  ENABLE_API_DOCS: ${ENABLE_API_DOCS:-false}
+  TRUSTED_HOSTS: ${TRUSTED_HOSTS:-127.0.0.1,localhost,gpu-worker-0,gpu-worker-1}
+  TENANT_HEADER_REQUIRED: ${TENANT_HEADER_REQUIRED:-true}
+  JWT_REQUIRE_TENANT: ${JWT_REQUIRE_TENANT:-true}
+  ENCRYPTION_KEY: ${ENCRYPTION_KEY:-}
+  ENCRYPTION_KEY_ID: ${ENCRYPTION_KEY_ID:-primary}
+  ENCRYPTION_KEYRING: ${ENCRYPTION_KEYRING:-}
+  REQUIRE_ENCRYPTION: ${REQUIRE_ENCRYPTION:-true}
+  PORTRAIT_STORAGE_BACKEND: ${PORTRAIT_STORAGE_BACKEND:-json}
+  PORTRAIT_VECTOR_BACKEND: ${PORTRAIT_VECTOR_BACKEND:-local}
+  PORTRAIT_OBJECT_STORAGE_BACKEND: ${PORTRAIT_OBJECT_STORAGE_BACKEND:-local}
+  POSTGRES_DSN: ${POSTGRES_DSN:-}
+  POSTGRES_CONNECT_TIMEOUT_SECONDS: ${POSTGRES_CONNECT_TIMEOUT_SECONDS:-3}
+  QDRANT_URL: ${QDRANT_URL:-}
+  QDRANT_API_KEY: ${QDRANT_API_KEY:-}
+  OBJECT_STORAGE_DIR: ${OBJECT_STORAGE_DIR:-/workspace/runtime-state/objects}
+  S3_ENDPOINT_URL: ${S3_ENDPOINT_URL:-}
+  S3_REGION: ${S3_REGION:-us-east-1}
+  S3_BUCKET: ${S3_BUCKET:-}
+  S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-}
+  S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-}
+  TASK_QUEUE_BACKEND: ${TASK_QUEUE_BACKEND:-local}
+  TASK_QUEUE_STATE_PATH: ${TASK_QUEUE_STATE_PATH:-/workspace/runtime-state/portrait-task-queue.jsonl}
+  REDIS_URL: ${REDIS_URL:-}
+  STREAM_EVENT_STATE_PATH: ${STREAM_EVENT_STATE_PATH:-/workspace/runtime-state/portrait-stream-events.jsonl}
+  MODEL_CAPABILITIES_PATH: ${MODEL_CAPABILITIES_PATH:-/workspace/model-capabilities.yml}
+  RATE_LIMIT_PER_MINUTE: ${RATE_LIMIT_PER_MINUTE:-120}
+  RATE_LIMIT_BURST: ${RATE_LIMIT_BURST:-240}
+  RATE_LIMIT_MAX_BUCKETS: ${RATE_LIMIT_MAX_BUCKETS:-10000}
+  RATE_LIMIT_BUCKET_TTL_SECONDS: ${RATE_LIMIT_BUCKET_TTL_SECONDS:-3600}
+  SECURITY_HEADERS_ENABLED: ${SECURITY_HEADERS_ENABLED:-true}
+  CONTENT_SECURITY_POLICY: "${CONTENT_SECURITY_POLICY:-default-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'}"
+  HSTS_ENABLED: ${HSTS_ENABLED:-true}
+  HSTS_MAX_AGE_SECONDS: ${HSTS_MAX_AGE_SECONDS:-31536000}
+  HSTS_INCLUDE_SUBDOMAINS: ${HSTS_INCLUDE_SUBDOMAINS:-true}
+  HSTS_PRELOAD: ${HSTS_PRELOAD:-false}
+  DATA_RETENTION_DAYS: ${DATA_RETENTION_DAYS:-0}
+  STATE_READ_FAIL_CLOSED: ${STATE_READ_FAIL_CLOSED:-true}
+  STATE_WRITE_FAIL_CLOSED: ${STATE_WRITE_FAIL_CLOSED:-true}
+  MAX_PUBLIC_METADATA_BYTES: ${MAX_PUBLIC_METADATA_BYTES:-16384}
+  MAX_PUBLIC_METADATA_DEPTH: ${MAX_PUBLIC_METADATA_DEPTH:-6}
+  MAX_PUBLIC_METADATA_KEYS: ${MAX_PUBLIC_METADATA_KEYS:-128}
+  MAX_PUBLIC_METADATA_STRING_LENGTH: ${MAX_PUBLIC_METADATA_STRING_LENGTH:-2048}
+  MAX_AUDIT_PAYLOAD_BYTES: ${MAX_AUDIT_PAYLOAD_BYTES:-32768}
+  MAX_AUDIT_DEPTH: ${MAX_AUDIT_DEPTH:-6}
+  MAX_AUDIT_KEYS: ${MAX_AUDIT_KEYS:-128}
+  MAX_AUDIT_LIST_ITEMS: ${MAX_AUDIT_LIST_ITEMS:-64}
+  MAX_AUDIT_STRING_LENGTH: ${MAX_AUDIT_STRING_LENGTH:-2048}
+  API_LIST_DEFAULT_LIMIT: ${API_LIST_DEFAULT_LIMIT:-100}
+  MAX_API_LIST_LIMIT: ${MAX_API_LIST_LIMIT:-500}
+  STREAM_EVENT_LIST_DEFAULT_LIMIT: ${STREAM_EVENT_LIST_DEFAULT_LIMIT:-100}
+  MAX_STREAM_EVENT_LIST_LIMIT: ${MAX_STREAM_EVENT_LIST_LIMIT:-200}
   WARMUP_MODELS: ${WARMUP_MODELS:-}
   API_TOKEN: ${API_TOKEN:-}
   TZ: Asia/Shanghai
@@ -36,6 +112,8 @@ x-gpu-worker-common: &gpu-worker-common
   build:
     context: .
     dockerfile: Dockerfile
+    args:
+      INSTALL_PROD_OPTIONAL: ${INSTALL_PROD_OPTIONAL:-false}
   restart: unless-stopped
   environment:
     <<: *gpu-worker-env
@@ -46,9 +124,9 @@ x-gpu-worker-common: &gpu-worker-common
       target: /workspace/models.yml
       bind:
         create_host_path: false
-    # 宿主机模型目录只读挂载，默认使用本项目同级的 ../shared-models。
+    # 宿主机模型目录只读挂载，默认使用本项目目录下的 ./models。
     - type: bind
-      source: ${MODELS_HOST_DIR:-../shared-models}
+      source: ${MODELS_HOST_DIR:-./models}
       target: /models
       read_only: true
     # 运行期审计日志等状态文件放在宿主机目录，避免容器重建后丢失。
@@ -105,6 +183,19 @@ services:
             - driver: nvidia
               device_ids: ["${GPU_WORKER_1_DEVICE:-1}"]
               capabilities: ["gpu"]
+
+  portrait-stream-worker:
+    <<: *gpu-worker-common
+    container_name: portrait-stream-worker
+    hostname: portrait-stream-worker
+    command: ["python", "-m", "app.portrait_stream_worker_daemon"]
+    ports: []
+    healthcheck:
+      disable: true
+    environment:
+      <<: *gpu-worker-env
+      NVIDIA_VISIBLE_DEVICES: ${STREAM_WORKER_GPU_DEVICES:-none}
+      NVIDIA_DRIVER_CAPABILITIES: "compute,utility"
 
 networks:
   gpu-bridge:

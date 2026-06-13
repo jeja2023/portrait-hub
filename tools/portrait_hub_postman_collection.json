@@ -1,0 +1,132 @@
+{
+  "info": {
+    "name": "PortraitHub v1",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Health",
+      "request": {
+        "method": "GET",
+        "url": "{{base_url}}/health"
+      }
+    },
+    {
+      "name": "Compare Persons",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{api_token}}"
+          }
+        ],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "image_a",
+              "type": "file",
+              "src": []
+            },
+            {
+              "key": "image_b",
+              "type": "file",
+              "src": []
+            },
+            {
+              "key": "threshold_profile",
+              "type": "text",
+              "value": "normal"
+            }
+          ]
+        },
+        "url": "{{base_url}}/v1/compare/persons"
+      }
+    },
+    {
+      "name": "Gallery Enroll",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{api_token}}"
+          }
+        ],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "person_id",
+              "type": "text",
+              "value": "p_001"
+            },
+            {
+              "key": "modality",
+              "type": "text",
+              "value": "body"
+            },
+            {
+              "key": "files",
+              "type": "file",
+              "src": []
+            }
+          ]
+        },
+        "url": "{{base_url}}/v1/gallery/enroll"
+      }
+    },
+    {
+      "name": "Gallery Search",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{api_token}}"
+          }
+        ],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "src": []
+            },
+            {
+              "key": "modality",
+              "type": "text",
+              "value": "body"
+            }
+          ]
+        },
+        "url": "{{base_url}}/v1/gallery/search"
+      }
+    },
+    {
+      "name": "Thresholds",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{api_token}}"
+          }
+        ],
+        "url": "{{base_url}}/v1/thresholds"
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://127.0.0.1:9001"
+    },
+    {
+      "key": "api_token",
+      "value": ""
+    }
+  ]
+}

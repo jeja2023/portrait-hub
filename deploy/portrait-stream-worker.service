@@ -1,0 +1,17 @@
+[Unit]
+Description=PortraitHub stream worker daemon
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/portrait-hub
+EnvironmentFile=-/etc/portrait-hub/portrait-hub.env
+ExecStart=/usr/bin/python3 -m app.portrait_stream_worker_daemon
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

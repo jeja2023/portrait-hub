@@ -1,0 +1,36 @@
+{
+  "collections": [
+    {
+      "name": "portrait_face_vectors",
+      "vectors": {
+        "size": 512,
+        "distance": "Cosine"
+      },
+      "payload_indexes": ["tenant_id", "person_id", "model_id", "model_version"]
+    },
+    {
+      "name": "portrait_body_vectors",
+      "vectors": {
+        "size": 512,
+        "distance": "Cosine"
+      },
+      "payload_indexes": ["tenant_id", "person_id", "model_id", "model_version"]
+    },
+    {
+      "name": "portrait_gait_vectors",
+      "vectors": {
+        "size": 256,
+        "distance": "Cosine"
+      },
+      "payload_indexes": ["tenant_id", "person_id", "model_id", "model_version"]
+    },
+    {
+      "name": "portrait_appearance_vectors",
+      "vectors": {
+        "size": 256,
+        "distance": "Cosine"
+      },
+      "payload_indexes": ["tenant_id", "person_id", "model_id", "model_version"]
+    }
+  ]
+}

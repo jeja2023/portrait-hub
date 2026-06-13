@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>PortraitHub 运维控制台</title>
+  <link rel="stylesheet" href="/assets/console.css" />
+  <script src="/assets/console.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <h1>PortraitHub 运维控制台</h1>
+      <p>接口文档 /models /gallery /jobs /streams</p>
+    </div>
+    <nav aria-label="console views">
+      <button type="button" data-nav="models">Models</button>
+      <button type="button" data-nav="gallery">Gallery</button>
+      <button type="button" data-nav="jobs">Jobs</button>
+      <button type="button" data-nav="streams">Streams</button>
+      <button type="button" data-nav="admin">Admin</button>
+    </nav>
+  </header>
+
+  <main class="shell">
+    <aside class="panel auth-panel">
+      <h2>JWT 令牌</h2>
+      <label>Tenant <input id="tenant-input" autocomplete="off" value="default" /></label>
+      <label>API Key <input id="api-key-input" type="password" autocomplete="off" /></label>
+      <label>Bearer <input id="bearer-input" type="password" autocomplete="off" /></label>
+      <div class="actions">
+        <button type="button" id="save-auth-button">Save</button>
+        <button type="button" id="refresh-button" class="primary">Refresh</button>
+      </div>
+      <div id="status-strip" class="status-strip">Ready</div>
+    </aside>
+
+    <section class="workspace">
+      <section class="view" data-view="models">
+        <div class="view-header">
+          <h2>Models</h2>
+          <div class="actions">
+            <input id="model-id-input" placeholder="portrait_hub/yolov8n.onnx" />
+            <button type="button" id="load-model-button">Load</button>
+            <button type="button" id="unload-model-button">Unload</button>
+          </div>
+        </div>
+        <pre id="models-json" class="json-view">{}</pre>
+      </section>
+
+      <section class="view" data-view="gallery">
+        <div class="view-header">
+          <h2>Gallery</h2>
+          <button type="button" id="gallery-refresh-button">Refresh</button>
+        </div>
+        <form id="enroll-form" class="form-grid">
+          <label>Person <input id="enroll-person-id-input" name="person_id" /></label>
+          <label>Display <input id="enroll-display-name-input" name="display_name" /></label>
+          <label>Modality
+            <select id="enroll-modality-input" name="modality">
+              <option value="body">Body</option>
+              <option value="face">Face</option>
+              <option value="appearance">Appearance</option>
+            </select>
+          </label>
+          <label>Images <input id="enroll-file-input" name="files" type="file" multiple /></label>
+          <button type="submit" class="primary">Enroll</button>
+        </form>
+        <form id="search-form" class="form-grid">
+          <label>Query <input id="search-file-input" name="file" type="file" /></label>
+          <label>Modality
+            <select id="search-modality-input" name="modality">
+              <option value="body">Body</option>
+              <option value="face">Face</option>
+              <option value="appearance">Appearance</option>
+            </select>
+          </label>
+          <label>Top K <input id="search-top-k-input" name="top_k" type="number" min="1" value="5" /></label>
+          <button type="submit">Search</button>
+        </form>
+        <pre id="gallery-json" class="json-view">{}</pre>
+      </section>
+
+      <section class="view" data-view="jobs">
+        <div class="view-header">
+          <h2>Jobs</h2>
+          <input id="job-id-input" placeholder="job id" />
+        </div>
+        <form id="job-form" class="form-grid">
+          <label>Video <input id="job-file-input" name="file" type="file" /></label>
+          <label>Interval <input id="job-frame-interval-input" name="frame_interval" type="number" min="1" value="15" /></label>
+          <label>Max Frames <input id="job-max-frames-input" name="max_frames" type="number" min="1" value="64" /></label>
+          <button type="submit" class="primary">Create</button>
+        </form>
+        <div class="actions">
+          <button type="button" id="job-get-button">Get</button>
+          <button type="button" id="job-result-button">Result</button>
+          <button type="button" id="job-cancel-button">Cancel</button>
+        </div>
+        <pre id="jobs-json" class="json-view">{}</pre>
+      </section>
+
+      <section class="view" data-view="streams">
+        <div class="view-header">
+          <h2>Streams</h2>
+          <button type="button" id="streams-refresh-button">Refresh</button>
+        </div>
+        <form id="stream-form" class="form-grid">
+          <label>URL <input id="stream-url-input" name="stream_url" /></label>
+          <label>Name <input id="stream-name-input" name="name" /></label>
+          <button type="submit" class="primary">Create</button>
+        </form>
+        <div class="actions">
+          <input id="stream-id-input" placeholder="stream id" />
+          <button type="button" id="stream-start-button">Start</button>
+          <button type="button" id="stream-stop-button">Stop</button>
+          <button type="button" id="stream-events-button">Events</button>
+        </div>
+        <pre id="streams-json" class="json-view">{}</pre>
+      </section>
+
+      <section class="view" data-view="admin">
+        <div class="view-header">
+          <h2>Admin</h2>
+          <button type="button" id="admin-refresh-button">Refresh</button>
+        </div>
+        <form id="threshold-form" class="form-grid">
+          <label>Profile <input id="threshold-profile-input" value="normal" /></label>
+          <label>Body <input id="threshold-body-input" type="number" min="0" max="1" step="0.01" /></label>
+          <label>Face <input id="threshold-face-input" type="number" min="0" max="1" step="0.01" /></label>
+          <button type="submit">Save Thresholds</button>
+        </form>
+        <form id="retention-form" class="form-grid">
+          <label>Days <input id="retention-days-input" type="number" min="1" value="30" /></label>
+          <label>Confirm <input id="retention-confirm-input" placeholder="cleanup" /></label>
+          <button type="submit">Cleanup</button>
+        </form>
+        <pre id="admin-json" class="json-view">{}</pre>
+      </section>
+    </section>
+  </main>
+</body>
+</html>

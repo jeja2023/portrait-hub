@@ -1,0 +1,32 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: ["main", "master"]
+  workflow_dispatch:
+
+jobs:
+  test-and-verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+      - name: Run Python tests
+        run: python -m pytest -q
+      - name: Run Node SDK contract tests
+        run: node tests/test_node_sdk.js
+      - name: Run deployment contract checks
+        run: python tools/deploy_check.py --json
+      - name: Run example model regression gates
+        run: python tools/portrait_model_regression.py --manifest examples/portrait-model-regression.example.yml --json

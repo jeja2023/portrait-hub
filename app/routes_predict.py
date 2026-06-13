@@ -4,12 +4,14 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from app.core import *
+from app.portrait_auth import permission_dependency
+from app.portrait_response import exception_log_summary, raise_internal_error
 
 
 router = APIRouter()
 
 
-@router.post("/predict", dependencies=[Depends(require_api_token)])
+@router.post("/predict", dependencies=[Depends(require_api_token), Depends(permission_dependency("infer"))])
 async def predict(req: InferenceRequest, request: Request) -> dict[str, Any]:
     request_id = request_id_from_headers(request)
     observe("predict_requests_total")
@@ -46,11 +48,8 @@ async def predict(req: InferenceRequest, request: Request) -> dict[str, Any]:
         raise
     except Exception as exc:
         observe("predict_errors_total")
-        logger.exception("inference failed for model: %s", key)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"inference runtime error: {exc}",
-        ) from exc
+        logger.warning("inference failed: request_id=%s error=%s", request_id, exception_log_summary(exc))
+        raise_internal_error(request_id, "inference runtime error")
 
     return {
         "status": "success",

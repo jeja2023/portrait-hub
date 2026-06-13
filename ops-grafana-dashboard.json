@@ -1,0 +1,32 @@
+{
+  "title": "PortraitHub Overview",
+  "schemaVersion": 39,
+  "version": 1,
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "HTTP Request Rate",
+      "targets": [{"expr": "sum(rate(gpu_worker_requests_total[5m]))"}]
+    },
+    {
+      "type": "timeseries",
+      "title": "Inference p95 Latency",
+      "targets": [{"expr": "histogram_quantile(0.95, sum(rate(gpu_worker_inference_duration_seconds_bucket[5m])) by (le))"}]
+    },
+    {
+      "type": "timeseries",
+      "title": "GPU Memory Used",
+      "targets": [{"expr": "gpu_worker_gpu_memory_used_bytes"}]
+    },
+    {
+      "type": "timeseries",
+      "title": "GPU Queue Depth",
+      "targets": [{"expr": "gpu_worker_gpu_device_queue_depth"}]
+    },
+    {
+      "type": "stat",
+      "title": "Loaded Models",
+      "targets": [{"expr": "sum(gpu_worker_loaded_models)"}]
+    }
+  ]
+}

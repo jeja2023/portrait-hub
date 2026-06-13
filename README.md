@@ -1,6 +1,116 @@
-# GPU Inference Service
+# GPU 推理服务
 
 面向 Ubuntu + Docker + NVIDIA GPU 的 ONNX 推理服务。服务通过 FastAPI 暴露接口，按 GPU 拆成多个 worker，适合给人像识别、人像检索、ReID 等业务项目提供共享推理能力。
+
+## PortraitHub v1 平台接口
+
+服务现在还提供 PortraitHub v1 接口，用于人像中台方案：
+
+- `/v1/infer/faces`、`/v1/infer/persons`、`/v1/infer/pose`、`/v1/infer/appearance`、`/v1/infer/gait`
+- `/v1/compare/faces`、`/v1/compare/persons`、`/v1/compare/gait`、`/v1/fusion/compare`
+- `/v1/gallery/enroll`、`/v1/gallery/search`、`/v1/gallery/{person_id}`、`/v1/gallery/reindex`
+- `/v1/jobs/video`、`/v1/jobs/{job_id}`、`/v1/jobs/{job_id}/result`、`/v1/jobs/{job_id}/cancel`
+- `/v1/streams`、`/v1/streams/{stream_id}/start`、`/v1/streams/{stream_id}/stop`、`/v1/streams/{stream_id}/status`、`/v1/streams/{stream_id}/events`
+- `/v1/models`、`/v1/models/{model_id}`、`/v1/models/{model_id}/load`、`/v1/models/{model_id}/unload`
+- `/v1/thresholds`、`/v1/thresholds/{profile}`、`/console`
+
+当人脸、姿态、步态、衣着、数据库或向量库这些专用服务尚未配置时，v1 接口会使用明确的本地兜底能力，保证平台契约在开发环境里仍可运行。生产部署应使用校准后的模型和向量库集成替换这些兜底实现。
+
+推荐的生产数据栈：
+
+- PostgreSQL 作为租户、人员、底库元数据、特征元数据、阈值、视频任务、流、审计事件和对象元数据的主数据库。
+- 当你想要最简单的生产拓扑时，`pgvector` 是首选向量后端。
+- 当特征规模、QPS、过滤需求或运维隔离要求超过 PostgreSQL 时，推荐改用 Qdrant。
+- MinIO 或其他 S3 兼容服务用于存放上传的底库图片、快照以及视频/对象载荷，数据库只保存对象 key 和元数据。
+- Redis 只作为分布式任务队列的可选转交通道，本地默认队列仍适合单进程开发。
+
+算法流水线升级：
+
+- 图像质量评分现在包含模糊、曝光、过曝/欠曝裁剪、对比度、尺寸、宽高比、色彩丰富度和噪声信号。
+- 图像解码增加了内容 SHA-256 以及感知平均哈希/差异哈希；批量图像解码会把完全重复和近重复输入标记为 `duplicate_of`。
+- 图像上传现在通过同一条共享路径校验扩展名、文件签名、解码格式和像素上限，供旧接口和 v1 接口共用。
+- 视频上传会先用容器签名校验支持的扩展名，再进行 OpenCV 解码，从而降低伪装媒体的注入风险。
+- 离线视频抽帧采用“区间 + 均匀”混合过采样，并结合质量、多样性、时间覆盖和场景片段选择，让受限帧数仍能覆盖整段视频、覆盖不同镜头，并避免低价值近重复帧。
+- 视频和视频流抽帧现在会增加感知帧指纹和 MMR 风格的帧选择，抑制近重复候选，同时保留高质量且多样的证据。
+- 视频流和不可 seek 视频抽帧在质量/多样性选择之前也会使用有界的顺序候选池，同时继续遵守读取超时。
+- 抽取到的视频帧和流帧会在元数据里携带每帧质量、场景变化分数、帧指纹、被选帧的哈希距离以及近重复候选数量。
+- 人体轨迹推理现在使用借鉴 ByteTrack/BoT-SORT 的两阶段关联策略，结合 IoU、运动连续性、置信区间、ReID 外观 embedding 和小批量全局最优分配，生成稳定的 `track_id`。
+- 人体轨迹推理现在会在 embedding 聚合前，对每个 ReID 裁剪结果计算图像质量、面积占比、截断情况、宽高比适配度和可用性。
+- 轨迹关联在最后一次观测 IoU 之外增加了恒速预测框，改善高速运动和间隔抽帧视频的连续性；每次匹配都会报告决策余量、置信度、风险和支持信号，便于排查 ID 切换。
+- 轨迹后处理增加了时间维度的 `smoothed_box`、短间隔插值摘要、片段合并、稳定性分数、间隔计数和插值计数，供视频/流分析使用。
+- 轨迹现在暴露面向近期的、按质量/置信度加权的 tracklet 模板，并做成对一致性离群抑制；只有在 `include_embeddings=true` 时才返回向量载荷。
+- Tracklet 模板可以直接使用与人脸/人体/步态比对相同的质量感知阈值契约进行比较。
+- 人脸兜底检测使用带缓存的、受限的 OpenCV Haar 路径，并在低纹理场景下快速回退，避免无人脸或低信息图像阻塞比对请求。
+- 人脸/人体/步态比对使用质量感知校准，在保持原始相似度兼容性的同时，增加调整后相似度、调整后阈值、质量惩罚、质量门槛、决策余量、置信度和风险字段。
+- 比对响应会包含输入证据，例如解码后的帧质量、指纹以及完全/近重复标记；人脸/人体/融合决策还会暴露 `input_independence`，对重复证据降低置信度，并附加重复输入风险因素，而不会掩盖已有的质量或模态风险。
+- 步态比对会在 tracklet embedding 之前排除近重复序列帧。
+- 多模态融合会报告一致性、分数一致程度、冲突惩罚、决策余量、置信度和风险标签，以便保守处理相互矛盾的模态证据。
+- 底库检索会先扩大特征级检索池，再做人员级聚合；当查询质量和种子候选足够稳定时，还可以运行保守的查询扩展，执行第二阶段检索。
+- 底库候选会包含查询质量、模板质量、决策余量、置信度、支撑因子、排序上下文、最近竞争者差距和风险标签，方便人工复核排序。
+- 底库注册会跳过同一次请求中的完全/近重复图片，并报告被跳过的重复来源。
+- `tools/portrait_algorithm_eval.py` 会评估比对 ROC/TAR@FAR、底库/ReID 检索 mAP/CMC/MRR/nDCG/precision@K/recall@K、分数分离度、工作阈值校准、复核带、跟踪 MOTA/IDF1/ID 切换/HOTA 代理/覆盖率，以及来自离线 JSON/YAML manifest 的嵌套帧/人员质量分布。
+
+v1 已加入的生产加固：
+
+- 底库记录按 `X-Tenant-ID` 隔离，默认持久化到 `PORTRAIT_GALLERY_STATE_PATH`，当 `PORTRAIT_STORAGE_BACKEND=postgres` 时则写入 PostgreSQL。
+- 底库特征状态保留私有对象引用，因此删除人员时可以同时清理关联的本地/S3 载荷，而公开响应仍会脱敏对象 key、bucket 和 hash。
+- 人员删除会在不可逆清理开始前先写入失败关闭的 `gallery_delete_person_requested` 审计记录；对象清理失败会回滚并上报，不暴露存储位置。
+- 保留清理按租户范围执行，会删除过期的视频任务、流事件、底库人员及相关对象载荷，并在清理失败时失败关闭，同时回滚元数据。
+- 阈值更新默认持久化到 `PORTRAIT_THRESHOLDS_STATE_PATH`，或者在 `PORTRAIT_STORAGE_BACKEND=postgres` 时写入 PostgreSQL。
+- 底库、阈值、视频任务和流操作会把脱敏、哈希链式 JSONL 审计事件写入 `PORTRAIT_AUDIT_PATH`；PostgreSQL 部署还会把审计行写入 `portrait_audit_events`，并保留可查询的审计 hash 列。
+- `AUDIT_WRITE_FAIL_CLOSED` 会在审计持久化失败时让管理/审计写入失败关闭；Docker Compose 默认设为 `true`。
+- 流注册会阻止私网、回环、链路本地、多播、保留和未指定的 IP 字面量，以及解析到这些地址段的主机名，除非显式设置 `ALLOW_PRIVATE_STREAM_HOSTS=true`。
+- 旧版流推理现在复用同样的 SSRF 防护，并在响应元数据中隐藏凭据以及查询串/fragment 中的秘密。
+- 流状态会保护流 URL 以及敏感 `settings`/`metadata` 字段在静态存储中的安全，而公开流响应会保持这些字段脱敏。
+- `STREAM_ALLOWED_HOSTS` 可以把流 URL 限制到显式的主机/域名白名单。
+- `RBAC_ENABLED`、`JWT_SECRET`、`JWT_SECRET_ID`、`JWT_SECRET_KEYRING`、`JWT_ISSUER`、`JWT_AUDIENCE`、`JWT_REQUIRE_EXP`、`JWT_REQUIRE_ISS` 和 `JWT_REQUIRE_AUD` 用于开启可选的 HS256 JWT 角色校验，并要求过期时间、签发方、受众和滚动密钥验证。
+- RBAC 角色采用最小权限：`viewer` 只能读底库/任务/流/模型元数据；`operator` 可以推理/比对、读取管理状态和指标；`auditor` 可以读取管理状态、导出和指标，但没有修改权限；生物特征推理/比对要求 `operator`、`algorithm` 或 `admin`；调试模型输出需要模型写权限；管理导出/保留使用独立的管理权限。
+- `AUTH_REQUIRED` 会在既没有 `API_TOKEN` 也没有 RBAC 凭证时让受保护接口失败关闭；Docker Compose 默认设为 `true`。
+- `DEBUG_ENDPOINTS_ENABLED` 控制 `/debug/model-output`，默认 `false`。
+- `ENABLE_API_DOCS` 控制 `/docs`、`/redoc` 和 `/openapi.json`；Docker Compose 在生产环境默认设为 `false`。
+- `TRUSTED_HOSTS` 通过 `TrustedHostMiddleware` 执行 Host 头白名单；Docker Compose 默认允许回环地址和 worker 服务名。
+- `TENANT_HEADER_REQUIRED` 会让 v1 租户接口在 Compose 部署中默认拒绝不携带 `X-Tenant-ID` 的请求。
+- `JWT_REQUIRE_TENANT` 会让 RBAC JWT 默认通过 `tenant_id`、`tenant` 或 `tenants` claim 绑定请求租户。
+- `PORTRAIT_STORAGE_BACKEND`、`PORTRAIT_VECTOR_BACKEND` 和 `PORTRAIT_OBJECT_STORAGE_BACKEND` 提供 PostgreSQL、pgvector/Qdrant 以及 S3 兼容存储的生产后端适配器。
+- `REQUIRE_ENCRYPTION` 会在缺少 `ENCRYPTION_KEY` 时让敏感载荷保护失败关闭；Docker Compose 默认设为 `true`。
+- `ENCRYPTION_KEY_ID` 用于标记新加密载荷，而 `ENCRYPTION_KEYRING` 会在密钥轮换期间保留已退役密钥，供只读解密使用。
+- `TASK_QUEUE_BACKEND`、`REDIS_URL` 和 `STREAM_EVENT_STATE_PATH` 定义了外部 worker 的任务队列和流事件契约。
+- `model-capabilities.yml` 记录哪些模态是真实模型驱动，哪些仍是兜底或占位。
+- `MODEL_CONFIG_READ_FAIL_CLOSED` 会让缺失、不可读或格式错误的 `models.yml` 在启动/重载时默认失败关闭，而不是静默以空配置运行。
+- `RATE_LIMIT_PER_MINUTE` 和 `RATE_LIMIT_BURST` 开启按租户/路径的令牌桶限流；Docker Compose 默认每分钟 `120`，突发 `240`。
+- `RATE_LIMIT_MAX_BUCKETS` 和 `RATE_LIMIT_BUCKET_TTL_SECONDS` 限定本地限流桶内存。
+- `MAX_REQUEST_BODY_BYTES` 在路由处理器解析 JSON 或 multipart 之前就应用全局 HTTP 请求体上限；Docker Compose 默认 `805306368` 字节。
+- `STATE_READ_FAIL_CLOSED` 会让现有本地 JSON 状态读取或结构失败默认失败关闭，而不是静默丢弃已持久化状态。
+- `STATE_WRITE_FAIL_CLOSED` 会让本地 JSON 状态写入默认失败关闭。
+- `SECURITY_HEADERS_ENABLED`、`CONTENT_SECURITY_POLICY` 和 `HSTS_*` 会加入加固后的默认 HTTP 响应头、CSP、跨域隔离头以及生产 HSTS。
+- `MAX_PUBLIC_METADATA_BYTES`、`MAX_PUBLIC_METADATA_DEPTH`、`MAX_PUBLIC_METADATA_KEYS` 和 `MAX_PUBLIC_METADATA_STRING_LENGTH` 限制用户可写的元数据/设置字段。
+- `MAX_AUDIT_PAYLOAD_BYTES`、`MAX_AUDIT_DEPTH`、`MAX_AUDIT_KEYS`、`MAX_AUDIT_LIST_ITEMS` 和 `MAX_AUDIT_STRING_LENGTH` 限制脱敏审计载荷的大小和复杂度。
+- `API_LIST_DEFAULT_LIMIT`、`MAX_API_LIST_LIMIT`、`STREAM_EVENT_LIST_DEFAULT_LIMIT` 和 `MAX_STREAM_EVENT_LIST_LIMIT` 限制列表/导出响应大小。
+- `/v1/admin/export` 和 `/v1/admin/retention/cleanup` 提供按租户范围的运维导出和保留清理，覆盖任务、流事件、底库记录和底库对象载荷。
+
+生产集成产物：
+
+- `requirements-prod-optional.txt` 列出 PostgreSQL、pgvector、Qdrant、S3、JWT 和 Redis 风格队列所需的可选驱动。
+- 通过设置 `INSTALL_PROD_OPTIONAL=true` 可以把这些可选驱动安装进 Docker 镜像。
+- `tools/portrait_postgres_schema.sql` 提供 PostgreSQL/pgvector 的 schema，覆盖租户、人员、特征、阈值、任务、流、对象和审计事件。
+- `tools/qdrant_collections.json` 记录人脸、人体、步态和衣着向量的 Qdrant collection 定义。
+- `tools/portrait_production_readiness.py` 会报告模型文件、核心 SDK、模板和能力状态；在生产切换前请使用 `--strict`。
+- `app/portrait_model_runtime.py` 通过现有 ONNXRuntime 注册表、GPU 队列、产物 hash 校验和 LRU 卸载路径接入 SCRFD、ArcFace、RTMPose 和 OpenGait 的生产适配器。
+- 要启用真实模型，先添加对应的 ONNX 产物和 `models.yml` 条目，再把 `model-capabilities.yml` 里的对应项切到 `status: ready` 或 `production`，并把 `model_id` 设为已配置的模型 id，把 `adapter` 设为 `scrfd`、`arcface`、`rtmpose` 或 `opengait`。
+- `examples/production-models.example.yml` 和 `examples/production-model-capabilities.example.yml` 展示了 SCRFD、ArcFace、RTMPose 和 OpenGait 的生产契约示例。
+- `tools/portrait_cutover_check.py --regression-manifest <held-out.yml> --validate-onnx --json` 是最终的真实模型门禁。它要求生产能力状态、非兜底模型 ID、匹配的产物 SHA-256、可选的 ONNXRuntime 加载检查，以及通过回归门禁。
+- 精度回归门禁可直接参考 `python tools/portrait_model_regression.py --manifest examples/portrait-model-regression.example.yml --json`；上线前把示例分数替换成留出集评估结果。
+- 长期运行的流拉取应在 API 进程外执行：`python -m app.portrait_stream_worker_daemon`；Docker Compose 已包含对应的 `portrait-stream-worker` 服务。
+- `deploy/portrait-stream-worker.service` 和 `deploy/k8s-stream-worker.yaml` 提供流 worker 进程的 systemd 和 Kubernetes 部署模板，而 `tools/portrait_stream_worker_health.py --json` 会报告进程内 worker 心跳是否过期。
+- `.github/workflows/ci.yml` 运行 Python 测试、Node SDK 契约测试、部署检查和示例回归门禁；`.github/workflows/security-audit.yml` 会在依赖变更时以及每周运行 `pip-audit`。
+
+受限范围的工业级验收：
+
+- 当真实模型替换、真实生产数据栈演练和真实运维演练被明确排除在本阶段之外时，请使用 `python tools/portrait_production_readiness.py --scope platform --strict` 作为平台验收门禁。
+- 这个受限门禁仍会检查 API/安全契约、存储/向量/对象适配器、Python/Node SDK 产物、`models` 下的模型文件路径、审计和保留控制、脱敏、回滚行为以及生产配置默认值。
+- 完整的 `python tools/portrait_production_readiness.py --strict` 仍然是最终切换门禁。在 `model-capabilities.yml` 还把 appearance、face detection、face embedding、gait 或 pose 标记为 fallback/placeholder 时，这个门禁预期会失败。
+- 除非某个新功能扩展是为了解决已有的安全、兼容性或发布契约缺口，否则不要把它算进平台验收门禁。
+- 受限平台验收清单记录在 [PLATFORM_ACCEPTANCE.md](PLATFORM_ACCEPTANCE.md)。
 
 Ubuntu 服务器完整部署步骤见 [DEPLOY_UBUNTU.md](DEPLOY_UBUNTU.md)。
 
@@ -51,9 +161,9 @@ gpu-services/
 ~/project/
 ├── gpu-services/
 ├── other-project/
-└── shared-models/
+└── models/
     └── your_project/
-        └── your_model.onnx
+        └── yolov8n.onnx
 ```
 
 ## Ubuntu 服务器要求
@@ -72,14 +182,13 @@ docker run --rm --gpus all nvidia/cuda:11.8.0-base-ubuntu22.04 nvidia-smi
 创建共享模型目录：
 
 ```bash
-mkdir -p ../shared-models
+mkdir -p models
 ```
 
-把模型放入共享目录。下面命令只是示例，按你的实际项目名和模型文件调整：
+把模型放入共享目录。下面命令使用本仓库默认的 PortraitHub 模型 ID：
 
 ```bash
-mkdir -p ../shared-models/person_service
-cp "$PWD/models"/*.onnx ../shared-models/person_service/
+cp "$PWD/models"/*.onnx models/
 ```
 
 构建并启动：
@@ -107,7 +216,7 @@ GET /ready/deep
 GET /models
 GET /model-configs
 GET /metrics
-GET /model-info?project_name=person_service&model_name=your_model.onnx
+GET /model-info?project_name=portrait_hub&model_name=yolov8n.onnx
 ```
 
 推理：
@@ -117,8 +226,8 @@ POST /predict
 Content-Type: application/json
 
 {
-  "project_name": "person_service",
-  "model_name": "your_model.onnx",
+  "project_name": "portrait_hub",
+  "model_name": "yolov8n.onnx",
   "tensor_data": [[[[0.1, 0.2, 0.3]]]]
 }
 ```
@@ -128,7 +237,7 @@ Content-Type: application/json
 ```bash
 curl -X POST http://127.0.0.1:9001/predict \
   -H "Content-Type: application/json" \
-  -d '{"project_name":"person_service","model_name":"your_model.onnx","tensor_data":[[[[0.1,0.2,0.3]]]]}'
+  -d '{"project_name":"portrait_hub","model_name":"yolov8n.onnx","tensor_data":[[[[0.1,0.2,0.3]]]]}'
 ```
 
 响应：
@@ -136,7 +245,7 @@ curl -X POST http://127.0.0.1:9001/predict \
 ```json
 {
   "status": "success",
-  "model": "person_service/your_model.onnx",
+  "model": "portrait_hub/yolov8n.onnx",
   "outputs": []
 }
 ```
@@ -177,7 +286,7 @@ curl -X POST http://127.0.0.1:9001/vision/infer \
 
 ```bash
 curl -X POST http://127.0.0.1:9001/infer/persons \
-  -F "project_name=cross_camera_tracking" \
+  -F "project_name=portrait_hub" \
   -F "model_name=yolov8n.onnx" \
   -F "confidence=0.25" \
   -F "iou=0.45" \
@@ -192,7 +301,7 @@ curl -X POST http://127.0.0.1:9001/infer/persons \
 ```json
 {
   "status": "success",
-  "model": "cross_camera_tracking/yolov8n.onnx",
+  "model": "portrait_hub/yolov8n.onnx",
   "frame_count": 2,
   "person_count": 3,
   "frames": [
@@ -219,7 +328,7 @@ ReID 向量接口：
 
 ```bash
 curl -X POST http://127.0.0.1:9001/infer/person-embeddings \
-  -F "project_name=cross_camera_tracking" \
+  -F "project_name=portrait_hub" \
   -F "model_name=osnet_ibn_x1_0.onnx" \
   -F "include_vectors=true" \
   -F "files=@person-001.jpg" \
@@ -230,9 +339,9 @@ curl -X POST http://127.0.0.1:9001/infer/person-embeddings \
 
 ```bash
 curl -X POST http://127.0.0.1:9001/infer/person-tracks \
-  -F "detector_project_name=cross_camera_tracking" \
+  -F "detector_project_name=portrait_hub" \
   -F "detector_model_name=yolov8n.onnx" \
-  -F "reid_project_name=cross_camera_tracking" \
+  -F "reid_project_name=portrait_hub" \
   -F "reid_model_name=osnet_ibn_x1_0.onnx" \
   -F "include_embeddings=false" \
   -F "files=@frame-001.jpg" \
@@ -269,27 +378,28 @@ curl -X POST http://127.0.0.1:9001/infer/stream/person-tracks \
 
 ```bash
 curl -X POST http://127.0.0.1:9001/debug/model-output \
-  -F "project_name=cross_camera_tracking" \
+  -H "Authorization: Bearer $API_TOKEN" \
+  -F "project_name=portrait_hub" \
   -F "model_name=yolov8n.onnx" \
   -F "model_type=yolo" \
   -F "sample_values=12" \
   -F "file=@frame-001.jpg"
 ```
 
-`/debug/model-output` 只返回输入 shape、输出 shape、min/max 和少量 sample 值，用于排查模型导出格式，不返回完整大 tensor。
+`/debug/model-output` 只返回输入 shape、输出 shape、min/max 和少量 sample 值，用于排查模型导出格式，不返回完整大 tensor。该接口默认关闭，需要显式设置 `DEBUG_ENDPOINTS_ENABLED=true` 后才可访问。
 
 预热示例：
 
 ```bash
 curl -X POST http://127.0.0.1:9001/warmup \
   -H "Content-Type: application/json" \
-  -d '{"models":[{"project_name":"person_service","model_name":"your_model.onnx"}]}'
+  -d '{"models":[{"project_name":"portrait_hub","model_name":"yolov8n.onnx"}]}'
 ```
 
 模型元信息示例：
 
 ```bash
-curl "http://127.0.0.1:9001/model-info?project_name=person_service&model_name=your_model.onnx"
+curl "http://127.0.0.1:9001/model-info?project_name=portrait_hub&model_name=yolov8n.onnx"
 ```
 
 `/model-info` 会返回输入名、输入 shape、输入 dtype、输出名、输出 shape、provider、模型 hash、文件大小、加载时间和推理次数。
@@ -312,7 +422,7 @@ curl "http://127.0.0.1:9001/model-info?project_name=person_service&model_name=yo
 - 模型加载后默认不会自动卸载，直到容器重启或进程退出。这可以降低后续请求延迟，但会持续占用显存。
 - 首次并发请求同一个模型时有加载锁，只有一个请求执行加载，其它请求等待加载完成后复用缓存。
 - `MAX_LOADED_MODELS=0` 表示不限制缓存模型数量。设置为正整数后会启用 LRU 淘汰，超过上限时卸载最久未使用的模型。
-- 可以通过 `WARMUP_MODELS` 在容器启动时预热模型，格式为逗号分隔的 `project/model.onnx`，例如 `person_service/reid.onnx,person_service/face.onnx`。
+- 可以通过 `WARMUP_MODELS` 在容器启动时预热模型，格式为逗号分隔的 `project/model.onnx`，例如 `portrait_hub/yolov8n.onnx,portrait_hub/osnet_ibn_x1_0.onnx`。
 - `/unload` 可以手动卸载单个模型，`/reload` 可以在替换 ONNX 文件后强制重新加载。
 - 如果替换了共享模型目录里的 ONNX 文件，已加载 worker 不会自动热更新。需要重启对应 worker 才能加载新模型：
 
@@ -328,10 +438,10 @@ docker compose restart gpu-worker-1
 ```yaml
 aliases:
   person_detector_default:
-    target: cross_camera_tracking/yolov8n.onnx
+    target: portrait_hub/yolov8n.onnx
 
 models:
-  cross_camera_tracking/yolov8n.onnx:
+  portrait_hub/yolov8n.onnx:
     task: detection
     type: yolo
     runtime: onnxruntime
@@ -355,7 +465,7 @@ models:
       model_card: yolov8n.model-card.yml
       labels: yolov8n.labels.txt
       sha256: ""
-  cross_camera_tracking/osnet_ibn_x1_0.onnx:
+  portrait_hub/osnet_ibn_x1_0.onnx:
     task: reid
     type: reid
     input:
@@ -376,7 +486,7 @@ models:
 python -m pip install -r requirements-dev.txt
 pytest -q
 python tools/deploy_check.py --import-app
-python tools/validate_model_package.py --config models.yml --models-root ../shared-models
+python tools/validate_model_package.py --config models.yml --models-root models --strict-hash --strict-sidecars
 ```
 
 - `pytest` 覆盖 API 契约、路径安全、模型配置兼容解析、检测/分类/ReID 后处理和模型包校验脚本。
@@ -384,7 +494,7 @@ python tools/validate_model_package.py --config models.yml --models-root ../shar
 - `tools/validate_model_package.py` 用于上线前校验算法侧交付的模型包。生产上线建议加 `--strict-hash --strict-sidecars`，要求 sha256、模型卡和 labels 齐全。
 - `tools/regression_check.py` 用于固定样例回归检查，可以对运行中的服务发起 HTTP 请求，并按期望输出子集和浮点容忍阈值比对。
 
-服务启动后可以执行 HTTP smoke test：
+服务启动后可以执行 HTTP 冒烟测试：
 
 ```bash
 python tools/service_smoke_test.py \
@@ -393,6 +503,8 @@ python tools/service_smoke_test.py \
   --require-ready \
   --model-id person_detector_default
 ```
+
+Compose 生产默认关闭 `/openapi.json`，冒烟测试默认接受 404；如果需要验证 OpenAPI 路径契约，显式增加 `--check-openapi`。
 
 如果只是本地开发且没有 CUDA，可以不加 `--require-ready`，此时 `/ready` 返回 503 不会作为硬失败。真实上线前应在 GPU 服务器上执行 `--require-ready`，并按需增加 `--deep-ready --load-models --dummy-inference`。
 
@@ -433,7 +545,7 @@ python tools/regression_check.py \
 ```bash
 python tools/worker_control.py --action health
 python tools/worker_control.py --action reload-config --token "$API_TOKEN"
-python tools/worker_control.py --action warmup --token "$API_TOKEN" --model cross_camera_tracking/yolov8n.onnx
+python tools/worker_control.py --action warmup --token "$API_TOKEN" --model portrait_hub/yolov8n.onnx
 ```
 
 ### 上线切换和回滚
@@ -442,7 +554,7 @@ python tools/worker_control.py --action warmup --token "$API_TOKEN" --model cros
 
 1. 把新模型包放入共享模型目录。
 2. 在 `models.yml` 的 `models` 中增加新模型配置，`rollout.status` 先写 `candidate`。
-3. 执行模型包校验和 smoke test。
+3. 执行模型包校验和冒烟测试。
 4. 使用别名切换接口把默认别名指向新模型。
 
 查看别名：
@@ -460,8 +572,8 @@ curl -X POST http://127.0.0.1:9001/rollout/aliases/switch \
   -H "Content-Type: application/json" \
   -d '{
     "alias_name": "person_detector_default",
-    "target_model_id": "cross_camera_tracking/person_detector_yolov8n_v1.1.0_fp32.onnx",
-    "expected_current_target": "cross_camera_tracking/yolov8n.onnx",
+    "target_model_id": "portrait_hub/person_detector_yolov8n_v1.1.0_fp32.onnx",
+    "expected_current_target": "portrait_hub/yolov8n.onnx",
     "dry_run": true
   }'
 ```
@@ -483,16 +595,16 @@ curl -X POST http://127.0.0.1:9001/rollout/aliases/weighted \
   -H "Content-Type: application/json" \
   -d '{
     "alias_name": "person_detector_default",
-    "expected_current_target": "cross_camera_tracking/yolov8n.onnx",
+    "expected_current_target": "portrait_hub/yolov8n.onnx",
     "dry_run": true,
     "targets": [
       {
-        "target_model_id": "cross_camera_tracking/yolov8n.onnx",
+        "target_model_id": "portrait_hub/yolov8n.onnx",
         "weight": 90,
         "status": "active"
       },
       {
-        "target_model_id": "cross_camera_tracking/person_detector_yolov8n_v1.1.0_fp32.onnx",
+        "target_model_id": "portrait_hub/person_detector_yolov8n_v1.1.0_fp32.onnx",
         "weight": 10,
         "status": "candidate"
       }
@@ -534,7 +646,7 @@ curl -X POST http://127.0.0.1:9001/vision/infer \
 - FP16 ONNX 输入会按模型输入 dtype 自动 cast；如果模型输入是 `tensor(float16)`，图像预处理结果会在进入 session 前转为 `float16`。
 - 配置 `runtime: tensorrt` 且 `ENABLE_TENSORRT=true` 时，服务会优先请求 ONNX Runtime 的 `TensorrtExecutionProvider`。运行环境必须实际包含该 provider，否则模型加载会失败并给出清晰错误。
 - 当前接口使用 JSON 传输 tensor，简单通用但不是最高性能方案。如果单次输入很大或 QPS 很高，后续可考虑改成二进制协议、共享对象存储路径、gRPC，或让业务端只传图片路径并在服务端预处理。
-- `/health` 表示服务进程正常，`/ready` 才表示 CUDA provider 可用。生产探活建议使用 `/ready`。
+- `/health` 表示服务进程正常，`/ready` 才表示 CUDA provider 可用。两者公开响应只返回最小状态信息；provider、模型状态和模型加载细节通过受保护的 `/ready/deep` 或 `/v1/admin/status` 查看。生产探活建议使用 `/ready`。
 
 ### 可观测性
 
@@ -542,7 +654,7 @@ curl -X POST http://127.0.0.1:9001/vision/infer \
 - `/predict` 和业务接口响应包含 `request_id`、是否冷加载、排队耗时、模型加载耗时、推理耗时、总耗时。
 - 业务接口会额外记录 `decode_seconds`、`preprocess_seconds`、`postprocess_seconds`、`frame_count`、`person_count` 和 `inference_mode`。
 - 服务日志使用 JSON 字符串记录关键事件，包括 `http_request`、`predict_completed`、`persons_infer_completed`、`embeddings_infer_completed`、`person_tracks_infer_completed`、模型加载和模型卸载。
-- `/metrics` 暴露 Prometheus 文本格式指标，包括请求量、推理失败数、模型加载数、缓存命中/未命中、已加载模型数、排队耗时总和、推理耗时总和、图片解码耗时、预处理耗时、后处理耗时、检测人数和处理帧数。
+- `/metrics` 受保护并需要 `metrics:read` RBAC 权限；它暴露 Prometheus 文本格式指标，包括请求量、推理失败数、模型加载数、缓存命中/未命中、已加载模型数、排队耗时总和、推理耗时总和、图片解码耗时、预处理耗时、后处理耗时、检测人数和处理帧数。
 - `/metrics` 还暴露模型维度指标，例如 `gpu_worker_model_config_info`、`gpu_worker_model_loaded_info`、`gpu_worker_model_inference_count_total`，标签包含 `model`、`task`、`version` 和 `status`。
 - 别名切换、weighted rollout 和 rollback 会追加写入 `ROLLOUT_AUDIT_PATH` 指向的 JSONL 文件。Docker Compose 默认把审计文件放在宿主机 `./runtime-state/` 中，便于容器重建后继续保留。
 
@@ -574,10 +686,11 @@ http://gpu-worker-1:8000/predict
 
 通过 `docker-compose.yml` 的环境变量调整：
 
-- `MODELS_HOST_DIR`: 宿主机模型共享目录，默认 `../shared-models`，即本项目同级目录。
+- `MODELS_HOST_DIR`: 宿主机模型目录，默认 `./models`，即本项目目录下的 `models`。
 - `MODELS_ROOT`: 容器内模型目录，固定为 `/models`。
 - `MODEL_CONFIG_HOST_FILE`: 宿主机模型配置文件，默认 `./models.yml`，Compose 会可写挂载到容器内。
 - `MODEL_CONFIG_PATH`: 容器内模型配置文件路径，默认 `/workspace/models.yml`；本地直接运行默认读取当前目录 `models.yml`。
+- `MODEL_CONFIG_READ_FAIL_CLOSED`: 模型配置文件缺失、损坏或根节点格式错误时是否启动/重载失败，默认 `true`。
 - `LOG_LEVEL`: 日志级别，默认 `INFO`。
 - `MAX_TENSOR_ITEMS`: 单次请求最大 tensor 元素数，默认 `12582912`。
 - `MAX_LOADED_MODELS`: 单 worker 最大缓存模型数，默认 `0` 表示不限制；正整数启用 LRU 淘汰。
@@ -596,12 +709,33 @@ http://gpu-worker-1:8000/predict
 - `MAX_VIDEO_BYTES`: `/infer/video/person-tracks` 单个视频文件大小上限，默认 `104857600`。
 - `VIDEO_FRAME_INTERVAL`: 离线视频默认抽帧间隔，默认 `15`。
 - `MAX_VIDEO_FRAMES`: 离线视频单次最多抽取帧数，默认 `64`。
+- `MAX_REQUEST_BODY_BYTES`: 全局 HTTP 请求体大小上限，默认 `805306368`；设为 `0` 可关闭。
 - `STREAM_FRAME_INTERVAL`: 视频流默认抽帧间隔，默认 `15`。
 - `MAX_STREAM_FRAMES`: 视频流单次最多抽取帧数，默认 `32`。
 - `STREAM_READ_TIMEOUT_SECONDS`: 视频流单次读取软超时，默认 `10`。
 - `ALLOW_STREAM_URLS`: 是否允许服务端主动拉取视频流 URL，默认 `false`。
 - `WARMUP_MODELS`: 容器启动时自动预热的模型列表，格式为逗号分隔的 `project/model.onnx`。
-- `API_TOKEN`: 可选接口令牌，留空时不启用鉴权；设置后业务接口、调试接口、模型管理接口和深度 ready 需要携带令牌。
+- `RATE_LIMIT_PER_MINUTE` / `RATE_LIMIT_BURST`: 本地 tenant/path token bucket 限流速率和突发容量；Compose 默认 `120`/`240`，本地直接运行默认关闭。
+- `RATE_LIMIT_MAX_BUCKETS` / `RATE_LIMIT_BUCKET_TTL_SECONDS`: 本地限流 bucket 的最大数量和空闲清理时间，避免大量 tenant/path 组合导致内存无界增长。
+- `AUDIT_WRITE_FAIL_CLOSED`: 审计事件写入失败时是否让管理操作失败，默认 `true`。
+- `STATE_READ_FAIL_CLOSED`: 已存在的本地 JSON 状态文件读取失败或根结构错误时是否启动/重载失败，默认 `true`。
+- `STATE_WRITE_FAIL_CLOSED`: 本地 JSON 状态写入失败时是否让请求失败，默认 `true`。
+- `REQUIRE_ENCRYPTION`: 缺少 `ENCRYPTION_KEY` 时是否拒绝写入敏感 payload；Compose 默认 `true`，本地直接运行默认 `false`。
+- `AUTH_REQUIRED`: 是否要求受保护接口必须存在可用鉴权后端；Compose 默认 `true`，本地直接运行默认 `false`。
+- `DEBUG_ENDPOINTS_ENABLED`: 是否启用 `/debug/model-output`；默认 `false`。
+- `ENABLE_API_DOCS`: 是否启用 `/docs`、`/redoc` 和 `/openapi.json`；Compose 默认 `false`，本地直接运行默认 `true`。
+- `TRUSTED_HOSTS`: 允许的 HTTP Host header 列表，逗号分隔；Compose 默认允许 `127.0.0.1,localhost,gpu-worker-0,gpu-worker-1`，本地直接运行默认 `*`。
+- `TENANT_HEADER_REQUIRED`: v1 多租户接口是否必须携带 `X-Tenant-ID`；Compose 默认 `true`，本地直接运行默认 `false`。
+- `SECURITY_HEADERS_ENABLED` / `CONTENT_SECURITY_POLICY`: 是否启用安全响应头以及默认 CSP；Compose 默认启用。
+- `HSTS_ENABLED` / `HSTS_MAX_AGE_SECONDS` / `HSTS_INCLUDE_SUBDOMAINS` / `HSTS_PRELOAD`: HTTPS 部署的 HSTS 响应头配置；Compose 默认启用，本地直接运行默认关闭。
+- `JWT_AUDIENCE`: RBAC JWT 的目标受众，默认 `portrait-hub-api`。
+- `JWT_SECRET_ID` / `JWT_SECRET_KEYRING`: 当前 HS256 JWT secret 的 `kid` 以及旧 secret keyring，格式为 `kid=secret`，用于平滑轮换 JWT 签名密钥。
+- `JWT_REQUIRE_TENANT`: RBAC JWT 是否必须通过 `tenant_id`、`tenant` 或 `tenants` claim 绑定请求租户；默认 `true`。
+- `JWT_REQUIRE_EXP` / `JWT_REQUIRE_ISS` / `JWT_REQUIRE_AUD`: RBAC JWT 是否必须携带过期时间、签发方和受众；默认 `true`。
+- `API_TOKEN`: 简单接口令牌；设置后业务接口、调试接口、模型管理接口和深度 ready 需要携带令牌。若 `AUTH_REQUIRED=true`，生产/容器启动前应设置 `API_TOKEN` 或启用可用 RBAC。
+- `MAX_PUBLIC_METADATA_BYTES` / `MAX_PUBLIC_METADATA_DEPTH` / `MAX_PUBLIC_METADATA_KEYS` / `MAX_PUBLIC_METADATA_STRING_LENGTH`: 用户可写 metadata/settings 的大小和复杂度限制。
+- `MAX_AUDIT_PAYLOAD_BYTES` / `MAX_AUDIT_DEPTH` / `MAX_AUDIT_KEYS` / `MAX_AUDIT_LIST_ITEMS` / `MAX_AUDIT_STRING_LENGTH`: 脱敏审计 payload 的大小和复杂度限制。
+- `API_LIST_DEFAULT_LIMIT` / `MAX_API_LIST_LIMIT` / `STREAM_EVENT_LIST_DEFAULT_LIMIT` / `MAX_STREAM_EVENT_LIST_LIMIT`: 列表、导出和流事件响应的分页大小限制。
 - `NVIDIA_VISIBLE_DEVICES`: 当前 worker 可见 GPU。
 - `NVIDIA_DRIVER_CAPABILITIES`: 默认 `compute,utility`。
 
@@ -616,7 +750,7 @@ Uvicorn 启动参数在 `Dockerfile` 的 `CMD` 中配置：
 curl -X POST http://127.0.0.1:9001/predict \
   -H "Authorization: Bearer your-token" \
   -H "Content-Type: application/json" \
-  -d '{"project_name":"person_service","model_name":"your_model.onnx","tensor_data":[[[[0.1,0.2,0.3]]]]}'
+  -d '{"project_name":"portrait_hub","model_name":"yolov8n.onnx","tensor_data":[[[[0.1,0.2,0.3]]]]}'
 ```
 
 ## 设计说明
@@ -631,7 +765,7 @@ curl -X POST http://127.0.0.1:9001/predict \
 - 支持 FP16 输入自动 cast，支持按模型配置启用 TensorRT Execution Provider。
 - 提供 `tools/worker_control.py` 对多个 worker 统一执行健康检查、配置重载、预热、重载和卸载。
 - 路径使用 `Path.resolve()` 限制在共享模型目录内，避免路径穿越。
-- `/ready` 会检查 `CUDAExecutionProvider` 是否可用，`/ready/deep` 可进一步检查配置模型、加载模型和 dummy inference。
+- `/ready` 会检查 `CUDAExecutionProvider` 是否可用，`/ready/deep` 可进一步检查配置模型、加载模型和虚拟推理。
 
 ## 压测记录模板
 
@@ -639,7 +773,7 @@ curl -X POST http://127.0.0.1:9001/predict \
 
 | 项目 | 数值 |
 | --- | --- |
-| 模型 | `person_service/your_model.onnx` |
+| 模型 | `portrait_hub/yolov8n.onnx` |
 | GPU | 例如 `RTX 2080 Ti 11GB` |
 | 输入 shape | 例如 `[1, 3, 256, 128]` |
 | batch size | 例如 `1` |

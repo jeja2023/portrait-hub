@@ -25,3 +25,6 @@ env/
 
 # Model artifacts are mounted or supplied out of band.
 models/
+
+# Codex temporary files
+.codex-tmp/

@@ -7,19 +7,23 @@ import onnxruntime as ort
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, Response, UploadFile, status
 
 from app.core import *
+from app.media.stream_decode import mask_stream_url
+from app.portrait_auth import permission_dependency
+from app.portrait_response import exception_log_summary, raise_internal_error
 from app.settings import APP_VERSION
+from app.video_io import public_video_metadata
 
 
 router = APIRouter()
 
 
-@router.post("/infer/stream/person-tracks", dependencies=[Depends(require_api_token)])
+@router.post("/infer/stream/person-tracks", dependencies=[Depends(require_api_token), Depends(permission_dependency("infer"))])
 async def infer_stream_person_tracks(
     request: Request,
     stream_url: str = Form(...),
-    detector_project_name: str = Form("cross_camera_tracking"),
+    detector_project_name: str = Form("portrait_hub"),
     detector_model_name: str = Form("yolov8n.onnx"),
-    reid_project_name: str = Form("cross_camera_tracking"),
+    reid_project_name: str = Form("portrait_hub"),
     reid_model_name: str = Form("osnet_ibn_x1_0.onnx"),
     confidence: float = Form(0.25),
     iou: float = Form(0.45),
@@ -39,14 +43,13 @@ async def infer_stream_person_tracks(
             detail="stream URL pulling is disabled. Set ALLOW_STREAM_URLS=true to enable it for trusted networks.",
         )
 
-    try:
-        stream_url = validate_stream_url(stream_url)
-        detector_project_name = validate_path_name(detector_project_name)
-        detector_model_name = validate_path_name(detector_model_name)
-        reid_project_name = validate_path_name(reid_project_name)
-        reid_model_name = validate_path_name(reid_model_name)
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    stream_url = validate_stream_url(stream_url)
+    detector_project_name, detector_model_name, reid_project_name, reid_model_name = validate_model_reference_parts(
+        detector_project_name,
+        detector_model_name,
+        reid_project_name,
+        reid_model_name,
+    )
 
     if not 0 <= confidence <= 1:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="confidence must be between 0 and 1")
@@ -109,11 +112,8 @@ async def infer_stream_person_tracks(
         raise
     except Exception as exc:
         observe("tracks_errors_total")
-        logger.exception("stream person track inference failed")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"stream person track inference runtime error: {exc}",
-        ) from exc
+        logger.warning("stream person track inference failed: request_id=%s error=%s", request_id, exception_log_summary(exc))
+        raise_internal_error(request_id, "stream person track inference runtime error")
 
     detector_meta = result["detector_meta"]
     embedding_meta = result["embedding_meta"]
@@ -122,8 +122,8 @@ async def infer_stream_person_tracks(
         "request_id": request_id,
         "source_type": "stream",
         "stream": {
-            **stream_meta,
-            "url": stream_url,
+            **public_video_metadata(stream_meta),
+            "url": mask_stream_url(stream_url),
             "read_timeout_seconds": read_timeout_seconds,
         },
         "detector_model": result["detector_key"],
@@ -137,6 +137,9 @@ async def infer_stream_person_tracks(
             "total_seconds": total_seconds,
         },
         "frames": result["frames"],
+        "tracks": result["tracks"],
+        "track_count": result["track_count"],
+        "tracker": result["tracker"],
         "frame_count": len(result["frames"]),
         "person_count": result["person_count"],
         "embedding_count": result["embedding_count"],

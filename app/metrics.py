@@ -1,3 +1,6 @@
+from typing import Any
+
+
 METRICS: dict[str, float] = {
     "requests_total": 0,
     "predict_requests_total": 0,
@@ -25,10 +28,71 @@ METRICS: dict[str, float] = {
     "preprocess_seconds_sum": 0,
     "postprocess_seconds_sum": 0,
 }
+REQUEST_STATUS_COUNTS: dict[str, int] = {}
+
+HISTOGRAM_BUCKETS: dict[str, tuple[float, ...]] = {
+    "inference_seconds": (0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0),
+    "queue_seconds": (0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0),
+    "model_load_seconds": (0.01, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0, 60.0),
+    "decode_seconds": (0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0),
+    "preprocess_seconds": (0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5),
+    "postprocess_seconds": (0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5),
+}
+HISTOGRAMS: dict[str, dict[str, Any]] = {
+    name: {"buckets": buckets, "counts": [0 for _ in buckets], "inf": 0, "count": 0, "sum": 0.0}
+    for name, buckets in HISTOGRAM_BUCKETS.items()
+}
 
 
 def observe(metric: str, value: float = 1) -> None:
     METRICS[metric] = METRICS.get(metric, 0) + value
+    if metric.endswith("_seconds_sum"):
+        observe_histogram(metric[: -len("_sum")], value)
+
+
+def observe_request_status(status_code: int) -> None:
+    status = str(int(status_code))
+    REQUEST_STATUS_COUNTS[status] = REQUEST_STATUS_COUNTS.get(status, 0) + 1
+
+
+def observe_histogram(metric: str, value: float) -> None:
+    histogram = HISTOGRAMS.get(metric)
+    if histogram is None:
+        return
+    numeric_value = max(0.0, float(value))
+    histogram["count"] += 1
+    histogram["sum"] += numeric_value
+    matched = False
+    for index, bucket in enumerate(histogram["buckets"]):
+        if numeric_value <= bucket:
+            histogram["counts"][index] += 1
+            matched = True
+    if not matched:
+        histogram["inf"] += 1
+
+
+def gpu_memory_metrics() -> list[dict[str, int]]:
+    try:  # pragma: no cover - requires an NVIDIA runtime
+        import pynvml
+    except Exception:
+        return []
+    try:  # pragma: no cover - requires an NVIDIA runtime
+        pynvml.nvmlInit()
+        devices = []
+        for index in range(pynvml.nvmlDeviceGetCount()):
+            handle = pynvml.nvmlDeviceGetHandleByIndex(index)
+            memory = pynvml.nvmlDeviceGetMemoryInfo(handle)
+            devices.append(
+                {
+                    "device": index,
+                    "used": int(memory.used),
+                    "free": int(memory.free),
+                    "total": int(memory.total),
+                }
+            )
+        return devices
+    except Exception:
+        return []
 
 
 def metric_label(value: object) -> str:
@@ -48,11 +112,35 @@ def model_labels(model: str, config: dict, extra: dict[str, object] | None = Non
     return ",".join(f'{key}="{metric_label(value)}"' for key, value in labels.items())
 
 
+def append_histogram(lines: list[str], metric: str, help_text: str) -> None:
+    histogram = HISTOGRAMS[metric]
+    prometheus_name = f"gpu_worker_{metric}"
+    lines.extend(
+        [
+            f"# HELP {prometheus_name} {help_text}",
+            f"# TYPE {prometheus_name} histogram",
+        ]
+    )
+    for bucket, count in zip(histogram["buckets"], histogram["counts"]):
+        lines.append(f'{prometheus_name}_bucket{{le="{bucket:g}"}} {count}')
+    lines.append(f'{prometheus_name}_bucket{{le="+Inf"}} {histogram["count"]}')
+    lines.append(f'{prometheus_name}_count {histogram["count"]}')
+    lines.append(f'{prometheus_name}_sum {histogram["sum"]}')
+
+
 def prometheus_metrics() -> str:
     from app.model_config import MODEL_CONFIGS
-    from app.runtime import MODEL_REGISTRY
+    from app.portrait_stream_worker import STREAM_WORKER_SESSIONS
+    from app.runtime import GPU_DEVICE_SEMAPHORES, GPU_SEMAPHORE, MODEL_REGISTRY
 
     loaded_models = len(MODEL_REGISTRY)
+    active_stream_sessions = sum(1 for item in STREAM_WORKER_SESSIONS.values() if item.get("status") == "running")
+    stream_backpressure_drops = sum(int(item.get("backpressure_drops", 0)) for item in STREAM_WORKER_SESSIONS.values())
+    queue_depth = max(0, len(getattr(GPU_SEMAPHORE, "_waiters", []) or []))
+    device_queue_depths = {
+        int(device_id): max(0, len(getattr(semaphore, "_waiters", []) or []))
+        for device_id, semaphore in GPU_DEVICE_SEMAPHORES.items()
+    }
     lines = [
         "# HELP gpu_worker_requests_total Total HTTP requests observed by app middleware.",
         "# TYPE gpu_worker_requests_total counter",
@@ -81,6 +169,17 @@ def prometheus_metrics() -> str:
         "# HELP gpu_worker_loaded_models Current loaded model count.",
         "# TYPE gpu_worker_loaded_models gauge",
         f"gpu_worker_loaded_models {loaded_models}",
+        "# HELP gpu_worker_gpu_queue_depth Current number of coroutines waiting for global GPU access.",
+        "# TYPE gpu_worker_gpu_queue_depth gauge",
+        f"gpu_worker_gpu_queue_depth {queue_depth}",
+        "# HELP gpu_worker_gpu_device_queue_depth Current number of coroutines waiting for a GPU device queue.",
+        "# TYPE gpu_worker_gpu_device_queue_depth gauge",
+        "# HELP gpu_worker_stream_active_sessions Current running stream worker session count.",
+        "# TYPE gpu_worker_stream_active_sessions gauge",
+        f"gpu_worker_stream_active_sessions {active_stream_sessions}",
+        "# HELP gpu_worker_stream_backpressure_drops_total Total frames dropped by stream backpressure.",
+        "# TYPE gpu_worker_stream_backpressure_drops_total counter",
+        f"gpu_worker_stream_backpressure_drops_total {stream_backpressure_drops}",
         "# HELP gpu_worker_inference_seconds_sum Sum of inference execution seconds.",
         "# TYPE gpu_worker_inference_seconds_sum counter",
         f"gpu_worker_inference_seconds_sum {METRICS.get('inference_seconds_sum', 0)}",
@@ -138,6 +237,13 @@ def prometheus_metrics() -> str:
     for model, config in sorted(MODEL_CONFIGS.items()):
         lines.append(f"gpu_worker_model_config_info{{{model_labels(model, config)}}} 1")
 
+    for status_code, count in sorted(REQUEST_STATUS_COUNTS.items()):
+        status_class = f"{status_code[0]}xx" if status_code else "unknown"
+        lines.append(f'gpu_worker_requests_total{{status="{metric_label(status_code)}",status_class="{status_class}"}} {count}')
+
+    for device_id, depth in sorted(device_queue_depths.items()):
+        lines.append(f'gpu_worker_gpu_device_queue_depth{{device="{device_id}"}} {depth}')
+
     lines.extend(
         [
             "# HELP gpu_worker_model_loaded_info Loaded model metadata. Value is always 1.",
@@ -154,10 +260,31 @@ def prometheus_metrics() -> str:
     )
     for model, bundle in sorted(MODEL_REGISTRY.items()):
         config = MODEL_CONFIGS.get(model, {})
-        labels = model_labels(model, config)
+        labels = model_labels(model, config, {"gpu_device_id": bundle.get("gpu_device_id", "")})
         lines.append(f"gpu_worker_model_loaded_info{{{labels}}} 1")
         lines.append(f"gpu_worker_model_file_bytes{{{labels}}} {bundle.get('file_size', 0)}")
         lines.append(f"gpu_worker_model_load_count_total{{{labels}}} {bundle.get('load_count', 0)}")
         lines.append(f"gpu_worker_model_inference_count_total{{{labels}}} {bundle.get('inference_count', 0)}")
         lines.append(f"gpu_worker_model_last_used_at_seconds{{{labels}}} {bundle.get('last_used_at', 0)}")
+    append_histogram(lines, "inference_seconds", "Inference execution latency in seconds.")
+    append_histogram(lines, "queue_seconds", "Inference queue wait latency in seconds.")
+    append_histogram(lines, "model_load_seconds", "Model load latency in seconds.")
+    append_histogram(lines, "decode_seconds", "Image or video decode latency in seconds.")
+    append_histogram(lines, "preprocess_seconds", "Preprocess latency in seconds.")
+    append_histogram(lines, "postprocess_seconds", "Postprocess latency in seconds.")
+    lines.extend(
+        [
+            "# HELP gpu_worker_gpu_memory_used_bytes GPU memory currently used by device.",
+            "# TYPE gpu_worker_gpu_memory_used_bytes gauge",
+            "# HELP gpu_worker_gpu_memory_free_bytes GPU memory currently free by device.",
+            "# TYPE gpu_worker_gpu_memory_free_bytes gauge",
+            "# HELP gpu_worker_gpu_memory_total_bytes GPU memory total by device.",
+            "# TYPE gpu_worker_gpu_memory_total_bytes gauge",
+        ]
+    )
+    for item in gpu_memory_metrics():
+        device_label = f'device="{item["device"]}"'
+        lines.append(f"gpu_worker_gpu_memory_used_bytes{{{device_label}}} {item['used']}")
+        lines.append(f"gpu_worker_gpu_memory_free_bytes{{{device_label}}} {item['free']}")
+        lines.append(f"gpu_worker_gpu_memory_total_bytes{{{device_label}}} {item['total']}")
     return "\n".join(lines) + "\n"

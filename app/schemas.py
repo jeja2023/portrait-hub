@@ -20,6 +20,7 @@ class ModelBundle(TypedDict):
     inference_count: int
     max_concurrency: int
     queue_timeout_seconds: float
+    gpu_device_id: int
 
 
 class LetterboxMeta(TypedDict):
@@ -53,7 +54,7 @@ class ModelConfig(TypedDict, total=False):
 
 
 class InferenceRequest(BaseModel):
-    model_config = ConfigDict(protected_namespaces=())
+    model_config = ConfigDict(extra="forbid", protected_namespaces=())
 
     project_name: str = Field(..., min_length=1, max_length=128)
     model_name: str = Field(..., min_length=1, max_length=256)
@@ -66,7 +67,7 @@ class InferenceRequest(BaseModel):
 
 
 class ModelRequest(BaseModel):
-    model_config = ConfigDict(protected_namespaces=())
+    model_config = ConfigDict(extra="forbid", protected_namespaces=())
 
     project_name: str = Field(..., min_length=1, max_length=128)
     model_name: str = Field(..., min_length=1, max_length=256)
@@ -78,12 +79,14 @@ class ModelRequest(BaseModel):
 
 
 class WarmupRequest(BaseModel):
-    model_config = ConfigDict(protected_namespaces=())
+    model_config = ConfigDict(extra="forbid", protected_namespaces=())
 
     models: list[ModelRequest] = Field(..., min_length=1)
 
 
 class AliasSwitchRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     alias_name: str = Field(..., min_length=1, max_length=128)
     target_model_id: str = Field(..., min_length=3, max_length=384)
     expected_current_target: str | None = Field(default=None, min_length=3, max_length=384)
@@ -109,6 +112,8 @@ class AliasSwitchRequest(BaseModel):
 
 
 class AliasRollbackRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     alias_name: str = Field(..., min_length=1, max_length=128)
     dry_run: bool = False
 
@@ -119,6 +124,8 @@ class AliasRollbackRequest(BaseModel):
 
 
 class AliasRolloutTarget(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     target_model_id: str = Field(..., min_length=3, max_length=384)
     weight: int = Field(..., ge=0, le=100_000)
     status: str | None = Field(default=None, max_length=64)
@@ -136,6 +143,8 @@ class AliasRolloutTarget(BaseModel):
 
 
 class AliasWeightedRolloutRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     alias_name: str = Field(..., min_length=1, max_length=128)
     targets: list[AliasRolloutTarget] = Field(..., min_length=1)
     expected_current_target: str | None = Field(default=None, min_length=3, max_length=384)

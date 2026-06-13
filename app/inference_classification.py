@@ -57,7 +57,6 @@ async def infer_classification_images(
         items.append(
             {
                 "image_index": index,
-                "filename": filenames[index],
                 "width": image.width,
                 "height": image.height,
                 "predictions": predictions,

@@ -1,0 +1,55 @@
+capabilities:
+  face_detection:
+    status: production
+    model_id: portrait_hub/scrfd_10g.onnx
+    adapter: scrfd
+    production_adapter: scrfd
+    input_size: [640, 640]
+    output:
+      decoded: false
+      bbox_scale: stride
+      confidence: 0.35
+      iou: 0.45
+    fallback_model_id: opencv/haarcascade_frontalface_default
+
+  face_embedding:
+    status: production
+    model_id: portrait_hub/arcface_r100.onnx
+    adapter: arcface
+    production_adapter: arcface
+    input_size: [112, 112]
+    preprocess: rgb_minus_127p5_div_128
+    embedding_dim: 512
+    normalize: l2
+    fallback_model_id: portrait_hub/image_fingerprint_v1
+
+  pose:
+    status: production
+    model_id: portrait_hub/rtmpose_coco17.onnx
+    adapter: rtmpose
+    production_adapter: rtmpose
+    input_size: [256, 192]
+    keypoint_schema: coco17
+    preprocess: imagenet
+    fallback_model_id: portrait_hub/geometric_pose_placeholder
+
+  gait:
+    status: production
+    model_id: portrait_hub/opengait_gait3d.onnx
+    adapter: opengait
+    production_adapter: opengait
+    input_size: [64, 44]
+    sequence_layout: ntchw
+    embedding_dim: 256
+    normalize: l2
+    fallback_model_id: portrait_hub/tracklet_fingerprint_v1
+
+  appearance:
+    status: fallback
+    model_id: portrait_hub/color_histogram_v1
+    adapter: color_histogram
+    production_adapter: attribute_reid
+    embedding_dim: 64
+    production_embedding_dim: 256
+    normalize: l2
+    fallback_model_id: portrait_hub/color_histogram_v1

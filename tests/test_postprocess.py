@@ -41,6 +41,31 @@ def test_yolo_person_detections_filters_person_class() -> None:
     assert detections[0]["class_name"] == "person"
 
 
+def test_yolo_person_detections_filters_invalid_boxes_before_nms() -> None:
+    meta = {
+        "original_width": 640,
+        "original_height": 480,
+        "input_width": 640,
+        "input_height": 640,
+        "scale": 1.0,
+        "pad_left": 0.0,
+        "pad_top": 0.0,
+    }
+    output = np.array(
+        [
+            [np.nan, 240, 100, 80, 0.99, 0],
+            [10, 10, 0, 0, 0.95, 0],
+            [320, 240, 100, 80, 0.90, 0],
+        ],
+        dtype=np.float32,
+    )
+
+    detections = yolo_person_detections([output], meta, 0.25, 0.45, 10)
+
+    assert len(detections) == 1
+    assert detections[0]["box"] == [270.0, 200.0, 370.0, 280.0]
+
+
 def test_nms_removes_overlapping_lower_score_box() -> None:
     boxes = np.array([[0, 0, 100, 100], [5, 5, 105, 105], [200, 200, 250, 250]], dtype=np.float32)
     scores = np.array([0.9, 0.8, 0.7], dtype=np.float32)

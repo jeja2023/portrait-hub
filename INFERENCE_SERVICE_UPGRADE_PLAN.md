@@ -55,7 +55,7 @@
 | 输入契约 | 声明输入 shape、dtype、颜色顺序、归一化 | 按契约执行预处理并校验请求 |
 | 输出契约 | 声明输出 tensor 语义、类别、阈值建议 | 按任务插件执行后处理并返回业务结构 |
 | 版本 | 生成语义化版本和模型卡 | 按版本加载、预热、灰度、回滚 |
-| 验收样例 | 提供样例图片、期望输出、误差容忍 | 上线前自动执行 smoke test 和回归验证 |
+| 验收样例 | 提供样例图片、期望输出、误差容忍 | 上线前自动执行冒烟测试和回归验证 |
 | 指标 | 提供算法指标、测试集、阈值 | 记录线上延迟、错误率、吞吐和输出统计 |
 | 上线审批 | 给出模型评估结论 | 执行服务兼容性验证并发布 |
 
@@ -63,7 +63,7 @@
 
 ```text
 shared-models/
-  cross_camera_tracking/
+  portrait_hub/
     person_detector_yolov8n_v1.0.0_fp32.onnx
     person_detector_yolov8n_v1.0.0_fp32.model-card.yml
     person_detector_yolov8n_v1.0.0_fp32.labels.txt
@@ -72,7 +72,7 @@ shared-models/
 当前服务仍通过：
 
 ```text
-project_name = cross_camera_tracking
+project_name = portrait_hub
 model_name   = person_detector_yolov8n_v1.0.0_fp32.onnx
 ```
 
@@ -81,7 +81,7 @@ model_name   = person_detector_yolov8n_v1.0.0_fp32.onnx
 ```yaml
 aliases:
   person_detector_default:
-    project_name: cross_camera_tracking
+    project_name: portrait_hub
     model_name: person_detector_yolov8n_v1.0.0_fp32.onnx
 ```
 
@@ -148,7 +148,7 @@ gpu-services/
 
 ```yaml
 models:
-  cross_camera_tracking/person_detector_yolov8n_v1.0.0_fp32.onnx:
+  portrait_hub/person_detector_yolov8n_v1.0.0_fp32.onnx:
     task: detection
     type: yolo
     runtime: onnxruntime
@@ -219,7 +219,7 @@ class VisionTask:
 - 调用 runtime。
 - 执行后处理。
 - 返回统一响应结构。
-- 提供 smoke test 所需的最小样例校验。
+- 提供冒烟测试所需的最小样例校验。
 
 优先级：
 
@@ -275,7 +275,7 @@ curl -X POST http://127.0.0.1:9001/vision/infer \
   "request_id": "xxx",
   "model": {
     "id": "person_detector_default",
-    "project_name": "cross_camera_tracking",
+    "project_name": "portrait_hub",
     "model_name": "person_detector_yolov8n_v1.0.0_fp32.onnx",
     "version": "1.0.0"
   },
@@ -305,7 +305,7 @@ curl -X POST http://127.0.0.1:9001/vision/infer \
 - 新业务优先接入 `/vision/infer`。
 - 旧接口内部逐步复用任务插件，避免维护两套逻辑。
 
-## 8. Runtime 策略
+## 8. 运行时策略
 
 短期主线：
 
@@ -340,7 +340,7 @@ curl -X POST http://127.0.0.1:9001/vision/infer \
    - 输入输出 shape 可解析。
    - labels 文件存在。
    - 样例输入可推理。
-4. 执行服务侧 smoke test：
+4. 执行服务侧冒烟测试：
    - 加载模型。
    - 执行一张样例图片。
    - 检查输出字段。
@@ -370,7 +370,7 @@ curl -X POST http://127.0.0.1:9001/vision/infer \
 ```yaml
 aliases:
   person_detector_default:
-    target: cross_camera_tracking/person_detector_yolov8n_v1.0.0_fp32.onnx
+    target: portrait_hub/person_detector_yolov8n_v1.0.0_fp32.onnx
 ```
 
 第二步：按比例灰度。
@@ -379,9 +379,9 @@ aliases:
 aliases:
   person_detector_default:
     rollout:
-      - target: cross_camera_tracking/person_detector_yolov8n_v1.0.0_fp32.onnx
+      - target: portrait_hub/person_detector_yolov8n_v1.0.0_fp32.onnx
         weight: 90
-      - target: cross_camera_tracking/person_detector_yolov8n_v1.1.0_fp16.onnx
+      - target: portrait_hub/person_detector_yolov8n_v1.1.0_fp16.onnx
         weight: 10
 ```
 
@@ -474,7 +474,7 @@ aliases:
 
 模型上线测试：
 
-- smoke test。
+- 冒烟测试。
 - 样例图片输出格式校验。
 - 与算法侧期望输出比对。
 - 延迟和显存基线记录。
@@ -488,7 +488,7 @@ aliases:
 当前进展：
 
 - 已新增 `tools/regression_check.py`，支持 YAML/JSON manifest、multipart 图片上传、期望输出子集比对和浮点容忍阈值。
-- 当前测试集已覆盖 API contract、配置解析、路径安全、后处理算法、模型包校验、别名切换和回归比较逻辑。
+- 当前测试集已覆盖 API 契约、配置解析、路径安全、后处理算法、模型包校验、别名切换和回归比较逻辑。
 
 ## 14. 分阶段实施计划
 
@@ -501,7 +501,7 @@ aliases:
 - 增加测试依赖和最小测试目录。
 - 为当前 `models.yml` 增加 schema 校验。
 - 把 README 中的模型配置和接口契约整理为稳定文档。
-- 梳理当前接口响应字段，形成 API contract。
+- 梳理当前接口响应字段，形成 API 契约。
 
 验收：
 
@@ -512,7 +512,7 @@ aliases:
 当前进展：
 
 - 已新增 `requirements-dev.txt`、`pytest.ini` 和 `tests/` 基础测试目录。
-- 已覆盖 API contract、路径校验、模型配置兼容解析、NMS、YOLO person 后处理、分类后处理、embedding normalize 和模型包校验脚本。
+- 已覆盖 API 契约、路径校验、模型配置兼容解析、NMS、YOLO person 后处理、分类后处理、embedding normalize 和模型包校验脚本。
 - 已新增 `tools/deploy_check.py`，用于部署前检查关键文件、Python 语法、`models.yml`、Docker Compose GPU 配置和核心路由。
 
 ### 第 1 阶段：模块化拆分
@@ -581,7 +581,7 @@ aliases:
 
 - 增加模型状态。
 - 增加模型别名。
-- 增加 smoke test 命令或接口。
+- 增加冒烟测试命令或接口。
 - 增加灰度切换配置。
 - 增加模型维度指标。
 
@@ -638,7 +638,7 @@ aliases:
 2. 模型包契约。
 3. 模型配置 schema。
 4. 分类插件和通用 `/vision/infer`。
-5. 模型上线前 smoke test。
+5. 模型上线前冒烟测试。
 
 暂缓做：
 
@@ -657,7 +657,7 @@ aliases:
 - 模型包契约说明。
 - 测试用例。
 - Docker 构建验证。
-- 最小模型 smoke test。
+- 最小模型冒烟测试。
 - 上线/回滚操作说明。
 
 ## 17. 与算法研发方案的硬性对齐项

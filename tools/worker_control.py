@@ -7,11 +7,14 @@ import json
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any
 
+from tools.report_redaction import redact_for_report
 
-def auth_headers(token: str | None) -> dict[str, str]:
-    if not token:
-        return {}
-    return {"Authorization": f"Bearer {token}", "X-API-Key": token}
+
+def auth_headers(token: str | None, tenant_id: str = "default") -> dict[str, str]:
+    headers = {"X-Tenant-ID": tenant_id}
+    if token:
+        headers.update({"Authorization": f"Bearer {token}", "X-API-Key": token})
+    return headers
 
 
 def split_model_id(model_id: str) -> dict[str, str]:
@@ -20,6 +23,9 @@ def split_model_id(model_id: str) -> dict[str, str]:
     project_name, model_name = model_id.split("/", 1)
     if not project_name or not model_name:
         raise ValueError(f"model must use project/model.onnx format: {model_id}")
+    for part in (project_name, model_name):
+        if part.strip() != part or part in {".", ".."} or "/" in part or "\\" in part:
+            raise ValueError("model project and model name must not contain path separators, whitespace padding, or relative path segments")
     return {"project_name": project_name, "model_name": model_name}
 
 
@@ -30,14 +36,14 @@ def request_worker(base_url: str, args: argparse.Namespace) -> dict[str, Any]:
         raise RuntimeError("httpx is required. Install requirements-dev.txt before running worker control.") from exc
 
     base_url = base_url.rstrip("/")
-    headers = auth_headers(args.token)
+    headers = auth_headers(args.token, args.tenant_id)
     timeout = args.timeout
     action = args.action
     with httpx.Client(timeout=timeout) as client:
         if action == "health":
-            response = client.get(f"{base_url}/health")
+            response = client.get(f"{base_url}/health", headers=headers)
         elif action == "ready":
-            response = client.get(f"{base_url}/ready")
+            response = client.get(f"{base_url}/ready", headers=headers)
         elif action == "reload-config":
             response = client.post(f"{base_url}/reload-config", headers=headers)
         elif action == "aliases":
@@ -61,7 +67,7 @@ def request_worker(base_url: str, args: argparse.Namespace) -> dict[str, Any]:
         "action": action,
         "ok": 200 <= response.status_code < 300,
         "status_code": response.status_code,
-        "payload": payload,
+        "payload": redact_for_report(payload),
     }
 
 
@@ -74,6 +80,7 @@ def main() -> int:
         help="Worker base URL. Can be repeated. Defaults to 9001 and 9002.",
     )
     parser.add_argument("--token", default=None, help="API token for protected endpoints.")
+    parser.add_argument("--tenant-id", default="default", help="Tenant id sent as X-Tenant-ID.")
     parser.add_argument("--timeout", type=float, default=30.0, help="Request timeout in seconds.")
     parser.add_argument(
         "--action",
@@ -93,7 +100,7 @@ def main() -> int:
             try:
                 results.append(future.result())
             except Exception as exc:
-                results.append({"base_url": futures[future], "action": args.action, "ok": False, "error": str(exc)})
+                results.append({"base_url": futures[future], "action": args.action, "ok": False, "error": redact_for_report(str(exc))})
 
     report = {"ok": all(item["ok"] for item in results), "results": sorted(results, key=lambda item: item["base_url"])}
     if args.json:

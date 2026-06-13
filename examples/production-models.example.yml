@@ -1,0 +1,72 @@
+models:
+  portrait_hub/scrfd_10g.onnx:
+    task: face_detection
+    type: scrfd
+    runtime: onnxruntime
+    version: 1.0.0
+    input:
+      size: [640, 640]
+      layout: nchw
+      color: rgb
+      normalize: rgb_minus_127p5_div_128
+    output:
+      decoded: false
+      bbox_scale: stride
+      confidence: 0.35
+      iou: 0.45
+      max_detections: 32
+    artifact:
+      path: scrfd_10g.onnx
+      sha256: replace-with-real-sha256
+
+  portrait_hub/arcface_r100.onnx:
+    task: face_embedding
+    type: arcface
+    runtime: onnxruntime
+    version: 1.0.0
+    input:
+      size: [112, 112]
+      layout: nchw
+      color: rgb
+      normalize: rgb_minus_127p5_div_128
+    output:
+      format: embedding
+      embedding_normalize: l2
+      metric: cosine
+    artifact:
+      path: arcface_r100.onnx
+      sha256: replace-with-real-sha256
+
+  portrait_hub/rtmpose_coco17.onnx:
+    task: pose
+    type: rtmpose
+    runtime: onnxruntime
+    version: 1.0.0
+    input:
+      size: [256, 192]
+      layout: nchw
+      color: rgb
+      normalize: imagenet
+    output:
+      keypoint_schema: coco17
+      format: heatmap_or_simcc
+    artifact:
+      path: rtmpose_coco17.onnx
+      sha256: replace-with-real-sha256
+
+  portrait_hub/opengait_gait3d.onnx:
+    task: gait
+    type: opengait
+    runtime: onnxruntime
+    version: 1.0.0
+    input:
+      size: [64, 44]
+      layout: ntchw
+      color: grayscale
+    output:
+      format: embedding
+      embedding_normalize: l2
+      embedding_dim: 256
+    artifact:
+      path: opengait_gait3d.onnx
+      sha256: replace-with-real-sha256

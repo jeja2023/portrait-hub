@@ -8,24 +8,39 @@ from fastapi import HTTPException, status
 from app.constants import COCO_CLASSES
 from app.model_config import config_section, config_value, configured_sha256, model_config, model_task
 from app.observability import logger
+from app.portrait_response import exception_log_summary
 from app.schemas import ModelConfig
 from app.settings import MODELS_ROOT
 
 
+def resolve_model_artifact_path(cache_key_value: str, project_name: str, model_name: str) -> Path:
+    artifact_path = config_section(model_config(cache_key_value), "artifact").get("path")
+    if isinstance(artifact_path, str) and artifact_path.strip():
+        candidate = Path(artifact_path.strip())
+        if candidate.is_absolute():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="model artifact.path must be relative to the models directory",
+            )
+        return (MODELS_ROOT / candidate).resolve()
+    return (MODELS_ROOT / project_name / model_name).resolve()
+
+
 def get_model_path(project_name: str, model_name: str) -> Path:
-    model_path = (MODELS_ROOT / project_name / model_name).resolve()
+    cache_key_value = f"{project_name}/{model_name}"
+    model_path = resolve_model_artifact_path(cache_key_value, project_name, model_name)
     try:
         model_path.relative_to(MODELS_ROOT)
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="model path must stay inside the shared models directory",
+            detail="model path must stay inside the models directory",
         ) from exc
 
     if not model_path.is_file():
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"model '{model_name}' was not found under project '{project_name}'",
+            detail="model artifact not found",
         )
     return model_path
 
@@ -39,9 +54,10 @@ def model_hash(model_path: Path) -> str:
 
 
 def safe_sidecar_path(model_path: Path, relative_path: str) -> Path:
-    sidecar_path = (model_path.parent / relative_path).resolve()
+    model_dir = model_path.parent.resolve()
+    sidecar_path = (model_dir / relative_path).resolve()
     try:
-        sidecar_path.relative_to(model_path.parent)
+        sidecar_path.relative_to(model_dir)
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -50,39 +66,92 @@ def safe_sidecar_path(model_path: Path, relative_path: str) -> Path:
     return sidecar_path
 
 
-def load_yaml_sidecar(path: Path) -> dict[str, Any]:
+def sidecar_path_fingerprint(path: Path) -> str:
+    return hashlib.sha256(str(path).encode("utf-8")).hexdigest()[:16]
+
+
+def load_yaml_sidecar(path: Path, *, required: bool = False) -> dict[str, Any]:
     if not path.is_file():
+        if required:
+            logger.error("required model sidecar yaml not found: sidecar_path_hash=%s", sidecar_path_fingerprint(path))
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="model sidecar yaml not found",
+            )
         return {}
     try:
         with path.open("r", encoding="utf-8") as file:
             raw = yaml.safe_load(file) or {}
-    except Exception:
-        logger.exception("failed to read model sidecar yaml: %s", path)
+    except Exception as exc:
+        logger.warning(
+            "failed to read model sidecar yaml: sidecar_path_hash=%s error=%s",
+            sidecar_path_fingerprint(path),
+            exception_log_summary(exc),
+        )
+        if required:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="failed to read model sidecar yaml",
+            ) from exc
         return {}
-    return raw if isinstance(raw, dict) else {}
+    if not isinstance(raw, dict):
+        if required:
+            logger.error(
+                "model sidecar yaml root must be a mapping: sidecar_path_hash=%s",
+                sidecar_path_fingerprint(path),
+            )
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="model sidecar yaml root must be a mapping",
+            )
+        return {}
+    return raw
 
 
-def load_text_labels(path: Path) -> list[str]:
+def load_text_labels(path: Path, *, required: bool = False) -> list[str]:
     if not path.is_file():
+        if required:
+            logger.error("required model labels file not found: sidecar_path_hash=%s", sidecar_path_fingerprint(path))
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="model labels file not found",
+            )
         return []
     try:
         with path.open("r", encoding="utf-8") as file:
-            return [line.strip() for line in file if line.strip() and not line.lstrip().startswith("#")]
-    except Exception:
-        logger.exception("failed to read model labels: %s", path)
+            labels = [line.strip() for line in file if line.strip() and not line.lstrip().startswith("#")]
+    except Exception as exc:
+        logger.warning(
+            "failed to read model labels: sidecar_path_hash=%s error=%s",
+            sidecar_path_fingerprint(path),
+            exception_log_summary(exc),
+        )
+        if required:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="failed to read model labels",
+            ) from exc
         return []
+    if required and not labels:
+        logger.error("model labels file is empty: sidecar_path_hash=%s", sidecar_path_fingerprint(path))
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="model labels file is empty",
+        )
+    return labels
 
 
 def labels_from_config(config: ModelConfig, model_path: Path | None = None) -> list[str]:
+    labels_path = config_section(config, "artifact").get("labels")
+    if model_path is not None and isinstance(labels_path, str) and labels_path.strip():
+        return load_text_labels(safe_sidecar_path(model_path, labels_path.strip()), required=True)
+
     raw_classes = config_value(config, "output", "classes")
     if isinstance(raw_classes, list):
         return [str(item) for item in raw_classes]
     if isinstance(raw_classes, str) and raw_classes.lower() == "coco":
         return COCO_CLASSES
 
-    labels_path = config_section(config, "artifact").get("labels")
-    if model_path is not None and isinstance(labels_path, str) and labels_path.strip():
-        return load_text_labels(safe_sidecar_path(model_path, labels_path.strip()))
     if model_path is not None:
         default_labels_path = model_path.with_suffix(".labels.txt")
         labels = load_text_labels(default_labels_path)
@@ -122,7 +191,7 @@ def parse_class_filter(raw_filter: Any, labels: list[str]) -> set[int] | None:
 def model_card_for_path(config: ModelConfig, model_path: Path) -> dict[str, Any]:
     card_path = config_section(config, "artifact").get("model_card")
     if isinstance(card_path, str) and card_path.strip():
-        return load_yaml_sidecar(safe_sidecar_path(model_path, card_path.strip()))
+        return load_yaml_sidecar(safe_sidecar_path(model_path, card_path.strip()), required=True)
     default_card_path = model_path.with_suffix(".model-card.yml")
     return load_yaml_sidecar(default_card_path)
 
@@ -141,8 +210,9 @@ def model_package_info(cache_key_value: str, model_path: Path, digest: str | Non
         "version": config.get("version") or config_section(card, "model").get("version"),
         "precision": config.get("precision") or config_section(card, "model").get("precision"),
         "artifact": {
-            "model_card": artifact.get("model_card"),
-            "labels": artifact.get("labels"),
+            "path_configured": bool(artifact.get("path")),
+            "model_card_configured": bool(artifact.get("model_card")),
+            "labels_configured": bool(artifact.get("labels")),
             "sha256": expected_sha256,
             "sha256_match": None if not expected_sha256 or not digest else expected_sha256 == digest.lower(),
         },
@@ -151,6 +221,27 @@ def model_package_info(cache_key_value: str, model_path: Path, digest: str | Non
             "items": labels,
         },
         "model_card": card,
+    }
+
+
+def public_model_config(cache_key_value: str, config: dict[str, Any], *, loaded: bool = False) -> dict[str, Any]:
+    artifact = config_section(config, "artifact")
+    return {
+        "model_id": cache_key_value,
+        "task": config.get("task"),
+        "type": config.get("type"),
+        "runtime": config.get("runtime"),
+        "version": config.get("version"),
+        "precision": config.get("precision"),
+        "rollout": config.get("rollout", {}),
+        "thresholds": config.get("thresholds", {}),
+        "artifact": {
+            "path_configured": bool(artifact.get("path")),
+            "model_card_configured": bool(artifact.get("model_card")),
+            "labels_configured": bool(artifact.get("labels")),
+            "sha256_configured": bool(configured_sha256(config)),
+        },
+        "loaded": loaded,
     }
 
 

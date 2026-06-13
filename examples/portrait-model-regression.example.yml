@@ -1,0 +1,29 @@
+pairs:
+  - score: 0.92
+    same: true
+  - score: 0.18
+    same: false
+retrieval:
+  ranks: [1, 5]
+  queries:
+    - query_id: q1
+      person_id: p1
+      camera_id: cam-a
+      candidates:
+        - person_id: p1
+          camera_id: cam-b
+          similarity: 0.91
+        - person_id: p2
+          camera_id: cam-c
+          similarity: 0.44
+quality:
+  frames:
+    - quality:
+        score: 0.82
+gates:
+  - path: metrics.compare.roc_auc
+    min: 0.99
+  - path: metrics.retrieval.map
+    min: 0.90
+  - path: metrics.quality.quality_p05
+    min: 0.20
