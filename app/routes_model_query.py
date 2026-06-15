@@ -5,6 +5,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 
 from app.core import *
+from app.portrait_async import run_blocking_io
 from app.portrait_audit import audit_event
 from app.portrait_auth import permission_dependency
 from app.portrait_security import tenant_id_from_request
@@ -46,7 +47,8 @@ async def reload_config(request: Request) -> dict[str, Any]:
     previous_aliases = deepcopy(MODEL_ALIASES)
     model_configs, model_aliases = reload_model_config_state()
     try:
-        audit_event(
+        await run_blocking_io(
+            audit_event,
             "model_config_reloaded",
             request_id=request_id,
             tenant_id=tenant_id,

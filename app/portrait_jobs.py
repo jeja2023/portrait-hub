@@ -9,7 +9,8 @@ from uuid import uuid4
 from app.media.quality import assess_image_quality
 from app.media.video_decode import extract_video_frames_from_bytes
 from app.observability import logger, wall_time
-from app.portrait_embeddings import appearance_record
+from app.portrait_async import run_blocking_io
+from app.portrait_model_runtime import infer_appearance_record_for_image
 from app.portrait_response import exception_log_summary
 from app.portrait_state import handle_state_read_error, read_json_state, write_json_state
 from app.settings import PORTRAIT_JOBS_STATE_PATH, PORTRAIT_STORAGE_BACKEND, VIDEO_JOB_MAX_RETRIES, VIDEO_JOB_RETRY_BACKOFF_SECONDS
@@ -17,6 +18,17 @@ from app.video_io import public_video_metadata
 
 
 VIDEO_JOB_ERROR_MESSAGE = "video job failed"
+
+
+async def appearance_record(image: Any, include_embedding: bool = True) -> dict[str, Any]:
+    return await infer_appearance_record_for_image(image, include_embedding=include_embedding)
+
+
+async def resolve_appearance_record(image: Any, *, include_embedding: bool = True) -> dict[str, Any]:
+    record = appearance_record(image, include_embedding=include_embedding)
+    if hasattr(record, "__await__"):
+        return await record
+    return record
 
 
 class JobStatus(StrEnum):
@@ -300,12 +312,12 @@ async def run_video_job(
         job.next_retry_at = None
         job.attempts = normalize_retry_count(job.attempts) + 1
         job.updated_at = wall_time()
-        persist_video_job(job)
+        await run_blocking_io(persist_video_job, job)
         try:
             if job.cancel_requested:
                 job.status = JobStatus.CANCELLED
                 job.updated_at = wall_time()
-                persist_video_job(job)
+                await run_blocking_io(persist_video_job, job)
                 return
 
             frames, metadata = await extract_video_frames_from_bytes(data, filename, frame_interval, max_frames)
@@ -315,10 +327,10 @@ async def run_video_job(
                 if job.cancel_requested:
                     job.status = JobStatus.CANCELLED
                     job.updated_at = wall_time()
-                    persist_video_job(job)
+                    await run_blocking_io(persist_video_job, job)
                     return
                 quality = assess_image_quality(image)
-                appearance = appearance_record(image, include_embedding=False)
+                appearance = await resolve_appearance_record(image, include_embedding=False)
                 frame_results.append(
                     {
                         "frame_index": index,
@@ -334,7 +346,7 @@ async def run_video_job(
                 )
                 job.progress = 0.10 + 0.85 * ((index + 1) / total)
                 job.updated_at = wall_time()
-                persist_video_job(job)
+                await run_blocking_io(persist_video_job, job)
 
             job.result = public_video_job_result(
                 {
@@ -347,7 +359,7 @@ async def run_video_job(
             job.status = JobStatus.COMPLETED
             job.progress = 1.0
             job.updated_at = wall_time()
-            persist_video_job(job)
+            await run_blocking_io(persist_video_job, job)
             return
         except Exception as exc:
             logger.warning(
@@ -360,7 +372,7 @@ async def run_video_job(
             if job.cancel_requested:
                 job.status = JobStatus.CANCELLED
                 job.updated_at = wall_time()
-                persist_video_job(job)
+                await run_blocking_io(persist_video_job, job)
                 return
             if normalize_retry_count(job.attempts) <= normalize_retry_count(job.max_retries, VIDEO_JOB_MAX_RETRIES):
                 retry_delay = max(0.0, float(VIDEO_JOB_RETRY_BACKOFF_SECONDS)) * normalize_retry_count(job.attempts, 1)
@@ -368,7 +380,7 @@ async def run_video_job(
                 job.error = VIDEO_JOB_ERROR_MESSAGE
                 job.next_retry_at = wall_time() + retry_delay
                 job.updated_at = wall_time()
-                persist_video_job(job)
+                await run_blocking_io(persist_video_job, job)
                 if retry_delay > 0:
                     await asyncio.sleep(retry_delay)
                 continue
@@ -376,8 +388,5 @@ async def run_video_job(
             job.error = VIDEO_JOB_ERROR_MESSAGE
             job.next_retry_at = None
             job.updated_at = wall_time()
-            persist_video_job(job)
+            await run_blocking_io(persist_video_job, job)
             return
-
-
-load_video_jobs_state()

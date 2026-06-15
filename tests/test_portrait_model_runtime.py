@@ -39,6 +39,82 @@ def fake_runtime(capability_name: str, adapter: str, shape: list[int], embedding
 
 
 @pytest.mark.asyncio
+async def test_reid_body_embedding_adapter_returns_model_metadata(monkeypatch) -> None:
+    async def fake_get_runtime(capability_name, adapters):
+        if capability_name == "body_embedding":
+            return fake_runtime("body_embedding", "reid", [1, 3, 256, 128], embedding_dim=512)
+        return None
+
+    async def fake_infer_reid_images(bundle, key, images):
+        assert key == "portrait/reid.onnx"
+        assert len(images) == 1
+        return np.ones((1, 512), dtype=np.float32), {
+            "input_shape": [1, 3, 256, 128],
+            "output_shapes": [[1, 512]],
+            "inference_mode": "single",
+            "embedding_dim": 512,
+        }
+
+    monkeypatch.setattr(portrait_model_runtime, "_BODY_EMBEDDING_RUNTIME_UNAVAILABLE", False)
+    monkeypatch.setattr(portrait_model_runtime, "_PERSON_DETECTION_RUNTIME_UNAVAILABLE", False)
+    monkeypatch.setattr(portrait_model_runtime, "get_capability_runtime", fake_get_runtime)
+    monkeypatch.setattr(portrait_model_runtime, "infer_reid_images", fake_infer_reid_images)
+
+    record = await portrait_model_runtime.infer_body_record_for_image(Image.new("RGB", (128, 256), (80, 120, 160)))
+
+    assert len(record["embedding"]) == 512
+    assert record["embedding_dim"] == 512
+    assert record["embedding_model_status"] == "reid_onnx"
+    assert record["embedding_model_id"] == "portrait/reid.onnx"
+    assert record["selection_strategy"] == "whole_image_reid"
+
+
+@pytest.mark.asyncio
+async def test_reid_body_embedding_uses_person_detector_crop(monkeypatch) -> None:
+    async def fake_get_runtime(capability_name, adapters):
+        if capability_name == "body_embedding":
+            return fake_runtime("body_embedding", "reid", [1, 3, 256, 128], embedding_dim=512)
+        if capability_name == "person_detection":
+            return fake_runtime("person_detection", "yolo", [1, 3, 640, 640])
+        return None
+
+    async def fake_infer_person_frames(bundle, key, images, filenames, confidence, iou, max_detections):
+        assert key == "portrait/yolo.onnx"
+        return [
+            {
+                "frame_index": 0,
+                "width": 128,
+                "height": 256,
+                "persons": [{"box": [32.0, 40.0, 96.0, 200.0], "score": 0.91}],
+                "person_count": 1,
+            }
+        ], {"inference_mode": "single"}
+
+    async def fake_infer_reid_images(bundle, key, images):
+        assert key == "portrait/reid.onnx"
+        assert images[0].size == (64, 160)
+        return np.ones((1, 512), dtype=np.float32), {
+            "input_shape": [1, 3, 256, 128],
+            "output_shapes": [[1, 512]],
+            "inference_mode": "single",
+            "embedding_dim": 512,
+        }
+
+    monkeypatch.setattr(portrait_model_runtime, "_BODY_EMBEDDING_RUNTIME_UNAVAILABLE", False)
+    monkeypatch.setattr(portrait_model_runtime, "_PERSON_DETECTION_RUNTIME_UNAVAILABLE", False)
+    monkeypatch.setattr(portrait_model_runtime, "get_capability_runtime", fake_get_runtime)
+    monkeypatch.setattr(portrait_model_runtime, "infer_person_frames", fake_infer_person_frames)
+    monkeypatch.setattr(portrait_model_runtime, "infer_reid_images", fake_infer_reid_images)
+
+    record = await portrait_model_runtime.infer_body_record_for_image(Image.new("RGB", (128, 256), (80, 120, 160)))
+
+    assert record["selection_strategy"] == "person_detection_crop_reid"
+    assert record["box"] == [32.0, 40.0, 96.0, 200.0]
+    assert record["detection_model_status"] == "yolo_onnx"
+    assert record["detection_count"] == 1
+
+
+@pytest.mark.asyncio
 async def test_arcface_adapter_batches_face_embeddings(monkeypatch) -> None:
     async def fake_get_runtime(capability_name, adapters):
         if capability_name == "face_embedding":
@@ -130,6 +206,32 @@ async def test_opengait_adapter_returns_normalized_embedding(monkeypatch) -> Non
     assert embedding is not None
     assert len(embedding) == 256
     assert meta["model_status"] == "opengait_onnx"
+
+
+@pytest.mark.asyncio
+async def test_attribute_reid_appearance_adapter_returns_model_metadata(monkeypatch) -> None:
+    async def fake_get_runtime(capability_name, adapters):
+        if capability_name == "appearance":
+            return fake_runtime("appearance", "attribute_reid", [1, 3, 256, 128], embedding_dim=256)
+        return None
+
+    async def fake_run(bundle, input_array):
+        assert input_array.shape == (1, 3, 256, 128)
+        return [np.ones((1, 256), dtype=np.float32)], 0.0, 0.0
+
+    monkeypatch.setattr(portrait_model_runtime, "get_capability_runtime", fake_get_runtime)
+    monkeypatch.setattr(portrait_model_runtime, "run_model_bundle", fake_run)
+
+    record = await portrait_model_runtime.infer_appearance_record_for_image(
+        Image.new("RGB", (128, 256), (80, 120, 160)),
+        include_embedding=True,
+    )
+
+    assert len(record["embedding"]) == 256
+    assert record["embedding_dim"] == 256
+    assert record["model_status"] == "attribute_reid_onnx"
+    assert record["model_id"] == "portrait/attribute_reid.onnx"
+    assert record["adapter"] == "attribute_reid"
 
 
 @pytest.mark.asyncio

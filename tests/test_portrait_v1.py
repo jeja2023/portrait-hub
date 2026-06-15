@@ -1170,6 +1170,19 @@ def test_v1_stream_and_retention_requests_reject_extra_fields() -> None:
     assert cleanup.status_code == 422
 
 
+def test_v1_retention_cleanup_confirm_validation() -> None:
+    client = TestClient(app)
+
+    # 1. 传递正确的 confirm 的情况
+    response_ok = client.post("/v1/admin/retention/cleanup", json={"retention_days": 0, "confirm": "cleanup"})
+    assert response_ok.status_code == 200
+
+    # 2. 传递错误的 confirm 的情况
+    response_bad = client.post("/v1/admin/retention/cleanup", json={"retention_days": 0, "confirm": "wrong"})
+    assert response_bad.status_code == 400
+    assert "cleanup" in response_bad.json()["detail"]
+
+
 def test_v1_compare_faces_and_gait_expose_input_evidence() -> None:
     client = TestClient(app)
 
@@ -1217,6 +1230,41 @@ def test_v1_fusion_compare_marks_duplicate_inputs_as_non_independent() -> None:
     assert payload["decision"]["input_independence"]["independent"] is False
     assert payload["decision"]["input_independence"]["confidence_multiplier"] == 0.35
     assert "duplicate_input" in payload["decision"]["risk_factors"]
+
+
+def test_v1_infer_pose_appearance_and_gait_contracts() -> None:
+    client = TestClient(app)
+
+    pose = client.post(
+        "/v1/infer/pose",
+        files=[upload("files", (80, 120, 160))],
+    )
+    appearance = client.post(
+        "/v1/infer/appearance",
+        files=[upload("files", (90, 110, 130))],
+        data={"include_embeddings": "true"},
+    )
+    gait = client.post(
+        "/v1/infer/gait",
+        files=[upload("files", (30, 60, 90)), upload("files", (50, 80, 110))],
+        data={"include_embedding": "true"},
+    )
+
+    assert pose.status_code == 200
+    assert pose.json()["data"]["frames"][0]["pose"]["keypoints"]
+    assert pose.json()["data"]["model"]["status"] == "placeholder"
+
+    assert appearance.status_code == 200
+    appearance_payload = appearance.json()["data"]
+    assert appearance_payload["frames"][0]["appearance"]["embedding_dim"] > 0
+    assert "embedding" in appearance_payload["frames"][0]["appearance"]
+    assert appearance_payload["model"]["status"] in {"color_histogram_fallback", "attribute_reid_onnx"}
+
+    assert gait.status_code == 200
+    gait_payload = gait.json()["data"]
+    assert gait_payload["tracklet"]["frame_count"] == 2
+    assert gait_payload["tracklet"]["embedding_dim"] > 0
+    assert "embedding" in gait_payload["tracklet"]
 
 
 def test_v1_stream_blocks_private_ip_literals_by_default() -> None:

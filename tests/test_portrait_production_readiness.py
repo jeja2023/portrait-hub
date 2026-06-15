@@ -121,6 +121,7 @@ def test_cutover_check_passes_with_real_artifact_hashes(workspace_tmp_path: Path
         "portrait_hub/arcface_r100.onnx": "arcface_r100.onnx",
         "portrait_hub/rtmpose_coco17.onnx": "rtmpose_coco17.onnx",
         "portrait_hub/opengait_gait3d.onnx": "opengait_gait3d.onnx",
+        "portrait_hub/attribute_reid.onnx": "attribute_reid.onnx",
     }
     for model_id, filename in artifacts.items():
         (models_root / filename).write_bytes(f"fake artifact for {model_id}".encode("utf-8"))
@@ -163,6 +164,13 @@ def test_cutover_check_passes_with_real_artifact_hashes(workspace_tmp_path: Path
                         "adapter": "opengait",
                         "embedding_dim": 256,
                         "fallback_model_id": "portrait_hub/tracklet_fingerprint_v1",
+                    },
+                    "appearance": {
+                        "status": "production",
+                        "model_id": "portrait_hub/attribute_reid.onnx",
+                        "adapter": "attribute_reid",
+                        "embedding_dim": 256,
+                        "fallback_model_id": "portrait_hub/color_histogram_v1",
                     },
                 }
             }

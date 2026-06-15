@@ -128,6 +128,3 @@ def update_threshold_profile(profile: str, payload: dict[str, Any]) -> dict[str,
         THRESHOLD_PROFILES.update(deepcopy(previous_thresholds))
         raise
     return {"profile": profile_key, "updated": updated, "thresholds": threshold_snapshot()}
-
-
-load_threshold_state()

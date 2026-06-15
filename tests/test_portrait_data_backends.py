@@ -9,6 +9,7 @@ from PIL import Image
 from app import runtime_execution
 from app import portrait_audit
 from app import portrait_gallery
+from app import portrait_bootstrap
 from app import portrait_object_storage
 from app import portrait_jobs
 from app import portrait_model_capabilities
@@ -20,6 +21,7 @@ from app import portrait_streams
 from app import portrait_thresholds
 from app import portrait_crypto
 from app import portrait_vector_store
+from app import server
 from app.portrait_gallery import GALLERY, add_feature, gallery_key, patch_person, reindex_gallery_vectors, upsert_person
 from app.portrait_jobs import VIDEO_JOBS, VideoJob, create_video_job, job_key, request_cancel_video_job
 from app.portrait_jobs import run_video_job
@@ -70,12 +72,19 @@ def test_model_capability_normalization_exposes_real_model_adapter_contract() ->
                 "model_id": "portrait/opengait.onnx",
                 "adapter": "opengait",
             },
+            "body_embedding": {
+                "status": "ready",
+                "model_id": "portrait/osnet.onnx",
+                "adapter": "reid",
+            },
         }
     )
 
     assert capabilities["face_embedding"]["embedding_dim"] == 512
     assert capabilities["face_embedding"]["input_size"] == [112, 112]
     assert capabilities["gait"]["sequence_input"] is True
+    assert capabilities["body_embedding"]["embedding_dim"] == 512
+    assert capabilities["body_embedding"]["input_size"] == [256, 128]
 
 
 def test_object_store_health_redacts_backend_locations(monkeypatch, workspace_tmp_path) -> None:
@@ -667,6 +676,28 @@ def test_invalid_runtime_state_logs_are_redacted(monkeypatch, workspace_tmp_path
     assert "ValueError" in caplog.text
     assert "secret-token" not in caplog.text
     assert "secret-token-algorithm" not in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_lifespan_loads_portrait_state_once_before_warmup(monkeypatch) -> None:
+    calls = []
+
+    def fake_load_state():
+        calls.append("state")
+
+    async def fake_warmup_models():
+        calls.append("warmup")
+
+    monkeypatch.setattr(portrait_bootstrap, "_STATE_LOADED", False)
+    monkeypatch.setattr(portrait_bootstrap, "_STATE_LOAD_LOCK", None)
+    monkeypatch.setattr(portrait_bootstrap, "load_portrait_runtime_state", fake_load_state)
+    monkeypatch.setattr(server, "warmup_models", fake_warmup_models)
+
+    async with server.lifespan(server.create_app()):
+        assert calls == ["state", "warmup"]
+
+    async with server.lifespan(server.create_app()):
+        assert calls == ["state", "warmup", "warmup"]
 
 
 def test_video_jobs_state_shape_fails_closed(monkeypatch, workspace_tmp_path) -> None:
@@ -1309,6 +1340,29 @@ async def test_stream_worker_daemon_once_runs_running_streams(monkeypatch) -> No
     assert report["selected_count"] == 1
     assert report["processed_count"] == 1
     assert calls == [("tenant-a", stream.stream_id, 2)]
+
+
+@pytest.mark.asyncio
+async def test_stream_worker_revalidates_url_before_pull(monkeypatch) -> None:
+    STREAMS.clear()
+    stream = create_stream("http://example.com/rebind", tenant_id="tenant-a")
+    stream.status = "running"
+    calls = []
+
+    def fail_validation(stream_url):
+        calls.append(stream_url)
+        raise HTTPException(status_code=400, detail="stream_url host is not allowed by SSRF protection")
+
+    def fail_if_pulled(*args, **kwargs):
+        raise AssertionError("stream pull should not run after validation failure")
+
+    monkeypatch.setattr(portrait_stream_worker, "validate_media_stream_url", fail_validation)
+    monkeypatch.setattr(portrait_stream_worker, "extract_video_frames_from_path", fail_if_pulled)
+
+    report = await portrait_stream_worker.run_stream_worker_session(stream, max_reconnects=0)
+
+    assert calls == ["http://example.com/rebind"]
+    assert report["status"] in {"failed", "reconnecting"}
 
 
 def test_audit_chain_verifier_detects_tampering(workspace_tmp_path) -> None:

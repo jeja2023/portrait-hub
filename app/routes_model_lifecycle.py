@@ -4,6 +4,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, Request
 
 from app.core import *
+from app.portrait_async import run_blocking_io
 from app.portrait_audit import audit_event
 from app.portrait_auth import permission_dependency
 from app.portrait_security import tenant_id_from_request
@@ -48,9 +49,9 @@ async def warmup(req: WarmupRequest, request: Request) -> dict[str, Any]:
                 "load_seconds": load_seconds,
                 "model_hash": bundle["model_hash"],
             }
-        )
+    )
     try:
-        audit_event("model_warmup", request_id=request_id, tenant_id=tenant_id, models=[item["model"] for item in results])
+        await run_blocking_io(audit_event, "model_warmup", request_id=request_id, tenant_id=tenant_id, models=[item["model"] for item in results])
     except Exception:
         restore_model_registry_snapshot(previous_registry, previous_locks)
         raise
@@ -66,7 +67,7 @@ async def unload(req: ModelRequest, request: Request) -> dict[str, Any]:
     previous_locks = model_load_locks_snapshot()
     unloaded = await unload_model_by_key(key)
     try:
-        audit_event("model_unload", request_id=request_id, tenant_id=tenant_id, model=key, unloaded=unloaded)
+        await run_blocking_io(audit_event, "model_unload", request_id=request_id, tenant_id=tenant_id, model=key, unloaded=unloaded)
     except Exception:
         restore_model_registry_snapshot(previous_registry, previous_locks)
         raise
@@ -84,7 +85,7 @@ async def reload_model(req: ModelRequest, request: Request) -> dict[str, Any]:
     model_path = get_model_path(req.project_name, req.model_name)
     bundle, cold_loaded, load_seconds = await get_or_load_model(key, model_path)
     try:
-        audit_event("model_reload", request_id=request_id, tenant_id=tenant_id, model=key, cold_loaded=cold_loaded)
+        await run_blocking_io(audit_event, "model_reload", request_id=request_id, tenant_id=tenant_id, model=key, cold_loaded=cold_loaded)
     except Exception:
         restore_model_registry_snapshot(previous_registry, previous_locks)
         raise

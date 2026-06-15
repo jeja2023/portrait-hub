@@ -4,6 +4,7 @@ from copy import deepcopy
 from typing import Any, Callable
 
 from app.observability import logger, wall_time
+from app.media.stream_decode import validate_media_stream_url
 from app.portrait_response import exception_log_summary
 from app.portrait_security import redact_sensitive_fields
 from app.portrait_state import append_jsonl
@@ -212,6 +213,7 @@ async def run_stream_worker_session(
     attempts = 0
     while stream.status == StreamStatus.RUNNING and attempts <= max_reconnects:
         try:
+            await asyncio.to_thread(validate_media_stream_url, stream.stream_url)
             frames, metadata = await asyncio.to_thread(
                 extract_video_frames_from_path,
                 stream.stream_url,

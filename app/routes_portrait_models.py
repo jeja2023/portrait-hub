@@ -22,6 +22,7 @@ from app.core import (
 )
 from app.observability import logger
 from app.observability import request_id_from_headers
+from app.portrait_async import run_blocking_io
 from app.portrait_audit import audit_event
 from app.portrait_auth import permission_dependency
 from app.portrait_response import exception_log_summary, portrait_success, raise_rollback_failure
@@ -110,7 +111,15 @@ async def v1_model_load(request: Request, model_id: str) -> dict[str, Any]:
     bundle, cold_loaded, load_seconds = await get_or_load_model(key, model_path)
     tenant_id = tenant_id_from_request(request)
     try:
-        audit_event("model_loaded", request_id=request_id, tenant_id=tenant_id, model_id=key, alias=alias_name, cold_loaded=cold_loaded)
+        await run_blocking_io(
+            audit_event,
+            "model_loaded",
+            request_id=request_id,
+            tenant_id=tenant_id,
+            model_id=key,
+            alias=alias_name,
+            cold_loaded=cold_loaded,
+        )
     except Exception:
         restore_model_registry_snapshot(previous_registry, previous_locks)
         raise
@@ -134,7 +143,15 @@ async def v1_model_unload(request: Request, model_id: str) -> dict[str, Any]:
     unloaded = await unload_model_by_key(key)
     tenant_id = tenant_id_from_request(request)
     try:
-        audit_event("model_unloaded", request_id=request_id, tenant_id=tenant_id, model_id=key, alias=alias_name, unloaded=unloaded)
+        await run_blocking_io(
+            audit_event,
+            "model_unloaded",
+            request_id=request_id,
+            tenant_id=tenant_id,
+            model_id=key,
+            alias=alias_name,
+            unloaded=unloaded,
+        )
     except Exception:
         restore_model_registry_snapshot(previous_registry, previous_locks)
         raise
@@ -180,7 +197,8 @@ async def v1_update_thresholds(request: Request, profile: str, payload: Threshol
     previous_thresholds = threshold_snapshot()
     result = update_threshold_profile(profile, update_payload)
     try:
-        audit_event(
+        await run_blocking_io(
+            audit_event,
             "threshold_profile_updated",
             request_id=request_id,
             tenant_id=tenant_id,

@@ -2,21 +2,24 @@ from copy import deepcopy
 import json
 from typing import Any
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.media.image_decode import decode_upload_image, decode_upload_images
 from app.observability import logger
-from app.observability import request_id_from_headers
+from app.portrait_async import run_blocking_io
 from app.portrait_audit import audit_event
 from app.portrait_auth import permission_dependency
 from app.portrait_embeddings import (
     FALLBACK_EMBEDDING_MODEL_ID,
     FALLBACK_EMBEDDING_VERSION,
-    appearance_record,
-    body_record,
 )
-from app.portrait_model_runtime import embedding_model_info, infer_best_face_embedding_for_image
+from app.portrait_model_runtime import (
+    embedding_model_info,
+    infer_appearance_record_for_image,
+    infer_best_face_embedding_for_image,
+    infer_body_record_for_image,
+)
 from app.portrait_gallery import (
     GALLERY,
     PersonRecord,
@@ -34,8 +37,9 @@ from app.portrait_gallery import (
     upsert_person,
 )
 from app.portrait_response import OBJECT_CLEANUP_FAILED, exception_log_summary, portrait_success, raise_rollback_failure
+from app.portrait_request_context import PortraitRequestContext, portrait_request_context
 from app.portrait_request_validation import validate_int_range
-from app.portrait_security import normalize_public_metadata, tenant_id_from_request
+from app.portrait_security import normalize_public_metadata
 from app.portrait_storage import store_backend_name
 from app.portrait_object_storage import OBJECT_STORE, public_object_info
 from app.portrait_thresholds import normalize_modality, validate_threshold_profile
@@ -82,10 +86,12 @@ async def extract_gallery_embedding(image: Any, modality: str) -> tuple[list[flo
         model_id, model_version = embedding_model_info(face)
         return embedding, float(face["quality"].get("score", 0.0)), model_id, model_version
     if modality_key == "appearance":
-        record = appearance_record(image, include_embedding=True)
-        return record["embedding"], float(record["quality"].get("score", 0.0)), FALLBACK_EMBEDDING_MODEL_ID, FALLBACK_EMBEDDING_VERSION
-    record = body_record(image, include_embedding=True)
-    return record["embedding"], float(record["quality"].get("score", 0.0)), FALLBACK_EMBEDDING_MODEL_ID, FALLBACK_EMBEDDING_VERSION
+        record = await infer_appearance_record_for_image(image, include_embedding=True)
+        model_id, model_version = embedding_model_info(record)
+        return record["embedding"], float(record["quality"].get("score", 0.0)), model_id, model_version
+    record = await infer_body_record_for_image(image, include_embedding=True)
+    model_id, model_version = embedding_model_info(record)
+    return record["embedding"], float(record["quality"].get("score", 0.0)), model_id, model_version
 
 
 def combined_query_quality(frame_quality: dict[str, Any] | None, subject_quality: float) -> float:
@@ -198,15 +204,15 @@ def rollback_gallery_mutation(
 
 @router.post("/v1/gallery/enroll", dependencies=[Depends(permission_dependency("gallery:write"))])
 async def v1_gallery_enroll(
-    request: Request,
     files: list[UploadFile] = File(...),
     person_id: str | None = Form(None),
     display_name: str | None = Form(None),
     modality: str = Form("body"),
     metadata: str | None = Form(None),
+    ctx: PortraitRequestContext = Depends(portrait_request_context),
 ) -> dict[str, Any]:
-    request_id = request_id_from_headers(request)
-    tenant_id = tenant_id_from_request(request)
+    request_id = ctx.request_id
+    tenant_id = ctx.tenant_id
     modality = validate_gallery_modality(modality)
     if len(files) > MAX_EMBEDDING_IMAGES:
         raise HTTPException(
@@ -217,7 +223,7 @@ async def v1_gallery_enroll(
     previous_person = None
     if person_id is not None:
         previous_person = deepcopy(GALLERY.get(gallery_key(tenant_id, person_id)))
-    person = upsert_person(person_id, display_name, parse_metadata(metadata), tenant_id=tenant_id)
+    person = await run_blocking_io(upsert_person, person_id, display_name, parse_metadata(metadata), tenant_id=tenant_id)
     created = []
     skipped_duplicates = []
     created_object_infos: list[dict[str, Any]] = []
@@ -232,7 +238,8 @@ async def v1_gallery_enroll(
                     }
                 )
                 continue
-            object_info = OBJECT_STORE.put_bytes(
+            object_info = await run_blocking_io(
+                OBJECT_STORE.put_bytes,
                 tenant_id,
                 "gallery-image",
                 item.frame.filename,
@@ -240,7 +247,8 @@ async def v1_gallery_enroll(
             )
             created_object_infos.append(object_info)
             embedding, quality_score, model_id, model_version = await extract_gallery_embedding(item.image, modality)
-            feature = add_feature(
+            feature = await run_blocking_io(
+                add_feature,
                 person,
                 modality=modality,
                 embedding=embedding,
@@ -253,7 +261,8 @@ async def v1_gallery_enroll(
             feature_payload = feature.public_dict()
             feature_payload["object"] = public_object_info(object_info)
             created.append(feature_payload)
-        audit_event(
+        await run_blocking_io(
+            audit_event,
             "gallery_enroll",
             request_id=request_id,
             tenant_id=tenant_id,
@@ -263,7 +272,8 @@ async def v1_gallery_enroll(
             skipped_duplicate_count=len(skipped_duplicates),
         )
     except Exception as exc:
-        rollback_gallery_mutation(
+        await run_blocking_io(
+            rollback_gallery_mutation,
             tenant_id=tenant_id,
             person_id=person.person_id,
             previous_person=previous_person,
@@ -287,14 +297,14 @@ async def v1_gallery_enroll(
 
 @router.post("/v1/gallery/search", dependencies=[Depends(permission_dependency("gallery:read"))])
 async def v1_gallery_search(
-    request: Request,
     file: UploadFile = File(...),
     modality: str = Form("body"),
     top_k: int = Form(5),
     threshold_profile: str = Form("normal"),
+    ctx: PortraitRequestContext = Depends(portrait_request_context),
 ) -> dict[str, Any]:
-    request_id = request_id_from_headers(request)
-    tenant_id = tenant_id_from_request(request)
+    request_id = ctx.request_id
+    tenant_id = ctx.tenant_id
     top_k = validate_int_range("top_k", top_k, minimum=1, maximum=100)
     threshold_profile = validate_threshold_profile(threshold_profile)
     modality = validate_gallery_modality(modality)
@@ -302,7 +312,8 @@ async def v1_gallery_search(
     embedding, quality_score, _, _ = await extract_gallery_embedding(decoded.image, modality)
     frame_quality_score = float(decoded.frame.quality.get("score", 0.0)) if isinstance(decoded.frame.quality, dict) else None
     combined_quality_score = combined_query_quality(decoded.frame.quality, float(quality_score))
-    candidates = search_gallery(
+    candidates = await run_blocking_io(
+        search_gallery,
         embedding,
         modality=modality,
         threshold_profile=threshold_profile,
@@ -311,7 +322,8 @@ async def v1_gallery_search(
         query_quality=combined_quality_score,
     )
     retrieval_context = candidates[0].get("retrieval_context", {}) if candidates else {}
-    audit_event(
+    await run_blocking_io(
+        audit_event,
         "gallery_search",
         request_id=request_id,
         tenant_id=tenant_id,
@@ -339,21 +351,23 @@ async def v1_gallery_search(
 
 @router.post("/v1/gallery/reindex", dependencies=[Depends(permission_dependency("gallery:write"))])
 async def v1_gallery_reindex(
-    request: Request,
     modality: str | None = Query(None),
     model_id: str | None = Query(None, max_length=128),
     dry_run: bool = Query(False),
+    ctx: PortraitRequestContext = Depends(portrait_request_context),
 ) -> dict[str, Any]:
-    request_id = request_id_from_headers(request)
-    tenant_id = tenant_id_from_request(request)
+    request_id = ctx.request_id
+    tenant_id = ctx.tenant_id
     modality_key = validate_gallery_modality(modality) if modality is not None else None
-    result = reindex_gallery_vectors(
+    result = await run_blocking_io(
+        reindex_gallery_vectors,
         tenant_id=tenant_id,
         modality=modality_key,
         model_id=model_id,
         dry_run=dry_run,
     )
-    audit_event(
+    await run_blocking_io(
+        audit_event,
         "gallery_reindex",
         request_id=request_id,
         tenant_id=tenant_id,
@@ -378,17 +392,24 @@ async def v1_gallery_reindex(
 
 
 @router.get("/v1/gallery/{person_id}", dependencies=[Depends(permission_dependency("gallery:read"))])
-async def v1_gallery_get_person(request: Request, person_id: str) -> dict[str, Any]:
-    request_id = request_id_from_headers(request)
-    tenant_id = tenant_id_from_request(request)
+async def v1_gallery_get_person(
+    person_id: str,
+    ctx: PortraitRequestContext = Depends(portrait_request_context),
+) -> dict[str, Any]:
+    request_id = ctx.request_id
+    tenant_id = ctx.tenant_id
     person = get_person_or_404(person_id, tenant_id=tenant_id)
     return portrait_success(request_id, {"person": person.public_dict(include_embeddings=False)})
 
 
 @router.patch("/v1/gallery/{person_id}", dependencies=[Depends(permission_dependency("gallery:write"))])
-async def v1_gallery_patch_person(request: Request, person_id: str, payload: GalleryPatchRequest) -> dict[str, Any]:
-    request_id = request_id_from_headers(request)
-    tenant_id = tenant_id_from_request(request)
+async def v1_gallery_patch_person(
+    person_id: str,
+    payload: GalleryPatchRequest,
+    ctx: PortraitRequestContext = Depends(portrait_request_context),
+) -> dict[str, Any]:
+    request_id = ctx.request_id
+    tenant_id = ctx.tenant_id
     update_payload = payload.model_dump(exclude_unset=True)
     if not update_payload:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="patch payload must not be empty")
@@ -397,11 +418,12 @@ async def v1_gallery_patch_person(request: Request, person_id: str, payload: Gal
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="metadata must be a JSON object")
         update_payload["metadata"] = normalize_public_metadata(update_payload["metadata"], field_name="metadata")
     previous_person = deepcopy(get_person_or_404(person_id, tenant_id=tenant_id))
-    person = patch_person(person_id, update_payload, tenant_id=tenant_id)
+    person = await run_blocking_io(patch_person, person_id, update_payload, tenant_id=tenant_id)
     try:
-        audit_event("gallery_patch_person", request_id=request_id, tenant_id=tenant_id, person_id=person_id)
+        await run_blocking_io(audit_event, "gallery_patch_person", request_id=request_id, tenant_id=tenant_id, person_id=person_id)
     except Exception as exc:
-        rollback_gallery_mutation(
+        await run_blocking_io(
+            rollback_gallery_mutation,
             tenant_id=tenant_id,
             person_id=person.person_id,
             previous_person=previous_person,
@@ -413,11 +435,15 @@ async def v1_gallery_patch_person(request: Request, person_id: str, payload: Gal
 
 
 @router.delete("/v1/gallery/{person_id}", dependencies=[Depends(permission_dependency("gallery:write"))])
-async def v1_gallery_delete_person(request: Request, person_id: str) -> dict[str, Any]:
-    request_id = request_id_from_headers(request)
-    tenant_id = tenant_id_from_request(request)
+async def v1_gallery_delete_person(
+    person_id: str,
+    ctx: PortraitRequestContext = Depends(portrait_request_context),
+) -> dict[str, Any]:
+    request_id = ctx.request_id
+    tenant_id = ctx.tenant_id
     previous_person = deepcopy(get_person_or_404(person_id, tenant_id=tenant_id))
-    audit_event(
+    await run_blocking_io(
+        audit_event,
         "gallery_delete_person_requested",
         request_id=request_id,
         tenant_id=tenant_id,
@@ -426,12 +452,12 @@ async def v1_gallery_delete_person(request: Request, person_id: str) -> dict[str
         feature_count=len(previous_person.features),
         object_reference_count=len(feature_object_infos(previous_person)),
     )
-    deleted = delete_person(person_id, tenant_id=tenant_id)
+    deleted = await run_blocking_io(delete_person, person_id, tenant_id=tenant_id)
     if not deleted:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="person not found")
-    deleted_object_count, object_cleanup_errors = cleanup_gallery_feature_objects(previous_person)
+    deleted_object_count, object_cleanup_errors = await run_blocking_io(cleanup_gallery_feature_objects, previous_person)
     if object_cleanup_errors:
-        rollback_errors = restore_gallery_person_snapshot(tenant_id, previous_person.person_id, previous_person)
+        rollback_errors = await run_blocking_io(restore_gallery_person_snapshot, tenant_id, previous_person.person_id, previous_person)
         if rollback_errors:
             raise_gallery_rollback_failure(HTTPException(status_code=503, detail=OBJECT_CLEANUP_FAILED), rollback_errors)
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=OBJECT_CLEANUP_FAILED)

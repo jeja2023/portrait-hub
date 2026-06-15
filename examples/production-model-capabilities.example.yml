@@ -33,6 +33,21 @@ capabilities:
     preprocess: imagenet
     fallback_model_id: portrait_hub/geometric_pose_placeholder
 
+  person_detection:
+    status: production
+    model_id: portrait_hub/yolov8n.onnx
+    adapter: yolo
+    production_adapter: yolo
+    input_size: [640, 640]
+    output:
+      format: yolo
+      classes: coco
+      class_filter: [person]
+      confidence: 0.25
+      iou: 0.45
+      max_detections: 100
+    fallback_model_id: portrait_hub/whole_image_person_fallback
+
   gait:
     status: production
     model_id: portrait_hub/opengait_gait3d.onnx
@@ -44,12 +59,24 @@ capabilities:
     normalize: l2
     fallback_model_id: portrait_hub/tracklet_fingerprint_v1
 
+  body_embedding:
+    status: production
+    model_id: portrait_hub/osnet_ibn_x1_0.onnx
+    adapter: reid
+    production_adapter: reid
+    input_size: [256, 128]
+    preprocess: imagenet
+    embedding_dim: 512
+    normalize: l2
+    fallback_model_id: portrait_hub/image_fingerprint_v1
+
   appearance:
-    status: fallback
-    model_id: portrait_hub/color_histogram_v1
-    adapter: color_histogram
+    status: production
+    model_id: portrait_hub/attribute_reid.onnx
+    adapter: attribute_reid
     production_adapter: attribute_reid
-    embedding_dim: 64
-    production_embedding_dim: 256
+    input_size: [256, 128]
+    preprocess: imagenet
+    embedding_dim: 256
     normalize: l2
     fallback_model_id: portrait_hub/color_histogram_v1

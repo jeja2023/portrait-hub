@@ -360,6 +360,3 @@ def remove_stream(stream_id: str, tenant_id: str) -> bool:
         STREAMS[key] = stream
         raise
     return True
-
-
-load_streams_state()

@@ -8,11 +8,11 @@ from app.portrait_auth import permission_dependency
 from app.portrait_embeddings import (
     FALLBACK_EMBEDDING_MODEL_ID,
     FALLBACK_EMBEDDING_VERSION,
-    appearance_record,
-    body_record,
 )
 from app.portrait_model_runtime import (
     face_model_summary,
+    infer_appearance_record_for_image,
+    infer_body_record_for_image,
     infer_face_records_for_image,
     infer_gait_embedding_for_images,
     infer_pose_record_for_image,
@@ -86,8 +86,17 @@ async def v1_infer_persons(
     validate_file_count(files, MAX_VISION_IMAGES)
     decoded = await decode_upload_images(files)
     frames = []
+    model_summary: dict[str, Any] | None = None
     for index, item in enumerate(decoded):
-        person = body_record(item.image, include_embedding=include_embeddings)
+        person = await infer_body_record_for_image(item.image, include_embedding=include_embeddings)
+        if model_summary is None:
+            model_summary = {
+                "id": person.get("embedding_model_id", FALLBACK_EMBEDDING_MODEL_ID),
+                "version": person.get("embedding_model_version", FALLBACK_EMBEDDING_VERSION),
+                "status": person.get("model_status", person.get("embedding_model_status", "whole_image_fallback")),
+                "adapter": person.get("embedding_adapter"),
+                "embedding_dim": person.get("embedding_dim", 0) if include_embeddings else 0,
+            }
         frame = item.frame.to_dict()
         frame["image_index"] = index
         frame["persons"] = [person]
@@ -99,10 +108,12 @@ async def v1_infer_persons(
             "frames": frames,
             "frame_count": len(frames),
             "person_count": len(frames),
-            "model": {
+            "model": model_summary
+            or {
                 "id": FALLBACK_EMBEDDING_MODEL_ID,
                 "version": FALLBACK_EMBEDDING_VERSION,
                 "status": "whole_image_fallback",
+                "embedding_dim": 0,
             },
         },
     )
@@ -142,17 +153,33 @@ async def v1_infer_appearance(
     validate_file_count(files, MAX_VISION_IMAGES)
     decoded = await decode_upload_images(files)
     results = []
+    model_summary: dict[str, Any] | None = None
     for index, item in enumerate(decoded):
+        appearance = await infer_appearance_record_for_image(item.image, include_embedding=include_embeddings)
+        if model_summary is None:
+            model_summary = {
+                "id": appearance.get("model_id", FALLBACK_EMBEDDING_MODEL_ID),
+                "version": appearance.get("model_version", FALLBACK_EMBEDDING_VERSION),
+                "status": appearance.get("model_status", "color_histogram_fallback"),
+                "adapter": appearance.get("adapter"),
+                "embedding_dim": appearance.get("embedding_dim", 0) if include_embeddings else 0,
+            }
         frame = item.frame.to_dict()
         frame["image_index"] = index
-        frame["appearance"] = appearance_record(item.image, include_embedding=include_embeddings)
+        frame["appearance"] = appearance
         results.append(frame)
     return portrait_success(
         request_id,
         {
             "frames": results,
             "frame_count": len(results),
-            "model": {"id": FALLBACK_EMBEDDING_MODEL_ID, "status": "color_histogram_fallback"},
+            "model": model_summary
+            or {
+                "id": FALLBACK_EMBEDDING_MODEL_ID,
+                "version": FALLBACK_EMBEDDING_VERSION,
+                "status": "color_histogram_fallback",
+                "embedding_dim": 0,
+            },
         },
     )
 

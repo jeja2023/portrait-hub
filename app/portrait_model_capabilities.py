@@ -31,6 +31,17 @@ DEFAULT_CAPABILITIES = {
         "keypoint_schema": "coco17",
         "fallback_model_id": "portrait_hub/geometric_pose_placeholder",
     },
+    "person_detection": {
+        "status": "fallback",
+        "model_id": "portrait_hub/whole_image_person_fallback",
+        "adapter": "whole_image_person",
+        "production_adapter": "yolo",
+        "input_size": [640, 640],
+        "confidence": 0.25,
+        "iou": 0.45,
+        "max_detections": 8,
+        "fallback_model_id": "portrait_hub/whole_image_person_fallback",
+    },
     "gait": {
         "status": "fallback",
         "model_id": "portrait_hub/tracklet_fingerprint_v1",
@@ -40,6 +51,16 @@ DEFAULT_CAPABILITIES = {
         "production_embedding_dim": 256,
         "normalize": "l2",
         "fallback_model_id": "portrait_hub/tracklet_fingerprint_v1",
+    },
+    "body_embedding": {
+        "status": "fallback",
+        "model_id": "portrait_hub/image_fingerprint_v1",
+        "adapter": "image_fingerprint",
+        "production_adapter": "reid",
+        "embedding_dim": 64,
+        "production_embedding_dim": 512,
+        "normalize": "l2",
+        "fallback_model_id": "portrait_hub/image_fingerprint_v1",
     },
     "appearance": {
         "status": "fallback",
@@ -80,6 +101,25 @@ ADAPTER_SCHEMAS = {
         "embedding_dim": 256,
         "normalize": "l2",
         "sequence_input": True,
+    },
+    "reid": {
+        "task": "body_embedding",
+        "input_size": [256, 128],
+        "embedding_dim": 512,
+        "normalize": "l2",
+        "preprocess": "imagenet",
+    },
+    "attribute_reid": {
+        "task": "appearance",
+        "input_size": [256, 128],
+        "embedding_dim": 256,
+        "normalize": "l2",
+        "preprocess": "imagenet",
+    },
+    "yolo": {
+        "task": "person_detection",
+        "input_size": [640, 640],
+        "embedding_dim": 0,
     },
 }
 
@@ -132,7 +172,7 @@ def embedding_dimension_for_modality(modality: str) -> int:
         "face": "face_embedding",
         "gait": "gait",
         "appearance": "appearance",
-        "body": "appearance",
+        "body": "body_embedding",
     }.get(str(modality), str(modality))
     capability = capability_status(capability_name)
     try:

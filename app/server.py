@@ -26,6 +26,7 @@ from app.routes import router
 from app.security_headers import apply_security_headers
 from app.settings import APP_VERSION, ENABLE_API_DOCS, MAX_REQUEST_BODY_BYTES, TRUSTED_HOSTS
 from app.metrics import observe_request_status
+from app.portrait_bootstrap import ensure_portrait_runtime_state_loaded
 
 
 def request_body_too_large_detail() -> str:
@@ -46,6 +47,7 @@ async def warmup_models() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    await ensure_portrait_runtime_state_loaded()
     await warmup_models()
     yield
 
@@ -78,7 +80,7 @@ def limit_request_body(request: Request) -> Request:
     return Request(request.scope, limited_receive)
 
 
-def validation_error_payload(exc: RequestValidationError) -> dict[str, Any]:
+def validation_error_payload(exc: RequestValidationError, request_id: str | None = None) -> dict[str, Any]:
     errors = []
     for error in exc.errors():
         errors.append(
@@ -88,7 +90,10 @@ def validation_error_payload(exc: RequestValidationError) -> dict[str, Any]:
                 "msg": error.get("msg", "validation error"),
             }
         )
-    return {"detail": errors}
+    payload: dict[str, Any] = {"detail": errors}
+    if request_id:
+        payload["request_id"] = request_id
+    return payload
 
 
 def validation_error_loc(error: dict[str, Any]) -> list[Any]:
@@ -118,7 +123,7 @@ def create_app() -> FastAPI:
 
     @app.exception_handler(RequestValidationError)
     async def request_validation_exception_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
-        return JSONResponse(status_code=422, content=validation_error_payload(exc))
+        return JSONResponse(status_code=422, content=validation_error_payload(exc, request_id_from_headers(request)))
 
     @app.middleware("http")
     async def request_logging_middleware(request: Request, call_next: Any) -> Response:
@@ -131,7 +136,11 @@ def create_app() -> FastAPI:
             check_rate_limit(request)
             response = await call_next(request)
         except HTTPException as exc:
-            response = JSONResponse(status_code=exc.status_code, content={"detail": exc.detail}, headers=exc.headers)
+            response = JSONResponse(
+                status_code=exc.status_code,
+                content={"detail": exc.detail, "request_id": request_id},
+                headers=exc.headers,
+            )
         except Exception:
             duration = now() - start
             log_json(

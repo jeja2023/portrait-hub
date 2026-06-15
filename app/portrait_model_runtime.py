@@ -1,33 +1,41 @@
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
-from typing import Any, Iterable
+from typing import Any
 
 import cv2
 import numpy as np
 from PIL import Image
 
-from app.geometry import crop_person, nms, restore_boxes
+from app.inference_detection import infer_person_frames
+from app.inference_reid import infer_reid_images
+from app.geometry import crop_person, nms, person_crop_quality, restore_boxes
 from app.media.quality import assess_image_quality, clamp01
-from app.model_config import config_value, configured_input_size, model_config
-from app.model_config_resolver import resolve_model_reference
-from app.model_package import get_model_path
+from app.observability import logger
 from app.portrait_compare import l2_normalize_vector
 from app.portrait_embeddings import (
     FALLBACK_EMBEDDING_MODEL_ID,
     FALLBACK_EMBEDDING_VERSION,
     best_quality_index,
+    appearance_record as fallback_appearance_record,
+    body_record as fallback_body_record,
     detect_face_candidates,
     fallback_face_candidate,
     gait_embedding as fallback_gait_embedding,
     image_fingerprint_embedding,
     pose_record as fallback_pose_record,
 )
-from app.portrait_model_capabilities import capability_status, production_model_ready
+from app.portrait_model_runtime_capability import (
+    CapabilityRuntime,
+    get_capability_runtime,
+    runtime_input_size,
+    runtime_input_value,
+    runtime_output_value,
+)
+from app.portrait_model_runtime_preprocess import batch_slice, letterbox_tensor, preprocess_rgb_array, resize_tensor
+from app.portrait_response import exception_log_summary
 from app.runtime_execution import run_model_bundle, run_model_bundle_batch
-from app.runtime_registry import get_or_load_model
-from app.schemas import LetterboxMeta, ModelBundle
+from app.schemas import LetterboxMeta
 
 
 FACE_DETECTION_FALLBACK_MODEL_ID = "opencv/haarcascade_frontalface_default"
@@ -80,141 +88,8 @@ ARCFACE_CANONICAL_112 = np.asarray(
     ],
     dtype=np.float32,
 )
-
-
-@dataclass(frozen=True)
-class CapabilityRuntime:
-    capability_name: str
-    model_id: str
-    cache_key: str
-    adapter: str
-    capability: dict[str, Any]
-    config: dict[str, Any]
-    bundle: ModelBundle
-    cold_loaded: bool = False
-    load_seconds: float = 0.0
-
-    @property
-    def version(self) -> str:
-        return str(self.config.get("version") or self.capability.get("version") or "")
-
-
-async def get_capability_runtime(capability_name: str, adapters: Iterable[str]) -> CapabilityRuntime | None:
-    capability = capability_status(capability_name)
-    adapter = str(capability.get("adapter") or "").strip().lower()
-    if adapter not in {item.lower() for item in adapters} or not production_model_ready(capability_name):
-        return None
-    model_id = str(capability.get("model_id") or "").strip()
-    project_name, model_name, cache_key_value, _ = resolve_model_reference(model_id, None, None)
-    model_path = get_model_path(project_name, model_name)
-    bundle, cold_loaded, load_seconds = await get_or_load_model(cache_key_value, model_path)
-    return CapabilityRuntime(
-        capability_name=capability_name,
-        model_id=cache_key_value,
-        cache_key=cache_key_value,
-        adapter=adapter,
-        capability=capability,
-        config=model_config(cache_key_value),
-        bundle=bundle,
-        cold_loaded=cold_loaded,
-        load_seconds=load_seconds,
-    )
-
-
-def runtime_input_size(runtime: CapabilityRuntime, default: tuple[int, int]) -> tuple[int, int]:
-    configured = runtime.capability.get("input_size")
-    if isinstance(configured, list) and len(configured) == 2:
-        try:
-            height, width = int(configured[0]), int(configured[1])
-            if height > 0 and width > 0:
-                default = (height, width)
-        except (TypeError, ValueError):
-            pass
-    if runtime.adapter == "opengait":
-        shape = runtime.bundle["session"].get_inputs()[0].shape
-        if len(shape) >= 5 and isinstance(shape[-2], int) and isinstance(shape[-1], int):
-            if shape[-2] > 0 and shape[-1] > 0:
-                return int(shape[-2]), int(shape[-1])
-    return configured_input_size(runtime.cache_key, runtime.bundle["session"], default)
-
-
-def runtime_input_value(runtime: CapabilityRuntime, key: str, default: Any = None) -> Any:
-    capability_input = runtime.capability.get("input")
-    capability_default = capability_input.get(key) if isinstance(capability_input, dict) and key in capability_input else runtime.capability.get(key, default)
-    return config_value(runtime.config, "input", key, capability_default)
-
-
-def runtime_output_value(runtime: CapabilityRuntime, key: str, default: Any = None) -> Any:
-    capability_output = runtime.capability.get("output")
-    capability_default = capability_output.get(key) if isinstance(capability_output, dict) and key in capability_output else runtime.capability.get(key, default)
-    return config_value(runtime.config, "output", key, capability_default)
-
-
-def preprocess_rgb_array(image: Image.Image, *, normalize: str = "none", color: str = "rgb") -> np.ndarray:
-    array = np.asarray(image.convert("RGB"), dtype=np.float32)
-    if str(color).strip().lower() == "bgr":
-        array = array[:, :, ::-1]
-    normalize_key = str(normalize or "none").strip().lower()
-    if normalize_key in {"rgb_minus_127p5_div_128", "minus_127p5_div_128", "arcface"}:
-        array = (array - 127.5) / 128.0
-    elif normalize_key == "imagenet":
-        array = array / 255.0
-        mean = np.asarray([0.485, 0.456, 0.406], dtype=np.float32)
-        std = np.asarray([0.229, 0.224, 0.225], dtype=np.float32)
-        array = (array - mean) / std
-    elif normalize_key in {"raw", "uint8"}:
-        pass
-    else:
-        array = array / 255.0
-    return np.transpose(array, (2, 0, 1)).astype(np.float32)
-
-
-def resize_tensor(
-    image: Image.Image,
-    input_height: int,
-    input_width: int,
-    *,
-    normalize: str = "none",
-    color: str = "rgb",
-) -> np.ndarray:
-    resized = image.resize((input_width, input_height), Image.Resampling.BILINEAR)
-    return preprocess_rgb_array(resized, normalize=normalize, color=color)[None, :, :, :]
-
-
-def letterbox_tensor(
-    image: Image.Image,
-    input_height: int,
-    input_width: int,
-    *,
-    normalize: str = "none",
-    color: str = "rgb",
-) -> tuple[np.ndarray, LetterboxMeta]:
-    original_width, original_height = image.size
-    scale = min(input_width / max(1, original_width), input_height / max(1, original_height))
-    resized_width = max(1, int(round(original_width * scale)))
-    resized_height = max(1, int(round(original_height * scale)))
-    pad_left = (input_width - resized_width) / 2
-    pad_top = (input_height - resized_height) / 2
-    resized = image.convert("RGB").resize((resized_width, resized_height), Image.Resampling.BILINEAR)
-    canvas = Image.new("RGB", (input_width, input_height), (114, 114, 114))
-    canvas.paste(resized, (int(round(pad_left - 0.1)), int(round(pad_top - 0.1))))
-    meta: LetterboxMeta = {
-        "original_width": original_width,
-        "original_height": original_height,
-        "input_width": input_width,
-        "input_height": input_height,
-        "scale": scale,
-        "pad_left": pad_left,
-        "pad_top": pad_top,
-    }
-    return preprocess_rgb_array(canvas, normalize=normalize, color=color)[None, :, :, :], meta
-
-
-def batch_slice(output: Any, batch_index: int, batch_size: int) -> np.ndarray:
-    array = np.asarray(output)
-    if array.ndim >= 3 and array.shape[0] == batch_size:
-        return np.asarray(array[batch_index])
-    return array
+_BODY_EMBEDDING_RUNTIME_UNAVAILABLE = False
+_PERSON_DETECTION_RUNTIME_UNAVAILABLE = False
 
 
 def rows_with_last_dim(array: np.ndarray) -> np.ndarray:
@@ -574,6 +449,175 @@ async def infer_best_face_embedding_for_image(image: Image.Image) -> tuple[list[
     return selected["embedding"], selected
 
 
+def best_person_detection(image: Image.Image, persons: list[dict[str, Any]]) -> tuple[Image.Image, dict[str, Any]] | None:
+    candidates: list[tuple[float, Image.Image, dict[str, Any], dict[str, Any]]] = []
+    for person in persons:
+        box = person.get("box")
+        if not isinstance(box, list) or len(box) < 4:
+            continue
+        crop = crop_person(image, [float(value) for value in box[:4]], min_size=2)
+        if crop is None:
+            continue
+        quality = person_crop_quality(image, [float(value) for value in box[:4]])
+        try:
+            detection_score = float(person.get("score", 0.0))
+            quality_score = float(quality.get("score", 0.0))
+        except (TypeError, ValueError):
+            detection_score = 0.0
+            quality_score = 0.0
+        candidates.append((detection_score * 0.58 + quality_score * 0.42, crop, person, quality))
+    if not candidates:
+        return None
+
+    _, crop, person, quality = max(candidates, key=lambda item: item[0])
+    return crop, {
+        "box": [round(float(value), 2) for value in person.get("box", [])[:4]],
+        "score": round(float(person.get("score", 0.0)), 6),
+        "quality": quality,
+    }
+
+
+async def detect_body_embedding_crop(image: Image.Image) -> tuple[Image.Image, dict[str, Any]]:
+    global _PERSON_DETECTION_RUNTIME_UNAVAILABLE
+    if _PERSON_DETECTION_RUNTIME_UNAVAILABLE:
+        return image, {"selection_strategy": "whole_image_reid"}
+    try:
+        runtime = await get_capability_runtime("person_detection", {"yolo", "yolov8"})
+    except Exception as exc:
+        _PERSON_DETECTION_RUNTIME_UNAVAILABLE = True
+        logger.warning("person detector unavailable for body embedding crop: %s", exception_log_summary(exc))
+        return image, {"selection_strategy": "whole_image_reid"}
+    if runtime is None:
+        return image, {"selection_strategy": "whole_image_reid"}
+
+    try:
+        confidence = float(runtime_output_value(runtime, "confidence", runtime.capability.get("confidence", 0.25)))
+        iou = float(runtime_output_value(runtime, "iou", runtime.capability.get("iou", 0.45)))
+        max_detections = int(runtime_output_value(runtime, "max_detections", runtime.capability.get("max_detections", 8)))
+        frames, meta = await infer_person_frames(
+            runtime.bundle,
+            runtime.cache_key,
+            [image],
+            [None],
+            confidence=confidence,
+            iou=iou,
+            max_detections=max_detections,
+        )
+    except Exception as exc:
+        _PERSON_DETECTION_RUNTIME_UNAVAILABLE = True
+        logger.warning("person detector inference failed for body embedding crop: %s", exception_log_summary(exc))
+        return image, {"selection_strategy": "whole_image_reid"}
+
+    frame = frames[0] if frames else {}
+    selected = best_person_detection(image, frame.get("persons", []) if isinstance(frame.get("persons"), list) else [])
+    if selected is None:
+        return image, {
+            "selection_strategy": "whole_image_reid",
+            "detection_model_id": runtime.model_id,
+            "detection_model_version": runtime.version,
+            "detection_model_status": "yolo_onnx",
+            "detection_count": int(frame.get("person_count", 0) or 0),
+        }
+
+    crop, detection = selected
+    return crop, {
+        "selection_strategy": "person_detection_crop_reid",
+        "box": detection["box"],
+        "score": detection["score"],
+        "detection_quality": detection["quality"],
+        "detection_model_id": runtime.model_id,
+        "detection_model_version": runtime.version,
+        "detection_model_status": "yolo_onnx",
+        "detection_count": int(frame.get("person_count", 0) or 0),
+        "detection_inference_mode": meta.get("inference_mode"),
+    }
+
+
+async def run_reid_body_embedding(image: Image.Image) -> tuple[list[float], dict[str, Any]] | None:
+    global _BODY_EMBEDDING_RUNTIME_UNAVAILABLE
+    if _BODY_EMBEDDING_RUNTIME_UNAVAILABLE:
+        return None
+    try:
+        runtime = await get_capability_runtime("body_embedding", {"reid"})
+    except Exception as exc:
+        _BODY_EMBEDDING_RUNTIME_UNAVAILABLE = True
+        logger.warning("body embedding model unavailable, falling back to image fingerprint: %s", exception_log_summary(exc))
+        return None
+    if runtime is None:
+        return None
+
+    try:
+        crop, selection_meta = await detect_body_embedding_crop(image)
+        embeddings, meta = await infer_reid_images(runtime.bundle, runtime.cache_key, [crop])
+    except Exception as exc:
+        _BODY_EMBEDDING_RUNTIME_UNAVAILABLE = True
+        logger.warning("body embedding inference failed, falling back to image fingerprint: %s", exception_log_summary(exc))
+        return None
+    if embeddings.ndim != 2 or embeddings.shape[0] < 1 or embeddings.shape[1] < 1:
+        logger.warning("body embedding inference returned empty output, falling back to image fingerprint")
+        return None
+
+    embedding = [round(float(value), 8) for value in embeddings[0].tolist()]
+    return embedding, {
+        **meta,
+        **selection_meta,
+        "embedding_dim": len(embedding),
+        "model_id": runtime.model_id,
+        "model_version": runtime.version,
+        "model_status": "reid_onnx",
+        "adapter": runtime.adapter,
+    }
+
+
+def fallback_body_embedding_record(image: Image.Image, *, include_embedding: bool) -> dict[str, Any]:
+    record = fallback_body_record(image, include_embedding=include_embedding)
+    record["model_status"] = "whole_image_fallback"
+    if include_embedding:
+        record["embedding_model_id"] = FALLBACK_EMBEDDING_MODEL_ID
+        record["embedding_model_version"] = FALLBACK_EMBEDDING_VERSION
+        record["embedding_model_status"] = "image_fingerprint_fallback"
+        record["embedding_adapter"] = "image_fingerprint"
+    return record
+
+
+async def infer_body_record_for_image(image: Image.Image, *, include_embedding: bool = True) -> dict[str, Any]:
+    if not include_embedding:
+        return fallback_body_embedding_record(image, include_embedding=False)
+
+    result = await run_reid_body_embedding(image)
+    if result is None:
+        return fallback_body_embedding_record(image, include_embedding=True)
+
+    embedding, meta = result
+    record = fallback_body_record(image, include_embedding=False)
+    record.update(
+        {
+            "box": meta.get("box", record.get("box")),
+            "score": meta.get("score", record.get("score")),
+            "embedding": embedding,
+            "embedding_dim": len(embedding),
+            "embedding_model_id": meta.get("model_id", FALLBACK_EMBEDDING_MODEL_ID),
+            "embedding_model_version": meta.get("model_version", FALLBACK_EMBEDDING_VERSION),
+            "embedding_model_status": meta.get("model_status", "reid_onnx"),
+            "embedding_adapter": meta.get("adapter", "reid"),
+            "embedding_batch_mode": meta.get("inference_mode"),
+            "model_status": meta.get("model_status", "reid_onnx"),
+            "selection_strategy": meta.get("selection_strategy", "whole_image_reid"),
+        }
+    )
+    for key in [
+        "detection_model_id",
+        "detection_model_version",
+        "detection_model_status",
+        "detection_count",
+        "detection_inference_mode",
+        "detection_quality",
+    ]:
+        if key in meta:
+            record[key] = meta[key]
+    return record
+
+
 def softmax_max(logits: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     logits = np.asarray(logits, dtype=np.float32)
     shifted = logits - logits.max(axis=-1, keepdims=True)
@@ -751,6 +795,42 @@ async def infer_gait_embedding_for_images(images: list[Image.Image]) -> tuple[li
     if result is not None:
         return result
     return fallback_gait_embedding(images)
+
+
+async def run_attribute_reid_appearance(image: Image.Image) -> tuple[list[float], dict[str, Any]] | None:
+    runtime = await get_capability_runtime("appearance", {"attribute_reid"})
+    if runtime is None:
+        return None
+    input_height, input_width = runtime_input_size(runtime, (256, 128))
+    normalize = str(runtime_input_value(runtime, "normalize", "imagenet"))
+    color = str(runtime_input_value(runtime, "color", "rgb"))
+    tensor = resize_tensor(image, input_height, input_width, normalize=normalize, color=color)
+    raw_outputs, _, _ = await run_model_bundle(runtime.bundle, tensor)
+    rows = embedding_rows(raw_outputs, 1)
+    if rows.size == 0:
+        return None
+    embedding = round_normalized_embedding(rows[0])
+    return embedding, {
+        "quality": assess_image_quality(image),
+        "embedding_dim": len(embedding),
+        "model_id": runtime.model_id,
+        "model_version": runtime.version,
+        "model_status": "attribute_reid_onnx",
+        "adapter": runtime.adapter,
+    }
+
+
+async def infer_appearance_record_for_image(image: Image.Image, *, include_embedding: bool = True) -> dict[str, Any]:
+    result = await run_attribute_reid_appearance(image)
+    if result is None:
+        return fallback_appearance_record(image, include_embedding=include_embedding)
+    embedding, meta = result
+    fallback = fallback_appearance_record(image, include_embedding=False)
+    fallback.update(meta)
+    fallback["embedding_dim"] = len(embedding)
+    if include_embedding:
+        fallback["embedding"] = embedding
+    return fallback
 
 
 def embedding_model_info(subject: dict[str, Any]) -> tuple[str, str]:

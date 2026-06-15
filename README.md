@@ -95,9 +95,9 @@ v1 已加入的生产加固：
 - `tools/portrait_postgres_schema.sql` 提供 PostgreSQL/pgvector 的 schema，覆盖租户、人员、特征、阈值、任务、流、对象和审计事件。
 - `tools/qdrant_collections.json` 记录人脸、人体、步态和衣着向量的 Qdrant collection 定义。
 - `tools/portrait_production_readiness.py` 会报告模型文件、核心 SDK、模板和能力状态；在生产切换前请使用 `--strict`。
-- `app/portrait_model_runtime.py` 通过现有 ONNXRuntime 注册表、GPU 队列、产物 hash 校验和 LRU 卸载路径接入 SCRFD、ArcFace、RTMPose 和 OpenGait 的生产适配器。
-- 要启用真实模型，先添加对应的 ONNX 产物和 `models.yml` 条目，再把 `model-capabilities.yml` 里的对应项切到 `status: ready` 或 `production`，并把 `model_id` 设为已配置的模型 id，把 `adapter` 设为 `scrfd`、`arcface`、`rtmpose` 或 `opengait`。
-- `examples/production-models.example.yml` 和 `examples/production-model-capabilities.example.yml` 展示了 SCRFD、ArcFace、RTMPose 和 OpenGait 的生产契约示例。
+- `app/portrait_model_runtime.py` 通过现有 ONNXRuntime 注册表、GPU 队列、产物 hash 校验和 LRU 卸载路径接入 SCRFD、ArcFace、RTMPose、OpenGait、YOLO 人体检测、OSNet ReID 和 attribute ReID/衣着属性的生产适配器。
+- 要启用真实模型，先添加对应的 ONNX 产物和 `models.yml` 条目，再把 `model-capabilities.yml` 里的对应项切到 `status: ready` 或 `production`，并把 `model_id` 设为已配置的模型 id，把 `adapter` 设为 `scrfd`、`arcface`、`rtmpose`、`opengait`、`yolo`、`reid` 或 `attribute_reid`。
+- `examples/production-models.example.yml` 和 `examples/production-model-capabilities.example.yml` 展示了 SCRFD、ArcFace、RTMPose、OpenGait、YOLO person detection、OSNet body embedding 和 attribute ReID appearance 的生产契约示例。
 - `tools/portrait_cutover_check.py --regression-manifest <held-out.yml> --validate-onnx --json` 是最终的真实模型门禁。它要求生产能力状态、非兜底模型 ID、匹配的产物 SHA-256、可选的 ONNXRuntime 加载检查，以及通过回归门禁。
 - 精度回归门禁可直接参考 `python tools/portrait_model_regression.py --manifest examples/portrait-model-regression.example.yml --json`；上线前把示例分数替换成留出集评估结果。
 - 长期运行的流拉取应在 API 进程外执行：`python -m app.portrait_stream_worker_daemon`；Docker Compose 已包含对应的 `portrait-stream-worker` 服务。
@@ -439,6 +439,8 @@ docker compose restart gpu-worker-1
 aliases:
   person_detector_default:
     target: portrait_hub/yolov8n.onnx
+  person_reid_default:
+    target: portrait_hub/osnet_ibn_x1_0.onnx
 
 models:
   portrait_hub/yolov8n.onnx:
@@ -475,6 +477,8 @@ models:
       format: embedding
       embedding_normalize: l2
 ```
+
+`model-capabilities.yml` 中可以把 `person_detection` 指向 `person_detector_default`，把 `body_embedding` 指向 `portrait_hub/osnet_ibn_x1_0.onnx` 并设置 `adapter: reid`。v1 的 persons、compare 和 gallery body 链路会优先使用 YOLO 裁剪人体，再生成 OSNet 512 维 ReID 向量；模型不可用时回退到本地 64 维图像指纹。appearance 能力可以在补齐真实衣着属性/attribute ReID ONNX 后切到 `adapter: attribute_reid`，`/v1/infer/appearance`、`/v1/fusion/compare`、gallery appearance 入库和视频任务帧级 appearance 会统一走该生产入口，未就绪时继续回退到颜色直方图。
 
 可以通过 `/model-configs` 查看当前加载的配置和别名，通过 `/reload-config` 在不重启容器的情况下重新读取配置，通过 `/model-package` 查看模型卡、labels、sha256 匹配状态等模型包信息。
 

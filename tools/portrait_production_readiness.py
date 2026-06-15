@@ -174,6 +174,7 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
     portrait_object_storage = (root / "app" / "portrait_object_storage.py").read_text(encoding="utf-8") if (root / "app" / "portrait_object_storage.py").is_file() else ""
     portrait_security = (root / "app" / "portrait_security.py").read_text(encoding="utf-8") if (root / "app" / "portrait_security.py").is_file() else ""
     portrait_gallery = (root / "app" / "portrait_gallery.py").read_text(encoding="utf-8") if (root / "app" / "portrait_gallery.py").is_file() else ""
+    portrait_gallery_records = (root / "app" / "portrait_gallery_records.py").read_text(encoding="utf-8") if (root / "app" / "portrait_gallery_records.py").is_file() else ""
     portrait_gallery_routes = (root / "app" / "routes_portrait_gallery.py").read_text(encoding="utf-8") if (root / "app" / "routes_portrait_gallery.py").is_file() else ""
     portrait_jobs = (root / "app" / "portrait_jobs.py").read_text(encoding="utf-8") if (root / "app" / "portrait_jobs.py").is_file() else ""
     portrait_request_validation = (root / "app" / "portrait_request_validation.py").read_text(encoding="utf-8") if (root / "app" / "portrait_request_validation.py").is_file() else ""
@@ -829,7 +830,10 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
                 in person_embeddings_routes
                 and "image_fingerprint_embedding" not in portrait_jobs
                 and '"embedding": image_fingerprint_embedding(image)' not in portrait_jobs
-                and 'appearance_record(image, include_embedding=False)' in portrait_jobs
+                and (
+                    'infer_appearance_record_for_image(image, include_embedding=False)' in portrait_jobs
+                    or 'resolve_appearance_record(image, include_embedding=False)' in portrait_jobs
+                )
                 and 'include_embeddings: bool = Form(False)' in person_tracks_routes
                 and 'include_embeddings: bool = Form(False)' in person_video_routes
                 and 'include_embeddings: bool = Form(False)' in person_stream_routes
@@ -1081,14 +1085,14 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
         {
             "name": "security:management_mutation_audit",
             "ok": (
-                'audit_event("model_warmup"' in model_lifecycle_routes
-                and 'audit_event("model_unload"' in model_lifecycle_routes
-                and 'audit_event("model_reload"' in model_lifecycle_routes
-                and 'audit_event(' in model_query_routes
+                ('audit_event("model_warmup"' in model_lifecycle_routes or '"model_warmup"' in model_lifecycle_routes)
+                and ('audit_event("model_unload"' in model_lifecycle_routes or '"model_unload"' in model_lifecycle_routes)
+                and ('audit_event("model_reload"' in model_lifecycle_routes or '"model_reload"' in model_lifecycle_routes)
+                and ('audit_event(' in model_query_routes or "run_blocking_io(\n            audit_event" in model_query_routes)
                 and '"model_config_reloaded"' in model_query_routes
-                and 'audit_event("model_loaded"' in portrait_model_routes
-                and 'audit_event("model_unloaded"' in portrait_model_routes
-                and 'audit_event(' in portrait_admin_routes
+                and ('audit_event("model_loaded"' in portrait_model_routes or '"model_loaded"' in portrait_model_routes)
+                and ('audit_event("model_unloaded"' in portrait_model_routes or '"model_unloaded"' in portrait_model_routes)
+                and ('audit_event(' in portrait_admin_routes or "run_blocking_io(audit_event" in portrait_admin_routes)
                 and '"admin_export"' in portrait_admin_routes
                 and "stream_events_count=sum" in portrait_admin_routes
                 and '"retention_cleanup"' in portrait_admin_routes
@@ -1242,7 +1246,10 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
         },
         {
             "name": "security:gallery_structured_tenant_key",
-            "ok": "GalleryKey = tuple[str, str]" in portrait_gallery and "def gallery_key" in portrait_gallery,
+            "ok": (
+                ("GalleryKey = tuple[str, str]" in portrait_gallery or "GalleryKey = tuple[str, str]" in portrait_gallery_records)
+                and ("def gallery_key" in portrait_gallery or "def gallery_key" in portrait_gallery_records)
+            ),
         },
         {
             "name": "security:job_stream_structured_tenant_keys",
@@ -1256,7 +1263,7 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
         {
             "name": "security:public_response_redaction",
             "ok": (
-                "redact_sensitive_fields(self.metadata)" in portrait_gallery
+                "redact_sensitive_fields(self.metadata)" in (portrait_gallery + portrait_gallery_records)
                 and "redact_sensitive_fields(self.settings)" in portrait_streams
                 and "redact_sensitive_fields(self.payload)" in portrait_streams
                 and "redact_sensitive_fields(self.payload)" in portrait_task_queue
@@ -1291,8 +1298,12 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
                 and 'payload["metadata"] = public_video_metadata(metadata)' in portrait_jobs
                 and '"filename": self.filename' not in portrait_jobs
                 and "return self.public_dict(include_result=True)" not in portrait_jobs
-                and 'queue_message = TASK_QUEUE.enqueue("video_jobs", {"job_id": job.job_id, "tenant_id": tenant_id})'
-                in portrait_job_routes
+                and (
+                    'queue_message = TASK_QUEUE.enqueue("video_jobs", {"job_id": job.job_id, "tenant_id": tenant_id})'
+                    in portrait_job_routes
+                    or 'queue_message = await run_blocking_io(TASK_QUEUE.enqueue, "video_jobs", {"job_id": job.job_id, "tenant_id": tenant_id})'
+                    in portrait_job_routes
+                )
                 and '"filename": file.filename' not in portrait_job_routes
                 and 'metadata["filename"] = filename' not in media_video_decode
                 and '"filename": payload.get("filename")' not in portrait_postgres
@@ -1498,16 +1509,22 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
                 "def append_task_queue_state" in portrait_task_queue
                 and "fail_closed=required" in portrait_task_queue
                 and "TASK_MESSAGES.remove(message)" in portrait_task_queue
-                and "remove_video_job(job.job_id, tenant_id)" in portrait_job_routes
-                and 'TASK_QUEUE.enqueue("video_jobs"' in portrait_job_routes
-                and 'audit_event("video_job_created"' in portrait_job_routes
+                and (
+                    "remove_video_job(job.job_id, tenant_id)" in portrait_job_routes
+                    or "run_blocking_io(remove_video_job, job.job_id, tenant_id)" in portrait_job_routes
+                )
+                and ('TASK_QUEUE.enqueue("video_jobs"' in portrait_job_routes or 'run_blocking_io(TASK_QUEUE.enqueue, "video_jobs"' in portrait_job_routes)
+                and ('audit_event("video_job_created"' in portrait_job_routes or '"video_job_created"' in portrait_job_routes)
             ),
         },
         {
             "name": "security:job_audit_compensation",
             "ok": (
                 "def rollback_video_job_snapshot" in portrait_job_routes
-                and "remove_video_job(job.job_id, tenant_id)" in portrait_job_routes
+                and (
+                    "remove_video_job(job.job_id, tenant_id)" in portrait_job_routes
+                    or "run_blocking_io(remove_video_job, job.job_id, tenant_id)" in portrait_job_routes
+                )
                 and "restore_video_job(job, previous_job)" in portrait_job_routes
                 and "persist_video_job(job)" in portrait_job_routes
                 and "video job mutation failed and rollback persistence failed" in portrait_job_routes
@@ -1587,7 +1604,10 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
             "name": "security:stream_audit_compensation",
             "ok": (
                 "def rollback_stream_snapshot" in portrait_stream_routes
-                and "remove_stream(stream.stream_id, tenant_id)" in portrait_stream_routes
+                and (
+                    "remove_stream(stream.stream_id, tenant_id)" in portrait_stream_routes
+                    or "run_blocking_io(remove_stream, stream.stream_id, tenant_id)" in portrait_stream_routes
+                )
                 and "restore_stream(stream, previous_stream)" in portrait_stream_routes
                 and "persist_stream(stream)" in portrait_stream_routes
                 and "stream mutation failed and rollback persistence failed" in portrait_stream_routes
@@ -1646,17 +1666,23 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
         {
             "name": "security:gallery_delete_object_cleanup",
             "ok": (
-                "object_info: dict[str, Any] | None = None" in portrait_gallery
-                and "def feature_object_infos" in portrait_gallery
-                and 'payload["object_info"] = deepcopy(self.object_info)' in portrait_gallery
-                and "object_info=deepcopy(object_info) if object_info else None" in portrait_gallery
+                "object_info: dict[str, Any] | None = None" in (portrait_gallery + portrait_gallery_records)
+                and "def feature_object_infos" in (portrait_gallery + portrait_gallery_records)
+                and 'payload["object_info"] = deepcopy(self.object_info)' in (portrait_gallery + portrait_gallery_records)
+                and "object_info=deepcopy(object_info) if object_info else None" in (portrait_gallery + portrait_gallery_records)
                 and "object_info=object_info" in portrait_gallery_routes
                 and "def cleanup_gallery_feature_objects" in portrait_gallery_routes
                 and '"gallery_delete_person_requested"' in portrait_gallery_routes
                 and 'outcome="started"' in portrait_gallery_routes
                 and "object_reference_count=len(feature_object_infos(previous_person))" in portrait_gallery_routes
-                and "cleanup_gallery_feature_objects(previous_person)" in portrait_gallery_routes
-                and "restore_gallery_person_snapshot(tenant_id, previous_person.person_id, previous_person)" in portrait_gallery_routes
+                and (
+                    "cleanup_gallery_feature_objects(previous_person)" in portrait_gallery_routes
+                    or "run_blocking_io(cleanup_gallery_feature_objects, previous_person)" in portrait_gallery_routes
+                )
+                and (
+                    "restore_gallery_person_snapshot(tenant_id, previous_person.person_id, previous_person)" in portrait_gallery_routes
+                    or "run_blocking_io(restore_gallery_person_snapshot, tenant_id, previous_person.person_id, previous_person)" in portrait_gallery_routes
+                )
                 and "OBJECT_CLEANUP_FAILED" in portrait_gallery_routes
                 and "deleted_object_count" in portrait_gallery_routes
                 and "object_info JSONB NOT NULL DEFAULT '{}'::jsonb" in portrait_postgres_schema

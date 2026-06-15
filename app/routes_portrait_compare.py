@@ -7,8 +7,12 @@ from app.media.media_schema import DecodedImage
 from app.observability import request_id_from_headers
 from app.portrait_auth import permission_dependency
 from app.portrait_compare import apply_input_independence_to_decision, fuse_modalities, quality_aware_compare
-from app.portrait_embeddings import appearance_record, body_record
-from app.portrait_model_runtime import infer_best_face_embedding_for_image, infer_gait_embedding_for_images
+from app.portrait_model_runtime import (
+    infer_appearance_record_for_image,
+    infer_best_face_embedding_for_image,
+    infer_body_record_for_image,
+    infer_gait_embedding_for_images,
+)
 from app.portrait_response import portrait_success
 from app.portrait_thresholds import validate_threshold_profile
 from app.security import require_api_token
@@ -124,8 +128,8 @@ async def v1_compare_persons(
     threshold_profile = validate_threshold_profile(threshold_profile)
     decoded_a = await decode_upload_image(image_a)
     decoded_b = await decode_upload_image(image_b)
-    person_a = body_record(decoded_a.image, include_embedding=True)
-    person_b = body_record(decoded_b.image, include_embedding=True)
+    person_a = await infer_body_record_for_image(decoded_a.image, include_embedding=True)
+    person_b = await infer_body_record_for_image(decoded_b.image, include_embedding=True)
     comparison = quality_aware_compare(
         person_a["embedding"],
         person_b["embedding"],
@@ -235,8 +239,8 @@ async def v1_fusion_compare(
         }
 
     if "body" in requested or "person" in requested:
-        body_a = body_record(decoded_a.image, include_embedding=True)
-        body_b = body_record(decoded_b.image, include_embedding=True)
+        body_a = await infer_body_record_for_image(decoded_a.image, include_embedding=True)
+        body_b = await infer_body_record_for_image(decoded_b.image, include_embedding=True)
         comparison = quality_aware_compare(
             body_a["embedding"],
             body_b["embedding"],
@@ -254,8 +258,8 @@ async def v1_fusion_compare(
         }
 
     if "appearance" in requested or "clothing" in requested:
-        appearance_a = appearance_record(decoded_a.image, include_embedding=True)
-        appearance_b = appearance_record(decoded_b.image, include_embedding=True)
+        appearance_a = await infer_appearance_record_for_image(decoded_a.image, include_embedding=True)
+        appearance_b = await infer_appearance_record_for_image(decoded_b.image, include_embedding=True)
         comparison = quality_aware_compare(
             appearance_a["embedding"],
             appearance_b["embedding"],
