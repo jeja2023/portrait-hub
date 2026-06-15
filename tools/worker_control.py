@@ -33,7 +33,7 @@ def request_worker(base_url: str, args: argparse.Namespace) -> dict[str, Any]:
     try:
         import httpx
     except ImportError as exc:
-        raise RuntimeError("httpx is required. Install requirements-dev.txt before running worker control.") from exc
+        raise RuntimeError("httpx is required. Install requirements/dev.txt before running worker control.") from exc
 
     base_url = base_url.rstrip("/")
     headers = auth_headers(args.token, args.tenant_id)

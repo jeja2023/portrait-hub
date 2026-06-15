@@ -25,7 +25,7 @@ RUN sed -i \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt /tmp/requirements.txt
-COPY requirements-prod-optional.txt /tmp/requirements-prod-optional.txt
+COPY requirements/prod-optional.txt /tmp/requirements-prod-optional.txt
 ARG INSTALL_PROD_OPTIONAL=false
 RUN /opt/portrait-hub-venv/bin/python -m pip install --no-cache-dir -r /tmp/requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple \
     && if [ "$INSTALL_PROD_OPTIONAL" = "true" ]; then \
@@ -65,6 +65,7 @@ RUN sed -i \
 
 COPY --from=builder /opt/portrait-hub-venv /opt/portrait-hub-venv
 COPY app /workspace/app
+COPY frontend /workspace/frontend
 COPY main.py /workspace/main.py
 COPY models.yml /workspace/models.yml
 COPY model-capabilities.yml /workspace/model-capabilities.yml

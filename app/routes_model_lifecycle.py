@@ -3,11 +3,16 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Request
 
-from app.core import *
+from app.model_package import get_model_path
+from app.model_refs import cache_key
+from app.observability import request_id_from_headers
 from app.portrait_async import run_blocking_io
 from app.portrait_audit import audit_event
 from app.portrait_auth import permission_dependency
 from app.portrait_security import tenant_id_from_request
+from app.runtime import MODEL_LOAD_LOCKS, MODEL_REGISTRY, get_or_load_model, unload_model_by_key
+from app.security import require_api_token
+from app.schemas import ModelRequest, WarmupRequest
 
 
 router = APIRouter()

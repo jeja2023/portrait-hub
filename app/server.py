@@ -1,6 +1,7 @@
 import logging
 import asyncio
 import hashlib
+import signal
 from contextlib import asynccontextmanager
 from collections.abc import AsyncIterator
 from typing import Any
@@ -20,10 +21,13 @@ from app.core import (
     now,
     observe,
     request_id_from_headers,
+    reset_log_context,
+    set_log_context,
     split_cache_key,
     traceparent_from_headers,
 )
 from app.model_config_state import reload_model_config_state
+from app.portrait_errors import PortraitError
 from app.rate_limit import check_rate_limit
 from app.routes import router
 from app.security_headers import apply_security_headers
@@ -71,10 +75,31 @@ async def config_hot_reload_loop() -> None:
             await asyncio.sleep(2.0)
 
 
+def install_config_reload_signal_handler() -> bool:
+    sighup = getattr(signal, "SIGHUP", None)
+    if sighup is None:
+        return False
+
+    def reload_config_from_signal(_signum: int, _frame: Any) -> None:
+        try:
+            reload_model_config_state()
+            logger.info("configuration hot reload completed from SIGHUP")
+        except Exception as exc:
+            logger.warning("configuration hot reload from SIGHUP failed: %s", exc)
+
+    try:
+        signal.signal(sighup, reload_config_from_signal)
+    except (OSError, ValueError):
+        return False
+    return True
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     await ensure_portrait_runtime_state_loaded()
     await warmup_models()
+    if CONFIG_HOT_RELOAD_ENABLED:
+        install_config_reload_signal_handler()
     reload_task = asyncio.create_task(config_hot_reload_loop()) if CONFIG_HOT_RELOAD_ENABLED else None
     try:
         yield
@@ -161,51 +186,61 @@ def create_app() -> FastAPI:
     async def request_validation_exception_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
         return JSONResponse(status_code=422, content=validation_error_payload(exc, request_id_from_headers(request)))
 
+    @app.exception_handler(PortraitError)
+    async def portrait_error_exception_handler(request: Request, exc: PortraitError) -> JSONResponse:
+        request_id = request_id_from_headers(request)
+        return JSONResponse(status_code=exc.status_code, content={"detail": exc.public_detail(), "request_id": request_id})
+
     @app.middleware("http")
     async def request_logging_middleware(request: Request, call_next: Any) -> Response:
         request_id = request_id_from_headers(request)
         traceparent = traceparent_from_headers(request)
+        tenant_id = request.headers.get("x-tenant-id") or None
+        context_tokens = set_log_context(request_id=request_id, tenant_id=tenant_id, traceparent=traceparent)
         start = now()
-        observe("requests_total")
         try:
-            request = limit_request_body(request)
-            check_rate_limit(request)
-            response = await call_next(request)
-        except HTTPException as exc:
-            response = JSONResponse(
-                status_code=exc.status_code,
-                content={"detail": exc.detail, "request_id": request_id},
-                headers=exc.headers,
-            )
-        except Exception:
+            observe("requests_total")
+            try:
+                request = limit_request_body(request)
+                check_rate_limit(request)
+                response = await call_next(request)
+            except HTTPException as exc:
+                response = JSONResponse(
+                    status_code=exc.status_code,
+                    content={"detail": exc.detail, "request_id": request_id},
+                    headers=exc.headers,
+                )
+            except Exception:
+                duration = now() - start
+                log_json(
+                    logging.ERROR,
+                    "http_request_failed",
+                    request_id=request_id,
+                    traceparent=traceparent,
+                    method=request.method,
+                    path=request.url.path,
+                    duration_seconds=round(duration, 6),
+                )
+                response = JSONResponse(status_code=500, content=internal_error_payload(request_id))
             duration = now() - start
+            observe_request_status(response.status_code)
+            response.headers["X-Request-ID"] = request_id
+            if traceparent:
+                response.headers["traceparent"] = traceparent
+            apply_security_headers(response)
             log_json(
-                logging.ERROR,
-                "http_request_failed",
+                logging.INFO,
+                "http_request",
                 request_id=request_id,
                 traceparent=traceparent,
                 method=request.method,
                 path=request.url.path,
+                status_code=response.status_code,
                 duration_seconds=round(duration, 6),
             )
-            response = JSONResponse(status_code=500, content=internal_error_payload(request_id))
-        duration = now() - start
-        observe_request_status(response.status_code)
-        response.headers["X-Request-ID"] = request_id
-        if traceparent:
-            response.headers["traceparent"] = traceparent
-        apply_security_headers(response)
-        log_json(
-            logging.INFO,
-            "http_request",
-            request_id=request_id,
-            traceparent=traceparent,
-            method=request.method,
-            path=request.url.path,
-            status_code=response.status_code,
-            duration_seconds=round(duration, 6),
-        )
-        return response
+            return response
+        finally:
+            reset_log_context(context_tokens)
 
     app.include_router(router)
     return app

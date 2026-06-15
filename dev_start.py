@@ -90,10 +90,10 @@ def main():
         log_info("正在安装 requirements.txt 依赖...")
         run_command([str(pip_exe), "install", "-q", "-r", str(req_file), "-i", "https://pypi.tuna.tsinghua.edu.cn/simple"])
     
-    # 安装 requirements-dev.txt 开发依赖
-    req_dev_file = root_dir / "requirements-dev.txt"
+    # 安装 requirements/dev.txt 开发依赖
+    req_dev_file = root_dir / "requirements" / "dev.txt"
     if req_dev_file.exists():
-        log_info("正在安装 requirements-dev.txt 开发依赖...")
+        log_info("正在安装 requirements/dev.txt 开发依赖...")
         run_command([str(pip_exe), "install", "-q", "-r", str(req_dev_file), "-i", "https://pypi.tuna.tsinghua.edu.cn/simple"])
 
     # 5. 启动 FastAPI 服务

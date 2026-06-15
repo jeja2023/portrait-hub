@@ -1,5 +1,6 @@
 from copy import deepcopy
 import math
+import threading
 from typing import Any
 
 from fastapi import HTTPException, status
@@ -17,6 +18,7 @@ DEFAULT_THRESHOLD_PROFILES: dict[str, dict[str, dict[str, float]]] = {
 }
 
 THRESHOLD_PROFILES = deepcopy(DEFAULT_THRESHOLD_PROFILES)
+THRESHOLD_PROFILES_LOCK = threading.RLock()
 SUPPORTED_THRESHOLD_PROFILES = frozenset({"strict", "normal", "loose"})
 
 
@@ -34,19 +36,20 @@ def load_threshold_state() -> None:
     if not isinstance(thresholds, dict):
         handle_state_read_error(f"threshold state thresholds must be a mapping: {PORTRAIT_THRESHOLDS_STATE_PATH}")
         return
-    for modality, profiles in thresholds.items():
-        modality_key = normalize_modality(str(modality))
-        if modality_key not in THRESHOLD_PROFILES or not isinstance(profiles, dict):
-            continue
-        for profile, raw_value in profiles.items():
-            if profile not in THRESHOLD_PROFILES[modality_key]:
+    with THRESHOLD_PROFILES_LOCK:
+        for modality, profiles in thresholds.items():
+            modality_key = normalize_modality(str(modality))
+            if modality_key not in THRESHOLD_PROFILES or not isinstance(profiles, dict):
                 continue
-            try:
-                value = float(raw_value)
-            except (TypeError, ValueError):
-                continue
-            if 0.0 <= value <= 1.0:
-                THRESHOLD_PROFILES[modality_key][profile] = value
+            for profile, raw_value in profiles.items():
+                if profile not in THRESHOLD_PROFILES[modality_key]:
+                    continue
+                try:
+                    value = float(raw_value)
+                except (TypeError, ValueError):
+                    continue
+                if 0.0 <= value <= 1.0:
+                    THRESHOLD_PROFILES[modality_key][profile] = value
 
 
 def save_threshold_state() -> None:
@@ -60,14 +63,16 @@ def save_threshold_state() -> None:
 
 
 def threshold_snapshot() -> dict[str, Any]:
-    return deepcopy(THRESHOLD_PROFILES)
+    with THRESHOLD_PROFILES_LOCK:
+        return deepcopy(THRESHOLD_PROFILES)
 
 
 def get_threshold(modality: str, profile: str = "normal") -> float:
     modality_key = validate_threshold_modality(modality)
-    thresholds = THRESHOLD_PROFILES.get(modality_key)
     profile_key = validate_threshold_profile(profile)
-    return float(thresholds[profile_key])
+    with THRESHOLD_PROFILES_LOCK:
+        thresholds = THRESHOLD_PROFILES.get(modality_key)
+        return float(thresholds[profile_key])
 
 
 def normalize_modality(modality: str) -> str:
@@ -88,8 +93,9 @@ def validate_threshold_profile(profile: str) -> str:
 
 def validate_threshold_modality(modality: str) -> str:
     modality_key = normalize_modality(str(modality))
-    if modality_key not in THRESHOLD_PROFILES:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="unsupported modality")
+    with THRESHOLD_PROFILES_LOCK:
+        if modality_key not in THRESHOLD_PROFILES:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="unsupported modality")
     return modality_key
 
 
@@ -113,18 +119,18 @@ def validate_threshold_value(modality: str, raw_value: Any) -> float:
 
 def update_threshold_profile(profile: str, payload: dict[str, Any]) -> dict[str, Any]:
     profile_key = validate_threshold_profile(profile)
-    previous_thresholds = threshold_snapshot()
-
-    updated: dict[str, float] = {}
-    try:
-        for modality, raw_value in payload.items():
-            modality_key = validate_threshold_modality(modality)
-            value = validate_threshold_value(str(modality), raw_value)
-            THRESHOLD_PROFILES[modality_key][profile_key] = value
-            updated[modality_key] = value
-        save_threshold_state()
-    except Exception:
-        THRESHOLD_PROFILES.clear()
-        THRESHOLD_PROFILES.update(deepcopy(previous_thresholds))
-        raise
-    return {"profile": profile_key, "updated": updated, "thresholds": threshold_snapshot()}
+    with THRESHOLD_PROFILES_LOCK:
+        previous_thresholds = threshold_snapshot()
+        updated: dict[str, float] = {}
+        try:
+            for modality, raw_value in payload.items():
+                modality_key = validate_threshold_modality(modality)
+                value = validate_threshold_value(str(modality), raw_value)
+                THRESHOLD_PROFILES[modality_key][profile_key] = value
+                updated[modality_key] = value
+            save_threshold_state()
+        except Exception:
+            THRESHOLD_PROFILES.clear()
+            THRESHOLD_PROFILES.update(deepcopy(previous_thresholds))
+            raise
+        return {"profile": profile_key, "updated": updated, "thresholds": threshold_snapshot()}

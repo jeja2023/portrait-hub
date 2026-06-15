@@ -8,7 +8,7 @@ from app.media.stream_decode import validate_media_stream_url
 from app.portrait_response import exception_log_summary
 from app.portrait_security import redact_sensitive_fields
 from app.portrait_state import append_jsonl
-from app.portrait_streams import STREAMS, StreamRecord, StreamStatus, persist_stream, restore_stream, stream_key
+from app.portrait_streams import StreamRecord, StreamStatus, persist_stream, restore_stream, restore_stream_snapshot_in_store
 from app.settings import MAX_STREAM_FRAMES, STREAM_EVENT_STATE_PATH, STREAM_FRAME_INTERVAL, STREAM_READ_TIMEOUT_SECONDS
 from app.video_io import extract_video_frames_from_path
 
@@ -40,7 +40,7 @@ def emit_stream_event(stream: StreamRecord, event_type: str, message: str, paylo
         persist_stream(stream)
     except Exception:
         restore_stream(stream, previous_stream)
-        STREAMS[stream_key(stream.tenant_id, stream.stream_id)] = stream
+        restore_stream_snapshot_in_store(stream)
         raise
 
 

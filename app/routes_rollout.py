@@ -2,9 +2,13 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
-from app.core import *
+from app.model_config import MODEL_ALIASES, alias_resolution, reload_model_config_state
 from app.model_config_writer import configure_weighted_alias_rollout, rollback_alias_target, switch_alias_target
+from app.model_package import get_model_path
+from app.model_refs import split_cache_key, validate_alias_name
 from app.portrait_auth import permission_dependency
+from app.schemas import AliasRollbackRequest, AliasSwitchRequest, AliasWeightedRolloutRequest
+from app.security import require_api_token
 
 
 router = APIRouter()

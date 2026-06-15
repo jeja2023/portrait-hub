@@ -27,7 +27,7 @@ from app.portrait_response import OBJECT_CLEANUP_FAILED, exception_log_summary, 
 from app.portrait_security import redact_sensitive_fields
 from app.portrait_storage import GALLERY_STORE
 from app.portrait_stream_worker import stream_worker_status
-from app.portrait_streams import STREAMS, StreamRecord, persist_stream, restore_stream, stream_key
+from app.portrait_streams import StreamRecord, persist_stream, restore_stream, restore_stream_snapshot_in_store, stream_records_snapshot
 from app.portrait_task_queue import TASK_QUEUE
 from app.portrait_thresholds import threshold_snapshot
 from app.portrait_vector_store import VECTOR_STORE
@@ -92,7 +92,7 @@ def rollback_retention_cleanup(
 
     for stream, previous_stream in reversed(trimmed_streams):
         restore_stream(stream, previous_stream)
-        STREAMS[stream_key(stream.tenant_id, stream.stream_id)] = stream
+        restore_stream_snapshot_in_store(stream)
     for job in reversed(removed_jobs):
         VIDEO_JOBS[job_key(job.tenant_id, job.job_id)] = job
 
@@ -187,7 +187,7 @@ def retention_cleanup_transaction(
                     removed_job_snapshots.append(previous_job)
                     removed_jobs += 1
 
-        for stream in list(STREAMS.values()):
+        for stream in stream_records_snapshot():
             if stream.tenant_id != tenant_id:
                 continue
             before = len(stream.events)
@@ -299,7 +299,7 @@ async def v1_admin_export(
     ]
     all_streams = [
         stream
-        for stream in STREAMS.values()
+        for stream in stream_records_snapshot()
         if stream.tenant_id == tenant_id and (updated_since is None or float(stream.updated_at or stream.created_at) >= updated_since)
     ]
     people, people_page = page_items_keyset(

@@ -8,13 +8,13 @@ from typing import Any
 from app.observability import logger
 from app.portrait_response import exception_log_summary
 from app.portrait_stream_worker import run_stream_worker_session
-from app.portrait_streams import STREAMS, StreamRecord, StreamStatus, load_streams_state, normalize_stream_status
+from app.portrait_streams import StreamRecord, StreamStatus, load_streams_state, normalize_stream_status, stream_records_snapshot
 from app.settings import STREAM_WORKER_MAX_RECONNECTS, STREAM_WORKER_POLL_INTERVAL_SECONDS
 
 
 def selected_running_streams(*, tenant_id: str | None = None, stream_id: str | None = None) -> list[StreamRecord]:
     streams = []
-    for stream in STREAMS.values():
+    for stream in stream_records_snapshot():
         if tenant_id is not None and stream.tenant_id != tenant_id:
             continue
         if stream_id is not None and stream.stream_id != stream_id:

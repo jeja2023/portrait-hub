@@ -7,7 +7,7 @@ from tools.security_audit import build_command, build_local_command, is_temp_env
 
 
 def test_security_audit_builds_pip_audit_command() -> None:
-    command = build_command(["requirements.txt", "requirements-prod-optional.txt"], "json", ".cache")
+    command = build_command(["requirements.txt", "requirements/prod-optional.txt"], "json", ".cache")
 
     assert command[1:3] == ["-m", "pip_audit"]
     assert "--progress-spinner" in command

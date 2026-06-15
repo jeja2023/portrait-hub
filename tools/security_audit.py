@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 
 
-DEFAULT_REQUIREMENTS = ["requirements.txt", "requirements-prod-optional.txt"]
+DEFAULT_REQUIREMENTS = ["requirements.txt", "requirements/prod-optional.txt"]
 DEFAULT_CACHE_DIR = Path(".codex-tmp") / "pip-audit-cache"
 DEFAULT_TMP_DIR = Path(".codex-tmp") / "pip-audit-tmp"
 TEMP_ENV_FAILURE_MARKERS = (
@@ -105,7 +105,7 @@ def main() -> int:
             return run_audit_command(build_local_command(args.format, str(cache_dir)), env)[0]
         return code
     except FileNotFoundError:
-        print("pip-audit is not installed; install requirements-prod-optional.txt or run `python -m pip install pip-audit`.", file=sys.stderr)
+        print("pip-audit is not installed; install requirements/prod-optional.txt or run `python -m pip install pip-audit`.", file=sys.stderr)
         return 2
 
 

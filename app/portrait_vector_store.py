@@ -3,7 +3,7 @@ from uuid import NAMESPACE_URL, uuid5
 
 import numpy as np
 
-from app.observability import logger
+from app.observability import logger, trace_span
 from app.portrait_compare import compare_embeddings
 from app.portrait_response import exception_log_summary
 from app.portrait_thresholds import get_threshold, validate_threshold_profile
@@ -158,14 +158,15 @@ class PgvectorVectorStore(LocalVectorStore):
         modality_key = normalize_modality(modality)
         profile_key = validate_threshold_profile(threshold_profile)
         try:
-            return search_pgvector(
-                query_embedding,
-                modality=modality_key,
-                threshold=get_threshold(modality_key, profile_key),
-                threshold_profile=profile_key,
-                top_k=top_k,
-                tenant_id=tenant_id,
-            )
+            with trace_span("portrait.vector.pgvector.search", modality=modality_key, top_k=top_k, tenant_id=tenant_id):
+                return search_pgvector(
+                    query_embedding,
+                    modality=modality_key,
+                    threshold=get_threshold(modality_key, profile_key),
+                    threshold_profile=profile_key,
+                    top_k=top_k,
+                    tenant_id=tenant_id,
+                )
         except Exception as exc:
             logger.warning("pgvector search failed, falling back to local vector scan: %s", exception_log_summary(exc))
             return super().search(
@@ -242,16 +243,17 @@ class QdrantVectorStore(LocalVectorStore):
             "source_id": feature.get("source_id"),
             "created_at": feature.get("created_at"),
         }
-        client.upsert(
-            collection_name=collection_name,
-            points=[
-                qdrant_models.PointStruct(
-                    id=self._point_id(str(person["tenant_id"]), str(feature["feature_id"])),
-                    vector=[float(value) for value in embedding],
-                    payload=payload,
-                )
-            ],
-        )
+        with trace_span("portrait.vector.qdrant.upsert", collection=collection_name, modality=feature.get("modality")):
+            client.upsert(
+                collection_name=collection_name,
+                points=[
+                    qdrant_models.PointStruct(
+                        id=self._point_id(str(person["tenant_id"]), str(feature["feature_id"])),
+                        vector=[float(value) for value in embedding],
+                        payload=payload,
+                    )
+                ],
+            )
         return {"backend": self.backend_name, "status": "upserted", "collection": collection_name}
 
     def delete_person(self, tenant_id: str, person_id: str) -> dict[str, Any]:
@@ -301,15 +303,17 @@ class QdrantVectorStore(LocalVectorStore):
         threshold = get_threshold(modality_key, profile_key)
         try:
             client = self._client()
-            result = client.search(
-                collection_name=self._collection_for(modality_key),
-                query_vector=[float(value) for value in query_embedding],
-                query_filter=qdrant_models.Filter(
-                    must=[qdrant_models.FieldCondition(key="tenant_id", match=qdrant_models.MatchValue(value=tenant_id))]
-                ),
-                limit=int(top_k),
-                with_payload=True,
-            )
+            collection_name = self._collection_for(modality_key)
+            with trace_span("portrait.vector.qdrant.search", collection=collection_name, modality=modality_key, top_k=top_k, tenant_id=tenant_id):
+                result = client.search(
+                    collection_name=collection_name,
+                    query_vector=[float(value) for value in query_embedding],
+                    query_filter=qdrant_models.Filter(
+                        must=[qdrant_models.FieldCondition(key="tenant_id", match=qdrant_models.MatchValue(value=tenant_id))]
+                    ),
+                    limit=int(top_k),
+                    with_payload=True,
+                )
         except Exception as exc:
             logger.warning("qdrant search failed, falling back to local vector scan: %s", exception_log_summary(exc))
             return super().search(

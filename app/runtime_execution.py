@@ -5,7 +5,7 @@ import numpy as np
 from fastapi import HTTPException, status
 
 from app.metrics import observe
-from app.observability import logger, now
+from app.observability import logger, now, trace_span
 from app.portrait_response import exception_log_summary
 from app.runtime_sessions import input_dtype, run_session
 from app.runtime_state import gpu_semaphore_for_device
@@ -68,7 +68,13 @@ async def run_model_bundle(bundle: ModelBundle, input_array: np.ndarray) -> tupl
 
         queue_seconds = now() - queue_start
         inference_start = now()
-        raw_outputs = await asyncio.to_thread(run_session, session, input_array)
+        with trace_span(
+            "portrait.inference.run_session",
+            model=str(bundle.get("key", "")),
+            gpu_device_id=gpu_device_id,
+            batch_size=int(input_array.shape[0]) if input_array.ndim > 0 else 1,
+        ):
+            raw_outputs = await asyncio.to_thread(run_session, session, input_array)
         inference_seconds = now() - inference_start
     finally:
         if gpu_acquired:

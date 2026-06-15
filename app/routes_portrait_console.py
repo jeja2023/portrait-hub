@@ -9,7 +9,7 @@ from app.security import require_api_token
 
 
 router = APIRouter()
-CONSOLE_ROOT = Path(__file__).resolve().parent
+CONSOLE_ROOT = Path(__file__).resolve().parents[1] / "frontend" / "console"
 CONSOLE_HTML_PATH = CONSOLE_ROOT / "console.html"
 CONSOLE_CSS_PATH = CONSOLE_ROOT / "console.css"
 CONSOLE_JS_PATH = CONSOLE_ROOT / "console.js"

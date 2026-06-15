@@ -2,7 +2,7 @@ from copy import deepcopy
 import json
 from typing import Any
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, UploadFile, status
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.media.image_decode import decode_upload_image, decode_upload_images
@@ -36,6 +36,7 @@ from app.portrait_gallery import (
     search_gallery,
     upsert_person,
 )
+from app.portrait_jobs import VideoJob, create_batch_job, persist_video_job, run_batch_job
 from app.portrait_response import OBJECT_CLEANUP_FAILED, exception_log_summary, portrait_success, raise_rollback_failure
 from app.portrait_request_context import PortraitRequestContext, portrait_request_context
 from app.portrait_request_validation import validate_int_range
@@ -92,6 +93,49 @@ async def extract_gallery_embedding(image: Any, modality: str) -> tuple[list[flo
     record = await infer_body_record_for_image(image, include_embedding=True)
     model_id, model_version = embedding_model_info(record)
     return record["embedding"], float(record["quality"].get("score", 0.0)), model_id, model_version
+
+
+async def gallery_search_batch_results(
+    files: list[UploadFile],
+    *,
+    modality: str,
+    top_k: int,
+    threshold_profile: str,
+    tenant_id: str,
+    progress_callback: Any | None = None,
+) -> list[dict[str, Any]]:
+    results = []
+    total = max(1, len(files))
+    for index, file in enumerate(files):
+        decoded = await decode_upload_image(file)
+        embedding, quality_score, _, _ = await extract_gallery_embedding(decoded.image, modality)
+        combined_quality_score = combined_query_quality(decoded.frame.quality, float(quality_score))
+        candidates = await run_blocking_io(
+            search_gallery,
+            embedding,
+            modality=modality,
+            threshold_profile=threshold_profile,
+            top_k=top_k,
+            tenant_id=tenant_id,
+            query_quality=combined_quality_score,
+        )
+        results.append(
+            {
+                "index": index,
+                "candidate_count": len(candidates),
+                "candidates": candidates,
+                "query": {
+                    "modality": modality,
+                    "quality_score": round(float(quality_score), 6),
+                    "combined_quality_score": combined_quality_score,
+                    "threshold_profile": threshold_profile,
+                    "top_k": top_k,
+                },
+            }
+        )
+        if progress_callback is not None:
+            await progress_callback(0.05 + 0.9 * ((index + 1) / total))
+    return results
 
 
 def combined_query_quality(frame_quality: dict[str, Any] | None, subject_quality: float) -> float:
@@ -351,10 +395,12 @@ async def v1_gallery_search(
 
 @router.post("/v1/gallery/search/batch", dependencies=[Depends(permission_dependency("gallery:read"))])
 async def v1_gallery_search_batch(
+    background_tasks: BackgroundTasks,
     files: list[UploadFile] = File(...),
     modality: str = Form("body"),
     top_k: int = Form(5),
     threshold_profile: str = Form("normal"),
+    async_mode: bool = Form(False),
     ctx: PortraitRequestContext = Depends(portrait_request_context),
 ) -> dict[str, Any]:
     request_id = ctx.request_id
@@ -369,34 +415,50 @@ async def v1_gallery_search_batch(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
             detail=f"too many image files: {len(files)}, max {MAX_EMBEDDING_IMAGES}",
         )
-    results = []
-    for index, file in enumerate(files):
-        decoded = await decode_upload_image(file)
-        embedding, quality_score, _, _ = await extract_gallery_embedding(decoded.image, modality)
-        combined_quality_score = combined_query_quality(decoded.frame.quality, float(quality_score))
-        candidates = await run_blocking_io(
-            search_gallery,
-            embedding,
-            modality=modality,
-            threshold_profile=threshold_profile,
-            top_k=top_k,
-            tenant_id=tenant_id,
-            query_quality=combined_quality_score,
+    if async_mode:
+        file_payloads = [(file.filename, file.content_type, await file.read()) for file in files]
+        job = await run_blocking_io(
+            create_batch_job,
+            "gallery_search_batch",
+            tenant_id,
+            metadata={"query_count": len(file_payloads), "modality": modality, "threshold_profile": threshold_profile},
         )
-        results.append(
-            {
-                "index": index,
-                "candidate_count": len(candidates),
-                "candidates": candidates,
-                "query": {
-                    "modality": modality,
-                    "quality_score": round(float(quality_score), 6),
-                    "combined_quality_score": combined_quality_score,
-                    "threshold_profile": threshold_profile,
-                    "top_k": top_k,
-                },
+
+        async def handler(batch_job: VideoJob) -> dict[str, Any]:
+            from io import BytesIO
+            from fastapi import UploadFile
+
+            async def update_progress(progress: float) -> None:
+                batch_job.progress = progress
+                await run_blocking_io(persist_video_job, batch_job)
+
+            upload_files = [
+                UploadFile(filename=name, file=BytesIO(data), headers={"content-type": ctype or "application/octet-stream"})
+                for name, ctype, data in file_payloads
+            ]
+            results = await gallery_search_batch_results(
+                upload_files,
+                modality=modality,
+                top_k=top_k,
+                threshold_profile=threshold_profile,
+                tenant_id=tenant_id,
+                progress_callback=update_progress,
+            )
+            return {
+                "results": results,
+                "query_count": len(results),
+                "store_backend": store_backend_name(),
             }
-        )
+
+        background_tasks.add_task(run_batch_job, job.job_id, tenant_id, handler)
+        return portrait_success(request_id, {"batch_id": job.job_id, "job": job.public_dict(include_result=False)})
+    results = await gallery_search_batch_results(
+        files,
+        modality=modality,
+        top_k=top_k,
+        threshold_profile=threshold_profile,
+        tenant_id=tenant_id,
+    )
     await run_blocking_io(
         audit_event,
         "gallery_search_batch",

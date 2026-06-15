@@ -22,8 +22,13 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt
+          python -m pip install -r requirements/dev.txt
       - name: Run Python tests
         run: python -m pytest -q
+      - name: Run strict type checks
+        run: python tools/type_check.py
+      - name: Verify dependency lock policy
+        run: python tools/deploy_check.py --json --skip-node
       - name: Run Node SDK contract tests
         run: node tests/test_node_sdk.js
       - name: Run deployment contract checks

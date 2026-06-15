@@ -91,7 +91,7 @@ v1 已加入的生产加固：
 
 生产集成产物：
 
-- `requirements-prod-optional.txt` 列出 PostgreSQL 连接池、pgvector、Qdrant、S3、JWT、Redis 风格队列和 OpenTelemetry 所需的可选驱动。
+- `requirements/prod-optional.txt` 列出 PostgreSQL 连接池、pgvector、Qdrant、S3、JWT、Redis 风格队列和 OpenTelemetry 所需的可选驱动。
 - 通过设置 `INSTALL_PROD_OPTIONAL=true` 可以把这些可选驱动安装进 Docker 镜像。
 - `tools/portrait_postgres_schema.sql` 提供 PostgreSQL/pgvector 的 schema，覆盖租户、人员、特征、阈值、任务、流、对象和审计事件。
 - `tools/qdrant_collections.json` 记录人脸、人体、步态和衣着向量的 Qdrant collection 定义。
@@ -111,9 +111,9 @@ v1 已加入的生产加固：
 - 这个受限门禁仍会检查 API/安全契约、存储/向量/对象适配器、Python/Node SDK 产物、`models` 下的模型文件路径、审计和保留控制、脱敏、回滚行为以及生产配置默认值。
 - 完整的 `python tools/portrait_production_readiness.py --strict` 仍然是最终切换门禁。在 `model-capabilities.yml` 还把 appearance、face detection、face embedding、gait 或 pose 标记为 fallback/placeholder 时，这个门禁预期会失败。
 - 除非某个新功能扩展是为了解决已有的安全、兼容性或发布契约缺口，否则不要把它算进平台验收门禁。
-- 受限平台验收清单记录在 [PLATFORM_ACCEPTANCE.md](PLATFORM_ACCEPTANCE.md)。
+- 受限平台验收清单记录在 [docs/operations/PLATFORM_ACCEPTANCE.md](docs/operations/PLATFORM_ACCEPTANCE.md)。
 
-Ubuntu 服务器完整部署步骤见 [DEPLOY_UBUNTU.md](DEPLOY_UBUNTU.md)。
+Ubuntu 服务器完整部署步骤见 [docs/deployment/DEPLOY_UBUNTU.md](docs/deployment/DEPLOY_UBUNTU.md)。
 
 运行镜像基于 `nvidia/cuda:12.4.1-cudnn-runtime-ubuntu22.04`，容器内使用 Python 3.12。当前依赖固定为 `onnxruntime-gpu==1.20.1`，需要 CUDA 12.x 运行库与 cuDNN 9（CUDA 12 的镜像 tag 使用不带数字的 `-cudnn-`，内置 cuDNN 9）。宿主机 NVIDIA 驱动需满足 CUDA 12.4 的最低版本要求（Linux ≥ 550.54.14）。
 
@@ -288,7 +288,7 @@ curl -X POST http://127.0.0.1:9001/vision/infer \
 
 `/vision/infer` 和 `/vision/batch-infer` 会按照 `models.yml` 中的 `task` 自动分派到检测、分类或 ReID 后处理。`model_id` 可以是 `aliases` 中的稳定别名，也可以直接使用 `project_name/model_name.onnx`。如果不使用别名，也可以传 `project_name` 和 `model_name`。单次请求默认最多 16 张图，可通过 `MAX_VISION_IMAGES` 调整。
 
-v1 业务层也提供批量能力：`/v1/compare/batch` 支持同数量的 `image_a[]` / `image_b[]` 成对比对，`/v1/gallery/search/batch` 支持多张查询图批量检索。视频任务和流事件可分别通过 `/ws/jobs/{job_id}` 与 `/ws/streams/{stream_id}` 获得实时快照推送。
+v1 业务层也提供批量能力：`/v1/compare/batch` 支持同数量的 `image_a[]` / `image_b[]` 成对比对，`/v1/gallery/search/batch` 支持多张查询图批量检索。批量接口支持 `async_mode=true`：服务会立即返回 `batch_id` 和 Jobs 摘要，后台执行批量比对或图库检索，调用方可以继续通过 `/v1/jobs/{batch_id}` 和 `/v1/jobs/{batch_id}/result` 查询进度与结果。视频任务和流事件可分别通过 `/ws/jobs/{job_id}` 与 `/ws/streams/{stream_id}` 获得实时快照推送。
 
 多人检测接口：
 
@@ -495,7 +495,7 @@ models:
 本项目提供三类工程校验：
 
 ```bash
-python -m pip install -r requirements-dev.txt
+python -m pip install -r requirements/dev.txt
 pytest -q
 python tools/deploy_check.py --import-app
 python tools/validate_model_package.py --config models.yml --models-root models --strict-hash --strict-sidecars
@@ -503,8 +503,11 @@ python tools/validate_model_package.py --config models.yml --models-root models 
 
 - `pytest` 覆盖 API 契约、路径安全、模型配置兼容解析、检测/分类/ReID 后处理和模型包校验脚本。
 - `tools/deploy_check.py` 用于部署前静态检查，会验证关键文件、Python 语法、`models.yml`、Docker Compose GPU 配置和核心路由。
+- `tools/type_check.py` 用于运行聚焦的 `mypy --strict` 类型门禁，当前覆盖本轮拆出的核心兼容模块和类型检查脚本自身。
+- `tools/portrait_production_readiness.py --scope platform --strict` 用于平台级生产门禁，覆盖安全契约、部署模板、代码质量、共享状态锁、控制台静态资源和工具链。
 - `tools/validate_model_package.py` 用于上线前校验算法侧交付的模型包。生产上线建议加 `--strict-hash --strict-sidecars`，要求 sha256、模型卡和 labels 齐全。
 - `tools/regression_check.py` 用于固定样例回归检查，可以对运行中的服务发起 HTTP 请求，并按期望输出子集和浮点容忍阈值比对。
+- `tools/portrait_migrate.py`、`tools/portrait_backup_scheduler.py` 和 `tools/load_test.py` 分别用于数据迁移、备份调度和 HTTP 压测；`tools/portrait_migrate.py gallery-to-vector --dry-run --skip-load-state` 可用于快速验证本地向量迁移路径。
 
 服务启动后可以执行 HTTP 冒烟测试：
 

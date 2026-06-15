@@ -58,6 +58,30 @@ def test_v1_compare_persons_uses_threshold_contract() -> None:
     assert "average_hash" not in response.text
 
 
+def test_v1_compare_batch_async_returns_batch_job_result() -> None:
+    client = TestClient(app)
+    VIDEO_JOBS.clear()
+
+    response = client.post(
+        "/v1/compare/batch",
+        files=[
+            upload("image_a", (120, 30, 40)),
+            upload("image_b", (120, 30, 40)),
+        ],
+        data={"modality": "body", "async_mode": "true"},
+    )
+
+    assert response.status_code == 200
+    batch_id = response.json()["data"]["batch_id"]
+    assert batch_id.startswith("batch_")
+    result = client.get(f"/v1/jobs/{batch_id}/result")
+    assert result.status_code == 200
+    payload = result.json()["data"]
+    assert payload["job"]["status"] == "completed"
+    assert payload["result"]["pair_count"] == 1
+    assert payload["result"]["results"][0]["comparison"]["passed"] is True
+
+
 def test_v1_gallery_enroll_and_search_round_trip() -> None:
     client = TestClient(app)
     GALLERY.clear()
@@ -85,6 +109,33 @@ def test_v1_gallery_enroll_and_search_round_trip() -> None:
     assert candidates
     assert candidates[0]["person_id"] == "p_test_round_trip"
     assert search.json()["data"]["query"]["combined_quality_score"] >= search.json()["data"]["query"]["quality_score"] * 0.76
+
+
+def test_v1_gallery_search_batch_async_returns_batch_job_result() -> None:
+    client = TestClient(app)
+    GALLERY.clear()
+    VIDEO_JOBS.clear()
+    enroll = client.post(
+        "/v1/gallery/enroll",
+        files=[upload("files", (10, 80, 180))],
+        data={"person_id": "p_async_search", "display_name": "Async Search", "modality": "body"},
+    )
+    assert enroll.status_code == 200
+
+    response = client.post(
+        "/v1/gallery/search/batch",
+        files=[upload("files", (10, 80, 180))],
+        data={"modality": "body", "top_k": "3", "async_mode": "true"},
+    )
+
+    assert response.status_code == 200
+    batch_id = response.json()["data"]["batch_id"]
+    result = client.get(f"/v1/jobs/{batch_id}/result")
+    assert result.status_code == 200
+    payload = result.json()["data"]
+    assert payload["job"]["status"] == "completed"
+    assert payload["result"]["query_count"] == 1
+    assert payload["result"]["results"][0]["candidate_count"] >= 1
 
 
 def test_v1_gallery_reindex_rebuilds_vector_index_with_filters(monkeypatch) -> None:

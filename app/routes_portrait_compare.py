@@ -1,12 +1,14 @@
 from typing import Any
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Request, UploadFile, status
 
 from app.media.image_decode import decode_upload_image, decode_upload_images, duplicate_distance
 from app.media.media_schema import DecodedImage
 from app.observability import request_id_from_headers
+from app.portrait_async import run_blocking_io
 from app.portrait_auth import permission_dependency
 from app.portrait_compare import apply_input_independence_to_decision, fuse_modalities, quality_aware_compare
+from app.portrait_jobs import VideoJob, create_batch_job, persist_video_job, run_batch_job
 from app.portrait_model_runtime import (
     infer_appearance_record_for_image,
     infer_best_face_embedding_for_image,
@@ -14,6 +16,7 @@ from app.portrait_model_runtime import (
     infer_gait_embedding_for_images,
 )
 from app.portrait_response import portrait_success
+from app.portrait_request_context import PortraitRequestContext, portrait_request_context
 from app.portrait_thresholds import validate_threshold_profile
 from app.security import require_api_token
 from app.settings import MAX_VIDEO_FRAMES
@@ -77,6 +80,53 @@ def validate_sequence(files: list[UploadFile], name: str) -> None:
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
             detail=f"too many frames in {name}: {len(files)}, max {MAX_VIDEO_FRAMES}",
         )
+
+
+async def compare_batch_results(
+    image_a: list[UploadFile],
+    image_b: list[UploadFile],
+    *,
+    modality_key: str,
+    threshold_profile: str,
+    include_vectors: bool,
+    progress_callback: Any | None = None,
+) -> list[dict[str, Any]]:
+    results = []
+    total = max(1, len(image_a))
+    for index, (file_a, file_b) in enumerate(zip(image_a, image_b)):
+        decoded_a = await decode_upload_image(file_a)
+        decoded_b = await decode_upload_image(file_b)
+        if modality_key == "face":
+            subject_a_embedding, subject_a = await infer_best_face_embedding_for_image(decoded_a.image)
+            subject_b_embedding, subject_b = await infer_best_face_embedding_for_image(decoded_b.image)
+        elif modality_key == "appearance":
+            subject_a = await infer_appearance_record_for_image(decoded_a.image, include_embedding=True)
+            subject_b = await infer_appearance_record_for_image(decoded_b.image, include_embedding=True)
+            subject_a_embedding = subject_a["embedding"]
+            subject_b_embedding = subject_b["embedding"]
+        else:
+            subject_a = await infer_body_record_for_image(decoded_a.image, include_embedding=True)
+            subject_b = await infer_body_record_for_image(decoded_b.image, include_embedding=True)
+            subject_a_embedding = subject_a["embedding"]
+            subject_b_embedding = subject_b["embedding"]
+        comparison = quality_aware_compare(
+            subject_a_embedding,
+            subject_b_embedding,
+            modality=modality_key,
+            threshold_profile=threshold_profile,
+            quality_a=combined_quality(subject_a["quality"], decoded_a.frame.quality),
+            quality_b=combined_quality(subject_b["quality"], decoded_b.frame.quality),
+        )
+        comparison["subjects"] = {"a": subject_a, "b": subject_b}
+        comparison["input"] = pair_input_evidence(decoded_a, decoded_b)
+        apply_input_independence_to_decision(comparison, comparison["input"])
+        if not include_vectors:
+            comparison["subjects"]["a"].pop("embedding", None)
+            comparison["subjects"]["b"].pop("embedding", None)
+        results.append({"index": index, "modality": modality_key, "comparison": comparison})
+        if progress_callback is not None:
+            await progress_callback(0.05 + 0.9 * ((index + 1) / total))
+    return results
 
 
 @router.post("/v1/compare/faces", dependencies=[Depends(permission_dependency("compare"))])
@@ -288,14 +338,18 @@ async def v1_fusion_compare(
 
 @router.post("/v1/compare/batch", dependencies=[Depends(permission_dependency("compare"))])
 async def v1_compare_batch(
+    background_tasks: BackgroundTasks,
     request: Request,
     image_a: list[UploadFile] = File(...),
     image_b: list[UploadFile] = File(...),
     modality: str = Form("body"),
     threshold_profile: str = Form("normal"),
     include_vectors: bool = Form(False),
+    async_mode: bool = Form(False),
+    ctx: PortraitRequestContext = Depends(portrait_request_context),
 ) -> dict[str, Any]:
     request_id = request_id_from_headers(request)
+    tenant_id = ctx.tenant_id
     threshold_profile = validate_threshold_profile(threshold_profile)
     modality_key = modality.strip().lower()
     if modality_key in {"person", "persons"}:
@@ -304,38 +358,50 @@ async def v1_compare_batch(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="unsupported modality")
     if not image_a or len(image_a) != len(image_b):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="image_a and image_b must contain the same number of files")
-    results = []
-    for index, (file_a, file_b) in enumerate(zip(image_a, image_b)):
-        decoded_a = await decode_upload_image(file_a)
-        decoded_b = await decode_upload_image(file_b)
-        if modality_key == "face":
-            subject_a_embedding, subject_a = await infer_best_face_embedding_for_image(decoded_a.image)
-            subject_b_embedding, subject_b = await infer_best_face_embedding_for_image(decoded_b.image)
-        elif modality_key == "appearance":
-            subject_a = await infer_appearance_record_for_image(decoded_a.image, include_embedding=True)
-            subject_b = await infer_appearance_record_for_image(decoded_b.image, include_embedding=True)
-            subject_a_embedding = subject_a["embedding"]
-            subject_b_embedding = subject_b["embedding"]
-        else:
-            subject_a = await infer_body_record_for_image(decoded_a.image, include_embedding=True)
-            subject_b = await infer_body_record_for_image(decoded_b.image, include_embedding=True)
-            subject_a_embedding = subject_a["embedding"]
-            subject_b_embedding = subject_b["embedding"]
-        comparison = quality_aware_compare(
-            subject_a_embedding,
-            subject_b_embedding,
-            modality=modality_key,
-            threshold_profile=threshold_profile,
-            quality_a=combined_quality(subject_a["quality"], decoded_a.frame.quality),
-            quality_b=combined_quality(subject_b["quality"], decoded_b.frame.quality),
+    if async_mode:
+        left_payloads = [(file.filename, file.content_type, await file.read()) for file in image_a]
+        right_payloads = [(file.filename, file.content_type, await file.read()) for file in image_b]
+        job = await run_blocking_io(
+            create_batch_job,
+            "compare_batch",
+            tenant_id,
+            metadata={"pair_count": len(left_payloads), "modality": modality_key, "threshold_profile": threshold_profile},
         )
-        comparison["subjects"] = {"a": subject_a, "b": subject_b}
-        comparison["input"] = pair_input_evidence(decoded_a, decoded_b)
-        apply_input_independence_to_decision(comparison, comparison["input"])
-        if not include_vectors:
-            comparison["subjects"]["a"].pop("embedding", None)
-            comparison["subjects"]["b"].pop("embedding", None)
-        results.append({"index": index, "modality": modality_key, "comparison": comparison})
+
+        async def handler(batch_job: VideoJob) -> dict[str, Any]:
+            from io import BytesIO
+            from fastapi import UploadFile
+
+            async def update_progress(progress: float) -> None:
+                batch_job.progress = progress
+                await run_blocking_io(persist_video_job, batch_job)
+
+            left_files = [UploadFile(filename=name, file=BytesIO(data), headers={"content-type": ctype or "application/octet-stream"}) for name, ctype, data in left_payloads]
+            right_files = [UploadFile(filename=name, file=BytesIO(data), headers={"content-type": ctype or "application/octet-stream"}) for name, ctype, data in right_payloads]
+            results = await compare_batch_results(
+                left_files,
+                right_files,
+                modality_key=modality_key,
+                threshold_profile=threshold_profile,
+                include_vectors=include_vectors,
+                progress_callback=update_progress,
+            )
+            return {
+                "results": results,
+                "pair_count": len(results),
+                "threshold_profile": threshold_profile,
+                "modality": modality_key,
+            }
+
+        background_tasks.add_task(run_batch_job, job.job_id, tenant_id, handler)
+        return portrait_success(request_id, {"batch_id": job.job_id, "job": job.public_dict(include_result=False)})
+    results = await compare_batch_results(
+        image_a,
+        image_b,
+        modality_key=modality_key,
+        threshold_profile=threshold_profile,
+        include_vectors=include_vectors,
+    )
     return portrait_success(
         request_id,
         {

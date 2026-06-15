@@ -2,13 +2,20 @@ import asyncio
 from copy import deepcopy
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, Query, Request
 
-from app.core import *
+from app.model_config import MODEL_ALIASES, MODEL_CONFIGS, model_config, reload_model_config_state, resolve_model_reference
+from app.model_package import get_model_path, model_hash, model_package_info, public_model_config
+from app.model_refs import cache_key, validate_model_reference_parts
+from app.observability import request_id_from_headers
 from app.portrait_async import run_blocking_io
 from app.portrait_audit import audit_event
 from app.portrait_auth import permission_dependency
 from app.portrait_security import tenant_id_from_request
+from app.runtime import MODEL_REGISTRY, bundle_info, get_or_load_model
+from app.security import require_api_token
+from app.settings import MAX_LOADED_MODELS
+from app.schemas import ModelRequest
 
 
 router = APIRouter()

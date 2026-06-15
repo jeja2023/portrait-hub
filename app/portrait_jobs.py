@@ -254,6 +254,20 @@ def create_video_job(filename: str | None, tenant_id: str = "default") -> VideoJ
         return job
 
 
+def create_batch_job(job_type: str, tenant_id: str = "default", *, metadata: dict[str, Any] | None = None) -> VideoJob:
+    with VIDEO_JOBS_LOCK:
+        job = VideoJob(job_id=f"batch_{uuid4().hex[:16]}", tenant_id=tenant_id, filename=None)
+        job.result = {"type": job_type, "metadata": metadata or {}, "mode": "async_batch"}
+        key = job_key(job.tenant_id, job.job_id)
+        VIDEO_JOBS[key] = job
+        try:
+            persist_video_job(job)
+        except Exception:
+            VIDEO_JOBS.pop(key, None)
+            raise
+        return job
+
+
 def get_video_job(job_id: str, tenant_id: str | None = None) -> VideoJob | None:
     with VIDEO_JOBS_LOCK:
         if tenant_id is not None:
@@ -294,6 +308,47 @@ def remove_video_job(job_id: str, tenant_id: str) -> bool:
             VIDEO_JOBS[key] = job
             raise
         return True
+
+
+async def run_batch_job(job_id: str, tenant_id: str, handler: Any) -> None:
+    job = get_video_job(job_id, tenant_id=tenant_id)
+    if job is None:
+        logger.warning(
+            "batch job not found for background execution: tenant_hash=%s job_hash=%s",
+            video_job_identifier_fingerprint(tenant_id),
+            video_job_identifier_fingerprint(job_id),
+        )
+        return
+
+    base_result = deepcopy(job.result) if isinstance(job.result, dict) else {}
+    job.status = JobStatus.RUNNING
+    job.progress = 0.05
+    job.error = None
+    job.updated_at = wall_time()
+    await run_blocking_io(persist_video_job, job)
+    try:
+        if job.cancel_requested:
+            job.status = JobStatus.CANCELLED
+            job.updated_at = wall_time()
+            await run_blocking_io(persist_video_job, job)
+            return
+        result = await handler(job)
+        job.result = {**base_result, **(result if isinstance(result, dict) else {"result": result})}
+        job.status = JobStatus.COMPLETED
+        job.progress = 1.0
+        job.updated_at = wall_time()
+        await run_blocking_io(persist_video_job, job)
+    except Exception as exc:
+        logger.warning(
+            "batch job failed: tenant_hash=%s job_hash=%s error=%s",
+            video_job_identifier_fingerprint(tenant_id),
+            video_job_identifier_fingerprint(job_id),
+            exception_log_summary(exc),
+        )
+        job.status = JobStatus.CANCELLED if job.cancel_requested else JobStatus.FAILED
+        job.error = None if job.cancel_requested else VIDEO_JOB_ERROR_MESSAGE
+        job.updated_at = wall_time()
+        await run_blocking_io(persist_video_job, job)
 
 
 async def run_video_job(

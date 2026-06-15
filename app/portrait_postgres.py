@@ -5,7 +5,7 @@ import math
 from contextlib import contextmanager
 from typing import Any, Iterator
 
-from app.observability import logger
+from app.observability import logger, trace_span
 from app.portrait_crypto import decrypt_bytes, encrypt_bytes
 from app.portrait_response import HEALTH_CHECK_FAILED, exception_log_summary
 from app.settings import POSTGRES_CONNECT_TIMEOUT_SECONDS, POSTGRES_DSN, POSTGRES_POOL_MAX_SIZE, POSTGRES_POOL_MIN_SIZE
@@ -70,22 +70,24 @@ def postgres_connection(row_factory: Any = None) -> Iterator[Any]:
     require_postgres()
     pool = get_postgres_pool()
     if pool is not None:
-        with pool.connection() as connection:
-            previous_row_factory = getattr(connection, "row_factory", None)
-            if row_factory is not None:
-                connection.row_factory = row_factory
-            try:
-                yield connection
-            finally:
+        with trace_span("portrait.postgres.connection", pooled=True):
+            with pool.connection() as connection:
+                previous_row_factory = getattr(connection, "row_factory", None)
                 if row_factory is not None:
-                    connection.row_factory = previous_row_factory
+                    connection.row_factory = row_factory
+                try:
+                    yield connection
+                finally:
+                    if row_factory is not None:
+                        connection.row_factory = previous_row_factory
         return
 
     kwargs: dict[str, Any] = {"connect_timeout": POSTGRES_CONNECT_TIMEOUT_SECONDS}
     if row_factory is not None:
         kwargs["row_factory"] = row_factory
-    with psycopg.connect(POSTGRES_DSN, **kwargs) as connection:
-        yield connection
+    with trace_span("portrait.postgres.connection", pooled=False):
+        with psycopg.connect(POSTGRES_DSN, **kwargs) as connection:
+            yield connection
 
 
 def postgres_health() -> dict[str, Any]:
@@ -101,10 +103,11 @@ def postgres_health() -> dict[str, Any]:
     if not postgres_configured() or psycopg is None:
         return {**payload, "status": "not_ready"}
     try:
-        with postgres_connection() as connection:
-            with connection.cursor() as cursor:
-                cursor.execute("SELECT 1")
-                cursor.fetchone()
+        with trace_span("portrait.postgres.health"):
+            with postgres_connection() as connection:
+                with connection.cursor() as cursor:
+                    cursor.execute("SELECT 1")
+                    cursor.fetchone()
         return {**payload, "status": "ready"}
     except Exception as exc:  # pragma: no cover - requires external database
         logger.warning("postgres health check failed: %s", exception_log_summary(exc))
@@ -164,10 +167,11 @@ def load_gallery_snapshot() -> dict[str, Any]:
         ORDER BY p.tenant_id, p.person_id, f.created_at, f.feature_id
     """
     try:
-        with postgres_connection(row_factory=dict_row) as connection:
-            with connection.cursor() as cursor:
-                cursor.execute(query)
-                rows = cursor.fetchall()
+        with trace_span("portrait.postgres.load_gallery_snapshot"):
+            with postgres_connection(row_factory=dict_row) as connection:
+                with connection.cursor() as cursor:
+                    cursor.execute(query)
+                    rows = cursor.fetchall()
     except Exception as exc:  # pragma: no cover - requires external database
         logger.warning("postgres gallery load failed: %s", exception_log_summary(exc))
         return {"people": []}

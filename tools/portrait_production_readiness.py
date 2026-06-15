@@ -85,10 +85,26 @@ def check_model_files(root: Path, models_root: Path) -> list[dict[str, Any]]:
 
 def check_templates(root: Path) -> list[dict[str, Any]]:
     required = [
+        "app/portrait_errors.py",
+        "app/tracking_state.py",
+        "app/tracking_association.py",
+        "app/runtime_face.py",
+        "app/runtime_body.py",
+        "app/runtime_pose.py",
+        "app/runtime_gait.py",
+        "app/runtime_appearance.py",
+        "app/runtime_common.py",
+        "frontend/console/console.html",
+        "frontend/console/console.css",
+        "frontend/console/console.js",
         "tools/portrait_algorithm_eval.py",
         "tools/portrait_model_regression.py",
         "tools/portrait_cutover_check.py",
         "tools/portrait_stream_worker_health.py",
+        "tools/portrait_migrate.py",
+        "tools/portrait_backup_scheduler.py",
+        "tools/load_test.py",
+        "tools/type_check.py",
         "tools/portrait_postgres_schema.sql",
         "tools/qdrant_collections.json",
         "examples/portrait-model-regression.example.yml",
@@ -98,7 +114,7 @@ def check_templates(root: Path) -> list[dict[str, Any]]:
         "deploy/k8s-stream-worker.yaml",
         ".github/workflows/ci.yml",
         ".github/workflows/security-audit.yml",
-        "requirements-prod-optional.txt",
+        "requirements/prod-optional.txt",
         "sdk/python/portrait_hub_client.py",
         "sdk/node/portraitHubClient.js",
     ]
@@ -106,7 +122,8 @@ def check_templates(root: Path) -> list[dict[str, Any]]:
 
 
 def check_data_stack(root: Path) -> list[dict[str, Any]]:
-    optional = (root / "requirements-prod-optional.txt").read_text(encoding="utf-8") if (root / "requirements-prod-optional.txt").is_file() else ""
+    optional_path = root / "requirements" / "prod-optional.txt"
+    optional = optional_path.read_text(encoding="utf-8") if optional_path.is_file() else ""
     schema = (root / "tools" / "portrait_postgres_schema.sql").read_text(encoding="utf-8") if (root / "tools" / "portrait_postgres_schema.sql").is_file() else ""
     dockerfile = (root / "Dockerfile").read_text(encoding="utf-8") if (root / "Dockerfile").is_file() else ""
     compose = (root / "docker-compose.yml").read_text(encoding="utf-8") if (root / "docker-compose.yml").is_file() else ""
@@ -147,6 +164,12 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
     health_routes = (root / "app" / "routes_health.py").read_text(encoding="utf-8") if (root / "app" / "routes_health.py").is_file() else ""
     server = (root / "app" / "server.py").read_text(encoding="utf-8") if (root / "app" / "server.py").is_file() else ""
     observability = (root / "app" / "observability.py").read_text(encoding="utf-8") if (root / "app" / "observability.py").is_file() else ""
+    core = (root / "app" / "core.py").read_text(encoding="utf-8") if (root / "app" / "core.py").is_file() else ""
+    pyproject = (root / "pyproject.toml").read_text(encoding="utf-8") if (root / "pyproject.toml").is_file() else ""
+    dev_requirements = (root / "requirements" / "dev.txt").read_text(encoding="utf-8") if (root / "requirements" / "dev.txt").is_file() else ""
+    ci_workflow = (root / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8") if (root / ".github" / "workflows" / "ci.yml").is_file() else ""
+    type_check_tool = (root / "tools" / "type_check.py").read_text(encoding="utf-8") if (root / "tools" / "type_check.py").is_file() else ""
+    route_modules = "\n".join(path.read_text(encoding="utf-8") for path in sorted((root / "app").glob("routes*.py")))
     model_lifecycle_routes = (root / "app" / "routes_model_lifecycle.py").read_text(encoding="utf-8") if (root / "app" / "routes_model_lifecycle.py").is_file() else ""
     model_query_routes = (root / "app" / "routes_model_query.py").read_text(encoding="utf-8") if (root / "app" / "routes_model_query.py").is_file() else ""
     model_config_writer = (root / "app" / "model_config_writer.py").read_text(encoding="utf-8") if (root / "app" / "model_config_writer.py").is_file() else ""
@@ -165,6 +188,11 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
     person_stream_routes = (root / "app" / "routes_person_stream.py").read_text(encoding="utf-8") if (root / "app" / "routes_person_stream.py").is_file() else ""
     vision_routes = (root / "app" / "routes_vision.py").read_text(encoding="utf-8") if (root / "app" / "routes_vision.py").is_file() else ""
     runtime_execution = (root / "app" / "runtime_execution.py").read_text(encoding="utf-8") if (root / "app" / "runtime_execution.py").is_file() else ""
+    runtime_face = (root / "app" / "runtime_face.py").read_text(encoding="utf-8") if (root / "app" / "runtime_face.py").is_file() else ""
+    runtime_body = (root / "app" / "runtime_body.py").read_text(encoding="utf-8") if (root / "app" / "runtime_body.py").is_file() else ""
+    runtime_pose = (root / "app" / "runtime_pose.py").read_text(encoding="utf-8") if (root / "app" / "runtime_pose.py").is_file() else ""
+    runtime_gait = (root / "app" / "runtime_gait.py").read_text(encoding="utf-8") if (root / "app" / "runtime_gait.py").is_file() else ""
+    runtime_appearance = (root / "app" / "runtime_appearance.py").read_text(encoding="utf-8") if (root / "app" / "runtime_appearance.py").is_file() else ""
     video_io = (root / "app" / "video_io.py").read_text(encoding="utf-8") if (root / "app" / "video_io.py").is_file() else ""
     media_image_decode = (root / "app" / "media" / "image_decode.py").read_text(encoding="utf-8") if (root / "app" / "media" / "image_decode.py").is_file() else ""
     media_schema = (root / "app" / "media" / "media_schema.py").read_text(encoding="utf-8") if (root / "app" / "media" / "media_schema.py").is_file() else ""
@@ -182,6 +210,7 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
     portrait_compare_routes = (root / "app" / "routes_portrait_compare.py").read_text(encoding="utf-8") if (root / "app" / "routes_portrait_compare.py").is_file() else ""
     portrait_admin_routes = (root / "app" / "routes_portrait_admin.py").read_text(encoding="utf-8") if (root / "app" / "routes_portrait_admin.py").is_file() else ""
     portrait_console_routes = (root / "app" / "routes_portrait_console.py").read_text(encoding="utf-8") if (root / "app" / "routes_portrait_console.py").is_file() else ""
+    portrait_ws_routes = (root / "app" / "routes_portrait_ws.py").read_text(encoding="utf-8") if (root / "app" / "routes_portrait_ws.py").is_file() else ""
     portrait_response = (root / "app" / "portrait_response.py").read_text(encoding="utf-8") if (root / "app" / "portrait_response.py").is_file() else ""
     portrait_audit = (root / "app" / "portrait_audit.py").read_text(encoding="utf-8") if (root / "app" / "portrait_audit.py").is_file() else ""
     portrait_pagination = (root / "app" / "portrait_pagination.py").read_text(encoding="utf-8") if (root / "app" / "portrait_pagination.py").is_file() else ""
@@ -194,6 +223,9 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
     portrait_job_routes = (root / "app" / "routes_portrait_jobs.py").read_text(encoding="utf-8") if (root / "app" / "routes_portrait_jobs.py").is_file() else ""
     portrait_task_queue = (root / "app" / "portrait_task_queue.py").read_text(encoding="utf-8") if (root / "app" / "portrait_task_queue.py").is_file() else ""
     portrait_vector_store = (root / "app" / "portrait_vector_store.py").read_text(encoding="utf-8") if (root / "app" / "portrait_vector_store.py").is_file() else ""
+    portrait_tracking = (root / "app" / "portrait_tracking.py").read_text(encoding="utf-8") if (root / "app" / "portrait_tracking.py").is_file() else ""
+    tracking_state = (root / "app" / "tracking_state.py").read_text(encoding="utf-8") if (root / "app" / "tracking_state.py").is_file() else ""
+    tracking_association = (root / "app" / "tracking_association.py").read_text(encoding="utf-8") if (root / "app" / "tracking_association.py").is_file() else ""
     portrait_thresholds = (root / "app" / "portrait_thresholds.py").read_text(encoding="utf-8") if (root / "app" / "portrait_thresholds.py").is_file() else ""
     portrait_state = (root / "app" / "portrait_state.py").read_text(encoding="utf-8") if (root / "app" / "portrait_state.py").is_file() else ""
     portrait_crypto = (root / "app" / "portrait_crypto.py").read_text(encoding="utf-8") if (root / "app" / "portrait_crypto.py").is_file() else ""
@@ -213,13 +245,19 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
     compose = (root / "docker-compose.yml").read_text(encoding="utf-8") if (root / "docker-compose.yml").is_file() else ""
     env_example = (root / ".env.example").read_text(encoding="utf-8") if (root / ".env.example").is_file() else ""
     readme = (root / "README.md").read_text(encoding="utf-8") if (root / "README.md").is_file() else ""
-    deploy_ubuntu = (root / "DEPLOY_UBUNTU.md").read_text(encoding="utf-8") if (root / "DEPLOY_UBUNTU.md").is_file() else ""
-    model_training_plan = (root / "MODEL_RND_TRAINING_PLAN.md").read_text(encoding="utf-8") if (root / "MODEL_RND_TRAINING_PLAN.md").is_file() else ""
-    inference_upgrade_plan = (root / "INFERENCE_SERVICE_UPGRADE_PLAN.md").read_text(encoding="utf-8") if (root / "INFERENCE_SERVICE_UPGRADE_PLAN.md").is_file() else ""
+    deploy_ubuntu_path = root / "docs" / "deployment" / "DEPLOY_UBUNTU.md"
+    model_training_plan_path = root / "docs" / "plans" / "MODEL_RND_TRAINING_PLAN.md"
+    inference_upgrade_plan_path = root / "docs" / "plans" / "INFERENCE_SERVICE_UPGRADE_PLAN.md"
+    deploy_ubuntu = deploy_ubuntu_path.read_text(encoding="utf-8") if deploy_ubuntu_path.is_file() else ""
+    model_training_plan = model_training_plan_path.read_text(encoding="utf-8") if model_training_plan_path.is_file() else ""
+    inference_upgrade_plan = inference_upgrade_plan_path.read_text(encoding="utf-8") if inference_upgrade_plan_path.is_file() else ""
     project_docs = "\n".join([readme, deploy_ubuntu, model_training_plan, inference_upgrade_plan])
     legacy_cross_camera_namespace = "cross_camera" + "_tracking"
     legacy_parent_models_path = "../" + "models"
     requirements = (root / "requirements.txt").read_text(encoding="utf-8") if (root / "requirements.txt").is_file() else ""
+    base_lock = (root / "requirements" / "base.lock").read_text(encoding="utf-8") if (root / "requirements" / "base.lock").is_file() else ""
+    base_in = (root / "requirements" / "base.in").read_text(encoding="utf-8") if (root / "requirements" / "base.in").is_file() else ""
+    console_js = (root / "frontend" / "console" / "console.js").read_text(encoding="utf-8") if (root / "frontend" / "console" / "console.js").is_file() else ""
     regression_open_case_files = ""
     if "def open_case_files" in regression_check:
         regression_open_case_files = regression_check.split("def open_case_files", 1)[1].split("def run_case", 1)[0]
@@ -246,6 +284,104 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
         {
             "name": "security:auth_required_setting",
             "ok": "AUTH_REQUIRED" in settings and "AUTH_REQUIRED" in security,
+        },
+        {
+            "name": "quality:core_explicit_imports",
+            "ok": (
+                "__all__" in core
+                and "import *" not in core
+                and "from app.core import *" not in route_modules
+            ),
+        },
+        {
+            "name": "quality:strict_type_check_gate",
+            "ok": (
+                "[tool.mypy]" in pyproject
+                and "strict = true" in pyproject
+                and "mypy==" in dev_requirements
+                and "python tools/type_check.py" in ci_workflow
+                and "DEFAULT_TARGETS" in type_check_tool
+                and "app/portrait_gallery.py" in type_check_tool
+                and "app/portrait_model_runtime.py" in type_check_tool
+                and "app/portrait_postgres.py" in type_check_tool
+                and "app/portrait_tracking.py" in type_check_tool
+            ),
+        },
+        {
+            "name": "quality:tracking_split_is_real",
+            "ok": (
+                "from app.tracking_association import" in portrait_tracking
+                and "from app.tracking_state import" in portrait_tracking
+                and "from app.portrait_tracking import" not in tracking_state
+                and "from app.portrait_tracking import" not in tracking_association
+                and "class TrackState" in tracking_state
+                and "def associate_person_tracks" in tracking_association
+            ),
+        },
+        {
+            "name": "quality:runtime_split_is_real",
+            "ok": (
+                "from app.portrait_model_runtime import" not in runtime_face
+                and "from app.portrait_model_runtime import" not in runtime_body
+                and "from app.portrait_model_runtime import" not in runtime_pose
+                and "from app.portrait_model_runtime import" not in runtime_gait
+                and "from app.portrait_model_runtime import" not in runtime_appearance
+                and "def run_scrfd_face_detection" in runtime_face
+                and "def run_reid_body_embedding" in runtime_body
+                and "def run_rtmpose" in runtime_pose
+                and "def run_opengait" in runtime_gait
+                and "def run_attribute_reid_appearance" in runtime_appearance
+            ),
+        },
+        {
+            "name": "ops:config_sighup_hot_reload",
+            "ok": (
+                "def install_config_reload_signal_handler" in server
+                and 'getattr(signal, "SIGHUP"' in server
+                and "reload_model_config_state()" in server
+            ),
+        },
+        {
+            "name": "observability:explicit_opentelemetry_spans",
+            "ok": (
+                "def trace_span" in observability
+                and "portrait.inference.run_session" in runtime_execution
+                and "portrait.vector.pgvector.search" in portrait_vector_store
+                and "portrait.vector.qdrant.search" in portrait_vector_store
+                and "portrait.postgres.connection" in portrait_postgres
+            ),
+        },
+        {
+            "name": "frontend:websocket_console_subscription",
+            "ok": (
+                "new WebSocket" in console_js
+                and "/ws/jobs/" in console_js
+                and "/ws/streams/" in console_js
+                and "access_token" in console_js
+                and "token" in console_js
+            ),
+        },
+        {
+            "name": "security:websocket_auth_gate",
+            "ok": (
+                "def require_websocket_permission" in portrait_ws_routes
+                and "status.WS_1008_POLICY_VIOLATION" in portrait_ws_routes
+                and "except HTTPException" in portrait_ws_routes
+                and '"jobs:read"' in portrait_ws_routes
+                and '"streams:read"' in portrait_ws_routes
+            ),
+        },
+        {
+            "name": "dependencies:runtime_lock_exact",
+            "ok": (
+                "cryptography>=42.0.0,<46.0.0" in base_in
+                and "cryptography==45.0.6" in base_lock
+                and "cryptography==45.0.6" in requirements
+                and ">=" not in base_lock
+                and "<" not in base_lock
+                and ">=" not in requirements
+                and "<" not in requirements
+            ),
         },
         {
             "name": "security:debug_endpoint_gate",
@@ -708,6 +844,22 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
                 and 'logger.warning("redis task queue health check failed: %s", exc)' not in portrait_task_queue
                 and 'logger.warning("pgvector search failed, falling back to local vector scan: %s", exc)' not in portrait_vector_store
                 and 'logger.warning("qdrant search failed, falling back to local vector scan: %s", exc)' not in portrait_vector_store
+            ),
+        },
+        {
+            "name": "security:structured_log_context",
+            "ok": (
+                "class JsonLogFormatter" in observability
+                and "ContextVar" in observability
+                and "REQUEST_ID_CONTEXT" in observability
+                and "TENANT_ID_CONTEXT" in observability
+                and "TRACEPARENT_CONTEXT" in observability
+                and "def set_log_context" in observability
+                and "def reset_log_context" in observability
+                and 'payload["request_id"] = request_id' in observability
+                and 'payload["tenant_id"] = tenant_id' in observability
+                and "context_tokens = set_log_context(" in server
+                and "reset_log_context(context_tokens)" in server
             ),
         },
         {
@@ -1430,6 +1582,20 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
                 and "RATE_LIMIT_BURST=240" in env_example
                 and "RATE_LIMIT_MAX_BUCKETS=10000" in env_example
                 and "RATE_LIMIT_BUCKET_TTL_SECONDS=3600" in env_example
+            ),
+        },
+        {
+            "name": "security:shared_state_locking",
+            "ok": (
+                "GALLERY_LOCK = threading.RLock()" in portrait_gallery
+                and "VIDEO_JOBS_LOCK = threading.RLock()" in portrait_jobs
+                and "STREAMS_LOCK = threading.RLock()" in portrait_streams
+                and "THRESHOLD_PROFILES_LOCK = threading.RLock()" in portrait_thresholds
+                and "METRICS_LOCK = threading.RLock()" in (root / "app" / "metrics.py").read_text(encoding="utf-8")
+                and "BUCKETS_LOCK = threading.RLock()" in rate_limit
+                and "def stream_records_snapshot" in portrait_streams
+                and "stream_records_snapshot()" in portrait_admin_routes
+                and "stream_records_snapshot()" in portrait_stream_routes
             ),
         },
         {

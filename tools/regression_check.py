@@ -166,7 +166,7 @@ def run_regression(args: argparse.Namespace) -> dict[str, Any]:
     try:
         import httpx
     except ImportError as exc:
-        raise RuntimeError("httpx is required. Install requirements-dev.txt before running regression checks.") from exc
+        raise RuntimeError("httpx is required. Install requirements/dev.txt before running regression checks.") from exc
 
     manifest_path = Path(args.manifest).resolve()
     manifest = load_manifest(manifest_path)

@@ -3,9 +3,15 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
-from app.core import *
+from app.metrics import observe
+from app.model_package import get_model_path
+from app.model_refs import cache_key
+from app.observability import log_json, logger, now, request_id_from_headers
 from app.portrait_auth import permission_dependency
 from app.portrait_response import exception_log_summary, raise_internal_error
+from app.runtime import build_input_array, get_or_load_model, input_dtype, run_model_bundle, touch_model
+from app.schemas import InferenceRequest
+from app.security import require_api_token
 
 
 router = APIRouter()

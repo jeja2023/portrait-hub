@@ -96,10 +96,13 @@ def test_console_is_product_admin_shell_with_strict_inline_policy() -> None:
     for marker in [
         'data-view="models"',
         'data-view="gallery"',
+        'data-view="dashboard"',
+        'data-view="alerts"',
         'id="threshold-form"',
         'id="stream-form"',
         'id="retention-form"',
         'id="enroll-form"',
+        'id="alert-form"',
     ]:
         assert marker in body
     csp = response.headers["Content-Security-Policy"]
@@ -186,6 +189,23 @@ def test_request_id_is_normalized_and_reused_between_body_and_header() -> None:
     assert too_long.headers["X-Request-ID"] != "r" * 129
     assert too_long.headers["X-Request-ID"] == too_long.json()["request_id"]
     assert len(too_long.headers["X-Request-ID"]) == 36
+
+
+def test_json_logs_include_context_fields() -> None:
+    from app.observability import JsonLogFormatter, reset_log_context, set_log_context
+    import json
+    import logging
+
+    record = logging.LogRecord("test", logging.INFO, __file__, 1, "hello %s", ("world",), None)
+    tokens = set_log_context(request_id="req-log", tenant_id="tenant-log", traceparent="00-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-bbbbbbbbbbbbbbbb-01")
+    try:
+        payload = json.loads(JsonLogFormatter().format(record))
+    finally:
+        reset_log_context(tokens)
+
+    assert payload["request_id"] == "req-log"
+    assert payload["tenant_id"] == "tenant-log"
+    assert payload["traceparent"].startswith("00-")
 
 
 def test_validation_errors_do_not_echo_input_payloads() -> None:

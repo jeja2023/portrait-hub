@@ -43,7 +43,10 @@ def check_required_files(root: Path, report: DeployReport) -> None:
         "Dockerfile",
         "docker-compose.yml",
         "requirements.txt",
-        "requirements-prod-optional.txt",
+        "requirements/prod-optional.txt",
+        "requirements/dev.txt",
+        "requirements/base.in",
+        "requirements/base.lock",
         "models.yml",
         "model-capabilities.yml",
         "app/server.py",
@@ -53,6 +56,18 @@ def check_required_files(root: Path, report: DeployReport) -> None:
         "app/vision.py",
         "app/portrait_postgres.py",
         "app/portrait_tracking.py",
+        "app/runtime_face.py",
+        "app/runtime_body.py",
+        "app/runtime_pose.py",
+        "app/runtime_gait.py",
+        "app/runtime_appearance.py",
+        "app/runtime_common.py",
+        "app/tracking_state.py",
+        "app/tracking_association.py",
+        "app/portrait_errors.py",
+        "frontend/console/console.html",
+        "frontend/console/console.css",
+        "frontend/console/console.js",
         "tools/validate_model_package.py",
         "tools/service_smoke_test.py",
         "tools/regression_check.py",
@@ -62,6 +77,10 @@ def check_required_files(root: Path, report: DeployReport) -> None:
         "tools/portrait_model_regression.py",
         "tools/portrait_cutover_check.py",
         "tools/portrait_stream_worker_health.py",
+        "tools/portrait_migrate.py",
+        "tools/portrait_backup_scheduler.py",
+        "tools/load_test.py",
+        "tools/type_check.py",
         "tools/portrait_postgres_schema.sql",
         "tools/qdrant_collections.json",
         "examples/portrait-model-regression.example.yml",
@@ -84,6 +103,142 @@ def check_python_syntax(root: Path, report: DeployReport) -> None:
         except SyntaxError as exc:
             errors.append(f"{path}: {exc}")
     report.add("python_syntax", not errors, {"errors": errors, "file_count": len(list((root / "app").glob("*.py"))) + len(list((root / "tools").glob("*.py"))) + 1})
+
+
+def check_code_quality(root: Path, report: DeployReport) -> None:
+    core = read_text(root / "app" / "core.py")
+    route_modules = "\n".join(read_text(path) for path in sorted((root / "app").glob("routes*.py")))
+    pyproject = read_text(root / "pyproject.toml")
+    dev_requirements = read_text(root / "requirements" / "dev.txt")
+    ci = read_text(root / ".github" / "workflows" / "ci.yml")
+    type_check = read_text(root / "tools" / "type_check.py")
+    portrait_tracking = read_text(root / "app" / "portrait_tracking.py")
+    tracking_state = read_text(root / "app" / "tracking_state.py")
+    tracking_association = read_text(root / "app" / "tracking_association.py")
+    server = read_text(root / "app" / "server.py")
+    observability = read_text(root / "app" / "observability.py")
+    runtime_execution = read_text(root / "app" / "runtime_execution.py")
+    runtime_face = read_text(root / "app" / "runtime_face.py")
+    runtime_body = read_text(root / "app" / "runtime_body.py")
+    runtime_pose = read_text(root / "app" / "runtime_pose.py")
+    runtime_gait = read_text(root / "app" / "runtime_gait.py")
+    runtime_appearance = read_text(root / "app" / "runtime_appearance.py")
+    vector_store = read_text(root / "app" / "portrait_vector_store.py")
+    postgres = read_text(root / "app" / "portrait_postgres.py")
+    websocket_routes = read_text(root / "app" / "routes_portrait_ws.py")
+    console_js = read_text(root / "frontend" / "console" / "console.js")
+    report.add(
+        "core_explicit_imports",
+        "import *" not in core and "__all__" in core,
+        None,
+    )
+    report.add(
+        "routes_do_not_wildcard_import_core",
+        "from app.core import *" not in route_modules,
+        None,
+    )
+    report.add(
+        "strict_type_check_gate",
+        "[tool.mypy]" in pyproject
+        and "strict = true" in pyproject
+        and "mypy==" in dev_requirements
+        and "python tools/type_check.py" in ci
+        and "DEFAULT_TARGETS" in type_check,
+        None,
+    )
+    report.add(
+        "expanded_type_check_targets",
+        all(
+            item in type_check
+            for item in [
+                "app/portrait_gallery.py",
+                "app/portrait_model_runtime.py",
+                "app/portrait_postgres.py",
+                "app/portrait_tracking.py",
+            ]
+        ),
+        None,
+    )
+    report.add(
+        "tracking_split_is_real",
+        "from app.tracking_association import" in portrait_tracking
+        and "from app.tracking_state import" in portrait_tracking
+        and "from app.portrait_tracking import" not in tracking_state
+        and "from app.portrait_tracking import" not in tracking_association
+        and "def associate_person_tracks" in tracking_association
+        and "class TrackState" in tracking_state,
+        None,
+    )
+    report.add(
+        "runtime_split_is_real",
+        "from app.portrait_model_runtime import" not in runtime_face
+        and "from app.portrait_model_runtime import" not in runtime_body
+        and "from app.portrait_model_runtime import" not in runtime_pose
+        and "from app.portrait_model_runtime import" not in runtime_gait
+        and "from app.portrait_model_runtime import" not in runtime_appearance
+        and "def run_scrfd_face_detection" in runtime_face
+        and "def run_reid_body_embedding" in runtime_body
+        and "def run_rtmpose" in runtime_pose
+        and "def run_opengait" in runtime_gait
+        and "def run_attribute_reid_appearance" in runtime_appearance,
+        None,
+    )
+    report.add(
+        "config_sighup_hot_reload",
+        "def install_config_reload_signal_handler" in server
+        and 'getattr(signal, "SIGHUP"' in server
+        and "reload_model_config_state()" in server,
+        None,
+    )
+    report.add(
+        "explicit_opentelemetry_spans",
+        "def trace_span" in observability
+        and "portrait.inference.run_session" in runtime_execution
+        and "portrait.vector.pgvector.search" in vector_store
+        and "portrait.vector.qdrant.search" in vector_store
+        and "portrait.postgres.connection" in postgres,
+        None,
+    )
+    report.add(
+        "websocket_auth_and_console",
+        "def require_websocket_permission" in websocket_routes
+        and "status.WS_1008_POLICY_VIOLATION" in websocket_routes
+        and "except HTTPException" in websocket_routes
+        and '"jobs:read"' in websocket_routes
+        and '"streams:read"' in websocket_routes
+        and "new WebSocket" in console_js
+        and "/ws/jobs/" in console_js
+        and "/ws/streams/" in console_js,
+        None,
+    )
+
+
+def requirement_lines(text: str) -> list[str]:
+    return [line.strip() for line in text.splitlines() if line.strip() and not line.strip().startswith("#")]
+
+
+def has_version_range(line: str) -> bool:
+    if line.startswith("-"):
+        return False
+    return any(operator in line for operator in [">=", "<=", "~=", ">", "<", "!="])
+
+
+def check_dependency_lock(root: Path, report: DeployReport) -> None:
+    requirements = read_text(root / "requirements.txt")
+    base_in = read_text(root / "requirements" / "base.in")
+    base_lock = read_text(root / "requirements" / "base.lock")
+    lock_ranges = [line for line in requirement_lines(base_lock) if has_version_range(line) or "==" not in line]
+    runtime_ranges = [line for line in requirement_lines(requirements) if has_version_range(line) or "==" not in line]
+    report.add(
+        "dependency_lock_exact",
+        not lock_ranges and not runtime_ranges and "cryptography==45.0.6" in base_lock and "cryptography==45.0.6" in requirements,
+        {"base_lock_ranges": lock_ranges, "requirements_ranges": runtime_ranges},
+    )
+    report.add(
+        "dependency_input_keeps_compatibility_range",
+        "cryptography>=42.0.0,<46.0.0" in base_in,
+        None,
+    )
 
 
 def check_models_config(root: Path, report: DeployReport) -> None:
@@ -113,9 +268,10 @@ def check_docker_files(root: Path, report: DeployReport) -> None:
     services = compose.get("services", {}) if isinstance(compose, dict) else {}
     service_names = sorted(services) if isinstance(services, dict) else []
     report.add("dockerfile_copies_app", "COPY app /workspace/app" in dockerfile, None)
+    report.add("dockerfile_copies_frontend", "COPY frontend /workspace/frontend" in dockerfile, None)
     report.add("dockerfile_copies_main", "COPY main.py /workspace/main.py" in dockerfile, None)
     report.add("dockerfile_copies_capabilities", "COPY model-capabilities.yml /workspace/model-capabilities.yml" in dockerfile, None)
-    report.add("dockerfile_copies_prod_optional", "COPY requirements-prod-optional.txt" in dockerfile, None)
+    report.add("dockerfile_copies_prod_optional", "COPY requirements/prod-optional.txt" in dockerfile, None)
     report.add("dockerfile_prod_optional_arg", "INSTALL_PROD_OPTIONAL" in dockerfile, None)
     report.add("compose_services", bool(service_names), {"services": service_names})
     stream_worker = services.get("portrait-stream-worker") if isinstance(services, dict) else None
@@ -383,7 +539,7 @@ def check_import_app(root: Path, report: DeployReport) -> None:
 
 
 def check_production_integrations(root: Path, report: DeployReport) -> None:
-    optional = read_text(root / "requirements-prod-optional.txt")
+    optional = read_text(root / "requirements" / "prod-optional.txt")
     required_packages = ["psycopg", "pgvector", "qdrant-client", "boto3", "redis"]
     missing_packages = [item for item in required_packages if item not in optional]
     report.add("prod_optional_dependencies", not missing_packages, {"missing": missing_packages})
@@ -437,11 +593,14 @@ def run_checks(args: argparse.Namespace) -> DeployReport:
     report = DeployReport()
     check_required_files(root, report)
     check_python_syntax(root, report)
+    check_code_quality(root, report)
+    check_dependency_lock(root, report)
     check_models_config(root, report)
     check_docker_files(root, report)
     check_ci_workflows(root, report)
     check_production_integrations(root, report)
-    check_node_sdk_tests(root, report)
+    if not args.skip_node:
+        check_node_sdk_tests(root, report)
     if args.import_app:
         check_import_app(root, report)
     return report
@@ -452,6 +611,7 @@ def main() -> int:
     parser.add_argument("--root", default=".", help="Project root.")
     parser.add_argument("--import-app", action="store_true", help="Import main.app and verify key routes.")
     parser.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
+    parser.add_argument("--skip-node", action="store_true", help="Skip Node.js contract checks.")
     args = parser.parse_args()
 
     report = run_checks(args)

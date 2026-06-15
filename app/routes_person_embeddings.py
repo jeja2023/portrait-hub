@@ -1,15 +1,19 @@
-import asyncio
 import logging
 from typing import Any
 
-import numpy as np
-import onnxruntime as ort
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, Response, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile, status
 
-from app.core import *
+from app.image_io import load_images
+from app.inference import infer_reid_images
+from app.metrics import observe
+from app.model_package import get_model_path
+from app.model_refs import cache_key, validate_model_reference_parts
+from app.observability import log_json, logger, now, request_id_from_headers
 from app.portrait_auth import permission_dependency
 from app.portrait_response import exception_log_summary, raise_internal_error
-from app.settings import APP_VERSION
+from app.runtime import get_or_load_model, touch_model
+from app.security import require_api_token
+from app.settings import MAX_EMBEDDING_IMAGES
 
 
 router = APIRouter()

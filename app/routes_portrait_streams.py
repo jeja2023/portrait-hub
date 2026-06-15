@@ -13,16 +13,16 @@ from app.portrait_response import exception_log_summary, portrait_success, raise
 from app.portrait_request_context import PortraitRequestContext, portrait_request_context
 from app.portrait_security import normalize_public_metadata, validate_stream_id
 from app.portrait_streams import (
-    STREAMS,
     StreamRecord,
     create_stream,
     get_stream,
     persist_stream,
     remove_stream,
     restore_stream,
+    restore_stream_snapshot_in_store,
     start_stream,
     stop_stream,
-    stream_key,
+    stream_records_snapshot,
 )
 from app.portrait_stream_worker import (
     emit_stream_event,
@@ -57,7 +57,7 @@ def stream_or_404(stream_id: str, tenant_id: str):
 
 def rollback_stream_snapshot(stream: StreamRecord, previous_stream: StreamRecord) -> list[str]:
     restore_stream(stream, previous_stream)
-    STREAMS[stream_key(stream.tenant_id, stream.stream_id)] = stream
+    restore_stream_snapshot_in_store(stream)
     try:
         persist_stream(stream)
     except Exception as exc:
@@ -103,7 +103,7 @@ async def v1_list_streams(
     request_id = ctx.request_id
     tenant_id = ctx.tenant_id
     pagination_request = normalize_list_pagination(limit, offset, cursor)
-    tenant_streams = [stream for stream in sorted(STREAMS.values(), key=lambda item: item.stream_id) if stream.tenant_id == tenant_id]
+    tenant_streams = [stream for stream in sorted(stream_records_snapshot(), key=lambda item: item.stream_id) if stream.tenant_id == tenant_id]
     streams, pagination = page_items_keyset(
         tenant_streams,
         limit=pagination_request.limit,

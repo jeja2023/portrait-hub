@@ -1,4 +1,5 @@
 import json
+import threading
 from copy import deepcopy
 from dataclasses import dataclass, field
 from enum import StrEnum
@@ -141,10 +142,21 @@ StreamKey = tuple[str, str]
 
 
 STREAMS: dict[StreamKey, StreamRecord] = {}
+STREAMS_LOCK = threading.RLock()
 
 
 def stream_key(tenant_id: str, stream_id: str) -> StreamKey:
     return (str(tenant_id), str(stream_id))
+
+
+def stream_records_snapshot() -> list[StreamRecord]:
+    with STREAMS_LOCK:
+        return list(STREAMS.values())
+
+
+def restore_stream_snapshot_in_store(stream: StreamRecord) -> None:
+    with STREAMS_LOCK:
+        STREAMS[stream_key(stream.tenant_id, stream.stream_id)] = stream
 
 
 def protect_stream_url(stream_url: str) -> dict[str, Any]:
@@ -195,15 +207,16 @@ def postgres_streams_enabled() -> bool:
 
 
 def streams_state_payload() -> dict[str, Any]:
-    return {
-        "version": 1,
-        "streams": [
-            stream.state_dict()
-            if postgres_streams_enabled()
-            else stream_state_dict(stream)
-            for stream in sorted(STREAMS.values(), key=lambda item: (item.tenant_id, item.stream_id))
-        ],
-    }
+    with STREAMS_LOCK:
+        return {
+            "version": 1,
+            "streams": [
+                stream.state_dict()
+                if postgres_streams_enabled()
+                else stream_state_dict(stream)
+                for stream in sorted(STREAMS.values(), key=lambda item: (item.tenant_id, item.stream_id))
+            ],
+        }
 
 
 def save_streams_state() -> None:
@@ -255,23 +268,24 @@ def load_streams_state() -> None:
     if not isinstance(streams, list):
         handle_state_read_error(f"streams state streams must be a list: {PORTRAIT_STREAMS_STATE_PATH}")
         return
-    STREAMS.clear()
-    for item in streams:
-        if not isinstance(item, dict) or "stream_id" not in item:
-            continue
-        protected_url = item.get("stream_url_protected")
-        if isinstance(protected_url, dict):
-            try:
-                item = {**item, "stream_url": reveal_stream_url(protected_url)}
-            except Exception as exc:
-                logger.warning("skipping stream with unreadable protected URL: %s", exception_log_summary(exc))
+    with STREAMS_LOCK:
+        STREAMS.clear()
+        for item in streams:
+            if not isinstance(item, dict) or "stream_id" not in item:
                 continue
-        try:
-            stream = StreamRecord.from_state(item)
-        except Exception as exc:
-            logger.warning("skipping invalid stream state: %s", exception_log_summary(exc))
-            continue
-        STREAMS[stream_key(stream.tenant_id, stream.stream_id)] = stream
+            protected_url = item.get("stream_url_protected")
+            if isinstance(protected_url, dict):
+                try:
+                    item = {**item, "stream_url": reveal_stream_url(protected_url)}
+                except Exception as exc:
+                    logger.warning("skipping stream with unreadable protected URL: %s", exception_log_summary(exc))
+                    continue
+            try:
+                stream = StreamRecord.from_state(item)
+            except Exception as exc:
+                logger.warning("skipping invalid stream state: %s", exception_log_summary(exc))
+                continue
+            STREAMS[stream_key(stream.tenant_id, stream.stream_id)] = stream
 
 
 def create_stream(
@@ -283,41 +297,53 @@ def create_stream(
     metadata: dict[str, Any] | None = None,
 ) -> StreamRecord:
     validate_media_stream_url(stream_url)
-    stream = StreamRecord(
-        stream_id=f"str_{uuid4().hex[:16]}",
-        tenant_id=tenant_id,
-        stream_url=stream_url,
-        name=name,
-        settings=settings or {},
-        metadata=metadata or {},
-    )
-    stream.add_event("stream_registered", "stream registered")
-    key = stream_key(stream.tenant_id, stream.stream_id)
-    STREAMS[key] = stream
-    try:
-        persist_stream(stream)
-    except Exception:
-        STREAMS.pop(key, None)
-        raise
-    return stream
+    with STREAMS_LOCK:
+        stream = StreamRecord(
+            stream_id=f"str_{uuid4().hex[:16]}",
+            tenant_id=tenant_id,
+            stream_url=stream_url,
+            name=name,
+            settings=settings or {},
+            metadata=metadata or {},
+        )
+        stream.add_event("stream_registered", "stream registered")
+        key = stream_key(stream.tenant_id, stream.stream_id)
+        STREAMS[key] = stream
+        try:
+            persist_stream(stream)
+        except Exception:
+            STREAMS.pop(key, None)
+            raise
+        return stream
 
 
 def get_stream(stream_id: str, tenant_id: str | None = None) -> StreamRecord | None:
-    if tenant_id is not None:
-        return STREAMS.get(stream_key(tenant_id, stream_id))
-    matches = [stream for stream in STREAMS.values() if stream.stream_id == stream_id]
-    return matches[0] if len(matches) == 1 else None
+    with STREAMS_LOCK:
+        if tenant_id is not None:
+            return STREAMS.get(stream_key(tenant_id, stream_id))
+        matches = [stream for stream in STREAMS.values() if stream.stream_id == stream_id]
+        return matches[0] if len(matches) == 1 else None
 
 
 def start_stream(stream: StreamRecord) -> StreamRecord:
-    previous_stream = deepcopy(stream)
-    if not ALLOW_STREAM_URLS:
-        stream.status = StreamStatus.BLOCKED
-        stream.add_event(
-            "stream_start_blocked",
-            "stream pulling is disabled by ALLOW_STREAM_URLS",
-            {"allow_stream_urls": False},
-        )
+    with STREAMS_LOCK:
+        previous_stream = deepcopy(stream)
+        if not ALLOW_STREAM_URLS:
+            stream.status = StreamStatus.BLOCKED
+            stream.add_event(
+                "stream_start_blocked",
+                "stream pulling is disabled by ALLOW_STREAM_URLS",
+                {"allow_stream_urls": False},
+            )
+            try:
+                persist_stream(stream)
+            except Exception:
+                restore_stream(stream, previous_stream)
+                STREAMS[stream_key(stream.tenant_id, stream.stream_id)] = stream
+                raise
+            return stream
+        stream.status = StreamStatus.RUNNING
+        stream.add_event("stream_started", "stream session started")
         try:
             persist_stream(stream)
         except Exception:
@@ -325,38 +351,31 @@ def start_stream(stream: StreamRecord) -> StreamRecord:
             STREAMS[stream_key(stream.tenant_id, stream.stream_id)] = stream
             raise
         return stream
-    stream.status = StreamStatus.RUNNING
-    stream.add_event("stream_started", "stream session started")
-    try:
-        persist_stream(stream)
-    except Exception:
-        restore_stream(stream, previous_stream)
-        STREAMS[stream_key(stream.tenant_id, stream.stream_id)] = stream
-        raise
-    return stream
 
 
 def stop_stream(stream: StreamRecord) -> StreamRecord:
-    previous_stream = deepcopy(stream)
-    stream.status = StreamStatus.STOPPED
-    stream.add_event("stream_stopped", "stream session stopped")
-    try:
-        persist_stream(stream)
-    except Exception:
-        restore_stream(stream, previous_stream)
-        STREAMS[stream_key(stream.tenant_id, stream.stream_id)] = stream
-        raise
-    return stream
+    with STREAMS_LOCK:
+        previous_stream = deepcopy(stream)
+        stream.status = StreamStatus.STOPPED
+        stream.add_event("stream_stopped", "stream session stopped")
+        try:
+            persist_stream(stream)
+        except Exception:
+            restore_stream(stream, previous_stream)
+            STREAMS[stream_key(stream.tenant_id, stream.stream_id)] = stream
+            raise
+        return stream
 
 
 def remove_stream(stream_id: str, tenant_id: str) -> bool:
-    key = stream_key(tenant_id, stream_id)
-    stream = STREAMS.pop(key, None)
-    if stream is None:
-        return False
-    try:
-        delete_stream_state(tenant_id, stream_id)
-    except Exception:
-        STREAMS[key] = stream
-        raise
-    return True
+    with STREAMS_LOCK:
+        key = stream_key(tenant_id, stream_id)
+        stream = STREAMS.pop(key, None)
+        if stream is None:
+            return False
+        try:
+            delete_stream_state(tenant_id, stream_id)
+        except Exception:
+            STREAMS[key] = stream
+            raise
+        return True
