@@ -20,7 +20,7 @@ async def infer_persons(
     request: Request,
     files: list[UploadFile] = File(...),
     project_name: str = Form("portrait_hub"),
-    model_name: str = Form("yolov8n.onnx"),
+    artifact_name: str = Form("yolov8n.onnx", alias="model_name"),
     confidence: float = Form(0.25),
     iou: float = Form(0.45),
     max_detections: int = Form(100),
@@ -29,7 +29,7 @@ async def infer_persons(
     observe("persons_requests_total")
     total_start = now()
 
-    project_name, model_name = validate_model_reference_parts(project_name, model_name)
+    project_name, model_name = validate_model_reference_parts(project_name, artifact_name)
 
     if not files:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="at least one image file is required")

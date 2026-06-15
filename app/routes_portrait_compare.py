@@ -284,3 +284,64 @@ async def v1_fusion_compare(
     apply_input_independence_to_decision(fusion, evidence)
     fusion["input"] = evidence
     return portrait_success(request_id, fusion)
+
+
+@router.post("/v1/compare/batch", dependencies=[Depends(permission_dependency("compare"))])
+async def v1_compare_batch(
+    request: Request,
+    image_a: list[UploadFile] = File(...),
+    image_b: list[UploadFile] = File(...),
+    modality: str = Form("body"),
+    threshold_profile: str = Form("normal"),
+    include_vectors: bool = Form(False),
+) -> dict[str, Any]:
+    request_id = request_id_from_headers(request)
+    threshold_profile = validate_threshold_profile(threshold_profile)
+    modality_key = modality.strip().lower()
+    if modality_key in {"person", "persons"}:
+        modality_key = "body"
+    if modality_key not in {"face", "body", "appearance"}:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="unsupported modality")
+    if not image_a or len(image_a) != len(image_b):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="image_a and image_b must contain the same number of files")
+    results = []
+    for index, (file_a, file_b) in enumerate(zip(image_a, image_b)):
+        decoded_a = await decode_upload_image(file_a)
+        decoded_b = await decode_upload_image(file_b)
+        if modality_key == "face":
+            subject_a_embedding, subject_a = await infer_best_face_embedding_for_image(decoded_a.image)
+            subject_b_embedding, subject_b = await infer_best_face_embedding_for_image(decoded_b.image)
+        elif modality_key == "appearance":
+            subject_a = await infer_appearance_record_for_image(decoded_a.image, include_embedding=True)
+            subject_b = await infer_appearance_record_for_image(decoded_b.image, include_embedding=True)
+            subject_a_embedding = subject_a["embedding"]
+            subject_b_embedding = subject_b["embedding"]
+        else:
+            subject_a = await infer_body_record_for_image(decoded_a.image, include_embedding=True)
+            subject_b = await infer_body_record_for_image(decoded_b.image, include_embedding=True)
+            subject_a_embedding = subject_a["embedding"]
+            subject_b_embedding = subject_b["embedding"]
+        comparison = quality_aware_compare(
+            subject_a_embedding,
+            subject_b_embedding,
+            modality=modality_key,
+            threshold_profile=threshold_profile,
+            quality_a=combined_quality(subject_a["quality"], decoded_a.frame.quality),
+            quality_b=combined_quality(subject_b["quality"], decoded_b.frame.quality),
+        )
+        comparison["subjects"] = {"a": subject_a, "b": subject_b}
+        comparison["input"] = pair_input_evidence(decoded_a, decoded_b)
+        apply_input_independence_to_decision(comparison, comparison["input"])
+        if not include_vectors:
+            comparison["subjects"]["a"].pop("embedding", None)
+            comparison["subjects"]["b"].pop("embedding", None)
+        results.append({"index": index, "modality": modality_key, "comparison": comparison})
+    return portrait_success(
+        request_id,
+        {
+            "results": results,
+            "pair_count": len(results),
+            "threshold_profile": threshold_profile,
+            "modality": modality_key,
+        },
+    )

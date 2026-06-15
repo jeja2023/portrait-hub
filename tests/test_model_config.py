@@ -54,6 +54,22 @@ def test_alias_target_uses_weighted_rollout_with_traffic_key() -> None:
 
     assert first["target"] == second["target"]
     assert first["strategy"] == "weighted"
+
+
+def test_alias_target_accepts_traffic_split_mapping() -> None:
+    config = {
+        "traffic_split": {
+            "project/model-a.onnx": 80,
+            "project/model-b.onnx": 20,
+        }
+    }
+
+    first = alias_resolution("detector_default", config, traffic_key="customer-001")
+    second = alias_resolution("detector_default", config, traffic_key="customer-001")
+
+    assert first == second
+    assert first["strategy"] == "weighted"
+    assert first["target"] in {"project/model-a.onnx", "project/model-b.onnx"}
     assert first["total_weight"] == 100
 
 

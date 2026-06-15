@@ -7,7 +7,7 @@ from app.observability import logger
 from app.portrait_compare import compare_embeddings
 from app.portrait_response import exception_log_summary
 from app.portrait_thresholds import get_threshold, validate_threshold_profile
-from app.settings import PORTRAIT_REQUIRE_PRODUCTION_VECTOR_BACKEND, PORTRAIT_VECTOR_BACKEND, QDRANT_API_KEY, QDRANT_URL
+from app.settings import PORTRAIT_REQUIRE_PRODUCTION_VECTOR_BACKEND, PORTRAIT_VECTOR_BACKEND, QDRANT_API_KEY, QDRANT_PREFER_GRPC, QDRANT_URL
 
 try:  # pragma: no cover - optional production dependency
     from qdrant_client import QdrantClient
@@ -181,12 +181,16 @@ class PgvectorVectorStore(LocalVectorStore):
 class QdrantVectorStore(LocalVectorStore):
     backend_name = "qdrant"
 
+    def __init__(self) -> None:
+        self._cached_client: Any | None = None
+
     def health(self) -> dict[str, Any]:
         return {
             "backend": self.backend_name,
             "configured": bool(QDRANT_URL),
             "api_key_configured": bool(QDRANT_API_KEY),
             "driver_available": QdrantClient is not None,
+            "prefer_grpc": QDRANT_PREFER_GRPC,
             "status": "ready" if QDRANT_URL and QdrantClient is not None else "not_ready",
         }
 
@@ -195,7 +199,9 @@ class QdrantVectorStore(LocalVectorStore):
             raise RuntimeError("qdrant-client is not installed; install requirements-prod-optional.txt")
         if not QDRANT_URL:
             raise RuntimeError("QDRANT_URL is not configured")
-        return QdrantClient(url=QDRANT_URL, api_key=QDRANT_API_KEY or None)
+        if self._cached_client is None:
+            self._cached_client = QdrantClient(url=QDRANT_URL, api_key=QDRANT_API_KEY or None, prefer_grpc=QDRANT_PREFER_GRPC)
+        return self._cached_client
 
     def _collection_for(self, modality: str) -> str:
         from app.portrait_thresholds import normalize_modality

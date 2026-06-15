@@ -20,14 +20,14 @@ async def infer_person_embeddings(
     request: Request,
     files: list[UploadFile] = File(...),
     project_name: str = Form("portrait_hub"),
-    model_name: str = Form("osnet_ibn_x1_0.onnx"),
+    artifact_name: str = Form("osnet_ibn_x1_0.onnx", alias="model_name"),
     include_vectors: bool = Form(False),
 ) -> dict[str, Any]:
     request_id = request_id_from_headers(request)
     observe("embeddings_requests_total")
     total_start = now()
 
-    project_name, model_name = validate_model_reference_parts(project_name, model_name)
+    project_name, model_name = validate_model_reference_parts(project_name, artifact_name)
 
     if not files:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="at least one image file is required")

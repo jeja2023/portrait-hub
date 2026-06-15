@@ -1,4 +1,8 @@
+import threading
+import time
 from typing import Any
+
+from app.settings import PROMETHEUS_METRICS_CACHE_SECONDS
 
 
 METRICS: dict[str, float] = {
@@ -29,6 +33,8 @@ METRICS: dict[str, float] = {
     "postprocess_seconds_sum": 0,
 }
 REQUEST_STATUS_COUNTS: dict[str, int] = {}
+METRICS_LOCK = threading.RLock()
+PROMETHEUS_CACHE: dict[str, Any] = {"expires_at": 0.0, "text": ""}
 
 HISTOGRAM_BUCKETS: dict[str, tuple[float, ...]] = {
     "inference_seconds": (0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0),
@@ -45,14 +51,18 @@ HISTOGRAMS: dict[str, dict[str, Any]] = {
 
 
 def observe(metric: str, value: float = 1) -> None:
-    METRICS[metric] = METRICS.get(metric, 0) + value
-    if metric.endswith("_seconds_sum"):
-        observe_histogram(metric[: -len("_sum")], value)
+    with METRICS_LOCK:
+        METRICS[metric] = METRICS.get(metric, 0) + value
+        PROMETHEUS_CACHE["expires_at"] = 0.0
+        if metric.endswith("_seconds_sum"):
+            observe_histogram(metric[: -len("_sum")], value)
 
 
 def observe_request_status(status_code: int) -> None:
-    status = str(int(status_code))
-    REQUEST_STATUS_COUNTS[status] = REQUEST_STATUS_COUNTS.get(status, 0) + 1
+    with METRICS_LOCK:
+        status = str(int(status_code))
+        REQUEST_STATUS_COUNTS[status] = REQUEST_STATUS_COUNTS.get(status, 0) + 1
+        PROMETHEUS_CACHE["expires_at"] = 0.0
 
 
 def observe_histogram(metric: str, value: float) -> None:
@@ -129,6 +139,17 @@ def append_histogram(lines: list[str], metric: str, help_text: str) -> None:
 
 
 def prometheus_metrics() -> str:
+    now = time.monotonic()
+    with METRICS_LOCK:
+        if PROMETHEUS_METRICS_CACHE_SECONDS > 0 and PROMETHEUS_CACHE.get("text") and now < float(PROMETHEUS_CACHE["expires_at"]):
+            return str(PROMETHEUS_CACHE["text"])
+        text = build_prometheus_metrics()
+        PROMETHEUS_CACHE["text"] = text
+        PROMETHEUS_CACHE["expires_at"] = now + max(0.0, float(PROMETHEUS_METRICS_CACHE_SECONDS))
+        return text
+
+
+def build_prometheus_metrics() -> str:
     from app.model_config import MODEL_CONFIGS
     from app.portrait_stream_worker import STREAM_WORKER_SESSIONS
     from app.runtime import GPU_DEVICE_SEMAPHORES, GPU_SEMAPHORE, MODEL_REGISTRY

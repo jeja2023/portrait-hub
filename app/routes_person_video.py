@@ -21,9 +21,9 @@ async def infer_video_person_tracks(
     request: Request,
     file: UploadFile = File(...),
     detector_project_name: str = Form("portrait_hub"),
-    detector_model_name: str = Form("yolov8n.onnx"),
+    detector_artifact_name: str = Form("yolov8n.onnx", alias="detector_model_name"),
     reid_project_name: str = Form("portrait_hub"),
-    reid_model_name: str = Form("osnet_ibn_x1_0.onnx"),
+    reid_artifact_name: str = Form("osnet_ibn_x1_0.onnx", alias="reid_model_name"),
     confidence: float = Form(0.25),
     iou: float = Form(0.45),
     max_detections: int = Form(100),
@@ -37,9 +37,9 @@ async def infer_video_person_tracks(
 
     detector_project_name, detector_model_name, reid_project_name, reid_model_name = validate_model_reference_parts(
         detector_project_name,
-        detector_model_name,
+        detector_artifact_name,
         reid_project_name,
-        reid_model_name,
+        reid_artifact_name,
     )
 
     if not 0 <= confidence <= 1:

@@ -1,0 +1,11 @@
+# Direct runtime dependency lock for reproducible base installs.
+# Regenerate with pip-compile when network access to the package index is available.
+fastapi==0.111.0
+uvicorn[standard]==0.29.0
+onnxruntime-gpu==1.20.1
+numpy==1.26.4
+opencv-python-headless==4.10.0.84
+pillow==10.3.0
+pydantic==2.7.1
+PyYAML==6.0.1
+cryptography>=42.0.0,<46.0.0

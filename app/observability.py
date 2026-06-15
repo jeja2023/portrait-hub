@@ -9,11 +9,23 @@ from typing import Any
 from fastapi import Request
 
 
-logging.basicConfig(
-    level=os.getenv("LOG_LEVEL", "INFO"),
-    format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
-)
+class JsonLogFormatter(logging.Formatter):
+    def format(self, record: logging.LogRecord) -> str:
+        payload = {
+            "level": record.levelname,
+            "logger": record.name,
+            "message": record.getMessage(),
+            "created_at": record.created,
+        }
+        if record.exc_info:
+            payload["exc_info"] = self.formatException(record.exc_info)
+        return json.dumps(payload, ensure_ascii=False, sort_keys=True)
+
+
+logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"))
 logger = logging.getLogger("gpu-worker")
+for handler in logging.getLogger().handlers:
+    handler.setFormatter(JsonLogFormatter())
 REQUEST_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
 TRACEPARENT_PATTERN = re.compile(r"^00-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$")
 

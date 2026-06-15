@@ -286,23 +286,24 @@ def merge_track_fragments(
     max_gap: int,
 ) -> dict[str, Any]:
     merges: list[dict[str, Any]] = []
-    changed = True
-    while changed:
-        changed = False
-        tracks.sort(key=lambda item: (first_frame_index(item), item.track_id))
-        for left_index, left in enumerate(list(tracks)):
-            for right in list(tracks[left_index + 1 :]):
-                merge = can_merge_track_fragments(left, right, max_gap=max_gap)
-                if merge is None:
-                    continue
-                merge_track_state(left, right)
-                rewrite_merged_track_ids(frames, merge)
-                tracks.remove(right)
-                merges.append(merge)
-                changed = True
-                break
-            if changed:
-                break
+    tracks.sort(key=lambda item: (first_frame_index(item), item.track_id))
+    consumed: set[str] = set()
+    merged_tracks: list[TrackState] = []
+    for left in tracks:
+        if left.track_id in consumed:
+            continue
+        for right in tracks:
+            if right is left or right.track_id in consumed:
+                continue
+            merge = can_merge_track_fragments(left, right, max_gap=max_gap)
+            if merge is None:
+                continue
+            merge_track_state(left, right)
+            rewrite_merged_track_ids(frames, merge)
+            consumed.add(right.track_id)
+            merges.append(merge)
+        merged_tracks.append(left)
+    tracks[:] = merged_tracks
     return {
         "enabled": True,
         "max_gap": max_gap,
@@ -387,14 +388,6 @@ def global_match(
 ) -> list[tuple[TrackState, int, dict[str, Any]]]:
     if not tracks or not detections:
         return []
-    if len(tracks) > max_exact_size or len(detections) > max_exact_size:
-        return greedy_match(
-            tracks,
-            detections,
-            frame_index,
-            min_score,
-            solver_name="greedy_score_sort_large_batch",
-        )
 
     details_by_pair: dict[tuple[int, int], dict[str, Any]] = {}
     for track_position, track in enumerate(tracks):
@@ -402,6 +395,19 @@ def global_match(
             details = association_score(track, person, frame_index)
             if details["score"] >= min_score:
                 details_by_pair[(track_position, detection_position)] = details
+    if not details_by_pair:
+        return []
+
+    if len(tracks) > max_exact_size or len(detections) > max_exact_size:
+        pairs = hungarian_assignment_pairs(details_by_pair, len(tracks), len(detections))
+        return assignment_matches(
+            tracks,
+            detections,
+            details_by_pair,
+            pairs,
+            min_score,
+            solver_strategy="hungarian_large_batch",
+        )
 
     def better(
         candidate: tuple[float, tuple[tuple[int, int], ...]],
@@ -448,14 +454,101 @@ def global_match(
         return best
 
     _, pairs = solve(0, 0)
+    return assignment_matches(
+        tracks,
+        detections,
+        details_by_pair,
+        pairs,
+        min_score,
+        solver_strategy="exact_dynamic_programming",
+    )
+
+
+def assignment_matches(
+    tracks: list[TrackState],
+    detections: list[tuple[int, dict[str, Any]]],
+    details_by_pair: dict[tuple[int, int], dict[str, Any]],
+    pairs: tuple[tuple[int, int], ...] | list[tuple[int, int]],
+    min_score: float,
+    *,
+    solver_strategy: str,
+) -> list[tuple[TrackState, int, dict[str, Any]]]:
     matches: list[tuple[TrackState, int, dict[str, Any]]] = []
     for track_position, detection_position in pairs:
+        details = details_by_pair.get((track_position, detection_position))
+        if details is None:
+            continue
         person_index, _ = detections[detection_position]
-        payload = dict(details_by_pair[(track_position, detection_position)])
+        payload = dict(details)
         payload["association_solver"] = "global_optimal_assignment"
+        payload["association_solver_strategy"] = solver_strategy
         payload["decision"] = association_decision(payload, min_score)
         matches.append((tracks[track_position], person_index, payload))
     return matches
+
+
+def hungarian_assignment_pairs(
+    details_by_pair: dict[tuple[int, int], dict[str, Any]],
+    track_count: int,
+    detection_count: int,
+) -> list[tuple[int, int]]:
+    size = max(track_count, detection_count)
+    if size == 0:
+        return []
+    max_score = max(float(details["score"]) for details in details_by_pair.values())
+    missing_cost = max_score + 1.0
+    cost = [[missing_cost for _ in range(size)] for _ in range(size)]
+    for (track_position, detection_position), details in details_by_pair.items():
+        cost[track_position][detection_position] = max_score - float(details["score"])
+
+    potentials_u = [0.0] * (size + 1)
+    potentials_v = [0.0] * (size + 1)
+    matching = [0] * (size + 1)
+    predecessor = [0] * (size + 1)
+
+    for row in range(1, size + 1):
+        matching[0] = row
+        column = 0
+        min_values = [float("inf")] * (size + 1)
+        used = [False] * (size + 1)
+        while True:
+            used[column] = True
+            current_row = matching[column]
+            delta = float("inf")
+            next_column = 0
+            for candidate_column in range(1, size + 1):
+                if used[candidate_column]:
+                    continue
+                current = cost[current_row - 1][candidate_column - 1] - potentials_u[current_row] - potentials_v[candidate_column]
+                if current < min_values[candidate_column]:
+                    min_values[candidate_column] = current
+                    predecessor[candidate_column] = column
+                if min_values[candidate_column] < delta:
+                    delta = min_values[candidate_column]
+                    next_column = candidate_column
+            for candidate_column in range(size + 1):
+                if used[candidate_column]:
+                    potentials_u[matching[candidate_column]] += delta
+                    potentials_v[candidate_column] -= delta
+                else:
+                    min_values[candidate_column] -= delta
+            column = next_column
+            if matching[column] == 0:
+                break
+        while True:
+            previous_column = predecessor[column]
+            matching[column] = matching[previous_column]
+            column = previous_column
+            if column == 0:
+                break
+
+    result: list[tuple[int, int]] = []
+    for column in range(1, size + 1):
+        row = matching[column] - 1
+        detection_position = column - 1
+        if row < track_count and detection_position < detection_count and (row, detection_position) in details_by_pair:
+            result.append((row, detection_position))
+    return sorted(result)
 
 
 def associate_person_tracks(

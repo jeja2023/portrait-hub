@@ -1037,13 +1037,13 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
         {
             "name": "security:legacy_model_reference_error_redaction",
             "ok": (
-                "validate_model_reference_parts(project_name, model_name)" in person_detection_routes
-                and "validate_model_reference_parts(project_name, model_name)" in person_embeddings_routes
+                "validate_model_reference_parts(" in person_detection_routes
+                and "validate_model_reference_parts(" in person_embeddings_routes
                 and "validate_model_reference_parts(" in person_tracks_routes
                 and "validate_model_reference_parts(" in person_video_routes
                 and "validate_model_reference_parts(" in person_stream_routes
-                and "validate_model_reference_parts(project_name, model_name)" in model_query_routes
-                and "validate_model_reference_parts(project_name, model_name)" in debug_routes
+                and "validate_model_reference_parts(" in model_query_routes
+                and "validate_model_reference_parts(" in debug_routes
                 and "detail=str(exc)" not in person_detection_routes
                 and "detail=str(exc)" not in person_embeddings_routes
                 and "detail=str(exc)" not in person_tracks_routes

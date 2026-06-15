@@ -1,4 +1,4 @@
-# GPU 推理服务
+# 影鉴GPU 推理服务
 
 面向 Ubuntu + Docker + NVIDIA GPU 的 ONNX 推理服务。服务通过 FastAPI 暴露接口，按 GPU 拆成多个 worker，适合给人像识别、人像检索、ReID 等业务项目提供共享推理能力。
 
@@ -53,6 +53,7 @@
 v1 已加入的生产加固：
 
 - 底库记录按 `X-Tenant-ID` 隔离，默认持久化到 `PORTRAIT_GALLERY_STATE_PATH`，当 `PORTRAIT_STORAGE_BACKEND=postgres` 时则写入 PostgreSQL。
+- 本地 JSON 底库默认启用 WAL 增量写入，变更先追加到 `.wal.jsonl`，再按 `PORTRAIT_GALLERY_WAL_COMPACT_EVERY` compact 成主快照，降低高频入库时的全量序列化压力。
 - 底库特征状态保留私有对象引用，因此删除人员时可以同时清理关联的本地/S3 载荷，而公开响应仍会脱敏对象 key、bucket 和 hash。
 - 人员删除会在不可逆清理开始前先写入失败关闭的 `gallery_delete_person_requested` 审计记录；对象清理失败会回滚并上报，不暴露存储位置。
 - 保留清理按租户范围执行，会删除过期的视频任务、流事件、底库人员及相关对象载荷，并在清理失败时失败关闭，同时回滚元数据。
@@ -63,7 +64,7 @@ v1 已加入的生产加固：
 - 旧版流推理现在复用同样的 SSRF 防护，并在响应元数据中隐藏凭据以及查询串/fragment 中的秘密。
 - 流状态会保护流 URL 以及敏感 `settings`/`metadata` 字段在静态存储中的安全，而公开流响应会保持这些字段脱敏。
 - `STREAM_ALLOWED_HOSTS` 可以把流 URL 限制到显式的主机/域名白名单。
-- `RBAC_ENABLED`、`JWT_SECRET`、`JWT_SECRET_ID`、`JWT_SECRET_KEYRING`、`JWT_ISSUER`、`JWT_AUDIENCE`、`JWT_REQUIRE_EXP`、`JWT_REQUIRE_ISS` 和 `JWT_REQUIRE_AUD` 用于开启可选的 HS256 JWT 角色校验，并要求过期时间、签发方、受众和滚动密钥验证。
+- `RBAC_ENABLED`、`JWT_ALGORITHM`、`JWT_SECRET`、`JWT_SECRET_ID`、`JWT_SECRET_KEYRING`、`JWT_PUBLIC_KEY`、`JWT_PUBLIC_KEY_PATH`、`JWT_PUBLIC_KEYRING`、`JWT_ISSUER`、`JWT_AUDIENCE`、`JWT_REQUIRE_EXP`、`JWT_REQUIRE_ISS` 和 `JWT_REQUIRE_AUD` 用于开启可选 JWT 角色校验；默认兼容 HS256，生产可切换 RS256/ES256 并使用公钥验签。
 - RBAC 角色采用最小权限：`viewer` 只能读底库/任务/流/模型元数据；`operator` 可以推理/比对、读取管理状态和指标；`auditor` 可以读取管理状态、导出和指标，但没有修改权限；生物特征推理/比对要求 `operator`、`algorithm` 或 `admin`；调试模型输出需要模型写权限；管理导出/保留使用独立的管理权限。
 - `AUTH_REQUIRED` 会在既没有 `API_TOKEN` 也没有 RBAC 凭证时让受保护接口失败关闭；Docker Compose 默认设为 `true`。
 - `DEBUG_ENDPOINTS_ENABLED` 控制 `/debug/model-output`，默认 `false`。
@@ -86,11 +87,11 @@ v1 已加入的生产加固：
 - `MAX_PUBLIC_METADATA_BYTES`、`MAX_PUBLIC_METADATA_DEPTH`、`MAX_PUBLIC_METADATA_KEYS` 和 `MAX_PUBLIC_METADATA_STRING_LENGTH` 限制用户可写的元数据/设置字段。
 - `MAX_AUDIT_PAYLOAD_BYTES`、`MAX_AUDIT_DEPTH`、`MAX_AUDIT_KEYS`、`MAX_AUDIT_LIST_ITEMS` 和 `MAX_AUDIT_STRING_LENGTH` 限制脱敏审计载荷的大小和复杂度。
 - `API_LIST_DEFAULT_LIMIT`、`MAX_API_LIST_LIMIT`、`STREAM_EVENT_LIST_DEFAULT_LIMIT` 和 `MAX_STREAM_EVENT_LIST_LIMIT` 限制列表/导出响应大小。
-- `/v1/admin/export` 和 `/v1/admin/retention/cleanup` 提供按租户范围的运维导出和保留清理，覆盖任务、流事件、底库记录和底库对象载荷。
+- `/v1/admin/export` 和 `/v1/admin/retention/cleanup` 提供按租户范围的运维导出和保留清理，覆盖任务、流事件、底库记录和底库对象载荷；导出支持 `updated_since` 增量过滤，`/v1/admin/backup` 可把导出快照写入本地或 S3 对象存储。
 
 生产集成产物：
 
-- `requirements-prod-optional.txt` 列出 PostgreSQL、pgvector、Qdrant、S3、JWT 和 Redis 风格队列所需的可选驱动。
+- `requirements-prod-optional.txt` 列出 PostgreSQL 连接池、pgvector、Qdrant、S3、JWT、Redis 风格队列和 OpenTelemetry 所需的可选驱动。
 - 通过设置 `INSTALL_PROD_OPTIONAL=true` 可以把这些可选驱动安装进 Docker 镜像。
 - `tools/portrait_postgres_schema.sql` 提供 PostgreSQL/pgvector 的 schema，覆盖租户、人员、特征、阈值、任务、流、对象和审计事件。
 - `tools/qdrant_collections.json` 记录人脸、人体、步态和衣着向量的 Qdrant collection 定义。
@@ -262,6 +263,11 @@ POST /infer/video/person-tracks
 POST /infer/stream/person-tracks
 POST /vision/infer
 POST /vision/batch-infer
+POST /v1/compare/batch
+POST /v1/gallery/search/batch
+POST /v1/admin/backup
+WS   /ws/jobs/{job_id}
+WS   /ws/streams/{stream_id}
 POST /debug/model-output
 POST /warmup
 POST /reload
@@ -281,6 +287,8 @@ curl -X POST http://127.0.0.1:9001/vision/infer \
 ```
 
 `/vision/infer` 和 `/vision/batch-infer` 会按照 `models.yml` 中的 `task` 自动分派到检测、分类或 ReID 后处理。`model_id` 可以是 `aliases` 中的稳定别名，也可以直接使用 `project_name/model_name.onnx`。如果不使用别名，也可以传 `project_name` 和 `model_name`。单次请求默认最多 16 张图，可通过 `MAX_VISION_IMAGES` 调整。
+
+v1 业务层也提供批量能力：`/v1/compare/batch` 支持同数量的 `image_a[]` / `image_b[]` 成对比对，`/v1/gallery/search/batch` 支持多张查询图批量检索。视频任务和流事件可分别通过 `/ws/jobs/{job_id}` 与 `/ws/streams/{stream_id}` 获得实时快照推送。
 
 多人检测接口：
 
@@ -659,7 +667,9 @@ curl -X POST http://127.0.0.1:9001/vision/infer \
 - 业务接口会额外记录 `decode_seconds`、`preprocess_seconds`、`postprocess_seconds`、`frame_count`、`person_count` 和 `inference_mode`。
 - 服务日志使用 JSON 字符串记录关键事件，包括 `http_request`、`predict_completed`、`persons_infer_completed`、`embeddings_infer_completed`、`person_tracks_infer_completed`、模型加载和模型卸载。
 - `/metrics` 受保护并需要 `metrics:read` RBAC 权限；它暴露 Prometheus 文本格式指标，包括请求量、推理失败数、模型加载数、缓存命中/未命中、已加载模型数、排队耗时总和、推理耗时总和、图片解码耗时、预处理耗时、后处理耗时、检测人数和处理帧数。
+- `/metrics` 默认使用 `PROMETHEUS_METRICS_CACHE_SECONDS` 做短缓存，降低高频采集时的文本拼接开销。
 - `/metrics` 还暴露模型维度指标，例如 `gpu_worker_model_config_info`、`gpu_worker_model_loaded_info`、`gpu_worker_model_inference_count_total`，标签包含 `model`、`task`、`version` 和 `status`。
+- 设置 `OPENTELEMETRY_ENABLED=true` 且安装 optional 依赖后，服务会自动为 FastAPI 请求生成 OpenTelemetry span，并通过 OTLP HTTP exporter 输出。
 - 别名切换、weighted rollout 和 rollback 会追加写入 `ROLLOUT_AUDIT_PATH` 指向的 JSONL 文件。Docker Compose 默认把审计文件放在宿主机 `./runtime-state/` 中，便于容器重建后继续保留。
 
 ## 业务容器接入
@@ -695,6 +705,7 @@ http://gpu-worker-1:8000/predict
 - `MODEL_CONFIG_HOST_FILE`: 宿主机模型配置文件，默认 `./models.yml`，Compose 会可写挂载到容器内。
 - `MODEL_CONFIG_PATH`: 容器内模型配置文件路径，默认 `/workspace/models.yml`；本地直接运行默认读取当前目录 `models.yml`。
 - `MODEL_CONFIG_READ_FAIL_CLOSED`: 模型配置文件缺失、损坏或根节点格式错误时是否启动/重载失败，默认 `true`。
+- `CONFIG_HOT_RELOAD_ENABLED`: 是否启用 `models.yml` / `model-capabilities.yml` 轻量 mtime 热重载，默认 `true`。
 - `LOG_LEVEL`: 日志级别，默认 `INFO`。
 - `MAX_TENSOR_ITEMS`: 单次请求最大 tensor 元素数，默认 `12582912`。
 - `MAX_LOADED_MODELS`: 单 worker 最大缓存模型数，默认 `0` 表示不限制；正整数启用 LRU 淘汰。
@@ -724,6 +735,7 @@ http://gpu-worker-1:8000/predict
 - `AUDIT_WRITE_FAIL_CLOSED`: 审计事件写入失败时是否让管理操作失败，默认 `true`。
 - `STATE_READ_FAIL_CLOSED`: 已存在的本地 JSON 状态文件读取失败或根结构错误时是否启动/重载失败，默认 `true`。
 - `STATE_WRITE_FAIL_CLOSED`: 本地 JSON 状态写入失败时是否让请求失败，默认 `true`。
+- `PORTRAIT_GALLERY_WAL_ENABLED` / `PORTRAIT_GALLERY_WAL_COMPACT_EVERY`: 控制本地 JSON 底库增量 WAL 和 compact 阈值。
 - `REQUIRE_ENCRYPTION`: 缺少 `ENCRYPTION_KEY` 时是否拒绝写入敏感 payload；Compose 默认 `true`，本地直接运行默认 `false`。
 - `AUTH_REQUIRED`: 是否要求受保护接口必须存在可用鉴权后端；Compose 默认 `true`，本地直接运行默认 `false`。
 - `DEBUG_ENDPOINTS_ENABLED`: 是否启用 `/debug/model-output`；默认 `false`。
@@ -733,13 +745,20 @@ http://gpu-worker-1:8000/predict
 - `SECURITY_HEADERS_ENABLED` / `CONTENT_SECURITY_POLICY`: 是否启用安全响应头以及默认 CSP；Compose 默认启用。
 - `HSTS_ENABLED` / `HSTS_MAX_AGE_SECONDS` / `HSTS_INCLUDE_SUBDOMAINS` / `HSTS_PRELOAD`: HTTPS 部署的 HSTS 响应头配置；Compose 默认启用，本地直接运行默认关闭。
 - `JWT_AUDIENCE`: RBAC JWT 的目标受众，默认 `portrait-hub-api`。
+- `JWT_ALGORITHM`: JWT 验签算法，默认 `HS256`，可配置 `RS256`/`ES256` 等非对称算法。
 - `JWT_SECRET_ID` / `JWT_SECRET_KEYRING`: 当前 HS256 JWT secret 的 `kid` 以及旧 secret keyring，格式为 `kid=secret`，用于平滑轮换 JWT 签名密钥。
+- `JWT_PUBLIC_KEY` / `JWT_PUBLIC_KEY_PATH` / `JWT_PUBLIC_KEYRING`: RS/ES JWT 的公钥或公钥环配置。
 - `JWT_REQUIRE_TENANT`: RBAC JWT 是否必须通过 `tenant_id`、`tenant` 或 `tenants` claim 绑定请求租户；默认 `true`。
 - `JWT_REQUIRE_EXP` / `JWT_REQUIRE_ISS` / `JWT_REQUIRE_AUD`: RBAC JWT 是否必须携带过期时间、签发方和受众；默认 `true`。
 - `API_TOKEN`: 简单接口令牌；设置后业务接口、调试接口、模型管理接口和深度 ready 需要携带令牌。若 `AUTH_REQUIRED=true`，生产/容器启动前应设置 `API_TOKEN` 或启用可用 RBAC。
 - `MAX_PUBLIC_METADATA_BYTES` / `MAX_PUBLIC_METADATA_DEPTH` / `MAX_PUBLIC_METADATA_KEYS` / `MAX_PUBLIC_METADATA_STRING_LENGTH`: 用户可写 metadata/settings 的大小和复杂度限制。
 - `MAX_AUDIT_PAYLOAD_BYTES` / `MAX_AUDIT_DEPTH` / `MAX_AUDIT_KEYS` / `MAX_AUDIT_LIST_ITEMS` / `MAX_AUDIT_STRING_LENGTH`: 脱敏审计 payload 的大小和复杂度限制。
 - `API_LIST_DEFAULT_LIMIT` / `MAX_API_LIST_LIMIT` / `STREAM_EVENT_LIST_DEFAULT_LIMIT` / `MAX_STREAM_EVENT_LIST_LIMIT`: 列表、导出和流事件响应的分页大小限制。
+- `POSTGRES_POOL_MIN_SIZE` / `POSTGRES_POOL_MAX_SIZE`: PostgreSQL 连接池大小。
+- `QDRANT_PREFER_GRPC`: Qdrant 客户端是否优先使用 gRPC，并复用单例客户端。
+- `PROMETHEUS_METRICS_CACHE_SECONDS`: Prometheus 指标文本缓存秒数。
+- `READY_CHECK_DEPENDENCIES`: `/ready` 是否检查 Postgres、向量库、对象存储、任务队列和磁盘空间。
+- `OPENTELEMETRY_ENABLED` / `OTEL_SERVICE_NAME`: OpenTelemetry 自动埋点开关和服务名。
 - `NVIDIA_VISIBLE_DEVICES`: 当前 worker 可见 GPU。
 - `NVIDIA_DRIVER_CAPABILITIES`: 默认 `compute,utility`。
 

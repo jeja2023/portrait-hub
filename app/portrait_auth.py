@@ -11,7 +11,11 @@ from fastapi import Header, HTTPException, status
 
 from app.settings import (
     JWT_AUDIENCE,
+    JWT_ALGORITHM,
     JWT_ISSUER,
+    JWT_PUBLIC_KEY,
+    JWT_PUBLIC_KEY_PATH,
+    JWT_PUBLIC_KEYRING,
     JWT_REQUIRE_AUD,
     JWT_REQUIRE_EXP,
     JWT_REQUIRE_ISS,
@@ -21,6 +25,11 @@ from app.settings import (
     JWT_SECRET_KEYRING,
     RBAC_ENABLED,
 )
+
+try:  # pragma: no cover - optional production dependency
+    import jwt as pyjwt  # type: ignore[import-not-found]
+except Exception:  # pragma: no cover - exercised when dependency is absent
+    pyjwt = None
 
 
 ROLE_PERMISSIONS = {
@@ -33,6 +42,7 @@ ROLE_PERMISSIONS = {
 DEFAULT_JWT_SECRET_ID = "primary"
 MAX_JWT_SECRET_ID_LENGTH = 64
 JWT_SECRET_ID_CHARS = frozenset("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-")
+SUPPORTED_ASYMMETRIC_JWT_ALGORITHMS = {"RS256", "RS384", "RS512", "ES256", "ES384", "ES512"}
 
 
 def unauthorized(detail: str) -> HTTPException:
@@ -100,6 +110,62 @@ def jwt_secret_materials() -> dict[str, str]:
     return materials
 
 
+def parse_jwt_public_keyring() -> dict[str, str]:
+    keyring: dict[str, str] = {}
+    raw = str(JWT_PUBLIC_KEYRING or "").strip()
+    if not raw:
+        return keyring
+    try:
+        parsed = json.loads(raw)
+        if isinstance(parsed, dict):
+            for raw_key_id, raw_key in parsed.items():
+                key_id = normalize_jwt_secret_id(raw_key_id)
+                if not isinstance(raw_key, str) or not raw_key.strip():
+                    raise unauthorized("JWT public keyring is invalid")
+                keyring[key_id] = raw_key
+            return keyring
+    except HTTPException:
+        raise
+    except Exception:
+        pass
+    for raw_entry in raw.split(","):
+        entry = raw_entry.strip()
+        if not entry:
+            continue
+        if "=" not in entry:
+            raise unauthorized("JWT public keyring is invalid")
+        raw_key_id, raw_key = entry.split("=", 1)
+        keyring[normalize_jwt_secret_id(raw_key_id)] = raw_key.strip().replace("\\n", "\n")
+    return keyring
+
+
+def configured_jwt_public_key() -> str:
+    if JWT_PUBLIC_KEY:
+        return JWT_PUBLIC_KEY.replace("\\n", "\n")
+    if JWT_PUBLIC_KEY_PATH:
+        try:
+            with open(JWT_PUBLIC_KEY_PATH, "r", encoding="utf-8") as file:
+                return file.read()
+        except Exception as exc:
+            raise unauthorized("JWT public key is unavailable") from exc
+    raise unauthorized("JWT public key is not configured")
+
+
+def candidate_jwt_public_keys(header: dict[str, Any]) -> list[tuple[str, str]]:
+    keyring = parse_jwt_public_keyring()
+    raw_kid = header.get("kid")
+    if raw_kid is None:
+        if keyring:
+            return list(keyring.items())
+        return [(DEFAULT_JWT_SECRET_ID, configured_jwt_public_key())]
+    key_id = normalize_jwt_secret_id(raw_kid)
+    if key_id in keyring:
+        return [(key_id, keyring[key_id])]
+    if key_id == current_jwt_secret_id():
+        return [(key_id, configured_jwt_public_key())]
+    raise unauthorized("invalid JWT signature")
+
+
 def candidate_jwt_secrets(header: dict[str, Any]) -> list[tuple[str, str]]:
     materials = jwt_secret_materials()
     if not materials:
@@ -164,7 +230,15 @@ def verify_hs256_jwt(token: str) -> dict[str, Any]:
         raise
     except Exception as exc:
         raise unauthorized("invalid JWT header") from exc
-    if not isinstance(header, dict) or header.get("alg") != "HS256":
+    configured_algorithm = JWT_ALGORITHM or "HS256"
+    if not isinstance(header, dict):
+        raise unauthorized("invalid JWT header")
+    token_algorithm = str(header.get("alg") or "")
+    if token_algorithm != configured_algorithm:
+        raise unauthorized("unsupported JWT algorithm")
+    if configured_algorithm in SUPPORTED_ASYMMETRIC_JWT_ALGORITHMS:
+        return verify_pyjwt_token(token, header, configured_algorithm)
+    if configured_algorithm != "HS256":
         raise unauthorized("unsupported JWT algorithm")
     signing_input = ".".join(parts[:2]).encode("ascii")
     actual = base64url_decode(parts[2])
@@ -210,6 +284,46 @@ def verify_hs256_jwt(token: str) -> dict[str, Any]:
     except (TypeError, ValueError) as exc:
         raise unauthorized("invalid JWT time claim") from exc
     return payload
+
+
+def verify_pyjwt_token(token: str, header: dict[str, Any], algorithm: str) -> dict[str, Any]:
+    if pyjwt is None:
+        raise unauthorized("PyJWT is not installed")
+    options = {
+        "require": [
+            claim
+            for claim, required in [
+                ("exp", JWT_REQUIRE_EXP),
+                ("iss", JWT_REQUIRE_ISS),
+                ("aud", JWT_REQUIRE_AUD),
+            ]
+            if required
+        ],
+        "verify_exp": True,
+        "verify_nbf": True,
+        "verify_iat": True,
+        "verify_iss": JWT_REQUIRE_ISS,
+        "verify_aud": JWT_REQUIRE_AUD,
+    }
+    last_error: Exception | None = None
+    for _, public_key in candidate_jwt_public_keys(header):
+        try:
+            payload = pyjwt.decode(
+                token,
+                public_key,
+                algorithms=[algorithm],
+                audience=JWT_AUDIENCE if JWT_REQUIRE_AUD else None,
+                issuer=JWT_ISSUER if JWT_REQUIRE_ISS else None,
+                options=options,
+            )
+            if not isinstance(payload, dict):
+                raise unauthorized("invalid JWT payload")
+            return payload
+        except HTTPException:
+            raise
+        except Exception as exc:
+            last_error = exc
+    raise unauthorized("invalid JWT signature") from last_error
 
 
 def roles_from_claims(claims: dict[str, Any]) -> set[str]:

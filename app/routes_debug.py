@@ -32,14 +32,14 @@ async def debug_model_output(
     request: Request,
     file: UploadFile = File(...),
     project_name: str = Form(...),
-    model_name: str = Form(...),
-    model_type: str = Form("yolo"),
+    artifact_name: str = Form(..., alias="model_name"),
+    debug_model_type: str = Form("yolo", alias="model_type"),
     sample_values: int = Form(12),
 ) -> dict[str, Any]:
     request_id = request_id_from_headers(request)
     total_start = now()
 
-    project_name, model_name = validate_model_reference_parts(project_name, model_name)
+    project_name, model_name = validate_model_reference_parts(project_name, artifact_name)
     if sample_values < 0 or sample_values > 100:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="sample_values must be between 0 and 100")
 
@@ -50,7 +50,7 @@ async def debug_model_output(
         session = bundle["session"]
 
         preprocess_start = now()
-        if model_type == "reid":
+        if debug_model_type == "reid":
             config = model_config(key, default_type="reid")
             input_height, input_width = configured_input_size(key, session, default=(256, 128))
             tensor = await asyncio.to_thread(
@@ -87,7 +87,7 @@ async def debug_model_output(
             "debug_model_output_completed",
             request_id=request_id,
             model=key,
-            model_type=model_type,
+            model_type=debug_model_type,
             input_shape=list(input_array.shape),
             output_shapes=[item["shape"] for item in outputs],
             total_seconds=round(total_seconds, 6),
@@ -102,7 +102,7 @@ async def debug_model_output(
         "status": "success",
         "request_id": request_id,
         "model": key,
-        "model_type": model_type,
+        "model_type": debug_model_type,
         "cold_loaded": cold_loaded,
         "timing": {
             "decode_seconds": decode_seconds,

@@ -1,9 +1,19 @@
 from collections.abc import Iterator
 from pathlib import Path
 import shutil
+import warnings
 from uuid import uuid4
 
 import pytest
+
+
+with warnings.catch_warnings():
+    warnings.filterwarnings(
+        "ignore",
+        message=r"Please use `import python_multipart` instead\.",
+        category=PendingDeprecationWarning,
+    )
+    import starlette.formparsers  # noqa: F401
 
 
 @pytest.fixture

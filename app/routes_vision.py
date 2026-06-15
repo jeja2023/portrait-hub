@@ -20,9 +20,9 @@ router = APIRouter()
 async def vision_infer(
     request: Request,
     files: list[UploadFile] = File(...),
-    model_id: str | None = Form(None),
+    requested_model_id: str | None = Form(None, alias="model_id"),
     project_name: str | None = Form(None),
-    model_name: str | None = Form(None),
+    requested_model_name: str | None = Form(None, alias="model_name"),
     task: str | None = Form(None),
     confidence: float | None = Form(None),
     iou: float | None = Form(None),
@@ -53,7 +53,12 @@ async def vision_infer(
 
     try:
         rollout_key = traffic_key or request_id
-        project, model, key, alias_name = resolve_model_reference(model_id, project_name, model_name, traffic_key=rollout_key)
+        project, model, key, alias_name = resolve_model_reference(
+            requested_model_id,
+            project_name,
+            requested_model_name,
+            traffic_key=rollout_key,
+        )
         config = model_config(key)
         task_name = model_task({"task": task} if task else config)
         model_path = get_model_path(project, model)
@@ -145,7 +150,7 @@ async def vision_infer(
         "status": "success",
         "request_id": request_id,
         "model": {
-            "id": alias_name or model_id or key,
+            "id": alias_name or requested_model_id or key,
             "alias": alias_name,
             "traffic_key": rollout_key if alias_name else None,
             "project_name": project,

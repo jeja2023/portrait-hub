@@ -11,6 +11,11 @@ def rollout_candidates(alias_config: dict[str, Any]) -> list[dict[str, Any]]:
     rollout = alias_config.get("rollout")
     if isinstance(rollout, dict):
         rollout = rollout.get("targets") or rollout.get("candidates")
+    if not isinstance(rollout, list) and isinstance(alias_config.get("traffic_split"), dict):
+        rollout = [
+            {"target": target, "weight": weight}
+            for target, weight in alias_config["traffic_split"].items()
+        ]
     if not isinstance(rollout, list):
         return []
 

@@ -349,6 +349,73 @@ async def v1_gallery_search(
     )
 
 
+@router.post("/v1/gallery/search/batch", dependencies=[Depends(permission_dependency("gallery:read"))])
+async def v1_gallery_search_batch(
+    files: list[UploadFile] = File(...),
+    modality: str = Form("body"),
+    top_k: int = Form(5),
+    threshold_profile: str = Form("normal"),
+    ctx: PortraitRequestContext = Depends(portrait_request_context),
+) -> dict[str, Any]:
+    request_id = ctx.request_id
+    tenant_id = ctx.tenant_id
+    top_k = validate_int_range("top_k", top_k, minimum=1, maximum=100)
+    threshold_profile = validate_threshold_profile(threshold_profile)
+    modality = validate_gallery_modality(modality)
+    if not files:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="at least one image file is required")
+    if len(files) > MAX_EMBEDDING_IMAGES:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=f"too many image files: {len(files)}, max {MAX_EMBEDDING_IMAGES}",
+        )
+    results = []
+    for index, file in enumerate(files):
+        decoded = await decode_upload_image(file)
+        embedding, quality_score, _, _ = await extract_gallery_embedding(decoded.image, modality)
+        combined_quality_score = combined_query_quality(decoded.frame.quality, float(quality_score))
+        candidates = await run_blocking_io(
+            search_gallery,
+            embedding,
+            modality=modality,
+            threshold_profile=threshold_profile,
+            top_k=top_k,
+            tenant_id=tenant_id,
+            query_quality=combined_quality_score,
+        )
+        results.append(
+            {
+                "index": index,
+                "candidate_count": len(candidates),
+                "candidates": candidates,
+                "query": {
+                    "modality": modality,
+                    "quality_score": round(float(quality_score), 6),
+                    "combined_quality_score": combined_quality_score,
+                    "threshold_profile": threshold_profile,
+                    "top_k": top_k,
+                },
+            }
+        )
+    await run_blocking_io(
+        audit_event,
+        "gallery_search_batch",
+        request_id=request_id,
+        tenant_id=tenant_id,
+        modality=modality,
+        query_count=len(results),
+        candidate_count=sum(item["candidate_count"] for item in results),
+    )
+    return portrait_success(
+        request_id,
+        {
+            "results": results,
+            "query_count": len(results),
+            "store_backend": store_backend_name(),
+        },
+    )
+
+
 @router.post("/v1/gallery/reindex", dependencies=[Depends(permission_dependency("gallery:write"))])
 async def v1_gallery_reindex(
     modality: str | None = Query(None),

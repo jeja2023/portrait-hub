@@ -1,0 +1,18 @@
+[project]
+name = "portrait-hub"
+version = "0.5.28"
+requires-python = ">=3.11"
+description = "PortraitHub GPU inference and portrait intelligence service"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-p no:cacheprovider"
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+
+[tool.mypy]
+python_version = "3.12"
+warn_unused_configs = true
+ignore_missing_imports = true
+strict = true

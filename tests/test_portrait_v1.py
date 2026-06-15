@@ -1438,7 +1438,6 @@ def test_security_headers_and_admin_export_contract() -> None:
         export = client.get("/v1/admin/export")
         assert export.status_code == 200
         assert "people" in export.json()["data"]
-
         cleanup = client.post("/v1/admin/retention/cleanup", json={"retention_days": 0})
         assert cleanup.status_code == 200
         assert "removed_jobs" in cleanup.json()["data"]
@@ -1446,6 +1445,20 @@ def test_security_headers_and_admin_export_contract() -> None:
     finally:
         GALLERY.clear()
         GALLERY.update(gallery_snapshot)
+
+
+def test_admin_backup_writes_redacted_object(monkeypatch, workspace_tmp_path) -> None:
+    from app import portrait_object_storage
+
+    monkeypatch.setattr(portrait_object_storage, "OBJECT_STORAGE_DIR", workspace_tmp_path / "objects")
+    client = TestClient(app)
+
+    response = client.post("/v1/admin/backup", json={"confirm": "backup"})
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["backup"]["stored"] is True
+    assert data["bytes"] > 0
 
 
 def test_hsts_header_is_explicitly_gated_for_https_deployments(monkeypatch) -> None:

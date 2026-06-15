@@ -20,7 +20,7 @@ from app.portrait_gallery import (
 )
 from app.portrait_jobs import VIDEO_JOBS, VideoJob, job_key, persist_video_job, remove_video_job
 from app.portrait_model_capabilities import MODEL_CAPABILITIES
-from app.portrait_object_storage import OBJECT_STORE
+from app.portrait_object_storage import OBJECT_STORE, public_object_info
 from app.portrait_pagination import normalize_list_pagination, normalize_stream_event_pagination, page_items_keyset
 from app.portrait_request_context import PortraitRequestContext, portrait_request_context
 from app.portrait_response import OBJECT_CLEANUP_FAILED, exception_log_summary, portrait_success, raise_rollback_failure
@@ -63,6 +63,13 @@ class RetentionCleanupRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     retention_days: int = Field(..., ge=0, le=3650)
+    confirm: str | None = Field(default=None)
+
+
+class AdminBackupRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    updated_since: float | None = Field(default=None, ge=0)
     confirm: str | None = Field(default=None)
 
 
@@ -270,6 +277,7 @@ async def v1_admin_export(
     stream_events_limit: int | None = Query(None),
     stream_events_offset: int | None = Query(None),
     stream_events_cursor: str | None = Query(None),
+    updated_since: float | None = Query(None, ge=0),
     ctx: PortraitRequestContext = Depends(portrait_request_context),
 ) -> dict[str, Any]:
     request_id = ctx.request_id
@@ -279,22 +287,37 @@ async def v1_admin_export(
     streams_request = normalize_list_pagination(streams_limit, streams_offset, streams_cursor)
     events_request = normalize_stream_event_pagination(stream_events_limit, stream_events_offset, stream_events_cursor)
 
+    all_people = [
+        item
+        for item in list_gallery_people(tenant_id=tenant_id)
+        if updated_since is None or float(item.get("updated_at") or item.get("created_at") or 0.0) >= updated_since
+    ]
+    all_jobs = [
+        job
+        for job in VIDEO_JOBS.values()
+        if job.tenant_id == tenant_id and (updated_since is None or float(job.updated_at or job.created_at) >= updated_since)
+    ]
+    all_streams = [
+        stream
+        for stream in STREAMS.values()
+        if stream.tenant_id == tenant_id and (updated_since is None or float(stream.updated_at or stream.created_at) >= updated_since)
+    ]
     people, people_page = page_items_keyset(
-        sorted(list_gallery_people(tenant_id=tenant_id), key=lambda item: item["person_id"]),
+        sorted(all_people, key=lambda item: item["person_id"]),
         limit=people_request.limit,
         offset=people_request.offset,
         cursor=people_request.cursor,
         key_fields=["person_id"],
     )
     jobs, jobs_page = page_items_keyset(
-        sorted((job for job in VIDEO_JOBS.values() if job.tenant_id == tenant_id), key=lambda item: item.job_id),
+        sorted(all_jobs, key=lambda item: item.job_id),
         limit=jobs_request.limit,
         offset=jobs_request.offset,
         cursor=jobs_request.cursor,
         key_fields=["job_id"],
     )
     streams, streams_page = page_items_keyset(
-        sorted((stream for stream in STREAMS.values() if stream.tenant_id == tenant_id), key=lambda item: item.stream_id),
+        sorted(all_streams, key=lambda item: item.stream_id),
         limit=streams_request.limit,
         offset=streams_request.offset,
         cursor=streams_request.cursor,
@@ -318,6 +341,8 @@ async def v1_admin_export(
 
     export_payload = {
         "tenant_id": tenant_id,
+        "export_mode": "incremental" if updated_since is not None else "full",
+        "updated_since": updated_since,
         "people": people,
         "thresholds": threshold_snapshot(),
         "model_capabilities": MODEL_CAPABILITIES,
@@ -352,10 +377,65 @@ async def v1_admin_export(
         stream_events_limit=events_request.limit,
         stream_events_offset=events_request.offset,
         stream_events_cursor=events_request.cursor,
+        updated_since=updated_since,
     )
     return portrait_success(
         request_id,
         redact_sensitive_fields(export_payload),
+    )
+
+
+@router.post("/v1/admin/backup", dependencies=[Depends(permission_dependency("admin:export"))])
+async def v1_admin_backup(
+    payload: AdminBackupRequest,
+    ctx: PortraitRequestContext = Depends(portrait_request_context),
+) -> dict[str, Any]:
+    request_id = ctx.request_id
+    tenant_id = ctx.tenant_id
+    if payload.confirm is not None and payload.confirm != "backup":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='enter "backup" in confirm to run backup')
+    export_response = await v1_admin_export(
+        people_limit=None,
+        people_offset=None,
+        people_cursor=None,
+        jobs_limit=None,
+        jobs_offset=None,
+        jobs_cursor=None,
+        streams_limit=None,
+        streams_offset=None,
+        streams_cursor=None,
+        stream_events_limit=None,
+        stream_events_offset=None,
+        stream_events_cursor=None,
+        updated_since=payload.updated_since,
+        ctx=ctx,
+    )
+    data = export_response["data"]
+    body = __import__("json").dumps(data, ensure_ascii=False, sort_keys=True).encode("utf-8")
+    object_info = await run_blocking_io(
+        OBJECT_STORE.put_bytes,
+        tenant_id,
+        "admin-backup",
+        f"portrait-backup-{request_id}.json",
+        body,
+    )
+    await run_blocking_io(
+        audit_event,
+        "admin_backup",
+        request_id=request_id,
+        tenant_id=tenant_id,
+        updated_since=payload.updated_since,
+        object_backend=object_info.get("backend"),
+        bytes=len(body),
+    )
+    return portrait_success(
+        request_id,
+        {
+            "backup": public_object_info(object_info),
+            "bytes": len(body),
+            "export_mode": data.get("export_mode"),
+            "updated_since": payload.updated_since,
+        },
     )
 
 

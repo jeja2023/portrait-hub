@@ -1,5 +1,6 @@
 import asyncio
 import hashlib
+import threading
 from copy import deepcopy
 from dataclasses import dataclass, field
 from enum import StrEnum
@@ -156,6 +157,7 @@ JobKey = tuple[str, str]
 
 
 VIDEO_JOBS: dict[JobKey, VideoJob] = {}
+VIDEO_JOBS_LOCK = threading.RLock()
 
 
 def job_key(tenant_id: str, job_id: str) -> JobKey:
@@ -167,10 +169,11 @@ def postgres_jobs_enabled() -> bool:
 
 
 def video_jobs_state_payload() -> dict[str, Any]:
-    return {
-        "version": 1,
-        "jobs": [job.state_dict() for job in sorted(VIDEO_JOBS.values(), key=lambda item: (item.tenant_id, item.job_id))],
-    }
+    with VIDEO_JOBS_LOCK:
+        return {
+            "version": 1,
+            "jobs": [job.state_dict() for job in sorted(VIDEO_JOBS.values(), key=lambda item: (item.tenant_id, item.job_id))],
+        }
 
 
 def save_video_jobs_state() -> None:
@@ -225,67 +228,72 @@ def load_video_jobs_state() -> None:
     if not isinstance(jobs, list):
         handle_state_read_error(f"video jobs state jobs must be a list: {PORTRAIT_JOBS_STATE_PATH}")
         return
-    VIDEO_JOBS.clear()
-    for item in jobs:
-        if not isinstance(item, dict) or "job_id" not in item:
-            continue
-        try:
-            job = VideoJob.from_state(item)
-        except Exception as exc:
-            logger.warning("skipping invalid video job state: %s", exception_log_summary(exc))
-            continue
-        VIDEO_JOBS[job_key(job.tenant_id, job.job_id)] = job
+    with VIDEO_JOBS_LOCK:
+        VIDEO_JOBS.clear()
+        for item in jobs:
+            if not isinstance(item, dict) or "job_id" not in item:
+                continue
+            try:
+                job = VideoJob.from_state(item)
+            except Exception as exc:
+                logger.warning("skipping invalid video job state: %s", exception_log_summary(exc))
+                continue
+            VIDEO_JOBS[job_key(job.tenant_id, job.job_id)] = job
 
 
 def create_video_job(filename: str | None, tenant_id: str = "default") -> VideoJob:
-    job = VideoJob(job_id=f"job_{uuid4().hex[:16]}", tenant_id=tenant_id, filename=filename)
-    key = job_key(job.tenant_id, job.job_id)
-    VIDEO_JOBS[key] = job
-    try:
-        persist_video_job(job)
-    except Exception:
-        VIDEO_JOBS.pop(key, None)
-        raise
-    return job
+    with VIDEO_JOBS_LOCK:
+        job = VideoJob(job_id=f"job_{uuid4().hex[:16]}", tenant_id=tenant_id, filename=filename)
+        key = job_key(job.tenant_id, job.job_id)
+        VIDEO_JOBS[key] = job
+        try:
+            persist_video_job(job)
+        except Exception:
+            VIDEO_JOBS.pop(key, None)
+            raise
+        return job
 
 
 def get_video_job(job_id: str, tenant_id: str | None = None) -> VideoJob | None:
-    if tenant_id is not None:
-        return VIDEO_JOBS.get(job_key(tenant_id, job_id))
-    matches = [job for job in VIDEO_JOBS.values() if job.job_id == job_id]
-    return matches[0] if len(matches) == 1 else None
+    with VIDEO_JOBS_LOCK:
+        if tenant_id is not None:
+            return VIDEO_JOBS.get(job_key(tenant_id, job_id))
+        matches = [job for job in VIDEO_JOBS.values() if job.job_id == job_id]
+        return matches[0] if len(matches) == 1 else None
 
 
 def request_cancel_video_job(job_id: str, tenant_id: str | None = None) -> bool:
-    job = get_video_job(job_id, tenant_id=tenant_id)
-    if job is None:
-        return False
-    if normalize_job_status(job.status) in TERMINAL_JOB_STATUSES:
+    with VIDEO_JOBS_LOCK:
+        job = get_video_job(job_id, tenant_id=tenant_id)
+        if job is None:
+            return False
+        if normalize_job_status(job.status) in TERMINAL_JOB_STATUSES:
+            return True
+        previous_job = deepcopy(job)
+        job.cancel_requested = True
+        job.status = JobStatus.CANCELLED
+        job.updated_at = wall_time()
+        try:
+            persist_video_job(job)
+        except Exception:
+            restore_video_job(job, previous_job)
+            VIDEO_JOBS[job_key(job.tenant_id, job.job_id)] = job
+            raise
         return True
-    previous_job = deepcopy(job)
-    job.cancel_requested = True
-    job.status = JobStatus.CANCELLED
-    job.updated_at = wall_time()
-    try:
-        persist_video_job(job)
-    except Exception:
-        restore_video_job(job, previous_job)
-        VIDEO_JOBS[job_key(job.tenant_id, job.job_id)] = job
-        raise
-    return True
 
 
 def remove_video_job(job_id: str, tenant_id: str) -> bool:
-    key = job_key(tenant_id, job_id)
-    job = VIDEO_JOBS.pop(key, None)
-    if job is None:
-        return False
-    try:
-        delete_video_job(tenant_id, job_id)
-    except Exception:
-        VIDEO_JOBS[key] = job
-        raise
-    return True
+    with VIDEO_JOBS_LOCK:
+        key = job_key(tenant_id, job_id)
+        job = VIDEO_JOBS.pop(key, None)
+        if job is None:
+            return False
+        try:
+            delete_video_job(tenant_id, job_id)
+        except Exception:
+            VIDEO_JOBS[key] = job
+            raise
+        return True
 
 
 async def run_video_job(

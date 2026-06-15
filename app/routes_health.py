@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import shutil
 from typing import Any
 
 import numpy as np
@@ -9,7 +10,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Reques
 from app.core import *
 from app.portrait_auth import permission_dependency
 from app.portrait_response import MODEL_READINESS_CHECK_FAILED, exception_log_summary
-from app.settings import APP_VERSION
+from app.settings import APP_VERSION, OBJECT_STORAGE_DIR, READY_CHECK_DEPENDENCIES, RUNTIME_STATE_DIR
 
 
 router = APIRouter()
@@ -36,7 +37,46 @@ async def ready() -> dict[str, Any]:
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail={"status": "not_ready"},
         )
-    return {"status": "ready"}
+    if not READY_CHECK_DEPENDENCIES:
+        return {"status": "ready"}
+    checks = readiness_dependency_checks()
+    if any(item.get("status") == "error" for item in checks.values()):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"status": "not_ready", "checks": checks},
+        )
+    return {"status": "ready", "checks": checks}
+
+
+def disk_health(path: Any) -> dict[str, Any]:
+    try:
+        target = path
+        target.mkdir(parents=True, exist_ok=True)
+        usage = shutil.disk_usage(target)
+        return {
+            "status": "ready",
+            "free_bytes": int(usage.free),
+            "total_bytes": int(usage.total),
+        }
+    except Exception as exc:
+        logger.warning("disk health check failed: %s", exception_log_summary(exc))
+        return {"status": "error", "error": MODEL_READINESS_CHECK_FAILED}
+
+
+def readiness_dependency_checks() -> dict[str, Any]:
+    from app.portrait_object_storage import OBJECT_STORE
+    from app.portrait_postgres import postgres_health
+    from app.portrait_task_queue import TASK_QUEUE
+    from app.portrait_vector_store import VECTOR_STORE
+
+    return {
+        "postgres": postgres_health(),
+        "vector_store": VECTOR_STORE.health(),
+        "object_storage": OBJECT_STORE.health(),
+        "task_queue": TASK_QUEUE.health(),
+        "runtime_state_disk": disk_health(RUNTIME_STATE_DIR),
+        "object_storage_disk": disk_health(OBJECT_STORAGE_DIR),
+    }
 
 
 @router.get("/ready/deep", dependencies=[Depends(require_api_token), Depends(permission_dependency("models:read"))])

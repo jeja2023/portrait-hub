@@ -1,10 +1,44 @@
-FROM nvidia/cuda:12.4.1-cudnn-runtime-ubuntu22.04
+FROM nvidia/cuda:12.4.1-cudnn-runtime-ubuntu22.04 AS builder
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
+    TZ=Asia/Shanghai
+
+RUN sed -i \
+        -e 's#http://archive.ubuntu.com/ubuntu/#https://mirrors.tuna.tsinghua.edu.cn/ubuntu/#g' \
+        -e 's#http://security.ubuntu.com/ubuntu/#https://mirrors.tuna.tsinghua.edu.cn/ubuntu/#g' \
+        /etc/apt/sources.list \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends \
+        ca-certificates \
+        software-properties-common \
+        tzdata \
+    && add-apt-repository -y ppa:deadsnakes/ppa \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends \
+        python3.12 \
+        python3.12-venv \
+    && python3.12 -m venv /opt/portrait-hub-venv \
+    && /opt/portrait-hub-venv/bin/python -m pip install --no-cache-dir --upgrade pip setuptools wheel \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt /tmp/requirements.txt
+COPY requirements-prod-optional.txt /tmp/requirements-prod-optional.txt
+ARG INSTALL_PROD_OPTIONAL=false
+RUN /opt/portrait-hub-venv/bin/python -m pip install --no-cache-dir -r /tmp/requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple \
+    && if [ "$INSTALL_PROD_OPTIONAL" = "true" ]; then \
+        /opt/portrait-hub-venv/bin/python -m pip install --no-cache-dir -r /tmp/requirements-prod-optional.txt -i https://pypi.tuna.tsinghua.edu.cn/simple; \
+    fi
+
+FROM nvidia/cuda:12.4.1-cudnn-runtime-ubuntu22.04
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
     MODELS_ROOT=/models \
+    PATH=/opt/portrait-hub-venv/bin:$PATH \
     TZ=Asia/Shanghai
 
 WORKDIR /workspace
@@ -18,29 +52,18 @@ RUN sed -i \
         ca-certificates \
         libglib2.0-0 \
         libgl1 \
-        tzdata \
         software-properties-common \
-    && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime \
-    && echo $TZ > /etc/timezone \
+        tzdata \
     && add-apt-repository -y ppa:deadsnakes/ppa \
     && apt-get update \
     && apt-get install -y --no-install-recommends \
         python3.12 \
-        python3.12-venv \
-    && python3.12 -m ensurepip --upgrade \
-    && python3.12 -m pip install --no-cache-dir --upgrade pip setuptools wheel \
-    && ln -sf /usr/bin/python3.12 /usr/local/bin/python \
+    && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime \
+    && echo $TZ > /etc/timezone \
     && apt-get purge -y --auto-remove software-properties-common \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt /tmp/requirements.txt
-COPY requirements-prod-optional.txt /tmp/requirements-prod-optional.txt
-RUN python -m pip install --no-cache-dir -r /tmp/requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
-ARG INSTALL_PROD_OPTIONAL=false
-RUN if [ "$INSTALL_PROD_OPTIONAL" = "true" ]; then \
-        python -m pip install --no-cache-dir -r /tmp/requirements-prod-optional.txt -i https://pypi.tuna.tsinghua.edu.cn/simple; \
-    fi
-
+COPY --from=builder /opt/portrait-hub-venv /opt/portrait-hub-venv
 COPY app /workspace/app
 COPY main.py /workspace/main.py
 COPY models.yml /workspace/models.yml

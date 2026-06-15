@@ -1,4 +1,6 @@
 import logging
+import asyncio
+import hashlib
 from contextlib import asynccontextmanager
 from collections.abc import AsyncIterator
 from typing import Any
@@ -21,10 +23,11 @@ from app.core import (
     split_cache_key,
     traceparent_from_headers,
 )
+from app.model_config_state import reload_model_config_state
 from app.rate_limit import check_rate_limit
 from app.routes import router
 from app.security_headers import apply_security_headers
-from app.settings import APP_VERSION, ENABLE_API_DOCS, MAX_REQUEST_BODY_BYTES, TRUSTED_HOSTS
+from app.settings import APP_VERSION, CONFIG_HOT_RELOAD_ENABLED, ENABLE_API_DOCS, MAX_REQUEST_BODY_BYTES, MODEL_CONFIG_PATH, MODEL_CAPABILITIES_PATH, OPENTELEMETRY_ENABLED, OTEL_SERVICE_NAME, TRUSTED_HOSTS
 from app.metrics import observe_request_status
 from app.portrait_bootstrap import ensure_portrait_runtime_state_loaded
 
@@ -45,11 +48,43 @@ async def warmup_models() -> None:
         logger.info("startup warmup completed: %s", key)
 
 
+async def config_hot_reload_loop() -> None:
+    mtimes: dict[str, float] = {}
+    paths = [MODEL_CONFIG_PATH, MODEL_CAPABILITIES_PATH]
+    while True:
+        try:
+            for path in paths:
+                if not path.exists():
+                    continue
+                key = str(path)
+                mtime = path.stat().st_mtime
+                previous = mtimes.get(key)
+                mtimes[key] = mtime
+                if previous is not None and mtime > previous:
+                    reload_model_config_state()
+                    logger.info("configuration hot reload completed: path_hash=%s", hashlib.sha256(key.encode("utf-8")).hexdigest()[:16])
+            await asyncio.sleep(2.0)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            logger.warning("configuration hot reload failed: %s", exc)
+            await asyncio.sleep(2.0)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     await ensure_portrait_runtime_state_loaded()
     await warmup_models()
-    yield
+    reload_task = asyncio.create_task(config_hot_reload_loop()) if CONFIG_HOT_RELOAD_ENABLED else None
+    try:
+        yield
+    finally:
+        if reload_task is not None:
+            reload_task.cancel()
+            try:
+                await reload_task
+            except asyncio.CancelledError:
+                pass
 
 
 def limit_request_body(request: Request) -> Request:
@@ -120,6 +155,7 @@ def create_app() -> FastAPI:
         openapi_url="/openapi.json" if ENABLE_API_DOCS else None,
     )
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=TRUSTED_HOSTS, www_redirect=False)
+    configure_opentelemetry(app)
 
     @app.exception_handler(RequestValidationError)
     async def request_validation_exception_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
@@ -173,6 +209,25 @@ def create_app() -> FastAPI:
 
     app.include_router(router)
     return app
+
+
+def configure_opentelemetry(app: FastAPI) -> None:
+    if not OPENTELEMETRY_ENABLED:
+        return
+    try:  # pragma: no cover - optional production dependency
+        from opentelemetry import trace
+        from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+        from opentelemetry.sdk.resources import Resource
+        from opentelemetry.sdk.trace import TracerProvider
+        from opentelemetry.sdk.trace.export import BatchSpanProcessor
+        from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+    except Exception as exc:  # pragma: no cover - optional dependency absent
+        logger.warning("opentelemetry is enabled but dependencies are unavailable: %s", exc)
+        return
+    provider = TracerProvider(resource=Resource.create({"service.name": OTEL_SERVICE_NAME}))
+    provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter()))
+    trace.set_tracer_provider(provider)
+    FastAPIInstrumentor.instrument_app(app, tracer_provider=provider)
 
 
 app = create_app()

@@ -822,6 +822,33 @@ def test_gallery_upsert_rolls_back_memory_when_persist_fails(monkeypatch) -> Non
     assert gallery_key("tenant-a", "p_rollback") not in GALLERY
 
 
+def test_gallery_json_wal_replays_incremental_mutations(monkeypatch, workspace_tmp_path) -> None:
+    GALLERY.clear()
+    state_path = workspace_tmp_path / "gallery.json"
+    monkeypatch.setattr(portrait_gallery, "PORTRAIT_STORAGE_BACKEND", "json")
+    monkeypatch.setattr(portrait_gallery, "PORTRAIT_GALLERY_STATE_PATH", state_path)
+    monkeypatch.setattr(portrait_gallery, "PORTRAIT_GALLERY_WAL_ENABLED", True)
+    monkeypatch.setattr(portrait_gallery, "PORTRAIT_GALLERY_WAL_COMPACT_EVERY", 0)
+
+    person = upsert_person("p_wal", "WAL", tenant_id="tenant-a")
+    add_feature(
+        person,
+        modality="body",
+        embedding=[1.0, 0.0],
+        model_id="test-model",
+        model_version="test",
+        quality_score=0.9,
+        source_id="source",
+    )
+
+    GALLERY.clear()
+    portrait_gallery.load_gallery_state()
+
+    restored = GALLERY[gallery_key("tenant-a", "p_wal")]
+    assert restored.display_name == "WAL"
+    assert len(restored.features) == 1
+
+
 def test_gallery_patch_rolls_back_memory_when_persist_fails(monkeypatch) -> None:
     GALLERY.clear()
     person = upsert_person("p_patch", "Before", metadata={"note": "old"}, tenant_id="tenant-a")
