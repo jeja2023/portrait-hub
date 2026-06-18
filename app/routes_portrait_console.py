@@ -18,7 +18,7 @@ CONSOLE_JS_PATH = CONSOLE_ROOT / "console.js"
 def console_csp(nonce: str) -> str:
     return (
         "default-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; "
-        "form-action 'self'; img-src 'self' data:; connect-src 'self'; "
+        "form-action 'self'; img-src 'self' data: blob:; connect-src 'self'; "
         f"style-src 'self' 'nonce-{nonce}'; script-src 'self' 'nonce-{nonce}'"
     )
 

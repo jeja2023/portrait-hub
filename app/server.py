@@ -26,7 +26,7 @@ from app.core import (
     split_cache_key,
     traceparent_from_headers,
 )
-from app.model_config_state import reload_model_config_state
+from app.config_hot_reload import ENV_PATH, reload_runtime_config
 from app.portrait_errors import PortraitError
 from app.rate_limit import check_rate_limit
 from app.routes import router
@@ -54,10 +54,14 @@ async def warmup_models() -> None:
 
 async def config_hot_reload_loop() -> None:
     mtimes: dict[str, float] = {}
-    paths = [MODEL_CONFIG_PATH, MODEL_CAPABILITIES_PATH]
+    paths = {
+        "env": ENV_PATH,
+        "models": MODEL_CONFIG_PATH,
+        "capabilities": MODEL_CAPABILITIES_PATH,
+    }
     while True:
         try:
-            for path in paths:
+            for name, path in paths.items():
                 if not path.exists():
                     continue
                 key = str(path)
@@ -65,7 +69,7 @@ async def config_hot_reload_loop() -> None:
                 previous = mtimes.get(key)
                 mtimes[key] = mtime
                 if previous is not None and mtime > previous:
-                    reload_model_config_state()
+                    reload_runtime_config(source=f"watch:{name}", include_env=True)
                     logger.info("configuration hot reload completed: path_hash=%s", hashlib.sha256(key.encode("utf-8")).hexdigest()[:16])
             await asyncio.sleep(2.0)
         except asyncio.CancelledError:
@@ -82,7 +86,7 @@ def install_config_reload_signal_handler() -> bool:
 
     def reload_config_from_signal(_signum: int, _frame: Any) -> None:
         try:
-            reload_model_config_state()
+            reload_runtime_config(source="sighup", include_env=True)
             logger.info("configuration hot reload completed from SIGHUP")
         except Exception as exc:
             logger.warning("configuration hot reload from SIGHUP failed: %s", exc)
@@ -96,6 +100,8 @@ def install_config_reload_signal_handler() -> bool:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    if CONFIG_HOT_RELOAD_ENABLED:
+        reload_runtime_config(source="startup", include_env=True)
     await ensure_portrait_runtime_state_loaded()
     await warmup_models()
     if CONFIG_HOT_RELOAD_ENABLED:

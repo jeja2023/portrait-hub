@@ -71,7 +71,7 @@ class ExternalTaskQueue(LocalTaskQueue):
 class RedisTaskQueue(LocalTaskQueue):
     backend_name = "redis"
 
-    def _client(self):
+    def _client(self) -> Any:
         if redis is None:
             raise RuntimeError("redis is not installed; install requirements-prod-optional.txt")
         if not REDIS_URL:

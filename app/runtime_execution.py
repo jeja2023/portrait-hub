@@ -7,7 +7,7 @@ from fastapi import HTTPException, status
 from app.metrics import observe
 from app.observability import logger, now, trace_span
 from app.portrait_response import exception_log_summary
-from app.runtime_sessions import input_dtype, run_session
+from app.runtime_sessions import input_dtype, primary_execution_provider, run_session
 from app.runtime_state import gpu_semaphore_for_device
 from app.schemas import ModelBundle
 from app.settings import MAX_TENSOR_ITEMS
@@ -21,6 +21,16 @@ def build_input_array(tensor_data: list[Any], dtype: Any) -> np.ndarray:
             detail=f"tensor is too large: {input_array.size} items, max {MAX_TENSOR_ITEMS}",
         )
     return input_array
+
+
+def bundle_execution_provider(bundle: ModelBundle) -> str:
+    configured = bundle.get("execution_provider")
+    if isinstance(configured, str) and configured:
+        return configured
+    get_providers = getattr(bundle["session"], "get_providers", None)
+    if callable(get_providers):
+        return primary_execution_provider(get_providers())
+    return "CUDAExecutionProvider"
 
 
 async def acquire_with_timeout(semaphore: asyncio.Semaphore, timeout_seconds: float, detail: str) -> None:
@@ -40,7 +50,8 @@ async def run_model_bundle(bundle: ModelBundle, input_array: np.ndarray) -> tupl
     session = bundle["session"]
     model_semaphore = bundle.get("semaphore")
     gpu_device_id = bundle.get("gpu_device_id")
-    gpu_semaphore = gpu_semaphore_for_device(gpu_device_id)
+    execution_provider = bundle_execution_provider(bundle)
+    gpu_semaphore = gpu_semaphore_for_device(gpu_device_id) if execution_provider in {"CUDAExecutionProvider", "TensorrtExecutionProvider"} else None
     queue_timeout = float(bundle.get("queue_timeout_seconds", 0) or 0)
     queue_start = now()
     model_acquired = False
@@ -57,14 +68,15 @@ async def run_model_bundle(bundle: ModelBundle, input_array: np.ndarray) -> tupl
             await bundle["lock"].acquire()
             model_acquired = True
 
-        elapsed = now() - queue_start
-        remaining_timeout = max(0.001, queue_timeout - elapsed) if queue_timeout > 0 else 0
-        await acquire_with_timeout(
-            gpu_semaphore,
-            remaining_timeout,
-            "GPU inference queue timeout",
-        )
-        gpu_acquired = True
+        if gpu_semaphore is not None:
+            elapsed = now() - queue_start
+            remaining_timeout = max(0.001, queue_timeout - elapsed) if queue_timeout > 0 else 0
+            await acquire_with_timeout(
+                gpu_semaphore,
+                remaining_timeout,
+                "GPU inference queue timeout",
+            )
+            gpu_acquired = True
 
         queue_seconds = now() - queue_start
         inference_start = now()
@@ -72,6 +84,7 @@ async def run_model_bundle(bundle: ModelBundle, input_array: np.ndarray) -> tupl
             "portrait.inference.run_session",
             model=str(bundle.get("key", "")),
             gpu_device_id=gpu_device_id,
+            execution_provider=execution_provider,
             batch_size=int(input_array.shape[0]) if input_array.ndim > 0 else 1,
         ):
             raw_outputs = await asyncio.to_thread(run_session, session, input_array)

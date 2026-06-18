@@ -688,16 +688,21 @@ async def test_lifespan_loads_portrait_state_once_before_warmup(monkeypatch) -> 
     async def fake_warmup_models():
         calls.append("warmup")
 
+    def fake_reload_runtime_config(*, source, include_env):
+        calls.append(f"config:{source}:{include_env}")
+        return {"source": source}
+
     monkeypatch.setattr(portrait_bootstrap, "_STATE_LOADED", False)
     monkeypatch.setattr(portrait_bootstrap, "_STATE_LOAD_LOCK", None)
     monkeypatch.setattr(portrait_bootstrap, "load_portrait_runtime_state", fake_load_state)
+    monkeypatch.setattr(server, "reload_runtime_config", fake_reload_runtime_config)
     monkeypatch.setattr(server, "warmup_models", fake_warmup_models)
 
     async with server.lifespan(server.create_app()):
-        assert calls == ["state", "warmup"]
+        assert calls == ["config:startup:True", "state", "warmup"]
 
     async with server.lifespan(server.create_app()):
-        assert calls == ["state", "warmup", "warmup"]
+        assert calls == ["config:startup:True", "state", "warmup", "config:startup:True", "warmup"]
 
 
 def test_video_jobs_state_shape_fails_closed(monkeypatch, workspace_tmp_path) -> None:

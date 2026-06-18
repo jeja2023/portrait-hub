@@ -1,5 +1,5 @@
 import asyncio
-from typing import Any, TypedDict
+from typing import Any, NotRequired, TypedDict
 
 import onnxruntime as ort
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -21,6 +21,7 @@ class ModelBundle(TypedDict):
     max_concurrency: int
     queue_timeout_seconds: float
     gpu_device_id: int
+    execution_provider: NotRequired[str]
 
 
 class LetterboxMeta(TypedDict):

@@ -1,5 +1,9 @@
 import asyncio
 
+import numpy as np
+import pytest
+
+from app import runtime_execution
 from app import runtime_registry, runtime_sessions, runtime_state
 
 
@@ -102,3 +106,31 @@ def test_cuda_providers_for_device_does_not_mutate_base() -> None:
         item for item in runtime_sessions.CUDA_PROVIDERS if isinstance(item, tuple) and item[0] == "CUDAExecutionProvider"
     )
     assert base_cuda[1]["device_id"] == 0
+
+
+@pytest.mark.asyncio
+async def test_cpu_execution_provider_skips_gpu_queue(monkeypatch) -> None:
+    class FakeSession:
+        def get_providers(self):
+            return ["CPUExecutionProvider"]
+
+    async def fail_gpu_acquire(*args, **kwargs):
+        raise AssertionError("CPU fallback should not acquire GPU queue")
+
+    monkeypatch.setattr(runtime_execution, "gpu_semaphore_for_device", lambda device_id: object())
+    monkeypatch.setattr(runtime_execution, "run_session", lambda session, input_array: [input_array])
+    monkeypatch.setattr(runtime_execution, "acquire_with_timeout", fail_gpu_acquire)
+    bundle = {
+        "session": FakeSession(),
+        "lock": asyncio.Lock(),
+        "semaphore": None,
+        "gpu_device_id": 0,
+        "queue_timeout_seconds": 0,
+        "inference_count": 0,
+        "execution_provider": "CPUExecutionProvider",
+    }
+
+    outputs, _, _ = await runtime_execution.run_model_bundle(bundle, np.asarray([[1.0]], dtype=np.float32))
+
+    assert outputs[0].tolist() == [[1.0]]
+    assert bundle["inference_count"] == 1

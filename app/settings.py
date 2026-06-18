@@ -34,7 +34,7 @@ def parse_csv_env(name: str, default: str = "") -> list[str]:
     return [item.strip() for item in os.getenv(name, default).split(",") if item.strip()]
 
 
-APP_VERSION = "0.5.30"
+APP_VERSION = "0.5.35"
 MODELS_ROOT = Path(os.getenv("MODELS_ROOT", "models")).resolve()
 MODEL_CONFIG_PATH = Path(os.getenv("MODEL_CONFIG_PATH", "models.yml"))
 MODEL_CONFIG_READ_FAIL_CLOSED = parse_bool_env("MODEL_CONFIG_READ_FAIL_CLOSED", True)
@@ -65,6 +65,7 @@ GPU_DEVICE_IDS = [
     for item in parse_csv_env("GPU_DEVICE_IDS", os.getenv("CUDA_VISIBLE_DEVICES", "0"))
     if item.isdigit()
 ] or [0]
+CPU_FALLBACK_ENABLED = parse_bool_env("CPU_FALLBACK_ENABLED", True)
 MODEL_CONCURRENCY_LIMIT = parse_int_env("MODEL_CONCURRENCY_LIMIT", 1)
 MODEL_QUEUE_TIMEOUT_SECONDS = parse_float_env("MODEL_QUEUE_TIMEOUT_SECONDS", 0)
 ENABLE_TENSORRT = parse_bool_env("ENABLE_TENSORRT", False)
@@ -176,6 +177,7 @@ OTEL_SERVICE_NAME = os.getenv("OTEL_SERVICE_NAME", "portrait-hub")
 CONFIG_HOT_RELOAD_ENABLED = parse_bool_env("CONFIG_HOT_RELOAD_ENABLED", True)
 READY_CHECK_DEPENDENCIES = parse_bool_env("READY_CHECK_DEPENDENCIES", False)
 
+CPU_PROVIDERS: list[Any] = ["CPUExecutionProvider"]
 CUDA_PROVIDERS: list[Any] = [
     (
         "CUDAExecutionProvider",
@@ -187,5 +189,5 @@ CUDA_PROVIDERS: list[Any] = [
             "do_copy_in_default_stream": True,
         },
     ),
-    "CPUExecutionProvider",
+    *CPU_PROVIDERS,
 ]

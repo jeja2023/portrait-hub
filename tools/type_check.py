@@ -9,28 +9,23 @@ from pathlib import Path
 import tomllib
 
 
-DEFAULT_TARGETS = [
-    "app/core.py",
-    "app/portrait_errors.py",
-    "app/gallery_state.py",
-    "app/gallery_search.py",
-    "app/postgres_core.py",
-    "app/postgres_gallery.py",
-    "app/postgres_jobs.py",
-    "app/portrait_gallery.py",
-    "app/portrait_model_runtime.py",
-    "app/portrait_postgres.py",
-    "app/portrait_tracking.py",
-    "app/runtime_face.py",
-    "app/runtime_body.py",
-    "app/runtime_pose.py",
-    "app/runtime_gait.py",
-    "app/runtime_appearance.py",
-    "app/runtime_common.py",
-    "app/tracking_state.py",
-    "app/tracking_association.py",
-    "tools/type_check.py",
-]
+DEFAULT_TARGET_ROOTS = ("app", "tools", "sdk")
+IGNORED_PATH_PARTS = {".git", ".mypy_cache", ".pytest_cache", ".venv", "__pycache__"}
+
+
+def discover_default_targets() -> list[str]:
+    targets: list[str] = []
+    for root_name in DEFAULT_TARGET_ROOTS:
+        root = Path(root_name)
+        if not root.exists():
+            continue
+        for path in root.rglob("*.py"):
+            if any(part in IGNORED_PATH_PARTS for part in path.parts):
+                continue
+            targets.append(path.as_posix())
+    if Path("main.py").is_file():
+        targets.append("main.py")
+    return sorted(dict.fromkeys(targets))
 
 
 def mypy_strict_enabled() -> bool:
@@ -61,11 +56,12 @@ def annotation_errors(targets: list[str]) -> list[str]:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Run the focused type gate for typed PortraitHub modules.")
-    parser.add_argument("targets", nargs="*", default=DEFAULT_TARGETS)
+    parser = argparse.ArgumentParser(description="Run the whole-repository strict type gate for PortraitHub Python modules.")
+    parser.add_argument("targets", nargs="*")
     args = parser.parse_args()
+    targets = args.targets or discover_default_targets()
 
-    missing = [target for target in args.targets if not Path(target).is_file()]
+    missing = [target for target in targets if not Path(target).is_file()]
     if missing:
         print(f"missing type-check targets: {', '.join(missing)}", file=sys.stderr)
         return 2
@@ -75,9 +71,9 @@ def main() -> int:
         return 2
 
     if importlib.util.find_spec("mypy") is not None:
-        return subprocess.call([sys.executable, "-m", "mypy", *args.targets])
+        return subprocess.call([sys.executable, "-m", "mypy", *targets])
 
-    errors = annotation_errors(args.targets)
+    errors = annotation_errors(targets)
     if errors:
         print("\n".join(errors), file=sys.stderr)
         return 1

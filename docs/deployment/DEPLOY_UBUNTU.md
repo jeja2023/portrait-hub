@@ -41,7 +41,7 @@ nvidia-smi
 
 能看到 GPU 列表、驱动版本、显存信息，就可以继续。
 
-> 镜像基于 CUDA 12.4（`onnxruntime-gpu==1.20.1`，需 cuDNN 9）。宿主机 NVIDIA 驱动需满足 CUDA 12.4 的最低版本要求（Linux ≥ 550.54.14）。驱动过低会导致容器内 `CUDAExecutionProvider` 加载失败而静默回退 CPU。`nvidia-smi` 右上角的 `CUDA Version` 表示驱动支持的最高 CUDA 版本，需 ≥ 12.4。
+> 镜像基于 CUDA 12.4（`onnxruntime-gpu==1.20.1`，需 cuDNN 9）。宿主机 NVIDIA 驱动需满足 CUDA 12.4 的最低版本要求（Linux ≥ 550.54.14）。默认 `CPU_FALLBACK_ENABLED=true` 时，容器内 `CUDAExecutionProvider` 不可用会回退 `CPUExecutionProvider` 继续推理；生产若必须强制 GPU，请设为 `false`。`nvidia-smi` 右上角的 `CUDA Version` 表示驱动支持的最高 CUDA 版本，需 ≥ 12.4。
 
 如果没有驱动，可以用 Ubuntu 推荐驱动安装：
 
@@ -740,7 +740,7 @@ python -c "import onnxruntime as ort; print(ort.get_available_providers())"
 
 ## 13. 常见问题
 
-### `/ready` 返回没有 `CUDAExecutionProvider`
+### `/ready/deep` 显示没有 `CUDAExecutionProvider`
 
 检查：
 
@@ -806,7 +806,7 @@ Compose 默认绑定：
 - `nvidia-smi` 正常。
 - GPU 容器内 `nvidia-smi` 正常。
 - `docker compose ps` 显示 worker healthy。
-- `/ready` 返回 `CUDAExecutionProvider`。
+- `/ready/deep` 的 `runtime_provider.available_providers` 包含 `CUDAExecutionProvider`。
 - `/model-info` 能返回正确输入 shape 和 dtype。
 - `/warmup` 成功。
 - 业务请求 tensor shape 与模型输入一致。

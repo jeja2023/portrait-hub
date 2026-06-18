@@ -5,6 +5,7 @@ import hmac
 import json
 import math
 import time
+from collections.abc import Callable
 from typing import Any
 
 from fastapi import Header, HTTPException, status
@@ -360,7 +361,7 @@ async def require_permission(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=f"missing permission: {permission}")
 
 
-def permission_dependency(permission: str):
+def permission_dependency(permission: str) -> Callable[..., Any]:
     async def dependency(
         authorization: str | None = Header(default=None),
         x_tenant_id: str | None = Header(default=None),

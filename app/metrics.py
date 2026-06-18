@@ -281,7 +281,14 @@ def build_prometheus_metrics() -> str:
     )
     for model, bundle in sorted(MODEL_REGISTRY.items()):
         config = MODEL_CONFIGS.get(model, {})
-        labels = model_labels(model, config, {"gpu_device_id": bundle.get("gpu_device_id", "")})
+        labels = model_labels(
+            model,
+            config,
+            {
+                "gpu_device_id": bundle.get("gpu_device_id", ""),
+                "execution_provider": bundle.get("execution_provider", ""),
+            },
+        )
         lines.append(f"gpu_worker_model_loaded_info{{{labels}}} 1")
         lines.append(f"gpu_worker_model_file_bytes{{{labels}}} {bundle.get('file_size', 0)}")
         lines.append(f"gpu_worker_model_load_count_total{{{labels}}} {bundle.get('load_count', 0)}")

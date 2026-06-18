@@ -47,7 +47,7 @@ async def test_model_load_failure_logs_are_redacted(monkeypatch, workspace_tmp_p
         await runtime_registry.get_or_load_model("portrait_hub/secret-model.onnx", model_path)
 
     assert exc_info.value.status_code == 500
-    assert exc_info.value.detail == "failed to load model into GPU"
+    assert exc_info.value.detail == "failed to load model runtime"
     assert "path_hash=" in caplog.text
     assert "RuntimeError" in caplog.text
     for secret in ["secret-model-dir", "secret-token", str(model_path)]:

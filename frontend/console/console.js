@@ -2,11 +2,37 @@ const state = {
   tenantId: localStorage.getItem("portraitHubTenant") || "default",
   apiKey: localStorage.getItem("portraitHubApiKey") || "",
   bearer: localStorage.getItem("portraitHubBearer") || "",
-  view: "dashboard",
+  view: localStorage.getItem("portraitHubView") || "overview",
   dashboard: {},
   galleryExport: {},
+  latestPayloads: {},
   alertConfig: loadAlertConfig(),
   sockets: {},
+  visionPreviews: [],
+  visionPreviewSignature: "",
+  visionResultVisuals: [],
+  visionLightboxIndex: null,
+  comparePreviews: { A: [], B: [] },
+};
+
+const endpointMap = {
+  vision: {
+    faces: "/v1/infer/faces",
+    persons: "/v1/infer/persons",
+    pose: "/v1/infer/pose",
+    appearance: "/v1/infer/appearance",
+    gait: "/v1/infer/gait",
+    detect: "/infer/persons",
+    embeddings: "/infer/person-embeddings",
+    tracks: "/infer/person-tracks",
+  },
+  compare: {
+    faces: "/v1/compare/faces",
+    persons: "/v1/compare/persons",
+    gait: "/v1/compare/gait",
+    fusion: "/v1/fusion/compare",
+    batch: "/v1/compare/batch",
+  },
 };
 
 function loadAlertConfig() {
@@ -24,37 +50,49 @@ function loadAlertConfig() {
 
 const template = `
   <header class="topbar">
-    <div>
-      <h1>PortraitHub 运维控制台</h1>
-      <p>运维 API 交互界面与<a href="/docs" target="_blank">接口文档</a> (/models, /gallery, /jobs, /streams)</p>
+    <div class="brand">
+      <h1>PortraitHub 业务控制台</h1>
+      <p>面向业务项目的人像解析、比对、图库检索、离线视频和视频流服务控制台。可直接操作，也可复制接口调用示例接入其它系统。<a href="/docs" target="_blank" rel="noreferrer">接口文档</a></p>
     </div>
-    <nav aria-label="console views">
-      <button type="button" data-nav="dashboard">运行仪表盘</button>
-      <button type="button" data-nav="models">模型管理</button>
-      <button type="button" data-nav="gallery">底库检索</button>
-      <button type="button" data-nav="jobs">离线任务</button>
-      <button type="button" data-nav="streams">视频流管理</button>
-      <button type="button" data-nav="admin">全局治理</button>
-      <button type="button" data-nav="alerts">告警配置</button>
+    <nav aria-label="控制台视图">
+      <button type="button" data-nav="overview">总览</button>
+      <button type="button" data-nav="vision">图片解析</button>
+      <button type="button" data-nav="compare">人像比对</button>
+      <button type="button" data-nav="gallery">人员库</button>
+      <button type="button" data-nav="video">离线视频</button>
+      <button type="button" data-nav="streams">视频流</button>
+      <button type="button" data-nav="models">模型</button>
+      <button type="button" data-nav="admin">治理</button>
+      <button type="button" data-nav="alerts">告警</button>
     </nav>
   </header>
   <main class="shell">
     <aside class="panel auth-panel">
-      <h2>鉴权配置</h2>
+      <h2>调用凭证</h2>
       <label>租户 ID <input id="tenant-input" autocomplete="off" value="default" /></label>
-      <label>API 令牌 <input id="api-key-input" type="password" autocomplete="off" /></label>
-      <label>JWT 令牌 <input id="bearer-input" type="password" autocomplete="off" /></label>
+      <label>接口令牌（API Key） <input id="api-key-input" type="password" autocomplete="off" /></label>
+      <label>JWT 令牌（Bearer） <input id="bearer-input" type="password" autocomplete="off" /></label>
       <div class="actions">
-        <button type="button" id="save-auth-button">保存</button>
-        <button type="button" id="refresh-button" class="primary">刷新</button>
+        <button type="button" id="save-auth-button" class="primary">保存</button>
+        <button type="button" id="refresh-button">刷新全部</button>
       </div>
       <div id="status-strip" class="status-strip">就绪</div>
+      <div class="quick-links">
+        <button type="button" class="ghost" data-nav-shortcut="vision">上传图片解析</button>
+        <button type="button" class="ghost" data-nav-shortcut="compare">两张图比对</button>
+        <button type="button" class="ghost" data-nav-shortcut="gallery">人员入库检索</button>
+        <button type="button" class="ghost" data-nav-shortcut="video">创建视频任务</button>
+        <a href="/openapi.json" target="_blank" rel="noreferrer">接口定义</a>
+      </div>
     </aside>
     <section class="workspace">
-      <section class="view" data-view="dashboard">
+      <section class="view" data-view="overview">
         <div class="view-header">
-          <h2>运行仪表盘</h2>
-          <button type="button" id="dashboard-refresh-button">刷新指标</button>
+          <div class="section-title">
+            <h2>服务总览</h2>
+            <p>查看当前健康状态、业务入口和可复制的集成方式。</p>
+          </div>
+          <button type="button" id="dashboard-refresh-button">刷新状态</button>
         </div>
         <div class="metric-grid">
           <div class="metric"><span>推理请求</span><strong id="metric-requests">0</strong></div>
@@ -62,138 +100,376 @@ const template = `
           <div class="metric"><span>P95 推理耗时</span><strong id="metric-p95">0s</strong></div>
           <div class="metric"><span>GPU 空闲显存</span><strong id="metric-gpu-free">--</strong></div>
         </div>
-        <pre id="dashboard-json" class="json-view">{}</pre>
-      </section>
-      <section class="view" data-view="models">
-        <div class="view-header">
-          <h2>模型缓存状态</h2>
-          <div class="actions">
-            <input id="model-id-input" placeholder="请输入模型ID，例如: portrait_hub/yolov8n.onnx" />
-            <button type="button" id="load-model-button">加载模型</button>
-            <button type="button" id="unload-model-button">卸载模型</button>
+        <div class="product-grid">
+          <button type="button" class="product-tile" data-nav-shortcut="vision"><strong>图片解析</strong><span>人脸、人体、姿态、衣着、步态、检测和 ReID embedding。</span></button>
+          <button type="button" class="product-tile" data-nav-shortcut="compare"><strong>人像比对</strong><span>人脸、人体、步态、多模态融合和批量比对。</span></button>
+          <button type="button" class="product-tile" data-nav-shortcut="gallery"><strong>人员库查询</strong><span>人员注册、图库检索、候选排序和人员资料维护。</span></button>
+          <button type="button" class="product-tile" data-nav-shortcut="streams"><strong>视频服务</strong><span>离线视频轨迹任务、视频流注册、事件查询和实时订阅。</span></button>
+        </div>
+        <div class="split-grid">
+          <div class="card">
+            <div class="section-title">
+              <h3>对外接入示例</h3>
+              <p>示例会自动带上当前租户和令牌头。</p>
+            </div>
+            <pre id="integration-code" class="code-view"></pre>
+          </div>
+          <div class="card">
+            <div class="section-title">
+              <h3>平台状态</h3>
+              <p>包含存储、向量库、对象存储、任务队列和流工作进程状态。</p>
+            </div>
+            <div id="overview-badges" class="badge-row"></div>
+            <div id="dashboard-json" class="json-view data-viewer" role="region" aria-label="平台状态数据"></div>
           </div>
         </div>
-        <pre id="models-json" class="json-view">{}</pre>
       </section>
-      <section class="view" data-view="gallery">
+
+      <section class="view" data-view="vision">
         <div class="view-header">
-          <h2>底库管理</h2>
-          <button type="button" id="gallery-refresh-button">刷新底库</button>
+          <div class="section-title">
+            <h2>图片解析</h2>
+            <p>上传图片或帧序列，直接调用人像解析与通用检测接口。</p>
+          </div>
+          <button type="button" id="vision-copy-button">复制调用示例</button>
         </div>
-        <form id="enroll-form" class="form-grid">
-          <label>人员 ID <input id="enroll-person-id-input" name="person_id" placeholder="请输入人员唯一ID" /></label>
-          <label>姓名/展示名 <input id="enroll-display-name-input" name="display_name" placeholder="请输入姓名或展示名称" /></label>
-          <label>生物特征模态
-            <select id="enroll-modality-input" name="modality">
-              <option value="body">人体 (Body)</option>
-              <option value="face">人脸 (Face)</option>
-              <option value="appearance">衣着外观 (Appearance)</option>
+        <form id="vision-form" class="form-grid">
+          <label>解析能力
+            <select id="vision-mode-input" name="mode">
+              <option value="persons">人体解析 /v1/infer/persons</option>
+              <option value="faces">人脸解析 /v1/infer/faces</option>
+              <option value="appearance">衣着外观 /v1/infer/appearance</option>
+              <option value="pose">姿态解析 /v1/infer/pose</option>
+              <option value="gait">步态序列 /v1/infer/gait</option>
+              <option value="detect">YOLO 人体检测 /infer/persons</option>
+              <option value="embeddings">ReID 向量 /infer/person-embeddings</option>
+              <option value="tracks">图片序列轨迹 /infer/person-tracks</option>
             </select>
           </label>
-          <label>注册图片 <input id="enroll-file-input" name="files" type="file" multiple /></label>
-          <button type="submit" class="primary">注册登记</button>
-        </form>
-        <form id="search-form" class="form-grid">
-          <label>检索图片 <input id="search-file-input" name="file" type="file" /></label>
-          <label>生物特征模态
-            <select id="search-modality-input" name="modality">
-              <option value="body">人体 (Body)</option>
-              <option value="face">人脸 (Face)</option>
-              <option value="appearance">衣着外观 (Appearance)</option>
-            </select>
-          </label>
-          <label>返回数量 (Top K) <input id="search-top-k-input" name="top_k" type="number" min="1" value="5" /></label>
-          <button type="submit" class="primary">底库检索</button>
+          <label class="span-2">图片文件 <input id="vision-files-input" name="files" type="file" accept="image/*" multiple /></label>
+          <label>置信度 <input id="vision-confidence-input" name="confidence" type="number" min="0" max="1" step="0.01" value="0.25" /></label>
+          <label>交并比（IoU） <input id="vision-iou-input" name="iou" type="number" min="0" max="1" step="0.01" value="0.45" /></label>
+          <label>最大目标数 <input id="vision-max-detections-input" name="max_detections" type="number" min="1" value="100" /></label>
+          <label class="field-inline"><input id="vision-include-embeddings-input" name="include_embeddings" type="checkbox" /> 返回向量</label>
+          <button type="submit" class="primary">开始解析</button>
         </form>
         <div class="split-grid">
+          <div class="card">
+            <div class="section-title">
+              <h3>输入预览</h3>
+              <p>只在浏览器本地预览，不会额外上传。</p>
+            </div>
+            <div id="vision-preview" class="preview-grid"></div>
+          </div>
+          <div class="result-panel">
+            <div class="section-title">
+              <h3>解析结果</h3>
+              <p>关键计数会在上方汇总，完整响应保留为 JSON 数据。</p>
+            </div>
+            <div id="vision-summary" class="result-summary"></div>
+            <div id="vision-visuals" class="result-visual-grid"></div>
+            <div id="vision-json" class="json-view data-viewer" role="region" aria-label="解析结果数据"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="view" data-view="compare">
+        <div class="view-header">
+          <div class="section-title">
+            <h2>人像比对</h2>
+            <p>支持人脸、人体、步态、多模态融合和批量成对比对。</p>
+          </div>
+          <button type="button" id="compare-copy-button">复制调用示例</button>
+        </div>
+        <form id="compare-form" class="form-grid">
+          <label>比对类型
+            <select id="compare-mode-input" name="mode">
+              <option value="persons">人体比对</option>
+              <option value="faces">人脸比对</option>
+              <option value="fusion">多模态融合</option>
+              <option value="gait">步态序列比对</option>
+              <option value="batch">批量成对比对</option>
+            </select>
+          </label>
+          <label>阈值方案 <input id="compare-threshold-input" name="threshold_profile" value="normal" /></label>
+          <label>批量模态
+            <select id="compare-batch-modality-input" name="modality">
+              <option value="body">人体</option>
+              <option value="face">人脸</option>
+              <option value="appearance">衣着外观</option>
+            </select>
+          </label>
+          <label>融合模态 <input id="compare-modalities-input" name="modalities" value="face,body,appearance" /></label>
+          <label class="span-2">图 A / 序列 A <input id="compare-a-input" name="image_a" type="file" accept="image/*" multiple /></label>
+          <label class="span-2">图 B / 序列 B <input id="compare-b-input" name="image_b" type="file" accept="image/*" multiple /></label>
+          <label class="field-inline"><input id="compare-include-vectors-input" name="include_vectors" type="checkbox" /> 返回向量</label>
+          <label class="field-inline"><input id="compare-async-input" name="async_mode" type="checkbox" /> 批量异步</label>
+          <button type="submit" class="primary">开始比对</button>
+        </form>
+        <div class="split-grid">
+          <div class="card">
+            <div class="section-title">
+              <h3>输入预览</h3>
+              <p>步态和批量模式会读取多张图作为序列或多组配对。</p>
+            </div>
+            <div id="compare-preview" class="compare-preview"></div>
+          </div>
+          <div class="result-panel">
+            <div class="section-title">
+              <h3>比对结果</h3>
+              <p>相似度、阈值和通过状态会优先显示。</p>
+            </div>
+            <div id="compare-summary" class="result-summary"></div>
+            <div id="compare-json" class="json-view data-viewer" role="region" aria-label="比对结果数据"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="view" data-view="gallery">
+        <div class="view-header">
+          <div class="section-title">
+            <h2>人员库</h2>
+            <p>用于业务人员注册、以图搜人、人员资料维护和向量重建。</p>
+          </div>
+          <button type="button" id="gallery-refresh-button">刷新人员库</button>
+        </div>
+        <div class="gallery-layout">
+          <div class="card">
+            <div class="section-title">
+              <h3>人员注册</h3>
+              <p>支持同一人员多图入库，自动跳过重复输入。</p>
+            </div>
+            <form id="enroll-form" class="form-grid">
+              <label>人员 ID <input id="enroll-person-id-input" name="person_id" placeholder="留空自动生成" /></label>
+              <label>显示名称 <input id="enroll-display-name-input" name="display_name" placeholder="姓名或业务编号" /></label>
+              <label>特征模态
+                <select id="enroll-modality-input" name="modality">
+                  <option value="body">人体</option>
+                  <option value="face">人脸</option>
+                  <option value="appearance">衣着外观</option>
+                </select>
+              </label>
+              <label class="span-2">注册图片 <input id="enroll-file-input" name="files" type="file" accept="image/*" multiple /></label>
+              <label class="span-2">元数据（JSON） <textarea id="enroll-metadata-input" name="metadata" placeholder='{"source":"case-001"}'></textarea></label>
+              <button type="submit" class="primary">注册入库</button>
+            </form>
+          </div>
+          <div class="card">
+            <div class="section-title">
+              <h3>以图搜人</h3>
+              <p>返回人员级候选、质量信息和排序风险。</p>
+            </div>
+            <form id="search-form" class="form-grid">
+              <label class="span-2">检索图片 <input id="search-file-input" name="file" type="file" accept="image/*" /></label>
+              <label>特征模态
+                <select id="search-modality-input" name="modality">
+                  <option value="body">人体</option>
+                  <option value="face">人脸</option>
+                  <option value="appearance">衣着外观</option>
+                </select>
+              </label>
+              <label>前 K <input id="search-top-k-input" name="top_k" type="number" min="1" value="5" /></label>
+              <label>阈值方案 <input id="search-threshold-input" name="threshold_profile" value="normal" /></label>
+              <button type="submit" class="primary">图库检索</button>
+            </form>
+          </div>
+        </div>
+        <div class="split-grid">
           <div class="list-panel">
-            <h2>人员列表</h2>
+            <div class="section-title">
+              <h3>人员列表</h3>
+              <p>点击人员会把 ID 填入维护表单。</p>
+            </div>
             <ul id="people-list" class="people-list"></ul>
           </div>
           <div class="list-panel">
-            <h2>特征分布</h2>
+            <div class="section-title">
+              <h3>特征分布</h3>
+              <p>按人员和特征质量绘制的轻量分布图。</p>
+            </div>
             <div id="feature-scatter" class="scatter" aria-label="gallery feature distribution"></div>
           </div>
         </div>
-        <pre id="gallery-json" class="json-view">{}</pre>
-      </section>
-      <section class="view" data-view="jobs">
-        <div class="view-header">
-          <h2>离线视频轨迹任务</h2>
-          <input id="job-id-input" placeholder="请输入任务 ID" />
+        <div class="card">
+          <div class="section-title">
+            <h3>人员维护</h3>
+            <p>查询、更新、删除人员记录，或按模态重建向量索引。</p>
+          </div>
+          <div class="form-grid">
+            <label>人员 ID <input id="person-id-input" placeholder="person_id" /></label>
+            <label>新显示名称 <input id="person-display-name-input" placeholder="可选" /></label>
+            <label class="span-2">新元数据（JSON） <input id="person-metadata-input" placeholder='{"department":"A"}' /></label>
+            <button type="button" id="person-get-button">查询人员</button>
+            <button type="button" id="person-patch-button">更新人员</button>
+            <button type="button" id="person-delete-button" class="danger">删除人员</button>
+            <button type="button" id="gallery-copy-button">复制检索示例</button>
+          </div>
+          <div class="form-grid compact">
+            <label>重建模态
+              <select id="reindex-modality-input">
+                <option value="">全部</option>
+                <option value="body">人体</option>
+                <option value="face">人脸</option>
+                <option value="appearance">衣着外观</option>
+              </select>
+            </label>
+            <label>模型 ID <input id="reindex-model-id-input" placeholder="可选" /></label>
+            <label class="field-inline"><input id="reindex-dry-run-input" type="checkbox" /> 仅预演</label>
+            <button type="button" id="gallery-reindex-button">重建索引</button>
+          </div>
+          <div id="gallery-summary" class="result-summary"></div>
+          <div id="gallery-json" class="json-view data-viewer" role="region" aria-label="人员库响应数据"></div>
         </div>
-        <form id="job-form" class="form-grid">
-          <label>视频文件 <input id="job-file-input" name="file" type="file" /></label>
-          <label>抽帧间隔 (帧) <input id="job-frame-interval-input" name="frame_interval" type="number" min="1" value="15" /></label>
+      </section>
+
+      <section class="view" data-view="video">
+        <div class="view-header">
+          <div class="section-title">
+            <h2>离线视频</h2>
+            <p>上传视频创建轨迹任务，支持查询状态、结果、取消和实时进度订阅。</p>
+          </div>
+          <button type="button" id="video-copy-button">复制调用示例</button>
+        </div>
+        <form id="video-form" class="form-grid">
+          <label class="span-2">视频文件 <input id="job-file-input" name="file" type="file" accept="video/*" /></label>
+          <label>抽帧间隔 <input id="job-frame-interval-input" name="frame_interval" type="number" min="1" value="15" /></label>
           <label>最大处理帧数 <input id="job-max-frames-input" name="max_frames" type="number" min="1" value="64" /></label>
           <button type="submit" class="primary">创建任务</button>
         </form>
-        <div class="actions">
-          <button type="button" id="job-get-button">查询状态</button>
-          <button type="button" id="job-result-button">查看结果</button>
-          <button type="button" id="job-cancel-button">取消任务</button>
-          <button type="button" id="job-watch-button">实时订阅</button>
+        <div class="card">
+          <div class="form-grid compact">
+            <label class="span-2">任务 ID <input id="job-id-input" placeholder="创建任务后自动填入" /></label>
+            <button type="button" id="job-get-button">查询状态</button>
+            <button type="button" id="job-result-button">查看结果</button>
+            <button type="button" id="job-cancel-button" class="danger">取消任务</button>
+            <button type="button" id="job-watch-button">实时订阅</button>
+          </div>
+          <div id="job-ws-status" class="ws-status">未订阅任务进度</div>
+          <div id="jobs-summary" class="result-summary"></div>
+          <div id="jobs-json" class="json-view data-viewer" role="region" aria-label="视频任务响应数据"></div>
         </div>
-        <div id="job-ws-status" class="ws-status">未订阅任务进度</div>
-        <pre id="jobs-json" class="json-view">{}</pre>
       </section>
+
       <section class="view" data-view="streams">
         <div class="view-header">
-          <h2>视频流管理</h2>
-          <button type="button" id="streams-refresh-button">刷新状态</button>
+          <div class="section-title">
+            <h2>视频流</h2>
+            <p>注册 RTSP/HTTP 流，启动分析工作进程，查看事件并订阅实时快照。</p>
+          </div>
+          <button type="button" id="streams-refresh-button">刷新视频流</button>
         </div>
         <form id="stream-form" class="form-grid">
-          <label>视频流地址 (RTSP/HTTP) <input id="stream-url-input" name="stream_url" placeholder="rtsp://..." /></label>
-          <label>视频流名称 <input id="stream-name-input" name="name" placeholder="请输入视频流显示名称" /></label>
-          <button type="submit" class="primary">创建流</button>
+          <label class="span-2">视频流地址 <input id="stream-url-input" name="stream_url" placeholder="rtsp://user:password@host/stream1" /></label>
+          <label>显示名称 <input id="stream-name-input" name="name" placeholder="门岗摄像头 1" /></label>
+          <label>元数据（JSON） <input id="stream-metadata-input" placeholder='{"site":"east-gate"}' /></label>
+          <button type="submit" class="primary">注册视频流</button>
         </form>
-        <div class="actions">
-          <input id="stream-id-input" placeholder="请输入视频流 ID" />
-          <button type="button" id="stream-start-button">启动分析</button>
-          <button type="button" id="stream-stop-button">停止分析</button>
-          <button type="button" id="stream-events-button">查看事件</button>
-          <button type="button" id="stream-watch-button">实时订阅</button>
+        <div class="card">
+          <div class="form-grid compact">
+            <label class="span-2">视频流 ID <input id="stream-id-input" placeholder="stream_id" /></label>
+            <button type="button" id="stream-get-button">详情</button>
+            <button type="button" id="stream-start-button" class="primary">启动分析</button>
+            <button type="button" id="stream-stop-button">停止分析</button>
+            <button type="button" id="stream-events-button">事件</button>
+            <button type="button" id="stream-watch-button">实时订阅</button>
+          </div>
+          <div id="stream-ws-status" class="ws-status">未订阅视频流事件</div>
+          <div id="streams-summary" class="result-summary"></div>
+          <div id="streams-json" class="json-view data-viewer" role="region" aria-label="视频流响应数据"></div>
         </div>
-        <div id="stream-ws-status" class="ws-status">未订阅视频流事件</div>
-        <pre id="streams-json" class="json-view">{}</pre>
       </section>
+
+      <section class="view" data-view="models">
+        <div class="view-header">
+          <div class="section-title">
+            <h2>模型管理</h2>
+            <p>查看模型配置、加载/卸载模型，以及确认各能力是否已切到生产模型。</p>
+          </div>
+          <button type="button" id="models-refresh-button">刷新模型</button>
+        </div>
+        <div class="card">
+          <div class="form-grid">
+            <label class="span-2">模型 ID / 别名 <input id="model-id-input" placeholder="person_detector_default 或 portrait_hub/yolov8n.onnx" /></label>
+            <button type="button" id="model-detail-button">查看详情</button>
+            <button type="button" id="load-model-button" class="primary">加载模型</button>
+            <button type="button" id="unload-model-button">卸载模型</button>
+          </div>
+          <div id="models-summary" class="result-summary"></div>
+          <div id="models-json" class="json-view data-viewer" role="region" aria-label="模型响应数据"></div>
+        </div>
+      </section>
+
       <section class="view" data-view="admin">
         <div class="view-header">
-          <h2>全局比对阈值与数据保留策略</h2>
-          <button type="button" id="admin-refresh-button">刷新配置</button>
+          <div class="section-title">
+            <h2>治理配置</h2>
+            <p>管理比对阈值、数据保留、导出和备份。</p>
+          </div>
+          <button type="button" id="admin-refresh-button">刷新治理状态</button>
         </div>
-        <form id="threshold-form" class="form-grid">
-          <label>阈值方案类型 <input id="threshold-profile-input" value="normal" /></label>
-          <label>人体比对阈值 <input id="threshold-body-input" type="number" min="0" max="1" step="0.01" /></label>
-          <label>人脸比对阈值 <input id="threshold-face-input" type="number" min="0" max="1" step="0.01" /></label>
-          <button type="submit" class="primary">保存比对阈值</button>
-        </form>
-        <form id="retention-form" class="form-grid">
-          <label>数据保留天数 <input id="retention-days-input" type="number" min="1" value="30" /></label>
-          <label>输入 "cleanup" 确认 <input id="retention-confirm-input" placeholder="cleanup" /></label>
-          <button type="submit" class="danger">执行过期数据清理</button>
-        </form>
-        <pre id="admin-json" class="json-view">{}</pre>
+        <div class="split-grid">
+          <div class="card">
+            <div class="section-title">
+              <h3>比对阈值</h3>
+              <p>按 profile 更新各模态阈值。</p>
+            </div>
+            <form id="threshold-form" class="form-grid">
+              <label>阈值方案 <input id="threshold-profile-input" value="normal" /></label>
+              <label>人体 <input id="threshold-body-input" type="number" min="0" max="1" step="0.01" /></label>
+              <label>人脸 <input id="threshold-face-input" type="number" min="0" max="1" step="0.01" /></label>
+              <label>步态 <input id="threshold-gait-input" type="number" min="0" max="1" step="0.01" /></label>
+              <label>外观 <input id="threshold-appearance-input" type="number" min="0" max="1" step="0.01" /></label>
+              <label>融合 <input id="threshold-fusion-input" type="number" min="0" max="1" step="0.01" /></label>
+              <button type="submit" class="primary">保存阈值</button>
+            </form>
+          </div>
+          <div class="card">
+            <div class="section-title">
+              <h3>数据保留与备份</h3>
+              <p>清理和备份会按当前租户执行。</p>
+            </div>
+            <form id="retention-form" class="form-grid">
+              <label>保留天数 <input id="retention-days-input" type="number" min="0" value="30" /></label>
+              <label>输入 cleanup 确认 <input id="retention-confirm-input" placeholder="cleanup" /></label>
+              <button type="submit" class="danger">执行清理</button>
+            </form>
+            <form id="backup-form" class="form-grid">
+              <label>updated_since <input id="backup-updated-since-input" type="number" min="0" placeholder="可选 Unix 秒" /></label>
+              <label>输入 backup 确认 <input id="backup-confirm-input" placeholder="backup" /></label>
+              <button type="submit">创建备份</button>
+            </form>
+          </div>
+        </div>
+        <div id="admin-json" class="json-view data-viewer" role="region" aria-label="治理响应数据"></div>
       </section>
+
       <section class="view" data-view="alerts">
         <div class="view-header">
-          <h2>告警配置</h2>
+          <div class="section-title">
+            <h2>告警评估</h2>
+            <p>基于当前 metrics 做本地阈值评估，方便交付前巡检。</p>
+          </div>
           <button type="button" id="alerts-refresh-button">评估告警</button>
         </div>
         <form id="alert-form" class="form-grid">
           <label>最大错误率 <input id="alert-error-rate-input" type="number" min="0" max="1" step="0.01" /></label>
-          <label>最大 P95 延迟(秒) <input id="alert-p95-input" type="number" min="0" step="0.1" /></label>
-          <label>最小 GPU 空闲显存(GB) <input id="alert-gpu-free-input" type="number" min="0" step="0.1" /></label>
+          <label>最大 P95 延迟秒 <input id="alert-p95-input" type="number" min="0" step="0.1" /></label>
+          <label>最小 GPU 空闲 GB <input id="alert-gpu-free-input" type="number" min="0" step="0.1" /></label>
           <button type="submit" class="primary">保存告警阈值</button>
         </form>
         <div id="alert-list" class="alert-list"></div>
-        <pre id="alerts-json" class="json-view">{}</pre>
+        <div id="alerts-json" class="json-view data-viewer" role="region" aria-label="告警响应数据"></div>
       </section>
     </section>
-  </main>`;
+  </main>
+  <div id="vision-lightbox" class="vision-lightbox hidden" aria-hidden="true"></div>`;
 
 function qs(selector) {
   return document.querySelector(selector);
+}
+
+function qsa(selector) {
+  return Array.from(document.querySelectorAll(selector));
 }
 
 function headers(extra = {}) {
@@ -209,6 +485,361 @@ function websocketUrl(path) {
   if (state.apiKey) params.set("token", state.apiKey);
   if (state.bearer) params.set("access_token", state.bearer);
   return `${protocol}//${window.location.host}${path}?${params.toString()}`;
+}
+
+function setStatus(message, isError = false) {
+  const strip = qs("#status-strip");
+  strip.textContent = message;
+  strip.classList.toggle("error", isError);
+}
+
+function isPlainObject(value) {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function isScalar(value) {
+  return value === null || ["string", "number", "boolean"].includes(typeof value);
+}
+
+function compactValue(value) {
+  if (value === null || value === undefined) return "--";
+  if (typeof value === "boolean") return value ? "是" : "否";
+  if (typeof value === "number") return Number.isInteger(value) ? String(value) : String(Number(value.toFixed(6)));
+  if (typeof value === "string") return localizeValue(value) || "--";
+  if (Array.isArray(value)) return `${value.length} 项`;
+  if (isPlainObject(value)) return `${Object.keys(value).length} 个字段`;
+  return String(value);
+}
+
+const fieldLabels = {
+  aliases: "别名",
+  appearance: "衣着外观",
+  async_mode: "异步模式",
+  backend: "后端",
+  body: "人体",
+  candidate_count: "候选数",
+  confidence: "置信度",
+  config: "配置",
+  config_loaded: "配置已加载",
+  count: "数量",
+  data: "数据",
+  detail: "详情",
+  display_name: "显示名称",
+  dry_run: "仅预演",
+  error_rate: "错误率",
+  face: "人脸",
+  face_count: "人脸数",
+  frames: "帧列表",
+  gait: "步态",
+  gpu_free_gb: "GPU 空闲显存",
+  include_embeddings: "返回向量",
+  include_vectors: "返回向量",
+  inference_p95_seconds: "P95 推理耗时",
+  iou: "交并比（IoU）",
+  job_id: "任务 ID",
+  loaded: "已加载",
+  loaded_models: "已加载模型",
+  max_detections: "最大目标数",
+  message: "消息",
+  metadata: "元数据",
+  method: "方法",
+  modality: "模态",
+  modalities: "模态列表",
+  model_id: "模型 ID",
+  name: "名称",
+  pagination: "分页",
+  path: "路径",
+  people: "人员列表",
+  person_count: "人员数",
+  person_id: "人员 ID",
+  progress: "进度",
+  records: "记录",
+  request_id: "请求 ID",
+  results: "结果列表",
+  score: "分数",
+  settings: "设置",
+  similarity: "相似度",
+  status: "状态",
+  stream_id: "视频流 ID",
+  stream_url: "流地址",
+  tenant_id: "租户 ID",
+  threshold: "阈值",
+  threshold_profile: "阈值方案",
+  thresholds: "阈值",
+  top_k: "前 K",
+  total: "总数",
+  track_count: "轨迹数",
+  transport: "传输方式",
+  updated_since: "更新时间起点",
+  version: "版本",
+  visuals: "可视化结果",
+};
+
+const valueLabels = {
+  active: "运行中",
+  appearance: "衣着外观",
+  backup: "备份",
+  body: "人体",
+  cleanup: "清理",
+  completed: "已完成",
+  detect: "检测",
+  embeddings: "向量",
+  error: "错误",
+  face: "人脸",
+  failed: "失败",
+  false: "否",
+  fusion: "融合",
+  gait: "步态",
+  inactive: "未启用",
+  loaded: "已加载",
+  no: "否",
+  normal: "标准",
+  ok: "正常",
+  pending: "待处理",
+  persons: "人体",
+  pose: "姿态",
+  ready: "就绪",
+  running: "运行中",
+  success: "成功",
+  text: "文本",
+  tracks: "轨迹",
+  true: "是",
+  unloaded: "未加载",
+  yes: "是",
+};
+
+function localizeValue(value) {
+  const text = String(value ?? "");
+  const key = text.toLowerCase();
+  return Object.prototype.hasOwnProperty.call(valueLabels, key) ? valueLabels[key] : text;
+}
+
+function titleFromKey(key) {
+  const normalized = String(key || "");
+  if (!normalized) return "数据";
+  const labelKey = normalized.toLowerCase();
+  if (Object.prototype.hasOwnProperty.call(fieldLabels, labelKey)) return fieldLabels[labelKey];
+  return normalized
+    .replace(/[_-]+/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function describePayload(payload) {
+  if (Array.isArray(payload)) return `${payload.length} 条记录`;
+  if (isPlainObject(payload)) return `${Object.keys(payload).length} 个顶层字段`;
+  if (payload === null || payload === undefined) return "暂无数据";
+  return "接口响应";
+}
+
+function payloadLabel(name) {
+  const labels = {
+    dashboard: "平台状态",
+    vision: "图片解析响应",
+    compare: "人像比对响应",
+    gallery: "人员库响应",
+    jobs: "视频任务响应",
+    streams: "视频流响应",
+    models: "模型管理响应",
+    admin: "治理配置响应",
+    alerts: "告警评估响应",
+  };
+  return labels[name] || "接口响应";
+}
+
+function collectInsights(payload) {
+  const root = payloadData(payload);
+  const source = isPlainObject(root) ? root : isPlainObject(payload) ? payload : {};
+  const preferred = [
+    "status",
+    "tenant_id",
+    "count",
+    "total",
+    "candidate_count",
+    "person_count",
+    "face_count",
+    "track_count",
+    "job_id",
+    "stream_id",
+    "model_id",
+    "loaded",
+    "config_loaded",
+    "request_id",
+  ];
+  const items = [];
+  preferred.forEach((key) => {
+    if (source[key] !== undefined && isScalar(source[key])) {
+      items.push({ label: titleFromKey(key), value: compactValue(source[key]) });
+    }
+  });
+  Object.entries(source).forEach(([key, value]) => {
+    if (items.length >= 6) return;
+    if (preferred.includes(key) || !isScalar(value)) return;
+    items.push({ label: titleFromKey(key), value: compactValue(value) });
+  });
+  if (!items.length && Array.isArray(root)) {
+    items.push({ label: "记录数", value: root.length });
+  }
+  return items.slice(0, 6);
+}
+
+function objectPreview(value) {
+  if (isScalar(value)) return escapeHtml(compactValue(value));
+  return escapeHtml(compactValue(value));
+}
+
+function tableFromObjects(items) {
+  const rows = items.filter(isPlainObject).slice(0, 12);
+  if (!rows.length) return "";
+  const keys = Array.from(rows.reduce((set, row) => {
+    Object.keys(row).forEach((key) => {
+      if (set.size < 6) set.add(key);
+    });
+    return set;
+  }, new Set()));
+  if (!keys.length) return "";
+  return `
+    <div class="data-table-wrap">
+      <table class="data-table">
+        <thead><tr>${keys.map((key) => `<th>${escapeHtml(titleFromKey(key))}</th>`).join("")}</tr></thead>
+        <tbody>
+          ${rows.map((row) => `<tr>${keys.map((key) => `<td>${objectPreview(row[key])}</td>`).join("")}</tr>`).join("")}
+        </tbody>
+      </table>
+    </div>`;
+}
+
+function kvGridMarkup(value) {
+  if (!isPlainObject(value)) return "";
+  const entries = Object.entries(value).filter(([, item]) => isScalar(item)).slice(0, 18);
+  if (!entries.length) return "";
+  return `
+    <div class="data-kv-grid">
+      ${entries.map(([key, item]) => `
+        <div class="data-kv-item">
+          <span>${escapeHtml(titleFromKey(key))}</span>
+          <strong title="${escapeHtml(compactValue(item))}">${escapeHtml(compactValue(item))}</strong>
+        </div>`).join("")}
+    </div>`;
+}
+
+function listMarkup(items) {
+  const values = items.slice(0, 12);
+  if (!values.length) return "";
+  return `<ul class="data-list">${values.map((item) => `<li>${objectPreview(item)}</li>`).join("")}</ul>`;
+}
+
+function dataSectionMarkup(key, value, index) {
+  const label = titleFromKey(key);
+  const summary = compactValue(value);
+  let body = "";
+  if (Array.isArray(value)) {
+    body = tableFromObjects(value) || listMarkup(value) || `<div class="data-empty">暂无记录</div>`;
+  } else if (isPlainObject(value)) {
+    body = kvGridMarkup(value);
+    const nested = Object.entries(value)
+      .filter(([, item]) => Array.isArray(item) || isPlainObject(item))
+      .slice(0, 4)
+      .map(([nestedKey, nestedValue], nestedIndex) => dataSectionMarkup(nestedKey, nestedValue, nestedIndex + 10))
+      .join("");
+    body = [body, nested].filter(Boolean).join("");
+  } else {
+    body = `<div class="data-list"><li>${objectPreview(value)}</li></div>`;
+  }
+  return `
+    <details class="data-section" ${index < 2 ? "open" : ""}>
+      <summary><strong>${escapeHtml(label)}</strong><span>${escapeHtml(summary)}</span></summary>
+      <div class="data-section-body">${body || `<div class="data-empty">暂无可展示字段</div>`}</div>
+    </details>`;
+}
+
+function renderDataViewer(selector, payload, name = "") {
+  const node = qs(selector);
+  if (!node) return;
+  const raw = JSON.stringify(payload || {}, null, 2);
+  const root = payloadData(payload);
+  const sections = isPlainObject(root)
+    ? Object.entries(root).filter(([, value]) => Array.isArray(value) || isPlainObject(value)).slice(0, 8)
+    : Array.isArray(root)
+      ? [["records", root]]
+      : [];
+  const directFields = isPlainObject(root) ? kvGridMarkup(root) : "";
+  const insights = collectInsights(payload);
+  node.innerHTML = `
+    <div class="data-viewer-head">
+      <div class="data-viewer-title">
+        <strong>${escapeHtml(payloadLabel(name))}</strong>
+        <span>${escapeHtml(describePayload(root))}</span>
+      </div>
+      <button type="button" class="small" data-copy-json="${escapeHtml(name || selector)}">复制数据</button>
+    </div>
+    ${insights.length ? `<div class="data-insight-grid">${insights.map((item) => `
+      <div class="data-insight">
+        <span>${escapeHtml(item.label)}</span>
+        <strong title="${escapeHtml(item.value)}">${escapeHtml(item.value)}</strong>
+      </div>`).join("")}</div>` : ""}
+    ${directFields || (!sections.length ? `<div class="data-empty">暂无结构化数据</div>` : "")}
+    ${sections.length ? `<div class="data-section-list">${sections.map(([key, value], index) => dataSectionMarkup(key, value, index)).join("")}</div>` : ""}
+    <details class="raw-json">
+      <summary>查看完整数据（JSON）</summary>
+      <pre class="json-raw">${escapeHtml(raw)}</pre>
+    </details>`;
+  const copyButton = node.querySelector("[data-copy-json]");
+  if (copyButton) copyButton.addEventListener("click", () => copyText(raw, "数据已复制"));
+}
+
+function renderJson(selector, payload) {
+  const node = qs(selector);
+  if (!node) return;
+  if (node.classList.contains("data-viewer")) {
+    renderDataViewer(selector, payload);
+    return;
+  }
+  node.textContent = JSON.stringify(payload || {}, null, 2);
+}
+
+function renderPayload(name, selector, payload) {
+  state.latestPayloads[name] = payload;
+  const node = qs(selector);
+  if (node && node.classList.contains("data-viewer")) {
+    renderDataViewer(selector, payload, name);
+    return;
+  }
+  renderJson(selector, payload);
+}
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function formatNumber(value, digits = 2) {
+  if (value === null || value === undefined || Number.isNaN(Number(value))) return "--";
+  return Number(value).toFixed(digits);
+}
+
+function fitVisualSize(width, height, maxWidth, maxHeight, allowUpscale = false) {
+  const sourceWidth = Math.max(1, Number(width) || 1);
+  const sourceHeight = Math.max(1, Number(height) || 1);
+  const limitWidth = Math.max(1, Number(maxWidth) || sourceWidth);
+  const limitHeight = Math.max(1, Number(maxHeight) || sourceHeight);
+  const scale = Math.min(limitWidth / sourceWidth, limitHeight / sourceHeight);
+  const boundedScale = allowUpscale ? scale : Math.min(scale, 1);
+  return {
+    width: Math.max(1, Math.round(sourceWidth * boundedScale)),
+    height: Math.max(1, Math.round(sourceHeight * boundedScale)),
+  };
+}
+
+function setView(view) {
+  state.view = view;
+  localStorage.setItem("portraitHubView", view);
+  qsa("[data-view]").forEach((item) => item.classList.toggle("active", item.dataset.view === view));
+  qsa("[data-nav]").forEach((item) => item.setAttribute("aria-pressed", String(item.dataset.nav === view)));
+  closeVisionLightbox();
 }
 
 function closeSocket(name) {
@@ -229,9 +860,13 @@ function watchJsonSocket(name, path, statusSelector, outputSelector) {
   });
   socket.addEventListener("message", (event) => {
     try {
-      renderJson(outputSelector, JSON.parse(event.data));
+      const payload = JSON.parse(event.data);
+      state.latestPayloads[name] = payload;
+      renderDataViewer(outputSelector, payload, name);
     } catch {
-      qs(outputSelector).textContent = event.data;
+      const payload = { transport: "text", message: event.data };
+      state.latestPayloads[name] = payload;
+      renderDataViewer(outputSelector, payload, name);
     }
   });
   socket.addEventListener("close", () => {
@@ -242,23 +877,49 @@ function watchJsonSocket(name, path, statusSelector, outputSelector) {
   });
 }
 
-function setStatus(message, isError = false) {
-  const strip = qs("#status-strip");
-  strip.textContent = message;
-  strip.classList.toggle("error", isError);
+function wrapHandler(fn) {
+  return async (...args) => {
+    try {
+      setStatus("处理中...");
+      await fn(...args);
+      setStatus("就绪");
+    } catch (error) {
+      let msg = error.message || String(error);
+      try {
+        const parsed = JSON.parse(msg);
+        msg = parsed.detail || parsed.message || msg;
+      } catch {}
+      setStatus(msg, true);
+    }
+  };
 }
 
-function renderJson(selector, payload) {
-  qs(selector).textContent = JSON.stringify(payload, null, 2);
+async function api(path, options = {}) {
+  const init = { method: options.method || "GET", headers: headers(options.headers || {}) };
+  if (options.json !== undefined) {
+    init.headers["Content-Type"] = "application/json";
+    init.body = JSON.stringify(options.json);
+  }
+  if (options.body !== undefined) init.body = options.body;
+  const response = await fetch(path, init);
+  const text = await response.text();
+  let payload = {};
+  if (text) {
+    try {
+      payload = JSON.parse(text);
+    } catch {
+      payload = { body: text };
+    }
+  }
+  if (!response.ok) throw new Error(JSON.stringify(payload));
+  return payload.data || payload;
 }
 
-function escapeHtml(value) {
-  return String(value)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
+async function textApi(path) {
+  const response = await fetch(path, { headers: headers() });
+  const text = await response.text();
+  if (!response.ok) throw new Error(text || response.statusText);
+  return text;
 }
 
 function metricValue(metrics, name) {
@@ -299,75 +960,423 @@ function parsePrometheus(text) {
     .filter(Boolean);
 }
 
-async function textApi(path) {
-  const response = await fetch(path, { headers: headers() });
-  const text = await response.text();
-  if (!response.ok) throw new Error(text || response.statusText);
-  return text;
+function formDataWithBooleans(form, booleanFields = []) {
+  const data = new FormData(form);
+  booleanFields.forEach((name) => data.set(name, data.get(name) === "on" ? "true" : "false"));
+  return data;
 }
 
-async function api(path, options = {}) {
-  const init = { method: options.method || "GET", headers: headers(options.headers || {}) };
-  if (options.json !== undefined) {
-    init.headers["Content-Type"] = "application/json";
-    init.body = JSON.stringify(options.json);
+function copySharedFields(source, target, fields) {
+  fields.forEach((name) => {
+    if (source.has(name)) target.set(name, source.get(name));
+  });
+}
+
+function formFiles(input) {
+  return Array.from(input.files || []);
+}
+
+function filesSignature(files) {
+  return files.map((file) => `${file.name}:${file.size}:${file.lastModified}`).join("|");
+}
+
+function ensureFiles(input, label) {
+  const files = formFiles(input);
+  if (!files.length) {
+    setStatus(`请选择${label}`, true);
+    return null;
   }
-  if (options.body !== undefined) init.body = options.body;
-  const response = await fetch(path, init);
-  const text = await response.text();
-  let payload = {};
-  if (text) {
-    try {
-      payload = JSON.parse(text);
-    } catch {
-      payload = { body: text };
-    }
+  return files;
+}
+
+function encodedInput(selector, label) {
+  const value = qs(selector).value.trim();
+  if (!value) {
+    setStatus(`请输入${label}`, true);
+    return null;
   }
-  if (!response.ok) throw new Error(JSON.stringify(payload));
-  return payload.data || payload;
+  return encodeURIComponent(value);
 }
 
-function setView(view) {
-  state.view = view;
-  document.querySelectorAll("[data-view]").forEach((item) => item.classList.toggle("active", item.dataset.view === view));
-  document.querySelectorAll("[data-nav]").forEach((item) => item.setAttribute("aria-pressed", String(item.dataset.nav === view)));
+function parseOptionalJson(selector, fallback = {}) {
+  const raw = qs(selector).value.trim();
+  if (!raw) return fallback;
+  try {
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("not object");
+    return parsed;
+  } catch {
+    throw new Error("JSON 字段必须是对象");
+  }
 }
 
-function wrapHandler(fn) {
-  return async (...args) => {
-    try {
-      setStatus("处理中...");
-      await fn(...args);
-      setStatus("就绪");
-    } catch (error) {
-      let msg = error.message || String(error);
-      try {
-        const parsed = JSON.parse(msg);
-        msg = parsed.detail || parsed.message || msg;
-      } catch {}
-      setStatus(msg, true);
-    }
-  };
+function renderSummary(selector, items) {
+  const node = qs(selector);
+  if (!node) return;
+  node.innerHTML = items
+    .map((item) => `<div class="summary-item"><span>${escapeHtml(item.label)}</span><strong>${escapeHtml(item.value)}</strong></div>`)
+    .join("");
 }
 
-async function refreshModels() {
-  renderJson("#models-json", await api("/v1/models"));
+function renderBadges(selector, items) {
+  const node = qs(selector);
+  if (!node) return;
+  node.innerHTML = items.map((item) => `<span class="badge ${item.tone || ""}">${escapeHtml(item.label)}: ${escapeHtml(item.value)}</span>`).join("");
 }
 
-async function refreshGallery() {
-  const payload = await api("/v1/admin/export?people_limit=50&jobs_limit=0&streams_limit=0");
-  state.galleryExport = payload;
-  renderGalleryVisuals(payload);
-  renderJson("#gallery-json", payload);
+function payloadData(payload) {
+  return payload && payload.data ? payload.data : payload;
 }
 
-async function refreshStreams() {
-  renderJson("#streams-json", await api("/v1/streams?limit=50"));
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.addEventListener("load", () => resolve(String(reader.result || "")));
+    reader.addEventListener("error", () => reject(reader.error || new Error("file preview failed")));
+    reader.readAsDataURL(file);
+  });
 }
 
-async function refreshAdmin() {
-  const [status, thresholds] = await Promise.all([api("/v1/admin/status"), api("/v1/thresholds")]);
-  renderJson("#admin-json", { status, thresholds });
+function imageSize(src) {
+  return new Promise((resolve) => {
+    const image = new Image();
+    image.addEventListener("load", () => resolve({ width: image.naturalWidth || 1, height: image.naturalHeight || 1 }));
+    image.addEventListener("error", () => resolve({ width: 1, height: 1 }));
+    image.src = src;
+  });
+}
+
+async function previewItems(input, limit = 8, prefix = "") {
+  const files = formFiles(input).slice(0, limit);
+  return Promise.all(files.map(async (file, index) => ({
+    name: file.name,
+    label: `${prefix}${index + 1}. ${file.name}`,
+    src: await readFileAsDataUrl(file),
+  }))).then((items) => Promise.all(items.map(async (item) => ({ ...item, ...(await imageSize(item.src)) }))));
+}
+
+function frameImageIndex(frame, fallbackIndex) {
+  const raw = frame?.image_index ?? frame?.frame_index ?? frame?.index;
+  const value = Number(raw);
+  return Number.isInteger(value) && value >= 0 ? value : fallbackIndex;
+}
+
+function numericBox(box) {
+  if (!Array.isArray(box) || box.length < 4) return null;
+  const values = box.slice(0, 4).map((value) => Number(value));
+  return values.every((value) => Number.isFinite(value)) ? values : null;
+}
+
+function recordLabel(record, fallback) {
+  const name = record.label || record.class_name || record.name || record.track_id || fallback;
+  const score = record.score ?? record.confidence;
+  return score === undefined ? String(name) : `${name} ${formatNumber(score, 2)}`;
+}
+
+function frameRecords(frame) {
+  const groups = [
+    ["persons", "person"],
+    ["faces", "face"],
+    ["detections", "object"],
+  ];
+  const records = [];
+  groups.forEach(([key, fallback]) => {
+    const items = Array.isArray(frame?.[key]) ? frame[key] : [];
+    items.forEach((item, index) => records.push({ ...item, _label: recordLabel(item, `${fallback} ${index + 1}`) }));
+  });
+  if (frame?.appearance?.box) records.push({ ...frame.appearance, _label: "appearance" });
+  return records;
+}
+
+function poseKeypoints(frame) {
+  const keypoints = frame?.pose?.keypoints;
+  return Array.isArray(keypoints) ? keypoints : [];
+}
+
+function pointForKeypoint(keypoint) {
+  const point = keypoint?.point || keypoint?.xy || keypoint;
+  if (!Array.isArray(point) || point.length < 2) return null;
+  const x = Number(point[0]);
+  const y = Number(point[1]);
+  return Number.isFinite(x) && Number.isFinite(y) ? [x, y] : null;
+}
+
+function buildVisualMeta(item, frame, frameIndex) {
+  const width = Number(frame?.width) || Number(item?.width) || 1;
+  const height = Number(frame?.height) || Number(item?.height) || 1;
+  const boxes = frameRecords(frame)
+    .map((record) => ({ box: numericBox(record.box || record.bbox || record.smoothed_box), label: record._label }))
+    .filter((record) => record.box);
+  const keypoints = poseKeypoints(frame)
+    .map((keypoint) => ({ point: pointForKeypoint(keypoint), name: keypoint?.name || "" }))
+    .filter((keypoint) => keypoint.point);
+  const skeleton = Array.isArray(frame?.pose?.skeleton) ? frame.pose.skeleton : [];
+  const pointByName = new Map(keypoints.map((keypoint) => [keypoint.name, keypoint.point]));
+  const overlay = [
+    ...boxes.map(({ box, label }) => {
+      const [x1, y1, x2, y2] = box;
+      const x = Math.max(0, Math.min(width, Math.min(x1, x2)));
+      const y = Math.max(0, Math.min(height, Math.min(y1, y2)));
+      const w = Math.max(1, Math.min(width, Math.max(x1, x2)) - x);
+      const h = Math.max(1, Math.min(height, Math.max(y1, y2)) - y);
+      return `<rect x="${x}" y="${y}" width="${w}" height="${h}" /><text x="${x + 4}" y="${Math.max(14, y + 16)}">${escapeHtml(label)}</text>`;
+    }),
+    ...skeleton.map((pair) => {
+      if (!Array.isArray(pair) || pair.length < 2) return "";
+      const left = pointByName.get(pair[0]);
+      const right = pointByName.get(pair[1]);
+      if (!left || !right) return "";
+      return `<line x1="${left[0]}" y1="${left[1]}" x2="${right[0]}" y2="${right[1]}" />`;
+    }),
+    ...keypoints.map(({ point, name }) => `<circle cx="${point[0]}" cy="${point[1]}" r="4"><title>${escapeHtml(name)}</title></circle>`),
+  ].join("");
+  const count = boxes.length + keypoints.length;
+  const frameLabel = `第 ${frameIndex + 1} 帧`;
+  const caption = count ? `${count} 个标注` : "无可绘制标注";
+  return { width, height, overlay, count, frameLabel, caption };
+}
+
+function resultVisualStageMarkup(item, meta, size) {
+  return `
+      <div class="result-visual-stage">
+        <svg width="${size.width}" height="${size.height}" viewBox="0 0 ${meta.width} ${meta.height}" role="img" aria-label="${escapeHtml(item?.name || meta.frameLabel)}">
+          <image href="${escapeHtml(item?.src || "")}" x="0" y="0" width="${meta.width}" height="${meta.height}" preserveAspectRatio="none" />
+          ${meta.overlay}
+        </svg>
+      </div>`;
+}
+
+function resultVisualMarkup(entry, visualIndex, options = {}) {
+  const item = entry?.item || {};
+  const frame = entry?.frame || {};
+  const frameIndex = entry?.frameIndex ?? visualIndex;
+  const meta = buildVisualMeta(item, frame, frameIndex);
+  const variant = options.variant || "thumb";
+  const interactive = options.interactive ?? variant === "thumb";
+  const maxWidth = options.maxWidth ?? (variant === "lightbox" ? Math.max(320, Math.floor(window.innerWidth * 0.86)) : 180);
+  const maxHeight = options.maxHeight ?? (variant === "lightbox" ? Math.max(240, Math.floor(window.innerHeight * 0.78)) : 130);
+  const size = fitVisualSize(meta.width, meta.height, maxWidth, maxHeight, variant === "lightbox");
+  const label = escapeHtml(item?.label || meta.frameLabel);
+  const title = escapeHtml(item?.name || item?.label || meta.frameLabel);
+  const stage = resultVisualStageMarkup(item, meta, size);
+  return `
+    <figure class="result-visual-card result-visual-card--${variant}">
+      ${interactive ? `<button type="button" class="result-visual-trigger" data-result-visual-index="${visualIndex}" aria-label="放大查看 ${title}">${stage}</button>` : stage}
+      <figcaption><span>${label}</span><strong>${meta.caption}</strong></figcaption>
+    </figure>`;
+}
+
+function renderVisionVisuals(payload, items) {
+  const node = qs("#vision-visuals");
+  if (!node) return;
+  const data = payloadData(payload);
+  const frames = Array.isArray(data?.frames)
+    ? data.frames
+    : Array.isArray(data?.results)
+      ? data.results
+      : [];
+  const visuals = !frames.length
+    ? items.map((item, index) => ({ item, frame: { image_index: index }, frameIndex: index }))
+    : frames
+      .map((frame, index) => {
+        const imageIndex = frameImageIndex(frame, index);
+        return { item: items[imageIndex] || items[index], frame, frameIndex: index };
+      })
+      .filter((entry) => entry.item);
+  state.visionResultVisuals = visuals;
+  closeVisionLightbox();
+  if (!items.length) {
+    node.innerHTML = "";
+    return;
+  }
+  node.innerHTML = visuals.map((entry, index) => resultVisualMarkup(entry, index, { variant: "thumb", maxWidth: 180, maxHeight: 130 })).join("");
+}
+
+function closeVisionLightbox() {
+  state.visionLightboxIndex = null;
+  const node = qs("#vision-lightbox");
+  if (!node) return;
+  node.classList.add("hidden");
+  node.setAttribute("aria-hidden", "true");
+  node.innerHTML = "";
+  document.body.classList.remove("lightbox-open");
+}
+
+function renderVisionLightbox() {
+  const node = qs("#vision-lightbox");
+  if (!node) return;
+  const visual = state.visionResultVisuals[state.visionLightboxIndex];
+  if (!visual) {
+    closeVisionLightbox();
+    return;
+  }
+  node.innerHTML = `
+    <div class="vision-lightbox-scrim" data-lightbox-close></div>
+    <section class="vision-lightbox-panel" role="dialog" aria-modal="true" aria-label="解析结果放大图">
+      <button type="button" class="vision-lightbox-close" data-lightbox-close aria-label="关闭放大预览">×</button>
+      ${resultVisualMarkup(visual, state.visionLightboxIndex, { variant: "lightbox", interactive: false })}
+    </section>`;
+  node.classList.remove("hidden");
+  node.setAttribute("aria-hidden", "false");
+  document.body.classList.add("lightbox-open");
+}
+
+function openVisionLightbox(index) {
+  if (!Number.isInteger(index) || index < 0 || index >= state.visionResultVisuals.length) return;
+  state.visionLightboxIndex = index;
+  renderVisionLightbox();
+}
+
+function requestSnippet(path, formFieldExamples = []) {
+  const lines = [
+    `curl -X POST "${window.location.origin}${path}"`,
+    `  -H "X-Tenant-ID: ${state.tenantId}"`,
+  ];
+  if (state.apiKey) lines.push(`  -H "X-API-Key: ${state.apiKey}"`);
+  if (state.bearer) lines.push(`  -H "Authorization: Bearer ${state.bearer.slice(0, 12)}..."`);
+  formFieldExamples.forEach((item) => lines.push(`  -F "${item}"`));
+  return lines.join(" \\\n");
+}
+
+function renderIntegrationSnippet() {
+  qs("#integration-code").textContent = requestSnippet("/v1/gallery/search", [
+    "file=@query.jpg",
+    "modality=body",
+    "top_k=5",
+    "threshold_profile=normal",
+  ]);
+}
+
+async function copyText(text, notice = "内容已复制") {
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    await navigator.clipboard.writeText(text);
+  }
+  setStatus(notice);
+}
+
+function selectedVisionEndpoint() {
+  return endpointMap.vision[qs("#vision-mode-input").value] || "/v1/infer/persons";
+}
+
+function selectedCompareEndpoint() {
+  return endpointMap.compare[qs("#compare-mode-input").value] || "/v1/compare/persons";
+}
+
+function updateSnippetButtons() {
+  const vision = selectedVisionEndpoint();
+  const compare = selectedCompareEndpoint();
+  qs("#vision-copy-button").onclick = wrapHandler(() => copyText(requestSnippet(vision, ["files=@frame.jpg", "include_embeddings=false"]), "调用示例已复制"));
+  qs("#compare-copy-button").onclick = wrapHandler(() => copyText(requestSnippet(compare, ["image_a=@a.jpg", "image_b=@b.jpg", "threshold_profile=normal"]), "调用示例已复制"));
+  qs("#gallery-copy-button").onclick = wrapHandler(() => copyText(requestSnippet("/v1/gallery/search", ["file=@query.jpg", "modality=body", "top_k=5"]), "调用示例已复制"));
+  qs("#video-copy-button").onclick = wrapHandler(() => copyText(requestSnippet("/v1/jobs/video", ["file=@demo.mp4", "frame_interval=15", "max_frames=64"]), "调用示例已复制"));
+}
+
+async function renderPreviews(input, selector, prefix = "") {
+  const files = formFiles(input);
+  const signature = filesSignature(files);
+  const node = qs(selector);
+  if (!node) return;
+  node.innerHTML = "";
+  const items = await previewItems(input, 8, prefix);
+  if (filesSignature(formFiles(input)) !== signature) return;
+  if (selector === "#vision-preview") {
+    state.visionPreviews = items;
+    state.visionPreviewSignature = signature;
+    state.visionResultVisuals = [];
+    closeVisionLightbox();
+    qs("#vision-visuals").innerHTML = "";
+  }
+  items.forEach((item) => {
+    const card = document.createElement("div");
+    card.className = "preview-card";
+    card.innerHTML = `<img alt="${escapeHtml(item.name)}" src="${escapeHtml(item.src)}" /><span>${escapeHtml(item.label)}</span>`;
+    node.appendChild(card);
+  });
+  if (files.length > 8) {
+    const card = document.createElement("div");
+    card.className = "preview-card";
+    card.innerHTML = `<span>还有 ${files.length - 8} 个文件未预览</span>`;
+    node.appendChild(card);
+  }
+}
+
+async function renderComparePreviews() {
+  const node = qs("#compare-preview");
+  node.innerHTML = "";
+  state.comparePreviews = { A: [], B: [] };
+  for (const [input, prefix] of [
+    [qs("#compare-a-input"), "A"],
+    [qs("#compare-b-input"), "B"],
+  ]) {
+    const signature = filesSignature(formFiles(input));
+    const items = await previewItems(input, 4, prefix);
+    if (filesSignature(formFiles(input)) !== signature) return;
+    state.comparePreviews[prefix] = items;
+    items.forEach((item) => {
+      const card = document.createElement("div");
+      card.className = "preview-card";
+      card.innerHTML = `<img alt="${escapeHtml(item.name)}" src="${escapeHtml(item.src)}" /><span>${escapeHtml(item.label)}</span>`;
+      node.appendChild(card);
+    });
+  }
+}
+
+function renderDashboard(summary) {
+  const metrics = summary.metrics || {};
+  qs("#metric-requests").textContent = String(metrics.requests || 0);
+  qs("#metric-error-rate").textContent = `${((metrics.error_rate || 0) * 100).toFixed(1)}%`;
+  qs("#metric-p95").textContent = `${formatNumber(metrics.inference_p95_seconds, 2)}s`;
+  qs("#metric-gpu-free").textContent = metrics.gpu_free_gb === null ? "--" : `${formatNumber(metrics.gpu_free_gb, 1)}GB`;
+  const status = summary.status || {};
+  renderBadges("#overview-badges", [
+    { label: "图库", value: status.configured_backends?.gallery || "--", tone: "ok" },
+    { label: "向量库", value: status.configured_backends?.vector || "--", tone: "ok" },
+    { label: "对象存储", value: status.configured_backends?.object_storage || "--", tone: "ok" },
+    { label: "队列", value: status.configured_backends?.task_queue || "--", tone: "ok" },
+    { label: "RBAC", value: status.security?.rbac_enabled ? "开启" : "关闭", tone: status.security?.rbac_enabled ? "ok" : "warn" },
+  ]);
+}
+
+function renderAlerts() {
+  const metrics = state.dashboard.metrics || {};
+  const checks = [
+    {
+      name: "错误率",
+      current: metrics.error_rate || 0,
+      limit: state.alertConfig.maxErrorRate,
+      ok: (metrics.error_rate || 0) <= state.alertConfig.maxErrorRate,
+      unit: "%",
+      scale: 100,
+    },
+    {
+      name: "P95 延迟",
+      current: metrics.inference_p95_seconds || 0,
+      limit: state.alertConfig.maxP95Latency,
+      ok: (metrics.inference_p95_seconds || 0) <= state.alertConfig.maxP95Latency,
+      unit: "s",
+      scale: 1,
+    },
+    {
+      name: "GPU 空闲显存",
+      current: metrics.gpu_free_gb,
+      limit: state.alertConfig.minFreeGpuMemoryGb,
+      ok: metrics.gpu_free_gb === null || Number(metrics.gpu_free_gb) >= state.alertConfig.minFreeGpuMemoryGb,
+      unit: "GB",
+      scale: 1,
+    },
+  ];
+  qs("#alert-list").innerHTML = checks.map((item) => {
+    const current = item.current === null ? "--" : `${formatNumber(Number(item.current) * item.scale, 2)}${item.unit}`;
+    const limit = `${formatNumber(Number(item.limit) * item.scale, 2)}${item.unit}`;
+    return `<div class="alert-item ${item.ok ? "ok" : "warn"}"><strong>${escapeHtml(item.name)}</strong><span>${escapeHtml(current)} / ${escapeHtml(limit)}</span></div>`;
+  }).join("");
+  renderPayload("alerts", "#alerts-json", { config: state.alertConfig, checks });
+}
+
+function setAlertInputs() {
+  qs("#alert-error-rate-input").value = state.alertConfig.maxErrorRate;
+  qs("#alert-p95-input").value = state.alertConfig.maxP95Latency;
+  qs("#alert-gpu-free-input").value = state.alertConfig.minFreeGpuMemoryGb;
 }
 
 async function refreshDashboard() {
@@ -400,27 +1409,76 @@ async function refreshDashboard() {
   state.dashboard = summary;
   renderDashboard(summary);
   renderAlerts();
-  renderJson("#dashboard-json", summary);
+  renderPayload("dashboard", "#dashboard-json", summary);
+}
+
+async function refreshModels() {
+  const payload = await api("/v1/models");
+  renderSummary("#models-summary", [
+    { label: "模型数", value: payload.count ?? 0 },
+    { label: "已加载", value: (payload.loaded_models || []).length },
+    { label: "别名数", value: Object.keys(payload.aliases || {}).length },
+    { label: "配置", value: payload.config_loaded ? "已加载" : "异常" },
+  ]);
+  renderPayload("models", "#models-json", payload);
+}
+
+async function refreshGallery() {
+  const payload = await api("/v1/admin/export?people_limit=50&jobs_limit=0&streams_limit=0");
+  state.galleryExport = payload;
+  renderGalleryVisuals(payload);
+  renderGallerySummary(payload);
+  renderPayload("gallery", "#gallery-json", payload);
+}
+
+async function refreshStreams() {
+  const payload = await api("/v1/streams?limit=50");
+  renderSummary("#streams-summary", [
+    { label: "视频流", value: payload.total ?? (payload.streams || []).length },
+    { label: "本页数量", value: payload.count ?? (payload.streams || []).length },
+    { label: "下一页", value: payload.next_cursor ? "有" : "无" },
+    { label: "租户", value: state.tenantId },
+  ]);
+  renderPayload("streams", "#streams-json", payload);
+}
+
+async function refreshAdmin() {
+  const [status, thresholds] = await Promise.all([api("/v1/admin/status"), api("/v1/thresholds")]);
+  renderPayload("admin", "#admin-json", { status, thresholds });
 }
 
 async function refreshAll() {
   await Promise.allSettled([refreshDashboard(), refreshModels(), refreshGallery(), refreshStreams(), refreshAdmin()]);
 }
 
-function renderDashboard(summary) {
-  const metrics = summary.metrics || {};
-  qs("#metric-requests").textContent = String(metrics.requests || 0);
-  qs("#metric-error-rate").textContent = `${((metrics.error_rate || 0) * 100).toFixed(1)}%`;
-  qs("#metric-p95").textContent = `${Number(metrics.inference_p95_seconds || 0).toFixed(2)}s`;
-  qs("#metric-gpu-free").textContent = metrics.gpu_free_gb === null ? "--" : `${Number(metrics.gpu_free_gb).toFixed(1)}GB`;
+function renderGallerySummary(payload) {
+  const people = Array.isArray(payload.people) ? payload.people : [];
+  const featureCount = people.reduce((total, person) => total + Number(person.feature_count || (person.features || []).length || 0), 0);
+  renderSummary("#gallery-summary", [
+    { label: "人员数", value: payload.pagination?.people?.total ?? people.length },
+    { label: "特征数", value: featureCount },
+    { label: "向量后端", value: payload.model_capabilities ? "已配置" : "--" },
+    { label: "租户", value: payload.tenant_id || state.tenantId },
+  ]);
 }
 
 function renderGalleryVisuals(payload) {
   const people = Array.isArray(payload.people) ? payload.people : [];
   const list = qs("#people-list");
   list.innerHTML = people.length
-    ? people.map((person) => `<li><span>${escapeHtml(person.display_name || person.person_id)}</span><strong>${Number(person.feature_count || 0)}</strong></li>`).join("")
+    ? people.map((person) => {
+      const name = escapeHtml(person.display_name || person.person_id);
+      const id = escapeHtml(person.person_id);
+      const count = Number(person.feature_count || (person.features || []).length || 0);
+      return `<li><button type="button" class="ghost" data-person-id="${id}"><span>${name}</span><small>${id}</small></button><strong>${count}</strong></li>`;
+    }).join("")
     : "<li><span>暂无人员</span><strong>0</strong></li>";
+  qsa("[data-person-id]").forEach((button) => {
+    button.addEventListener("click", () => {
+      qs("#person-id-input").value = button.dataset.personId;
+      setStatus("已填入人员 ID");
+    });
+  });
   const scatter = qs("#feature-scatter");
   scatter.innerHTML = people
     .flatMap((person, personIndex) => (person.features || []).map((feature, featureIndex) => {
@@ -431,46 +1489,165 @@ function renderGalleryVisuals(payload) {
     .join("");
 }
 
-function setAlertInputs() {
-  qs("#alert-error-rate-input").value = state.alertConfig.maxErrorRate;
-  qs("#alert-p95-input").value = state.alertConfig.maxP95Latency;
-  qs("#alert-gpu-free-input").value = state.alertConfig.minFreeGpuMemoryGb;
+function renderVisionSummary(payload) {
+  const data = payloadData(payload);
+  renderSummary("#vision-summary", [
+    { label: "状态", value: data.status || "success" },
+    { label: "帧/图数量", value: data.frame_count ?? data.image_count ?? data.count ?? "--" },
+    { label: "人员/目标", value: data.person_count ?? data.face_count ?? data.result_count ?? "--" },
+    { label: "耗时", value: data.timing?.total_seconds !== undefined ? `${formatNumber(data.timing.total_seconds, 3)}s` : "--" },
+  ]);
 }
 
-function renderAlerts() {
-  const metrics = state.dashboard.metrics || {};
-  const checks = [
-    {
-      name: "错误率",
-      current: metrics.error_rate || 0,
-      limit: state.alertConfig.maxErrorRate,
-      ok: (metrics.error_rate || 0) <= state.alertConfig.maxErrorRate,
-      unit: "%",
-      scale: 100,
+function renderCompareSummary(payload) {
+  const data = payloadData(payload);
+  const comparison = data.comparison || data;
+  renderSummary("#compare-summary", [
+    { label: "是否通过", value: comparison.passed === undefined ? "--" : comparison.passed ? "通过" : "未通过" },
+    { label: "相似度", value: formatNumber(comparison.similarity ?? comparison.quality_adjusted_similarity, 4) },
+    { label: "阈值", value: formatNumber(comparison.threshold ?? comparison.adjusted_threshold, 4) },
+    { label: "风险", value: comparison.risk || comparison.reason || "--" },
+  ]);
+}
+
+function renderJobSummary(payload) {
+  const data = payloadData(payload);
+  const job = data.job || {};
+  const result = data.result || {};
+  renderSummary("#jobs-summary", [
+    { label: "任务状态", value: job.status || "--" },
+    { label: "进度", value: job.progress !== undefined ? `${formatNumber(job.progress * 100, 1)}%` : "--" },
+    { label: "轨迹数", value: result.track_count ?? job.result?.track_count ?? "--" },
+    { label: "人员数", value: result.person_count ?? job.result?.person_count ?? "--" },
+  ]);
+}
+
+async function submitVision(event) {
+  event.preventDefault();
+  const mode = qs("#vision-mode-input").value;
+  const files = ensureFiles(qs("#vision-files-input"), "图片文件");
+  if (!files) return;
+  const signature = filesSignature(files);
+  if (state.visionPreviewSignature !== signature || state.visionPreviews.length !== Math.min(files.length, 8)) {
+    state.visionPreviews = await previewItems(qs("#vision-files-input"), 8);
+    state.visionPreviewSignature = signature;
+  }
+  const endpoint = selectedVisionEndpoint();
+  const form = new FormData();
+  files.forEach((file) => form.append("files", file));
+  if (["faces", "persons", "appearance"].includes(mode)) {
+    form.set("include_embeddings", qs("#vision-include-embeddings-input").checked ? "true" : "false");
+    if (mode === "faces") form.set("fallback_to_image", "true");
+  } else if (mode === "gait") {
+    form.set("include_embedding", qs("#vision-include-embeddings-input").checked ? "true" : "false");
+  } else if (mode === "embeddings") {
+    form.set("include_vectors", qs("#vision-include-embeddings-input").checked ? "true" : "false");
+  } else if (["detect", "tracks"].includes(mode)) {
+    form.set("confidence", qs("#vision-confidence-input").value);
+    form.set("iou", qs("#vision-iou-input").value);
+    form.set("max_detections", qs("#vision-max-detections-input").value);
+    if (mode === "tracks") form.set("include_embeddings", qs("#vision-include-embeddings-input").checked ? "true" : "false");
+  }
+  const payload = await api(endpoint, { method: "POST", body: form });
+  renderVisionSummary(payload);
+  renderVisionVisuals(payload, state.visionPreviews);
+  renderPayload("vision", "#vision-json", payload);
+}
+
+async function submitCompare(event) {
+  event.preventDefault();
+  const mode = qs("#compare-mode-input").value;
+  const leftFiles = ensureFiles(qs("#compare-a-input"), "图 A 或序列 A");
+  const rightFiles = ensureFiles(qs("#compare-b-input"), "图 B 或序列 B");
+  if (!leftFiles || !rightFiles) return;
+  const form = new FormData();
+  form.set("threshold_profile", qs("#compare-threshold-input").value.trim() || "normal");
+  if (mode === "gait") {
+    leftFiles.forEach((file) => form.append("sequence_a", file));
+    rightFiles.forEach((file) => form.append("sequence_b", file));
+    form.set("include_vectors", qs("#compare-include-vectors-input").checked ? "true" : "false");
+  } else if (mode === "batch") {
+    leftFiles.forEach((file) => form.append("image_a", file));
+    rightFiles.forEach((file) => form.append("image_b", file));
+    form.set("modality", qs("#compare-batch-modality-input").value);
+    form.set("include_vectors", qs("#compare-include-vectors-input").checked ? "true" : "false");
+    form.set("async_mode", qs("#compare-async-input").checked ? "true" : "false");
+  } else {
+    form.set("image_a", leftFiles[0]);
+    form.set("image_b", rightFiles[0]);
+    if (mode === "fusion") {
+      form.set("modalities", qs("#compare-modalities-input").value.trim() || "face,body,appearance");
+    } else {
+      form.set("include_vectors", qs("#compare-include-vectors-input").checked ? "true" : "false");
+    }
+  }
+  const payload = await api(selectedCompareEndpoint(), { method: "POST", body: form });
+  renderCompareSummary(payload);
+  renderPayload("compare", "#compare-json", payload);
+  if (payload.batch_id) qs("#job-id-input").value = payload.batch_id;
+}
+
+async function submitGalleryEnroll(event) {
+  event.preventDefault();
+  const form = formDataWithBooleans(event.target);
+  if (!formFiles(qs("#enroll-file-input")).length) {
+    setStatus("请选择注册图片", true);
+    return;
+  }
+  const payload = await api("/v1/gallery/enroll", { method: "POST", body: form });
+  renderPayload("gallery", "#gallery-json", payload);
+  renderGallerySummary({ people: [payload.person], tenant_id: state.tenantId });
+  await refreshGallery();
+}
+
+async function submitGallerySearch(event) {
+  event.preventDefault();
+  if (!formFiles(qs("#search-file-input")).length) {
+    setStatus("请选择检索图片", true);
+    return;
+  }
+  const payload = await api("/v1/gallery/search", { method: "POST", body: new FormData(event.target) });
+  renderPayload("gallery", "#gallery-json", payload);
+  renderSummary("#gallery-summary", [
+    { label: "候选数", value: payload.candidate_count ?? 0 },
+    { label: "前 K", value: payload.query?.top_k ?? "--" },
+    { label: "模态", value: payload.query?.modality ?? "--" },
+    { label: "质量", value: formatNumber(payload.query?.combined_quality_score, 3) },
+  ]);
+}
+
+async function submitVideoJob(event) {
+  event.preventDefault();
+  if (!formFiles(qs("#job-file-input")).length) {
+    setStatus("请选择视频文件", true);
+    return;
+  }
+  const payload = await api("/v1/jobs/video", { method: "POST", body: new FormData(event.target) });
+  const jobId = payload.job?.job_id;
+  if (jobId) qs("#job-id-input").value = jobId;
+  renderJobSummary(payload);
+  renderPayload("jobs", "#jobs-json", payload);
+}
+
+async function submitStream(event) {
+  event.preventDefault();
+  const url = qs("#stream-url-input").value.trim();
+  if (!url) {
+    setStatus("请输入视频流地址", true);
+    return;
+  }
+  const payload = await api("/v1/streams", {
+    method: "POST",
+    json: {
+      stream_url: url,
+      name: qs("#stream-name-input").value.trim() || null,
+      settings: {},
+      metadata: parseOptionalJson("#stream-metadata-input", {}),
     },
-    {
-      name: "P95 延迟",
-      current: metrics.inference_p95_seconds || 0,
-      limit: state.alertConfig.maxP95Latency,
-      ok: (metrics.inference_p95_seconds || 0) <= state.alertConfig.maxP95Latency,
-      unit: "s",
-      scale: 1,
-    },
-    {
-      name: "GPU 空闲显存",
-      current: metrics.gpu_free_gb,
-      limit: state.alertConfig.minFreeGpuMemoryGb,
-      ok: metrics.gpu_free_gb === null || Number(metrics.gpu_free_gb) >= state.alertConfig.minFreeGpuMemoryGb,
-      unit: "GB",
-      scale: 1,
-    },
-  ];
-  qs("#alert-list").innerHTML = checks.map((item) => {
-    const current = item.current === null ? "--" : `${(Number(item.current) * item.scale).toFixed(2)}${item.unit}`;
-    const limit = `${(Number(item.limit) * item.scale).toFixed(2)}${item.unit}`;
-    return `<div class="alert-item ${item.ok ? "ok" : "warn"}"><strong>${item.name}</strong><span>${current} / ${limit}</span></div>`;
-  }).join("");
-  renderJson("#alerts-json", { config: state.alertConfig, checks });
+  });
+  if (payload.stream?.stream_id) qs("#stream-id-input").value = payload.stream.stream_id;
+  await refreshStreams();
+  renderPayload("streams", "#streams-json", payload);
 }
 
 function saveAuth() {
@@ -482,23 +1659,18 @@ function saveAuth() {
   localStorage.setItem("portraitHubBearer", state.bearer);
   closeSocket("job");
   closeSocket("stream");
-  setStatus("保存成功");
-}
-
-function encodedInput(selector, label) {
-  const val = qs(selector).value.trim();
-  if (!val) {
-    setStatus(`请输入${label}`, true);
-    return null;
-  }
-  return encodeURIComponent(val);
+  renderIntegrationSnippet();
+  updateSnippetButtons();
+  setStatus("凭证已保存");
 }
 
 function setupEvents() {
-  document.querySelectorAll("[data-nav]").forEach((button) => button.addEventListener("click", () => setView(button.dataset.nav)));
+  qsa("[data-nav]").forEach((button) => button.addEventListener("click", () => setView(button.dataset.nav)));
+  qsa("[data-nav-shortcut]").forEach((button) => button.addEventListener("click", () => setView(button.dataset.navShortcut)));
   qs("#save-auth-button").addEventListener("click", saveAuth);
   qs("#refresh-button").addEventListener("click", wrapHandler(refreshAll));
   qs("#dashboard-refresh-button").addEventListener("click", wrapHandler(refreshDashboard));
+  qs("#models-refresh-button").addEventListener("click", wrapHandler(refreshModels));
   qs("#gallery-refresh-button").addEventListener("click", wrapHandler(refreshGallery));
   qs("#streams-refresh-button").addEventListener("click", wrapHandler(refreshStreams));
   qs("#admin-refresh-button").addEventListener("click", wrapHandler(refreshAdmin));
@@ -507,99 +1679,173 @@ function setupEvents() {
     renderAlerts();
   }));
 
-  qs("#load-model-button").addEventListener("click", wrapHandler(async () => {
-    const id = encodedInput("#model-id-input", "模型ID");
+  qs("#vision-form").addEventListener("submit", wrapHandler(submitVision));
+  qs("#compare-form").addEventListener("submit", wrapHandler(submitCompare));
+  qs("#enroll-form").addEventListener("submit", wrapHandler(submitGalleryEnroll));
+  qs("#search-form").addEventListener("submit", wrapHandler(submitGallerySearch));
+  qs("#video-form").addEventListener("submit", wrapHandler(submitVideoJob));
+  qs("#stream-form").addEventListener("submit", wrapHandler(submitStream));
+  qs("#vision-visuals").addEventListener("click", (event) => {
+    const trigger = event.target instanceof Element ? event.target.closest("[data-result-visual-index]") : null;
+    if (!trigger) return;
+    const index = Number(trigger.dataset.resultVisualIndex);
+    if (Number.isFinite(index)) openVisionLightbox(index);
+  });
+  qs("#vision-lightbox").addEventListener("click", (event) => {
+    const target = event.target instanceof Element ? event.target.closest("[data-lightbox-close]") : null;
+    if (target) closeVisionLightbox();
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && state.visionLightboxIndex !== null) closeVisionLightbox();
+  });
+
+  qs("#vision-files-input").addEventListener("change", wrapHandler(() => renderPreviews(qs("#vision-files-input"), "#vision-preview")));
+  qs("#compare-a-input").addEventListener("change", wrapHandler(renderComparePreviews));
+  qs("#compare-b-input").addEventListener("change", wrapHandler(renderComparePreviews));
+  qs("#vision-mode-input").addEventListener("change", updateSnippetButtons);
+  qs("#compare-mode-input").addEventListener("change", updateSnippetButtons);
+
+  qs("#model-detail-button").addEventListener("click", wrapHandler(async () => {
+    const id = encodedInput("#model-id-input", "模型 ID");
     if (!id) return;
-    renderJson("#models-json", await api(`/v1/models/${id}/load`, { method: "POST" }));
+    renderPayload("models", "#models-json", await api(`/v1/models/${id}`));
+  }));
+  qs("#load-model-button").addEventListener("click", wrapHandler(async () => {
+    const id = encodedInput("#model-id-input", "模型 ID");
+    if (!id) return;
+    renderPayload("models", "#models-json", await api(`/v1/models/${id}/load`, { method: "POST" }));
+    await refreshModels();
   }));
   qs("#unload-model-button").addEventListener("click", wrapHandler(async () => {
-    const id = encodedInput("#model-id-input", "模型ID");
+    const id = encodedInput("#model-id-input", "模型 ID");
     if (!id) return;
-    renderJson("#models-json", await api(`/v1/models/${id}/unload`, { method: "POST" }));
+    renderPayload("models", "#models-json", await api(`/v1/models/${id}/unload`, { method: "POST" }));
+    await refreshModels();
   }));
-  qs("#enroll-form").addEventListener("submit", wrapHandler(async (event) => {
-    event.preventDefault();
-    renderJson("#gallery-json", await api("/v1/gallery/enroll", { method: "POST", body: new FormData(event.target) }));
+
+  qs("#person-get-button").addEventListener("click", wrapHandler(async () => {
+    const id = encodedInput("#person-id-input", "人员 ID");
+    if (!id) return;
+    renderPayload("gallery", "#gallery-json", await api(`/v1/gallery/${id}`));
   }));
-  qs("#search-form").addEventListener("submit", wrapHandler(async (event) => {
-    event.preventDefault();
-    renderJson("#gallery-json", await api("/v1/gallery/search", { method: "POST", body: new FormData(event.target) }));
+  qs("#person-patch-button").addEventListener("click", wrapHandler(async () => {
+    const id = encodedInput("#person-id-input", "人员 ID");
+    if (!id) return;
+    const payload = {};
+    const name = qs("#person-display-name-input").value.trim();
+    if (name) payload.display_name = name;
+    const metadata = qs("#person-metadata-input").value.trim();
+    if (metadata) payload.metadata = parseOptionalJson("#person-metadata-input");
+    renderPayload("gallery", "#gallery-json", await api(`/v1/gallery/${id}`, { method: "PATCH", json: payload }));
+    await refreshGallery();
   }));
-  qs("#job-form").addEventListener("submit", wrapHandler(async (event) => {
-    event.preventDefault();
-    renderJson("#jobs-json", await api("/v1/jobs/video", { method: "POST", body: new FormData(event.target) }));
+  qs("#person-delete-button").addEventListener("click", wrapHandler(async () => {
+    const id = encodedInput("#person-id-input", "人员 ID");
+    if (!id) return;
+    renderPayload("gallery", "#gallery-json", await api(`/v1/gallery/${id}`, { method: "DELETE" }));
+    await refreshGallery();
   }));
+  qs("#gallery-reindex-button").addEventListener("click", wrapHandler(async () => {
+    const params = new URLSearchParams();
+    const modality = qs("#reindex-modality-input").value;
+    const modelId = qs("#reindex-model-id-input").value.trim();
+    if (modality) params.set("modality", modality);
+    if (modelId) params.set("model_id", modelId);
+    params.set("dry_run", qs("#reindex-dry-run-input").checked ? "true" : "false");
+    renderPayload("gallery", "#gallery-json", await api(`/v1/gallery/reindex?${params.toString()}`, { method: "POST" }));
+  }));
+
   qs("#job-get-button").addEventListener("click", wrapHandler(async () => {
-    const id = encodedInput("#job-id-input", "任务ID");
+    const id = encodedInput("#job-id-input", "任务 ID");
     if (!id) return;
-    renderJson("#jobs-json", await api(`/v1/jobs/${id}`));
+    const payload = await api(`/v1/jobs/${id}`);
+    renderJobSummary(payload);
+    renderPayload("jobs", "#jobs-json", payload);
   }));
   qs("#job-result-button").addEventListener("click", wrapHandler(async () => {
-    const id = encodedInput("#job-id-input", "任务ID");
+    const id = encodedInput("#job-id-input", "任务 ID");
     if (!id) return;
-    renderJson("#jobs-json", await api(`/v1/jobs/${id}/result`));
+    const payload = await api(`/v1/jobs/${id}/result`);
+    renderJobSummary(payload);
+    renderPayload("jobs", "#jobs-json", payload);
   }));
   qs("#job-cancel-button").addEventListener("click", wrapHandler(async () => {
-    const id = encodedInput("#job-id-input", "任务ID");
+    const id = encodedInput("#job-id-input", "任务 ID");
     if (!id) return;
-    renderJson("#jobs-json", await api(`/v1/jobs/${id}/cancel`, { method: "POST" }));
+    const payload = await api(`/v1/jobs/${id}/cancel`, { method: "POST" });
+    renderJobSummary(payload);
+    renderPayload("jobs", "#jobs-json", payload);
   }));
   qs("#job-watch-button").addEventListener("click", () => {
-    const id = encodedInput("#job-id-input", "任务ID");
+    const id = encodedInput("#job-id-input", "任务 ID");
     if (!id) return;
     watchJsonSocket("job", `/ws/jobs/${id}`, "#job-ws-status", "#jobs-json");
   });
-  qs("#stream-form").addEventListener("submit", wrapHandler(async (event) => {
-    event.preventDefault();
-    const url = qs("#stream-url-input").value.trim();
-    if (!url) {
-      setStatus("请输入视频流地址", true);
-      return;
-    }
-    renderJson("#streams-json", await api("/v1/streams", {
-      method: "POST",
-      json: { stream_url: url, name: qs("#stream-name-input").value.trim() || null, settings: {}, metadata: {} },
-    }));
+
+  qs("#stream-get-button").addEventListener("click", wrapHandler(async () => {
+    const id = encodedInput("#stream-id-input", "视频流 ID");
+    if (!id) return;
+    renderPayload("streams", "#streams-json", await api(`/v1/streams/${id}`));
   }));
   qs("#stream-start-button").addEventListener("click", wrapHandler(async () => {
-    const id = encodedInput("#stream-id-input", "视频流ID");
+    const id = encodedInput("#stream-id-input", "视频流 ID");
     if (!id) return;
-    renderJson("#streams-json", await api(`/v1/streams/${id}/start`, { method: "POST" }));
+    renderPayload("streams", "#streams-json", await api(`/v1/streams/${id}/start`, { method: "POST" }));
+    await refreshStreams();
   }));
   qs("#stream-stop-button").addEventListener("click", wrapHandler(async () => {
-    const id = encodedInput("#stream-id-input", "视频流ID");
+    const id = encodedInput("#stream-id-input", "视频流 ID");
     if (!id) return;
-    renderJson("#streams-json", await api(`/v1/streams/${id}/stop`, { method: "POST" }));
+    renderPayload("streams", "#streams-json", await api(`/v1/streams/${id}/stop`, { method: "POST" }));
+    await refreshStreams();
   }));
   qs("#stream-events-button").addEventListener("click", wrapHandler(async () => {
-    const id = encodedInput("#stream-id-input", "视频流ID");
+    const id = encodedInput("#stream-id-input", "视频流 ID");
     if (!id) return;
-    renderJson("#streams-json", await api(`/v1/streams/${id}/events`));
+    renderPayload("streams", "#streams-json", await api(`/v1/streams/${id}/events`));
   }));
   qs("#stream-watch-button").addEventListener("click", () => {
-    const id = encodedInput("#stream-id-input", "视频流ID");
+    const id = encodedInput("#stream-id-input", "视频流 ID");
     if (!id) return;
     watchJsonSocket("stream", `/ws/streams/${id}`, "#stream-ws-status", "#streams-json");
   });
+
   qs("#threshold-form").addEventListener("submit", wrapHandler(async (event) => {
     event.preventDefault();
     const profile = qs("#threshold-profile-input").value.trim();
     if (!profile) {
-      setStatus("请输入阈值方案类型", true);
+      setStatus("请输入阈值方案", true);
       return;
     }
     const payload = {};
-    const body = qs("#threshold-body-input").value;
-    const face = qs("#threshold-face-input").value;
-    if (body !== "") payload.body = Number(body);
-    if (face !== "") payload.face = Number(face);
-    renderJson("#admin-json", await api(`/v1/thresholds/${encodeURIComponent(profile)}`, { method: "PUT", json: payload }));
+    [
+      ["body", "#threshold-body-input"],
+      ["face", "#threshold-face-input"],
+      ["gait", "#threshold-gait-input"],
+      ["appearance", "#threshold-appearance-input"],
+      ["fusion", "#threshold-fusion-input"],
+    ].forEach(([key, selector]) => {
+      const value = qs(selector).value;
+      if (value !== "") payload[key] = Number(value);
+    });
+    renderPayload("admin", "#admin-json", await api(`/v1/thresholds/${encodeURIComponent(profile)}`, { method: "PUT", json: payload }));
   }));
   qs("#retention-form").addEventListener("submit", wrapHandler(async (event) => {
     event.preventDefault();
-    renderJson("#admin-json", await api("/v1/admin/retention/cleanup", {
+    renderPayload("admin", "#admin-json", await api("/v1/admin/retention/cleanup", {
       method: "POST",
       json: { retention_days: Number(qs("#retention-days-input").value), confirm: qs("#retention-confirm-input").value },
+    }));
+  }));
+  qs("#backup-form").addEventListener("submit", wrapHandler(async (event) => {
+    event.preventDefault();
+    const updatedSince = qs("#backup-updated-since-input").value;
+    renderPayload("admin", "#admin-json", await api("/v1/admin/backup", {
+      method: "POST",
+      json: {
+        updated_since: updatedSince === "" ? null : Number(updatedSince),
+        confirm: qs("#backup-confirm-input").value,
+      },
     }));
   }));
   qs("#alert-form").addEventListener("submit", wrapHandler(async (event) => {
@@ -620,7 +1866,9 @@ function init() {
   qs("#api-key-input").value = state.apiKey;
   qs("#bearer-input").value = state.bearer;
   setAlertInputs();
+  renderIntegrationSnippet();
   setupEvents();
+  updateSnippetButtons();
   setView(state.view);
   wrapHandler(refreshAll)();
 }

@@ -202,6 +202,8 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
     portrait_object_storage = (root / "app" / "portrait_object_storage.py").read_text(encoding="utf-8") if (root / "app" / "portrait_object_storage.py").is_file() else ""
     portrait_security = (root / "app" / "portrait_security.py").read_text(encoding="utf-8") if (root / "app" / "portrait_security.py").is_file() else ""
     portrait_gallery = (root / "app" / "portrait_gallery.py").read_text(encoding="utf-8") if (root / "app" / "portrait_gallery.py").is_file() else ""
+    gallery_state = (root / "app" / "gallery_state.py").read_text(encoding="utf-8") if (root / "app" / "gallery_state.py").is_file() else ""
+    gallery_search = (root / "app" / "gallery_search.py").read_text(encoding="utf-8") if (root / "app" / "gallery_search.py").is_file() else ""
     portrait_gallery_records = (root / "app" / "portrait_gallery_records.py").read_text(encoding="utf-8") if (root / "app" / "portrait_gallery_records.py").is_file() else ""
     portrait_gallery_routes = (root / "app" / "routes_portrait_gallery.py").read_text(encoding="utf-8") if (root / "app" / "routes_portrait_gallery.py").is_file() else ""
     portrait_jobs = (root / "app" / "portrait_jobs.py").read_text(encoding="utf-8") if (root / "app" / "portrait_jobs.py").is_file() else ""
@@ -218,6 +220,13 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
     portrait_streams = (root / "app" / "portrait_streams.py").read_text(encoding="utf-8") if (root / "app" / "portrait_streams.py").is_file() else ""
     portrait_stream_routes = (root / "app" / "routes_portrait_streams.py").read_text(encoding="utf-8") if (root / "app" / "routes_portrait_streams.py").is_file() else ""
     portrait_postgres = (root / "app" / "portrait_postgres.py").read_text(encoding="utf-8") if (root / "app" / "portrait_postgres.py").is_file() else ""
+    postgres_core = (root / "app" / "postgres_core.py").read_text(encoding="utf-8") if (root / "app" / "postgres_core.py").is_file() else ""
+    postgres_gallery = (root / "app" / "postgres_gallery.py").read_text(encoding="utf-8") if (root / "app" / "postgres_gallery.py").is_file() else ""
+    postgres_streams = (root / "app" / "postgres_streams.py").read_text(encoding="utf-8") if (root / "app" / "postgres_streams.py").is_file() else ""
+    postgres_audit = (root / "app" / "postgres_audit.py").read_text(encoding="utf-8") if (root / "app" / "postgres_audit.py").is_file() else ""
+    postgres_jobs = (root / "app" / "postgres_jobs.py").read_text(encoding="utf-8") if (root / "app" / "postgres_jobs.py").is_file() else ""
+    postgres_thresholds = (root / "app" / "postgres_thresholds.py").read_text(encoding="utf-8") if (root / "app" / "postgres_thresholds.py").is_file() else ""
+    config_hot_reload = (root / "app" / "config_hot_reload.py").read_text(encoding="utf-8") if (root / "app" / "config_hot_reload.py").is_file() else ""
     portrait_postgres_schema = (root / "tools" / "portrait_postgres_schema.sql").read_text(encoding="utf-8") if (root / "tools" / "portrait_postgres_schema.sql").is_file() else ""
     stream_decode = (root / "app" / "media" / "stream_decode.py").read_text(encoding="utf-8") if (root / "app" / "media" / "stream_decode.py").is_file() else ""
     portrait_job_routes = (root / "app" / "routes_portrait_jobs.py").read_text(encoding="utf-8") if (root / "app" / "routes_portrait_jobs.py").is_file() else ""
@@ -256,13 +265,16 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
     legacy_parent_models_path = "../" + "models"
     requirements = (root / "requirements.txt").read_text(encoding="utf-8") if (root / "requirements.txt").is_file() else ""
     base_lock = (root / "requirements" / "base.lock").read_text(encoding="utf-8") if (root / "requirements" / "base.lock").is_file() else ""
+    requirements_lock = (root / "requirements.lock").read_text(encoding="utf-8") if (root / "requirements.lock").is_file() else ""
     base_in = (root / "requirements" / "base.in").read_text(encoding="utf-8") if (root / "requirements" / "base.in").is_file() else ""
     console_js = (root / "frontend" / "console" / "console.js").read_text(encoding="utf-8") if (root / "frontend" / "console" / "console.js").is_file() else ""
     regression_open_case_files = ""
     if "def open_case_files" in regression_check:
         regression_open_case_files = regression_check.split("def open_case_files", 1)[1].split("def run_case", 1)[0]
     ready_deep_section = text_between(health_routes, '@router.get("/ready/deep"', '@router.get("/metrics"')
-    postgres_health_section = text_between(portrait_postgres, "def postgres_health", "def jsonb")
+    portrait_gallery_impl = "\n".join([portrait_gallery, gallery_state, gallery_search])
+    portrait_postgres_impl = "\n".join([portrait_postgres, postgres_core, postgres_gallery, postgres_streams, postgres_audit, postgres_jobs, postgres_thresholds])
+    postgres_health_section = text_between(postgres_core, "def postgres_health", "def jsonb")
     redis_health_section = text_between(portrait_task_queue, "class RedisTaskQueue", "def configured_task_queue")
     local_object_store_section = text_between(portrait_object_storage, "class LocalObjectStore", "class S3ObjectStore")
     s3_object_store_section = text_between(portrait_object_storage, "class S3ObjectStore", "def configured_object_store")
@@ -300,11 +312,12 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
                 and "strict = true" in pyproject
                 and "mypy==" in dev_requirements
                 and "python tools/type_check.py" in ci_workflow
-                and "DEFAULT_TARGETS" in type_check_tool
-                and "app/portrait_gallery.py" in type_check_tool
-                and "app/portrait_model_runtime.py" in type_check_tool
-                and "app/portrait_postgres.py" in type_check_tool
-                and "app/portrait_tracking.py" in type_check_tool
+                and "discover_default_targets" in type_check_tool
+                and "DEFAULT_TARGET_ROOTS" in type_check_tool
+                and '"app"' in type_check_tool
+                and '"tools"' in type_check_tool
+                and '"sdk"' in type_check_tool
+                and "rglob(\"*.py\")" in type_check_tool
             ),
         },
         {
@@ -338,7 +351,10 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
             "ok": (
                 "def install_config_reload_signal_handler" in server
                 and 'getattr(signal, "SIGHUP"' in server
-                and "reload_model_config_state()" in server
+                and "reload_runtime_config(source=\"sighup\"" in server
+                and "ENV_PATH" in server
+                and "def reload_runtime_config" in config_hot_reload
+                and "audit_event(" in config_hot_reload
             ),
         },
         {
@@ -348,7 +364,7 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
                 and "portrait.inference.run_session" in runtime_execution
                 and "portrait.vector.pgvector.search" in portrait_vector_store
                 and "portrait.vector.qdrant.search" in portrait_vector_store
-                and "portrait.postgres.connection" in portrait_postgres
+                and "portrait.postgres.connection" in postgres_core
             ),
         },
         {
@@ -376,9 +392,12 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
             "ok": (
                 "cryptography>=42.0.0,<46.0.0" in base_in
                 and "cryptography==45.0.6" in base_lock
+                and "cryptography==45.0.6" in requirements_lock
                 and "cryptography==45.0.6" in requirements
                 and ">=" not in base_lock
+                and ">=" not in requirements_lock
                 and "<" not in base_lock
+                and "<" not in requirements_lock
                 and ">=" not in requirements
                 and "<" not in requirements
             ),
@@ -802,6 +821,7 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
                 and '"available_providers": available' not in health_routes.split('@router.get("/ready/deep"')[0]
                 and 'detail={"status": "not_ready"}' in health_routes
                 and 'return {"status": "ready"}' in health_routes
+                and "runtime_provider_status(available)" in health_routes
             ),
         },
         {
@@ -832,15 +852,15 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
             "name": "security:backend_failure_log_minimal_disclosure",
             "ok": (
                 "exception_log_summary(exc)" in portrait_audit
-                and portrait_postgres.count("exception_log_summary(exc)") >= 5
+                and portrait_postgres_impl.count("exception_log_summary(exc)") >= 5
                 and "exception_log_summary(exc)" in portrait_task_queue
                 and portrait_vector_store.count("exception_log_summary(exc)") >= 2
                 and 'logger.warning("postgres audit write failed: %s", exc)' not in portrait_audit
-                and 'logger.warning("postgres health check failed: %s", exc)' not in portrait_postgres
-                and 'logger.warning("postgres gallery load failed: %s", exc)' not in portrait_postgres
-                and 'logger.warning("postgres threshold load failed: %s", exc)' not in portrait_postgres
-                and 'logger.warning("postgres video job load failed: %s", exc)' not in portrait_postgres
-                and 'logger.warning("postgres stream load failed: %s", exc)' not in portrait_postgres
+                and 'logger.warning("postgres health check failed: %s", exc)' not in portrait_postgres_impl
+                and 'logger.warning("postgres gallery load failed: %s", exc)' not in portrait_postgres_impl
+                and 'logger.warning("postgres threshold load failed: %s", exc)' not in portrait_postgres_impl
+                and 'logger.warning("postgres video job load failed: %s", exc)' not in portrait_postgres_impl
+                and 'logger.warning("postgres stream load failed: %s", exc)' not in portrait_postgres_impl
                 and 'logger.warning("redis task queue health check failed: %s", exc)' not in portrait_task_queue
                 and 'logger.warning("pgvector search failed, falling back to local vector scan: %s", exc)' not in portrait_vector_store
                 and 'logger.warning("qdrant search failed, falling back to local vector scan: %s", exc)' not in portrait_vector_store
@@ -865,7 +885,7 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
         {
             "name": "security:runtime_failure_log_minimal_disclosure",
             "ok": (
-                portrait_gallery.count("exception_log_summary(exc)") >= 3
+                portrait_gallery_impl.count("exception_log_summary(exc)") >= 3
                 and portrait_jobs.count("exception_log_summary(exc)") >= 2
                 and portrait_streams.count("exception_log_summary(exc)") >= 2
                 and "exception_log_summary(exc)" in health_routes
@@ -875,9 +895,9 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
                 and "exception_log_summary(exc)" in runtime_registry
                 and 'logger.warning("failed to remove temp video file")' in video_io
                 and 'logger.warning("failed to remove temp video file")' in media_video_decode
-                and 'logger.warning("skipping invalid gallery person state: %s", exc)' not in portrait_gallery
-                and 'logger.warning("vector upsert failed: %s", exc)' not in portrait_gallery
-                and 'logger.warning("vector delete failed: %s", exc)' not in portrait_gallery
+                and 'logger.warning("skipping invalid gallery person state: %s", exc)' not in portrait_gallery_impl
+                and 'logger.warning("vector upsert failed: %s", exc)' not in portrait_gallery_impl
+                and 'logger.warning("vector delete failed: %s", exc)' not in portrait_gallery_impl
                 and 'logger.warning("skipping invalid video job state: %s", exc)' not in portrait_jobs
                 and 'logger.warning("skipping stream with unreadable protected URL: %s", exc)' not in portrait_streams
                 and 'logger.warning("skipping invalid stream state: %s", exc)' not in portrait_streams
@@ -1019,7 +1039,7 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
                 and "raise_internal_error(request_id, \"video person track inference runtime error\")" in person_video_routes
                 and "raise_internal_error(request_id, \"stream person track inference runtime error\")" in person_stream_routes
                 and "raise_internal_error(request_id, \"debug model output runtime error\")" in debug_routes
-                and 'detail="failed to load model into GPU"' in runtime_registry
+                and 'detail="failed to load model runtime"' in runtime_registry
                 and "runtime error: {exc}" not in "\n".join(
                     [
                         predict_routes,
@@ -1032,7 +1052,7 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
                         debug_routes,
                     ]
                 )
-                and "failed to load model into GPU: {exc}" not in runtime_registry
+                and "failed to load model runtime: {exc}" not in runtime_registry
             ),
         },
         {
@@ -1296,7 +1316,7 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
                 and '"audit_hash"' in portrait_audit
                 and "audit_hash TEXT NOT NULL" in (root / "tools" / "portrait_postgres_schema.sql").read_text(encoding="utf-8")
                 and "audit_prev_hash TEXT" in (root / "tools" / "portrait_postgres_schema.sql").read_text(encoding="utf-8")
-                and "payload.get(\"audit_hash\")" in portrait_postgres
+                and "payload.get(\"audit_hash\")" in portrait_postgres_impl
                 and "AUDIT_WRITE_FAIL_CLOSED" in settings
                 and "fail_closed=AUDIT_WRITE_FAIL_CLOSED" in portrait_audit
                 and "if AUDIT_WRITE_FAIL_CLOSED:" in portrait_audit
@@ -1587,7 +1607,7 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
         {
             "name": "security:shared_state_locking",
             "ok": (
-                "GALLERY_LOCK = threading.RLock()" in portrait_gallery
+                "GALLERY_LOCK = threading.RLock()" in portrait_gallery_impl
                 and "VIDEO_JOBS_LOCK = threading.RLock()" in portrait_jobs
                 and "STREAMS_LOCK = threading.RLock()" in portrait_streams
                 and "THRESHOLD_PROFILES_LOCK = threading.RLock()" in portrait_thresholds
@@ -1608,6 +1628,9 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
                 and "HTTPException(status_code=413" in server
                 and "MAX_REQUEST_BODY_BYTES: ${MAX_REQUEST_BODY_BYTES:-805306368}" in compose
                 and "MAX_REQUEST_BODY_BYTES=805306368" in env_example
+                and "CPU_FALLBACK_ENABLED = parse_bool_env(\"CPU_FALLBACK_ENABLED\", True)" in settings
+                and "CPU_FALLBACK_ENABLED: ${CPU_FALLBACK_ENABLED:-true}" in compose
+                and "CPU_FALLBACK_ENABLED=true" in env_example
             ),
         },
         {
@@ -1630,7 +1653,7 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
                 and "if STATE_READ_FAIL_CLOSED:" in portrait_state
                 and "detail=\"state read failed\"" in portrait_state
                 and "def handle_state_read_error" in portrait_state
-                and "gallery state root must be a mapping" in portrait_gallery
+                and "gallery state root must be a mapping" in portrait_gallery_impl
                 and "video jobs state root must be a mapping" in portrait_jobs
                 and "streams state root must be a mapping" in portrait_streams
                 and "threshold state root must be a mapping" in portrait_thresholds
@@ -1730,11 +1753,11 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
         {
             "name": "security:resource_not_found_minimal_disclosure",
             "ok": (
-                'detail="person not found"' in portrait_gallery
+                'detail="person not found"' in portrait_gallery_impl
                 and 'detail="person not found"' in portrait_gallery_routes
                 and 'detail="stream not found"' in portrait_stream_routes
                 and 'detail="job not found"' in portrait_job_routes
-                and 'detail=f"person not found: {resolved_id}"' not in portrait_gallery
+                and 'detail=f"person not found: {resolved_id}"' not in portrait_gallery_impl
                 and 'detail=f"person not found: {person_id}"' not in portrait_gallery_routes
                 and 'detail=f"stream not found: {stream_id}"' not in portrait_stream_routes
                 and 'detail=f"job not found: {job_id}"' not in portrait_job_routes
@@ -1743,10 +1766,10 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
         {
             "name": "security:state_mutation_rollback",
             "ok": (
-                "previous_person = deepcopy(person)" in portrait_gallery
-                and "GALLERY.pop(key, None)" in portrait_gallery
-                and "GALLERY[key] = previous_person" in portrait_gallery
-                and "person.features = previous_person.features" in portrait_gallery
+                "previous_person = deepcopy(person)" in portrait_gallery_impl
+                and "GALLERY.pop(key, None)" in portrait_gallery_impl
+                and "GALLERY[key] = previous_person" in portrait_gallery_impl
+                and "person.features = previous_person.features" in portrait_gallery_impl
                 and "previous_thresholds = threshold_snapshot()" in portrait_thresholds
                 and "THRESHOLD_PROFILES.clear()" in portrait_thresholds
                 and "THRESHOLD_PROFILES.update(deepcopy(previous_thresholds))" in portrait_thresholds
@@ -1784,9 +1807,9 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
         {
             "name": "security:postgres_stream_event_snapshot_sync",
             "ok": (
-                "DELETE FROM portrait_stream_events WHERE tenant_id = %s AND stream_id = %s" in portrait_postgres
-                and "def delete_stream" in portrait_postgres
-                and "DELETE FROM portrait_streams WHERE tenant_id = %s AND stream_id = %s" in portrait_postgres
+                "DELETE FROM portrait_stream_events WHERE tenant_id = %s AND stream_id = %s" in portrait_postgres_impl
+                and "def delete_stream" in portrait_postgres_impl
+                and "DELETE FROM portrait_streams WHERE tenant_id = %s AND stream_id = %s" in portrait_postgres_impl
             ),
         },
         {
@@ -1852,9 +1875,9 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
                 and "OBJECT_CLEANUP_FAILED" in portrait_gallery_routes
                 and "deleted_object_count" in portrait_gallery_routes
                 and "object_info JSONB NOT NULL DEFAULT '{}'::jsonb" in portrait_postgres_schema
-                and "f.object_info" in portrait_postgres
-                and "object_info = EXCLUDED.object_info" in portrait_postgres
-                and "jsonb(feature.get(\"object_info\") if isinstance(feature.get(\"object_info\"), dict) else {})" in portrait_postgres
+                and "f.object_info" in portrait_postgres_impl
+                and "object_info = EXCLUDED.object_info" in portrait_postgres_impl
+                and "jsonb(feature.get(\"object_info\") if isinstance(feature.get(\"object_info\"), dict) else {})" in portrait_postgres_impl
             ),
         },
         {

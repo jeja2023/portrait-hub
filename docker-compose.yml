@@ -30,6 +30,7 @@ x-worker-environment: &worker-environment
   RATE_LIMIT_MAX_BUCKETS: ${RATE_LIMIT_MAX_BUCKETS:-10000}
   RATE_LIMIT_BUCKET_TTL_SECONDS: ${RATE_LIMIT_BUCKET_TTL_SECONDS:-3600}
   MAX_REQUEST_BODY_BYTES: ${MAX_REQUEST_BODY_BYTES:-805306368}
+  CPU_FALLBACK_ENABLED: ${CPU_FALLBACK_ENABLED:-true}
   SECURITY_HEADERS_ENABLED: ${SECURITY_HEADERS_ENABLED:-true}
   CONTENT_SECURITY_POLICY: ${CONTENT_SECURITY_POLICY:-default-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'}
   HSTS_ENABLED: ${HSTS_ENABLED:-true}

@@ -115,7 +115,7 @@ v1 已加入的生产加固：
 
 Ubuntu 服务器完整部署步骤见 [docs/deployment/DEPLOY_UBUNTU.md](docs/deployment/DEPLOY_UBUNTU.md)。
 
-运行镜像基于 `nvidia/cuda:12.4.1-cudnn-runtime-ubuntu22.04`，容器内使用 Python 3.12。当前依赖固定为 `onnxruntime-gpu==1.20.1`，需要 CUDA 12.x 运行库与 cuDNN 9（CUDA 12 的镜像 tag 使用不带数字的 `-cudnn-`，内置 cuDNN 9）。宿主机 NVIDIA 驱动需满足 CUDA 12.4 的最低版本要求（Linux ≥ 550.54.14）。
+运行镜像基于 `nvidia/cuda:12.4.1-cudnn-runtime-ubuntu22.04`，容器内使用 Python 3.12。当前依赖固定为 `onnxruntime-gpu==1.20.1`，需要 CUDA 12.x 运行库与 cuDNN 9（CUDA 12 的镜像 tag 使用不带数字的 `-cudnn-`，内置 cuDNN 9）。宿主机 NVIDIA 驱动需满足 CUDA 12.4 的最低版本要求（Linux ≥ 550.54.14）。默认开启 `CPU_FALLBACK_ENABLED=true`，无 CUDA/GPU 时会使用 `CPUExecutionProvider` 继续推理；生产若必须强制 GPU，可设为 `false`。
 
 ## 目录结构
 
@@ -521,7 +521,7 @@ python tools/service_smoke_test.py \
 
 Compose 生产默认关闭 `/openapi.json`，冒烟测试默认接受 404；如果需要验证 OpenAPI 路径契约，显式增加 `--check-openapi`。
 
-如果只是本地开发且没有 CUDA，可以不加 `--require-ready`，此时 `/ready` 返回 503 不会作为硬失败。真实上线前应在 GPU 服务器上执行 `--require-ready`，并按需增加 `--deep-ready --load-models --dummy-inference`。
+默认开启 CPU fallback 后，本地开发没有 CUDA 时 `/ready` 也可以返回 200，并在真实模型加载时使用 `CPUExecutionProvider`。真实上线前如果必须确认 GPU/CUDA 路径，应设置 `CPU_FALLBACK_ENABLED=false` 后执行 `--require-ready`，并按需增加 `--deep-ready --load-models --dummy-inference`。
 
 固定回归集 manifest 示例：
 
@@ -659,9 +659,9 @@ curl -X POST http://127.0.0.1:9001/vision/infer \
 - `GPU_QUEUE_LIMIT` 控制单 worker 同时进入 GPU 段的请求数量，`MODEL_CONCURRENCY_LIMIT` 控制单模型默认并发，模型配置里的 `max_concurrency` 或 `runtime.max_concurrency` 可以单独覆盖。
 - `MODEL_QUEUE_TIMEOUT_SECONDS` 大于 0 时，请求在模型队列或 GPU 队列等待超过该秒数会返回 503，避免无限堆积。
 - FP16 ONNX 输入会按模型输入 dtype 自动 cast；如果模型输入是 `tensor(float16)`，图像预处理结果会在进入 session 前转为 `float16`。
-- 配置 `runtime: tensorrt` 且 `ENABLE_TENSORRT=true` 时，服务会优先请求 ONNX Runtime 的 `TensorrtExecutionProvider`。运行环境必须实际包含该 provider，否则模型加载会失败并给出清晰错误。
+- 配置 `runtime: tensorrt` 且 `ENABLE_TENSORRT=true` 时，服务会优先请求 ONNX Runtime 的 `TensorrtExecutionProvider`。TensorRT 不可用但 CUDA 可用时会回退 CUDA；无 CUDA 且 `CPU_FALLBACK_ENABLED=true` 时会回退 CPU。
 - 当前接口使用 JSON 传输 tensor，简单通用但不是最高性能方案。如果单次输入很大或 QPS 很高，后续可考虑改成二进制协议、共享对象存储路径、gRPC，或让业务端只传图片路径并在服务端预处理。
-- `/health` 表示服务进程正常，`/ready` 才表示 CUDA provider 可用。两者公开响应只返回最小状态信息；provider、模型状态和模型加载细节通过受保护的 `/ready/deep` 或 `/v1/admin/status` 查看。生产探活建议使用 `/ready`。
+- `/health` 表示服务进程正常，`/ready` 表示当前运行时 provider 可用。两者公开响应只返回最小状态信息；provider、模型状态和模型加载细节通过受保护的 `/ready/deep` 或 `/v1/admin/status` 查看。生产探活建议使用 `/ready`，强制 GPU 的环境应设置 `CPU_FALLBACK_ENABLED=false`。
 
 ### 可观测性
 
@@ -715,6 +715,7 @@ http://gpu-worker-1:8000/predict
 - `GPU_QUEUE_LIMIT`: 单 worker 同时进入 GPU 推理段的请求数，默认 `1`。
 - `MODEL_CONCURRENCY_LIMIT`: 单模型默认并发限制，默认 `1`。
 - `MODEL_QUEUE_TIMEOUT_SECONDS`: 模型队列和 GPU 队列等待超时秒数，默认 `0` 表示不超时。
+- `CPU_FALLBACK_ENABLED`: 无 CUDA/GPU 或 CUDA session 初始化失败时是否回退 `CPUExecutionProvider`，默认 `true`；生产强制 GPU 时设为 `false`。
 - `ENABLE_TENSORRT`: 是否允许 `runtime: tensorrt` 模型使用 TensorRT Execution Provider，默认 `false`。
 - `TENSORRT_ENGINE_CACHE_ENABLE`: 是否启用 TensorRT engine cache，默认 `true`。
 - `TENSORRT_ENGINE_CACHE_PATH`: TensorRT engine cache 路径，默认 `/tmp/tensorrt-engine-cache`。
@@ -791,7 +792,7 @@ curl -X POST http://127.0.0.1:9001/predict \
 - 支持 FP16 输入自动 cast，支持按模型配置启用 TensorRT Execution Provider。
 - 提供 `tools/worker_control.py` 对多个 worker 统一执行健康检查、配置重载、预热、重载和卸载。
 - 路径使用 `Path.resolve()` 限制在共享模型目录内，避免路径穿越。
-- `/ready` 会检查 `CUDAExecutionProvider` 是否可用，`/ready/deep` 可进一步检查配置模型、加载模型和虚拟推理。
+- `/ready` 会检查当前推理 provider 是否可用；默认无 CUDA 时可回退 `CPUExecutionProvider`。`/ready/deep` 可进一步检查配置模型、加载模型和虚拟推理，并返回 `runtime_provider` 诊断字段。
 
 ## 压测记录模板
 
@@ -812,7 +813,7 @@ curl -X POST http://127.0.0.1:9001/predict \
 
 ## 常见问题
 
-如果 `/ready` 返回没有 `CUDAExecutionProvider`：
+如果需要强制 GPU，但 `/ready/deep` 显示没有 `CUDAExecutionProvider`：
 
 1. 确认宿主机 `nvidia-smi` 正常。
 2. 确认 NVIDIA Container Toolkit 已安装。

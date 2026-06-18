@@ -14,6 +14,7 @@ from app.runtime import get_or_load_model, input_dtype, run_model_bundle
 from app.security import require_api_token
 from app.portrait_auth import permission_dependency
 from app.portrait_response import MODEL_READINESS_CHECK_FAILED, exception_log_summary
+from app.runtime_sessions import runtime_provider_status
 from app.settings import APP_VERSION, OBJECT_STORAGE_DIR, READY_CHECK_DEPENDENCIES, RUNTIME_STATE_DIR
 
 
@@ -36,7 +37,8 @@ async def health() -> dict[str, Any]:
 @router.get("/ready")
 async def ready() -> dict[str, Any]:
     available = ort.get_available_providers()
-    if "CUDAExecutionProvider" not in available:
+    provider_status = runtime_provider_status(available)
+    if not provider_status["ready"]:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail={"status": "not_ready"},
@@ -89,8 +91,9 @@ async def ready_deep(
     dummy_inference: bool = Query(False),
 ) -> dict[str, Any]:
     available = ort.get_available_providers()
+    provider_status = runtime_provider_status(available)
     checks = []
-    ok = "CUDAExecutionProvider" in available
+    ok = bool(provider_status["ready"])
 
     for key, config in MODEL_CONFIGS.items():
         try:
@@ -110,6 +113,7 @@ async def ready_deep(
                         "cold_loaded": cold_loaded,
                         "load_seconds": load_seconds,
                         "providers": bundle["session"].get_providers(),
+                        "execution_provider": bundle.get("execution_provider"),
                     }
                 )
                 if dummy_inference:
@@ -136,9 +140,9 @@ async def ready_deep(
     if not ok:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail={"status": "not_ready", "available_providers": available, "checks": checks},
+            detail={"status": "not_ready", "runtime_provider": provider_status, "checks": checks},
         )
-    return {"status": "ready", "available_providers": available, "checks": checks}
+    return {"status": "ready", "runtime_provider": provider_status, "checks": checks}
 
 
 @router.get("/metrics", dependencies=[Depends(require_api_token), Depends(permission_dependency("metrics:read"))])

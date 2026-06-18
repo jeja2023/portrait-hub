@@ -129,7 +129,7 @@ def main() -> int:
     parser.add_argument("--token", default=None, help="API token for protected endpoints.")
     parser.add_argument("--tenant-id", default="default", help="Tenant id sent as X-Tenant-ID for tenant-scoped endpoints.")
     parser.add_argument("--timeout", type=float, default=10.0, help="Request timeout in seconds.")
-    parser.add_argument("--require-ready", action="store_true", help="Fail if /ready is not CUDA-ready.")
+    parser.add_argument("--require-ready", action="store_true", help="Fail if /ready is not runtime-ready.")
     parser.add_argument("--check-openapi", action="store_true", help="Require /openapi.json to be enabled and contain core paths.")
     parser.add_argument("--deep-ready", action="store_true", help="Call /ready/deep.")
     parser.add_argument("--load-models", action="store_true", help="Ask /ready/deep to load configured models.")

@@ -11,14 +11,23 @@ from app.model_config import config_value, model_config
 from app.model_package import model_hash, validate_model_hash
 from app.observability import logger, now, wall_time
 from app.portrait_response import exception_log_summary
-from app.runtime_sessions import create_session, io_meta
+from app.runtime_sessions import create_session, io_meta, primary_execution_provider
 from app.runtime_state import MODEL_LOAD_LOCKS, MODEL_REGISTRY, REGISTRY_LOCK, gpu_device_ids
 from app.schemas import ModelBundle
 from app.settings import MAX_LOADED_MODELS, MODEL_CONCURRENCY_LIMIT, MODEL_QUEUE_TIMEOUT_SECONDS
 
 
+def bundle_providers(bundle: ModelBundle) -> list[str]:
+    get_providers = getattr(bundle["session"], "get_providers", None)
+    if callable(get_providers):
+        return list(get_providers())
+    provider = bundle.get("execution_provider")
+    return [provider] if isinstance(provider, str) and provider else []
+
+
 def bundle_info(cache_key_value: str, bundle: ModelBundle) -> dict[str, Any]:
     session = bundle["session"]
+    providers = bundle_providers(bundle)
     return {
         "model": cache_key_value,
         "artifact_resolved": bool(bundle.get("path")),
@@ -31,7 +40,8 @@ def bundle_info(cache_key_value: str, bundle: ModelBundle) -> dict[str, Any]:
         "max_concurrency": bundle.get("max_concurrency", 1),
         "queue_timeout_seconds": bundle.get("queue_timeout_seconds", 0),
         "gpu_device_id": bundle.get("gpu_device_id"),
-        "providers": session.get_providers(),
+        "execution_provider": bundle.get("execution_provider") or primary_execution_provider(providers),
+        "providers": providers,
         **io_meta(session),
     }
 
@@ -147,6 +157,7 @@ async def get_or_load_model(
             validate_model_hash(cache_key_value, digest)
             gpu_device_id = model_gpu_device_id(cache_key_value)
             session = await asyncio.to_thread(create_session, model_path, cache_key_value, gpu_device_id)
+            execution_provider = primary_execution_provider(session.get_providers())
         except HTTPException:
             observe("model_load_errors_total")
             raise
@@ -155,7 +166,7 @@ async def get_or_load_model(
             logger.warning("failed to load model: %s error=%s", cache_key_value, exception_log_summary(exc))
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="failed to load model into GPU",
+                detail="failed to load model runtime",
             ) from exc
 
         load_seconds = now() - start
@@ -175,6 +186,7 @@ async def get_or_load_model(
             "inference_count": 0,
             "max_concurrency": max_concurrency,
             "queue_timeout_seconds": queue_timeout,
+            "execution_provider": execution_provider,
         }
         MODEL_REGISTRY[cache_key_value] = bundle
         await touch_model(cache_key_value, bundle)
@@ -182,8 +194,9 @@ async def get_or_load_model(
         observe("model_load_seconds_sum", load_seconds)
         await evict_lru_if_needed(except_key=cache_key_value)
         logger.info(
-            "model loaded on CUDA: %s device_id=%s load_seconds=%.6f hash=%s",
+            "model loaded: %s execution_provider=%s device_id=%s load_seconds=%.6f hash=%s",
             cache_key_value,
+            execution_provider,
             gpu_device_id,
             load_seconds,
             digest,

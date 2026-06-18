@@ -3,6 +3,9 @@ import numpy as np
 from fastapi import HTTPException, Request
 from fastapi.testclient import TestClient
 
+import app.config_hot_reload as config_hot_reload
+import app.rate_limit as rate_limit
+import app.settings as settings
 from app import (
     portrait_auth,
     routes_debug,
@@ -15,6 +18,27 @@ from app import (
 )
 from app.runtime_state import MODEL_REGISTRY
 from main import app
+
+
+def test_env_hot_reload_updates_loaded_settings_modules(monkeypatch, workspace_tmp_path) -> None:
+    env_path = workspace_tmp_path / ".env"
+    env_path.write_text("RATE_LIMIT_PER_MINUTE=37\n", encoding="utf-8")
+    original_env = settings.RATE_LIMIT_PER_MINUTE
+    original_rate_limit = rate_limit.RATE_LIMIT_PER_MINUTE
+    monkeypatch.setattr(config_hot_reload, "ENV_PATH", env_path)
+    monkeypatch.setattr(config_hot_reload, "audit_config_reload", lambda source, result: None)
+
+    try:
+        result = config_hot_reload.reload_runtime_config(source="test-env", include_env=True)
+
+        assert result["env_loaded"] is True
+        assert result["env_changed_key_count"] == 1
+        assert settings.RATE_LIMIT_PER_MINUTE == 37
+        assert rate_limit.RATE_LIMIT_PER_MINUTE == 37
+    finally:
+        monkeypatch.setenv("RATE_LIMIT_PER_MINUTE", str(original_env))
+        config_hot_reload.reload_settings_modules()
+        rate_limit.RATE_LIMIT_PER_MINUTE = original_rate_limit
 
 
 def test_openapi_keeps_core_routes() -> None:
@@ -90,27 +114,36 @@ def test_console_is_product_admin_shell_with_strict_inline_policy() -> None:
 
     assert response.status_code == 200
     body = response.text
-    assert "PortraitHub 运维控制台" in body
-    assert "接口文档" in body
-    assert "JWT 令牌" in body
-    for marker in [
-        'data-view="models"',
-        'data-view="gallery"',
-        'data-view="dashboard"',
-        'data-view="alerts"',
-        'id="threshold-form"',
-        'id="stream-form"',
-        'id="retention-form"',
-        'id="enroll-form"',
-        'id="alert-form"',
-    ]:
-        assert marker in body
+    assert "PortraitHub 业务控制台" in body
+    assert "启用 JavaScript" in body
     csp = response.headers["Content-Security-Policy"]
+    assert "img-src 'self' data: blob:" in csp
     assert "script-src 'self' 'nonce-" in csp
     assert "style-src 'self' 'nonce-" in csp
     assert "'unsafe-inline'" not in csp
     assert 'style="' not in body
     assert "onclick" not in body
+
+
+def test_console_assets_use_light_structured_response_panels() -> None:
+    client = TestClient(app)
+
+    js = client.get("/assets/console.js")
+    css = client.get("/assets/console.css")
+
+    assert js.status_code == 200
+    assert css.status_code == 200
+    js_body = js.text
+    css_body = css.text
+    assert "data-viewer" in js_body
+    assert "查看完整数据（JSON）" in js_body
+    assert "复制数据" in js_body
+    assert 'class="json-view data-viewer"' in js_body
+    assert '<pre id="dashboard-json"' not in js_body
+    assert '<pre id="models-json"' not in js_body
+    assert "--code" not in css_body
+    assert "#111827" not in css_body
+    assert "background: #fbfdff" in css_body
 
 
 def test_api_docs_can_be_disabled_in_production(monkeypatch) -> None:

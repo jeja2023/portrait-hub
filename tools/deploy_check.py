@@ -47,6 +47,7 @@ def check_required_files(root: Path, report: DeployReport) -> None:
         "requirements/dev.txt",
         "requirements/base.in",
         "requirements/base.lock",
+        "requirements.lock",
         "models.yml",
         "model-capabilities.yml",
         "app/server.py",
@@ -125,6 +126,8 @@ def check_code_quality(root: Path, report: DeployReport) -> None:
     runtime_appearance = read_text(root / "app" / "runtime_appearance.py")
     vector_store = read_text(root / "app" / "portrait_vector_store.py")
     postgres = read_text(root / "app" / "portrait_postgres.py")
+    postgres_core = read_text(root / "app" / "postgres_core.py")
+    config_hot_reload = read_text(root / "app" / "config_hot_reload.py")
     websocket_routes = read_text(root / "app" / "routes_portrait_ws.py")
     console_js = read_text(root / "frontend" / "console" / "console.js")
     report.add(
@@ -143,20 +146,14 @@ def check_code_quality(root: Path, report: DeployReport) -> None:
         and "strict = true" in pyproject
         and "mypy==" in dev_requirements
         and "python tools/type_check.py" in ci
-        and "DEFAULT_TARGETS" in type_check,
+        and "discover_default_targets" in type_check
+        and "DEFAULT_TARGET_ROOTS" in type_check,
         None,
     )
     report.add(
         "expanded_type_check_targets",
-        all(
-            item in type_check
-            for item in [
-                "app/portrait_gallery.py",
-                "app/portrait_model_runtime.py",
-                "app/portrait_postgres.py",
-                "app/portrait_tracking.py",
-            ]
-        ),
+        all(item in type_check for item in ["\"app\"", "\"tools\"", "\"sdk\"", "main.py"])
+        and "rglob(\"*.py\")" in type_check,
         None,
     )
     report.add(
@@ -187,7 +184,10 @@ def check_code_quality(root: Path, report: DeployReport) -> None:
         "config_sighup_hot_reload",
         "def install_config_reload_signal_handler" in server
         and 'getattr(signal, "SIGHUP"' in server
-        and "reload_model_config_state()" in server,
+        and "reload_runtime_config(source=\"sighup\"" in server
+        and "ENV_PATH" in server
+        and "def reload_runtime_config" in config_hot_reload
+        and "audit_event(" in config_hot_reload,
         None,
     )
     report.add(
@@ -196,7 +196,7 @@ def check_code_quality(root: Path, report: DeployReport) -> None:
         and "portrait.inference.run_session" in runtime_execution
         and "portrait.vector.pgvector.search" in vector_store
         and "portrait.vector.qdrant.search" in vector_store
-        and "portrait.postgres.connection" in postgres,
+        and "portrait.postgres.connection" in postgres_core,
         None,
     )
     report.add(
@@ -227,12 +227,23 @@ def check_dependency_lock(root: Path, report: DeployReport) -> None:
     requirements = read_text(root / "requirements.txt")
     base_in = read_text(root / "requirements" / "base.in")
     base_lock = read_text(root / "requirements" / "base.lock")
+    requirements_lock = read_text(root / "requirements.lock")
     lock_ranges = [line for line in requirement_lines(base_lock) if has_version_range(line) or "==" not in line]
+    root_lock_ranges = [line for line in requirement_lines(requirements_lock) if has_version_range(line) or "==" not in line]
     runtime_ranges = [line for line in requirement_lines(requirements) if has_version_range(line) or "==" not in line]
     report.add(
         "dependency_lock_exact",
-        not lock_ranges and not runtime_ranges and "cryptography==45.0.6" in base_lock and "cryptography==45.0.6" in requirements,
-        {"base_lock_ranges": lock_ranges, "requirements_ranges": runtime_ranges},
+        not lock_ranges
+        and not root_lock_ranges
+        and not runtime_ranges
+        and "cryptography==45.0.6" in base_lock
+        and "cryptography==45.0.6" in requirements_lock
+        and "cryptography==45.0.6" in requirements,
+        {
+            "base_lock_ranges": lock_ranges,
+            "requirements_lock_ranges": root_lock_ranges,
+            "requirements_ranges": runtime_ranges,
+        },
     )
     report.add(
         "dependency_input_keeps_compatibility_range",

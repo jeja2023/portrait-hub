@@ -47,7 +47,7 @@ class StreamCreateRequest(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
-def stream_or_404(stream_id: str, tenant_id: str):
+def stream_or_404(stream_id: str, tenant_id: str) -> StreamRecord:
     stream_id = validate_stream_id(stream_id)
     stream = get_stream(stream_id, tenant_id=tenant_id)
     if stream is None:

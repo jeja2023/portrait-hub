@@ -9,7 +9,7 @@ import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
-from app import model_package, portrait_auth, portrait_crypto, portrait_security, security
+from app import model_package, portrait_auth, portrait_crypto, portrait_security, routes_health, runtime_sessions, security
 from main import app
 
 
@@ -503,6 +503,17 @@ def test_public_health_and_ready_do_not_expose_runtime_details(monkeypatch) -> N
     assert "available_providers" not in health.json()
     assert ready.status_code == 503
     assert ready.json()["detail"] == {"status": "not_ready"}
+
+
+def test_public_ready_accepts_cpu_fallback_without_exposing_runtime_details(monkeypatch) -> None:
+    monkeypatch.setattr(routes_health.ort, "get_available_providers", lambda: ["CPUExecutionProvider"])
+    monkeypatch.setattr(runtime_sessions, "CPU_FALLBACK_ENABLED", True)
+    client = TestClient(app)
+
+    ready = client.get("/ready")
+
+    assert ready.status_code == 200
+    assert ready.json() == {"status": "ready"}
 
 
 def test_verify_hs256_jwt_rejects_expired_token(monkeypatch) -> None:
