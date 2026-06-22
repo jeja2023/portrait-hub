@@ -2,9 +2,9 @@ from typing import Any, Protocol
 from uuid import NAMESPACE_URL, uuid5
 
 import numpy as np
+import numpy.typing as npt
 
 from app.observability import logger, trace_span
-from app.portrait_compare import compare_embeddings
 from app.portrait_response import exception_log_summary
 from app.portrait_thresholds import get_threshold, validate_threshold_profile
 from app.settings import PORTRAIT_REQUIRE_PRODUCTION_VECTOR_BACKEND, PORTRAIT_VECTOR_BACKEND, QDRANT_API_KEY, QDRANT_PREFER_GRPC, QDRANT_URL
@@ -23,6 +23,22 @@ QDRANT_COLLECTIONS = {
     "gait": "portrait_gait_vectors",
     "appearance": "portrait_appearance_vectors",
 }
+
+
+def _gallery_scan_records(modality: str, tenant_id: str) -> list[dict[str, Any]]:
+    # 为 DB 后端不可用时的本地扫描回退，懒构建内存图库快照。正常路径下 search_gallery
+    # 传入空 records（存储有自己的索引），因此回退在此重建。延迟导入以避免与
+    # gallery_search 的循环导入。
+    try:
+        from app.gallery_search import gallery_records_snapshot
+        from app.portrait_thresholds import normalize_modality
+
+        return gallery_records_snapshot(tenant_id, normalize_modality(modality))
+    except Exception as exc:  # pragma: no cover - 防御性：绝不让回退本身失败
+        logger.warning("failed to build local-scan fallback records: %s", exception_log_summary(exc))
+        return []
+
+FloatArray = npt.NDArray[np.float32]
 
 
 class VectorStore(Protocol):
@@ -87,7 +103,7 @@ class LocalVectorStore:
         if query_norm <= 0:
             return []
         query = query / query_norm
-        vectors: list[np.ndarray] = []
+        vectors: list[FloatArray] = []
         vector_records: list[dict[str, Any]] = []
         for record in records:
             vector = np.asarray(record.get("embedding") or [], dtype=np.float32).reshape(-1)
@@ -171,7 +187,7 @@ class PgvectorVectorStore(LocalVectorStore):
             logger.warning("pgvector search failed, falling back to local vector scan: %s", exception_log_summary(exc))
             return super().search(
                 query_embedding,
-                records,
+                records or _gallery_scan_records(modality, tenant_id),
                 modality=modality,
                 threshold_profile=profile_key,
                 top_k=top_k,
@@ -291,7 +307,7 @@ class QdrantVectorStore(LocalVectorStore):
         if qdrant_models is None:
             return super().search(
                 query_embedding,
-                records,
+                records or _gallery_scan_records(modality, tenant_id),
                 modality=modality,
                 threshold_profile=profile_key,
                 top_k=top_k,
@@ -318,7 +334,7 @@ class QdrantVectorStore(LocalVectorStore):
             logger.warning("qdrant search failed, falling back to local vector scan: %s", exception_log_summary(exc))
             return super().search(
                 query_embedding,
-                records,
+                records or _gallery_scan_records(modality, tenant_id),
                 modality=modality,
                 threshold_profile=profile_key,
                 top_k=top_k,

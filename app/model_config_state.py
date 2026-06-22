@@ -14,3 +14,10 @@ def reload_model_config_state() -> tuple[dict[str, ModelConfig], dict[str, Any]]
     MODEL_ALIASES.clear()
     MODEL_ALIASES.update(aliases)
     return MODEL_CONFIGS, MODEL_ALIASES
+
+
+__all__ = [
+    "MODEL_CONFIGS",
+    "MODEL_ALIASES",
+    "reload_model_config_state",
+]

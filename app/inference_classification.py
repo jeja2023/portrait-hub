@@ -34,11 +34,14 @@ async def infer_classification_images(
     top_k_value = int(top_k if top_k is not None else output_config.get("top_k", 5))
 
     preprocess_start = now()
-    tensors = [
-        await asyncio.to_thread(resize_image_tensor, image, input_height, input_width, normalize)
-        for image in images
-    ]
-    input_array = np.stack(tensors, axis=0).astype(np.float32)
+
+    def _preprocess_batch() -> np.ndarray:
+        # 在单个工作线程里 resize 整批，而不是每张图一次 asyncio.to_thread 跳转
+        #（会串行化并产生逐图循环往返）。
+        tensors = [resize_image_tensor(image, input_height, input_width, normalize) for image in images]
+        return np.stack(tensors, axis=0)
+
+    input_array = await asyncio.to_thread(_preprocess_batch)
     preprocess_seconds = now() - preprocess_start
 
     raw_outputs, queue_seconds, inference_seconds, inference_mode = await run_yolo_frames(bundle, input_array)
@@ -84,3 +87,8 @@ async def infer_classification_images(
         },
     }
     return items, meta
+
+
+__all__ = [
+    "infer_classification_images",
+]

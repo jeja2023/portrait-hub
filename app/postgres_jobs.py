@@ -55,6 +55,7 @@ def delete_video_job(tenant_id: str, job_id: str) -> None:
 def load_video_jobs_snapshot() -> list[dict[str, Any]]:
     if not _core.postgres_configured() or _core.psycopg is None:
         return []
+    jobs = []
     try:
         with _core.postgres_connection(row_factory=_core.dict_row) as connection:
             with connection.cursor() as cursor:
@@ -67,25 +68,23 @@ def load_video_jobs_snapshot() -> list[dict[str, Any]]:
                     ORDER BY created_at
                     """
                 )
-                rows = cursor.fetchall()
+                for row in cursor:
+                    payload = row["payload"] if isinstance(row["payload"], dict) else {}
+                    jobs.append(
+                        {
+                            "tenant_id": row["tenant_id"],
+                            "job_id": row["job_id"],
+                            "filename": None,
+                            "status": row["status"],
+                            "progress": float(row["progress"] or 0.0),
+                            "created_at": float(row["created_at"] or 0.0),
+                            "updated_at": float(row["updated_at"] or 0.0),
+                            "error": row["error"],
+                            "result": row["result"],
+                            "cancel_requested": bool(payload.get("cancel_requested", False)),
+                        }
+                    )
     except Exception as exc:  # pragma: no cover - requires external database
         logger.warning("postgres video job load failed: %s", exception_log_summary(exc))
         return []
-    jobs = []
-    for row in rows:
-        payload = row["payload"] if isinstance(row["payload"], dict) else {}
-        jobs.append(
-            {
-                "tenant_id": row["tenant_id"],
-                "job_id": row["job_id"],
-                "filename": None,
-                "status": row["status"],
-                "progress": float(row["progress"] or 0.0),
-                "created_at": float(row["created_at"] or 0.0),
-                "updated_at": float(row["updated_at"] or 0.0),
-                "error": row["error"],
-                "result": row["result"],
-                "cancel_requested": bool(payload.get("cancel_requested", False)),
-            }
-        )
     return jobs

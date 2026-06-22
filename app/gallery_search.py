@@ -2,12 +2,51 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.gallery_state import GALLERY
+from app.gallery_state import GALLERY, GALLERY_LOCK
 from app.observability import logger
 from app.portrait_compare import l2_normalize_vector
-from app.portrait_gallery_records import gallery_key
 from app.portrait_response import exception_log_summary
 from app.portrait_thresholds import normalize_modality
+
+
+# 查询质量分低于此值时，绝不会尝试保守的伪相关反馈扩展，因此调用方可以跳过本来
+# 需要的图库快照物化（见 search_gallery / gallery_query_expansion_plan）。
+QUERY_EXPANSION_MIN_QUERY_QUALITY = 0.40
+
+
+def candidate_feature(candidate: dict[str, Any]) -> dict[str, Any]:
+    feature = candidate.get("feature")
+    return feature if isinstance(feature, dict) else {}
+
+
+def gallery_records_snapshot(tenant_id: str, modality_key: str) -> list[dict[str, Any]]:
+    # 物化某个 tenant/modality 的内存候选记录。GALLERY 与 person.features 会被并发
+    # upsert 原地修改，因此迭代必须在锁内进行，避免 "changed size during iteration"。
+    records: list[dict[str, Any]] = []
+    with GALLERY_LOCK:
+        for person in GALLERY.values():
+            if person.tenant_id != tenant_id:
+                continue
+            for feature in person.features:
+                if feature.modality != modality_key:
+                    continue
+                records.append(
+                    {
+                        "tenant_id": person.tenant_id,
+                        "person_id": person.person_id,
+                        "display_name": person.display_name,
+                        "feature": feature.public_dict(include_embedding=False),
+                        "embedding": feature.embedding,
+                    }
+                )
+    return records
+
+
+def query_expansion_quality_eligible(query_quality: float | None) -> bool:
+    # 轻量预检，与 gallery_query_expansion_plan 内部的门槛一致：让热路径对永远不可能
+    # 触发扩展的查询跳过构建图库快照。质量未知（None）时与此前一样仍视为合格。
+    gate = gallery_query_quality_gate(query_quality)
+    return not (gate is not None and float(gate["score"]) < QUERY_EXPANSION_MIN_QUERY_QUALITY)
 
 
 def reindex_gallery_vectors(
@@ -24,13 +63,18 @@ def reindex_gallery_vectors(
     if model_key == "":
         model_key = None
 
-    people = [
-        person
-        for person in sorted(GALLERY.values(), key=lambda item: item.person_id)
-        if person.tenant_id == tenant_id
-    ]
+    # Snapshot the matching people and their feature lists under the lock so a
+    # concurrent upsert (which mutates GALLERY and person.features in place) cannot
+    # raise "changed size during iteration" during the long, I/O-bound reindex below.
+    with GALLERY_LOCK:
+        people_with_features = [
+            (person, list(person.features))
+            for person in sorted(GALLERY.values(), key=lambda item: item.person_id)
+            if person.tenant_id == tenant_id
+        ]
+    people = [person for person, _ in people_with_features]
     vector_backend = str(getattr(VECTOR_STORE, "backend_name", "unknown"))
-    feature_count = sum(len(person.features) for person in people)
+    feature_count = sum(len(features) for _, features in people_with_features)
     matched_feature_count = 0
     reindexed_feature_count = 0
     skipped_feature_count = 0
@@ -42,9 +86,9 @@ def reindex_gallery_vectors(
         skipped_feature_count += 1
         skip_reasons[reason] = skip_reasons.get(reason, 0) + 1
 
-    for person in people:
+    for person, person_features in people_with_features:
         person_payload = person.public_dict(include_embeddings=False)
-        for feature in person.features:
+        for feature in person_features:
             if modality_key and feature.modality != modality_key:
                 skip("filtered_out")
                 continue
@@ -251,7 +295,7 @@ def aggregate_gallery_candidates(
     groups: dict[tuple[str, str], dict[str, Any]] = {}
     for candidate in candidates:
         key = (str(candidate.get("tenant_id", "default")), str(candidate.get("person_id", "")))
-        feature = candidate.get("feature") if isinstance(candidate.get("feature"), dict) else {}
+        feature = candidate_feature(candidate)
         quality = max(0.0, min(1.0, float(feature.get("quality_score", 0.0) or 0.0)))
         similarity = float(candidate.get("similarity", 0.0) or 0.0)
         adjusted = similarity * (0.90 + 0.10 * quality)
@@ -327,7 +371,7 @@ def aggregate_gallery_candidates(
 
 
 def gallery_candidate_key(candidate: dict[str, Any]) -> tuple[str, str, str]:
-    feature = candidate.get("feature") if isinstance(candidate.get("feature"), dict) else {}
+    feature = candidate_feature(candidate)
     return (
         str(candidate.get("tenant_id", "default")),
         str(candidate.get("person_id", "")),
@@ -343,7 +387,7 @@ def gallery_candidate_score(candidate: dict[str, Any]) -> float:
 
 
 def gallery_candidate_quality(candidate: dict[str, Any]) -> float:
-    feature = candidate.get("feature") if isinstance(candidate.get("feature"), dict) else {}
+    feature = candidate_feature(candidate)
     try:
         return max(0.0, min(1.0, float(feature.get("quality_score", 0.0) or 0.0)))
     except (TypeError, ValueError):
@@ -353,7 +397,7 @@ def gallery_candidate_quality(candidate: dict[str, Any]) -> float:
 def gallery_records_by_feature_id(records: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
     index: dict[str, dict[str, Any]] = {}
     for record in records:
-        feature = record.get("feature") if isinstance(record.get("feature"), dict) else {}
+        feature = candidate_feature(record)
         feature_id = str(feature.get("feature_id", ""))
         if feature_id:
             index[feature_id] = record
@@ -369,7 +413,7 @@ def gallery_query_expansion_plan(
     max_features: int = 3,
 ) -> tuple[list[float] | None, dict[str, Any]]:
     gate = gallery_query_quality_gate(query_quality)
-    if gate is not None and float(gate["score"]) < 0.40:
+    if gate is not None and float(gate["score"]) < QUERY_EXPANSION_MIN_QUERY_QUALITY:
         return None, {
             "enabled": False,
             "reason": "query_quality_too_low",
@@ -441,7 +485,7 @@ def gallery_query_expansion_plan(
         "selected_feature_count": len(selected),
         "selected_person_count": len(selected_people),
         "seed_feature_ids": [
-            str((candidate.get("feature") if isinstance(candidate.get("feature"), dict) else {}).get("feature_id", ""))
+            str(candidate_feature(candidate).get("feature_id", ""))
             for _, _, candidate in selected
         ],
         "seed_person_ids": [str(candidate.get("person_id", "")) for _, _, candidate in selected],
@@ -494,26 +538,30 @@ def search_gallery(
     from app.portrait_vector_store import VECTOR_STORE
 
     modality_key = normalize_modality(modality)
-    records: list[dict[str, Any]] = []
-    for person in GALLERY.values():
-        if person.tenant_id != tenant_id:
-            continue
-        for feature in person.features:
-            if feature.modality != modality_key:
-                continue
-            records.append(
-                {
-                    "tenant_id": person.tenant_id,
-                    "person_id": person.person_id,
-                    "display_name": person.display_name,
-                    "feature": feature.public_dict(include_embedding=False),
-                    "embedding": feature.embedding,
-                }
-            )
+    backend = getattr(VECTOR_STORE, "backend_name", "local_numpy")
+    is_local_scan = backend == "local_numpy"
+
+    # 本地 numpy 后端会扫描此快照；pgvector/qdrant 查询各自的 ANN 索引并忽略它。
+    # 至多构建一次、且仅在确有代码路径需要时构建，使 DB 后端图库在热路径上避免
+    # O(N) 的持锁拷贝。查询扩展仍需要种子候选的 embedding，因此当查询的质量满足
+    # 扩展条件时才物化快照。
+    records_cache: list[dict[str, Any]] | None = None
+
+    def gallery_records() -> list[dict[str, Any]]:
+        nonlocal records_cache
+        if records_cache is None:
+            records_cache = gallery_records_snapshot(tenant_id, modality_key)
+        return records_cache
+
+    scan_records = gallery_records() if is_local_scan else []
+    expansion_records = (
+        gallery_records() if is_local_scan or query_expansion_quality_eligible(query_quality) else []
+    )
+
     candidate_pool_size = min(500, max(top_k * 5, top_k + 10))
     initial_candidates = VECTOR_STORE.search(
         embedding,
-        records,
+        scan_records,
         modality=modality_key,
         threshold_profile=threshold_profile,
         top_k=candidate_pool_size,
@@ -522,7 +570,7 @@ def search_gallery(
     expansion_embedding, expansion_context = gallery_query_expansion_plan(
         embedding,
         initial_candidates,
-        records,
+        expansion_records,
         query_quality=query_quality,
     )
     retrieval_context: dict[str, Any] = {
@@ -536,7 +584,7 @@ def search_gallery(
         expansion_pool_size = min(500, max(candidate_pool_size, top_k * 8, top_k + 20))
         expanded_candidates = VECTOR_STORE.search(
             expansion_embedding,
-            records,
+            scan_records,
             modality=modality_key,
             threshold_profile=threshold_profile,
             top_k=expansion_pool_size,
@@ -557,3 +605,25 @@ def search_gallery(
         candidate["retrieval_context"] = retrieval_context
     return aggregated
 
+
+__all__ = [
+    "GALLERY",
+    "aggregate_gallery_candidates",
+    "apply_gallery_query_quality",
+    "apply_gallery_rank_context",
+    "candidate_feature",
+    "gallery_candidate_key",
+    "gallery_candidate_quality",
+    "gallery_candidate_rank_context",
+    "gallery_candidate_score",
+    "gallery_decision_risk_severity",
+    "gallery_primary_risk",
+    "gallery_query_expansion_plan",
+    "gallery_query_quality_gate",
+    "gallery_records_by_feature_id",
+    "gallery_records_snapshot",
+    "merge_gallery_candidate_pools",
+    "query_expansion_quality_eligible",
+    "reindex_gallery_vectors",
+    "search_gallery",
+]

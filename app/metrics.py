@@ -1,6 +1,7 @@
 import threading
 import time
-from typing import Any
+from collections.abc import Mapping
+from typing import Any, TypedDict
 
 from app.settings import PROMETHEUS_METRICS_CACHE_SECONDS
 
@@ -36,6 +37,14 @@ REQUEST_STATUS_COUNTS: dict[str, int] = {}
 METRICS_LOCK = threading.RLock()
 PROMETHEUS_CACHE: dict[str, Any] = {"expires_at": 0.0, "text": ""}
 
+
+class Histogram(TypedDict):
+    buckets: tuple[float, ...]
+    counts: list[int]
+    inf: int
+    count: int
+    sum: float
+
 HISTOGRAM_BUCKETS: dict[str, tuple[float, ...]] = {
     "inference_seconds": (0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0),
     "queue_seconds": (0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0),
@@ -44,7 +53,7 @@ HISTOGRAM_BUCKETS: dict[str, tuple[float, ...]] = {
     "preprocess_seconds": (0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5),
     "postprocess_seconds": (0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5),
 }
-HISTOGRAMS: dict[str, dict[str, Any]] = {
+HISTOGRAMS: dict[str, Histogram] = {
     name: {"buckets": buckets, "counts": [0 for _ in buckets], "inf": 0, "count": 0, "sum": 0.0}
     for name, buckets in HISTOGRAM_BUCKETS.items()
 }
@@ -83,7 +92,7 @@ def observe_histogram(metric: str, value: float) -> None:
 
 def gpu_memory_metrics() -> list[dict[str, int]]:
     try:  # pragma: no cover - requires an NVIDIA runtime
-        import pynvml  # type: ignore[import-not-found]  # optional, from nvidia-ml-py (requirements-prod-optional.txt)
+        import pynvml  # optional, from nvidia-ml-py (requirements-prod-optional.txt)
     except Exception:
         return []
     try:  # pragma: no cover - requires an NVIDIA runtime
@@ -109,8 +118,9 @@ def metric_label(value: object) -> str:
     return str(value or "").replace("\\", "\\\\").replace("\n", "\\n").replace('"', '\\"')
 
 
-def model_labels(model: str, config: dict, extra: dict[str, object] | None = None) -> str:
-    rollout = config.get("rollout") if isinstance(config.get("rollout"), dict) else {}
+def model_labels(model: str, config: Mapping[str, Any], extra: dict[str, object] | None = None) -> str:
+    raw_rollout = config.get("rollout")
+    rollout = raw_rollout if isinstance(raw_rollout, dict) else {}
     labels = {
         "model": model,
         "task": config.get("task") or config.get("type") or "",

@@ -7,14 +7,27 @@ from PIL import Image
 from app.geometry import crop_person, person_crop_quality
 from app.inference_detection import infer_person_frames
 from app.inference_reid import infer_reid_images
-from app.observability import logger
+from app.observability import logger, wall_time
 from app.portrait_embeddings import FALLBACK_EMBEDDING_MODEL_ID, FALLBACK_EMBEDDING_VERSION, body_record as fallback_body_record
 from app.portrait_model_runtime_capability import get_capability_runtime, runtime_output_value
 from app.portrait_response import exception_log_summary
+from app.settings import RUNTIME_CAPABILITY_RETRY_COOLDOWN_SECONDS
 
 
-_BODY_EMBEDDING_RUNTIME_UNAVAILABLE = False
-_PERSON_DETECTION_RUNTIME_UNAVAILABLE = False
+# These hold a "retry-after" epoch timestamp rather than a permanent flag: a value
+# in the future means the runtime is cooling down after a failure, 0.0/False means
+# it is available. This lets a capability recover after a transient cold-start
+# failure instead of staying disabled until the process restarts.
+_BODY_EMBEDDING_RUNTIME_UNAVAILABLE: float = 0.0
+_PERSON_DETECTION_RUNTIME_UNAVAILABLE: float = 0.0
+
+
+def _runtime_cooldown_active(retry_after: float) -> bool:
+    return float(retry_after or 0.0) > wall_time()
+
+
+def _runtime_cooldown_deadline() -> float:
+    return wall_time() + RUNTIME_CAPABILITY_RETRY_COOLDOWN_SECONDS
 
 
 def best_person_detection(image: Image.Image, persons: list[dict[str, Any]]) -> tuple[Image.Image, dict[str, Any]] | None:
@@ -47,12 +60,12 @@ def best_person_detection(image: Image.Image, persons: list[dict[str, Any]]) -> 
 
 async def detect_body_embedding_crop(image: Image.Image) -> tuple[Image.Image, dict[str, Any]]:
     global _PERSON_DETECTION_RUNTIME_UNAVAILABLE
-    if _PERSON_DETECTION_RUNTIME_UNAVAILABLE:
+    if _runtime_cooldown_active(_PERSON_DETECTION_RUNTIME_UNAVAILABLE):
         return image, {"selection_strategy": "whole_image_reid"}
     try:
         runtime = await get_capability_runtime("person_detection", {"yolo", "yolov8"})
     except Exception as exc:
-        _PERSON_DETECTION_RUNTIME_UNAVAILABLE = True
+        _PERSON_DETECTION_RUNTIME_UNAVAILABLE = _runtime_cooldown_deadline()
         logger.warning("person detector unavailable for body embedding crop: %s", exception_log_summary(exc))
         return image, {"selection_strategy": "whole_image_reid"}
     if runtime is None:
@@ -72,7 +85,7 @@ async def detect_body_embedding_crop(image: Image.Image) -> tuple[Image.Image, d
             max_detections=max_detections,
         )
     except Exception as exc:
-        _PERSON_DETECTION_RUNTIME_UNAVAILABLE = True
+        _PERSON_DETECTION_RUNTIME_UNAVAILABLE = _runtime_cooldown_deadline()
         logger.warning("person detector inference failed for body embedding crop: %s", exception_log_summary(exc))
         return image, {"selection_strategy": "whole_image_reid"}
 
@@ -103,12 +116,12 @@ async def detect_body_embedding_crop(image: Image.Image) -> tuple[Image.Image, d
 
 async def run_reid_body_embedding(image: Image.Image) -> tuple[list[float], dict[str, Any]] | None:
     global _BODY_EMBEDDING_RUNTIME_UNAVAILABLE
-    if _BODY_EMBEDDING_RUNTIME_UNAVAILABLE:
+    if _runtime_cooldown_active(_BODY_EMBEDDING_RUNTIME_UNAVAILABLE):
         return None
     try:
         runtime = await get_capability_runtime("body_embedding", {"reid"})
     except Exception as exc:
-        _BODY_EMBEDDING_RUNTIME_UNAVAILABLE = True
+        _BODY_EMBEDDING_RUNTIME_UNAVAILABLE = _runtime_cooldown_deadline()
         logger.warning("body embedding model unavailable, falling back to image fingerprint: %s", exception_log_summary(exc))
         return None
     if runtime is None:
@@ -118,7 +131,7 @@ async def run_reid_body_embedding(image: Image.Image) -> tuple[list[float], dict
         crop, selection_meta = await detect_body_embedding_crop(image)
         embeddings, meta = await infer_reid_images(runtime.bundle, runtime.cache_key, [crop])
     except Exception as exc:
-        _BODY_EMBEDDING_RUNTIME_UNAVAILABLE = True
+        _BODY_EMBEDDING_RUNTIME_UNAVAILABLE = _runtime_cooldown_deadline()
         logger.warning("body embedding inference failed, falling back to image fingerprint: %s", exception_log_summary(exc))
         return None
     if embeddings.ndim != 2 or embeddings.shape[0] < 1 or embeddings.shape[1] < 1:
@@ -190,6 +203,9 @@ __all__ = [
     "best_person_detection",
     "detect_body_embedding_crop",
     "fallback_body_embedding_record",
+    "get_capability_runtime",
     "infer_body_record_for_image",
+    "infer_person_frames",
+    "infer_reid_images",
     "run_reid_body_embedding",
 ]

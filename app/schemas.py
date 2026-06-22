@@ -18,6 +18,7 @@ class ModelBundle(TypedDict):
     last_used_at: float
     load_count: int
     inference_count: int
+    in_use: NotRequired[int]
     max_concurrency: int
     queue_timeout_seconds: float
     gpu_device_id: int

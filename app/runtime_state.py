@@ -23,3 +23,14 @@ def gpu_semaphore_for_device(device_id: int | None) -> asyncio.Semaphore:
     if device_id is None:
         return GPU_SEMAPHORE
     return GPU_DEVICE_SEMAPHORES.get(int(device_id), GPU_SEMAPHORE)
+
+
+__all__ = [
+    "MODEL_REGISTRY",
+    "MODEL_LOAD_LOCKS",
+    "REGISTRY_LOCK",
+    "GPU_SEMAPHORE",
+    "GPU_DEVICE_SEMAPHORES",
+    "gpu_device_ids",
+    "gpu_semaphore_for_device",
+]

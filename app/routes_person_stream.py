@@ -8,11 +8,22 @@ from app.inference_tracks import infer_tracks_for_images
 from app.media.stream_decode import mask_stream_url
 from app.metrics import observe
 from app.model_refs import validate_model_reference_parts
-from app.observability import log_json, logger, now, request_id_from_headers
+from app.observability import log_json, now, request_id_from_headers
 from app.portrait_auth import permission_dependency
-from app.portrait_response import exception_log_summary, raise_internal_error
+from app.portrait_request_validation import validate_int_range
+from app.routes_inference_common import inference_error_boundary, validate_detection_parameters
 from app.security import require_api_token
-from app.settings import ALLOW_STREAM_URLS, MAX_STREAM_FRAMES, STREAM_FRAME_INTERVAL, STREAM_READ_TIMEOUT_SECONDS
+from app.settings import (
+    ALLOW_STREAM_URLS,
+    DEFAULT_CONFIDENCE,
+    DEFAULT_DETECTOR_ARTIFACT,
+    DEFAULT_DETECTOR_PROJECT,
+    DEFAULT_IOU,
+    DEFAULT_REID_ARTIFACT,
+    MAX_STREAM_FRAMES,
+    STREAM_FRAME_INTERVAL,
+    STREAM_READ_TIMEOUT_SECONDS,
+)
 from app.video_io import extract_video_frames_from_path, public_video_metadata, validate_stream_url
 
 
@@ -23,12 +34,12 @@ router = APIRouter()
 async def infer_stream_person_tracks(
     request: Request,
     stream_url: str = Form(...),
-    detector_project_name: str = Form("portrait_hub"),
-    detector_artifact_name: str = Form("yolov8n.onnx", alias="detector_model_name"),
-    reid_project_name: str = Form("portrait_hub"),
-    reid_artifact_name: str = Form("osnet_ibn_x1_0.onnx", alias="reid_model_name"),
-    confidence: float = Form(0.25),
-    iou: float = Form(0.45),
+    detector_project_name: str = Form(DEFAULT_DETECTOR_PROJECT),
+    detector_artifact_name: str = Form(DEFAULT_DETECTOR_ARTIFACT, alias="detector_model_name"),
+    reid_project_name: str = Form(DEFAULT_DETECTOR_PROJECT),
+    reid_artifact_name: str = Form(DEFAULT_REID_ARTIFACT, alias="reid_model_name"),
+    confidence: float = Form(DEFAULT_CONFIDENCE),
+    iou: float = Form(DEFAULT_IOU),
     max_detections: int = Form(100),
     include_embeddings: bool = Form(False),
     frame_interval: int = Form(STREAM_FRAME_INTERVAL),
@@ -53,23 +64,17 @@ async def infer_stream_person_tracks(
         reid_artifact_name,
     )
 
-    if not 0 <= confidence <= 1:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="confidence must be between 0 and 1")
-    if not 0 <= iou <= 1:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="iou must be between 0 and 1")
-    if max_detections < 1 or max_detections > 1000:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="max_detections must be between 1 and 1000")
-    if frame_interval < 1:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="frame_interval must be >= 1")
-    if max_frames < 1 or max_frames > MAX_STREAM_FRAMES:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"max_frames must be between 1 and {MAX_STREAM_FRAMES}")
-    if read_timeout_seconds < 1 or read_timeout_seconds > STREAM_READ_TIMEOUT_SECONDS:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"read_timeout_seconds must be between 1 and {STREAM_READ_TIMEOUT_SECONDS}",
-        )
+    validate_detection_parameters(confidence=confidence, iou=iou, max_detections=max_detections)
+    validate_int_range("frame_interval", frame_interval, minimum=1)
+    validate_int_range("max_frames", max_frames, minimum=1, maximum=MAX_STREAM_FRAMES)
+    validate_int_range("read_timeout_seconds", read_timeout_seconds, minimum=1, maximum=STREAM_READ_TIMEOUT_SECONDS)
 
-    try:
+    with inference_error_boundary(
+        request_id,
+        errors_metric="tracks_errors_total",
+        log_label="stream person track inference failed",
+        internal_message="stream person track inference runtime error",
+    ):
         images, stream_meta = await asyncio.to_thread(
             extract_video_frames_from_path,
             stream_url,
@@ -79,7 +84,7 @@ async def infer_stream_person_tracks(
         )
         if not images:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="no frames could be read from stream")
-        filenames = [f"stream#frame-{frame_index}" for frame_index in stream_meta["source_frame_indexes"]]
+        filenames: list[str | None] = [f"stream#frame-{frame_index}" for frame_index in stream_meta["source_frame_indexes"]]
         result = await infer_tracks_for_images(
             images,
             filenames,
@@ -109,13 +114,6 @@ async def infer_stream_person_tracks(
             person_count=result["person_count"],
             total_seconds=round(total_seconds, 6),
         )
-    except HTTPException:
-        observe("tracks_errors_total")
-        raise
-    except Exception as exc:
-        observe("tracks_errors_total")
-        logger.warning("stream person track inference failed: request_id=%s error=%s", request_id, exception_log_summary(exc))
-        raise_internal_error(request_id, "stream person track inference runtime error")
 
     detector_meta = result["detector_meta"]
     embedding_meta = result["embedding_meta"]

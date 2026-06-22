@@ -1,5 +1,81 @@
-from app.media.frame_sampler import *
-from app.media.image_decode import *
-from app.media.media_schema import *
-from app.media.quality import *
-from app.media.stream_decode import *
+"""Media decoding, sampling, quality, and stream helpers (re-export facade)."""
+
+from app.media.frame_sampler import (
+    normalize_frame_interval,
+    bounded_max_frames,
+    sample_indexes,
+    uniform_sample_indexes,
+    hybrid_sample_indexes,
+    take_every,
+)
+from app.media.image_decode import (
+    SUPPORTED_IMAGE_EXTENSIONS,
+    SUPPORTED_IMAGE_FORMATS,
+    IMAGE_EXTENSION_FORMATS,
+    validate_image_filename,
+    expected_format_from_filename,
+    sniff_image_format,
+    validate_image_content,
+    read_limited_upload,
+    decode_image_bytes,
+    decode_upload_image,
+    decode_upload_images,
+    duplicate_distance,
+    mark_near_duplicates,
+)
+from app.media.media_schema import (
+    MediaFrame,
+    DecodedImage,
+)
+from app.media.quality import (
+    clamp01,
+    round_quality,
+    assess_image_quality,
+)
+from app.media.stream_decode import (
+    SUPPORTED_STREAM_SCHEMES,
+    host_matches_allowlist,
+    is_blocked_stream_address,
+    reject_blocked_stream_address,
+    reject_private_ip_literal,
+    resolve_stream_host_addresses,
+    reject_private_resolved_addresses,
+    validate_media_stream_url,
+    mask_stream_url,
+)
+
+__all__ = [
+    "normalize_frame_interval",
+    "bounded_max_frames",
+    "sample_indexes",
+    "uniform_sample_indexes",
+    "hybrid_sample_indexes",
+    "take_every",
+    "SUPPORTED_IMAGE_EXTENSIONS",
+    "SUPPORTED_IMAGE_FORMATS",
+    "IMAGE_EXTENSION_FORMATS",
+    "validate_image_filename",
+    "expected_format_from_filename",
+    "sniff_image_format",
+    "validate_image_content",
+    "read_limited_upload",
+    "decode_image_bytes",
+    "decode_upload_image",
+    "decode_upload_images",
+    "duplicate_distance",
+    "mark_near_duplicates",
+    "MediaFrame",
+    "DecodedImage",
+    "clamp01",
+    "round_quality",
+    "assess_image_quality",
+    "SUPPORTED_STREAM_SCHEMES",
+    "host_matches_allowlist",
+    "is_blocked_stream_address",
+    "reject_blocked_stream_address",
+    "reject_private_ip_literal",
+    "resolve_stream_host_addresses",
+    "reject_private_resolved_addresses",
+    "validate_media_stream_url",
+    "mask_stream_url",
+]

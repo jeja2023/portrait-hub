@@ -12,18 +12,16 @@ def load_threshold_snapshot() -> dict[str, Any]:
         logger.warning("postgres threshold load skipped because PostgreSQL is not ready")
         return {}
     query = "SELECT profile, modality, threshold FROM portrait_thresholds ORDER BY modality, profile"
+    thresholds: dict[str, dict[str, float]] = {}
     try:
         with _core.postgres_connection(row_factory=_core.dict_row) as connection:
             with connection.cursor() as cursor:
                 cursor.execute(query)
-                rows = cursor.fetchall()
+                for row in cursor:
+                    thresholds.setdefault(str(row["modality"]), {})[str(row["profile"])] = float(row["threshold"])
     except Exception as exc:  # pragma: no cover - requires external database
         logger.warning("postgres threshold load failed: %s", exception_log_summary(exc))
         return {}
-
-    thresholds: dict[str, dict[str, float]] = {}
-    for row in rows:
-        thresholds.setdefault(str(row["modality"]), {})[str(row["profile"])] = float(row["threshold"])
     return {"version": 1, "thresholds": thresholds}
 
 
@@ -44,4 +42,3 @@ def save_threshold_snapshot(thresholds: dict[str, Any]) -> None:
                         """,
                         (str(profile), str(modality), float(value)),
                     )
-

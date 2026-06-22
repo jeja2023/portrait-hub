@@ -1,10 +1,15 @@
+from typing import Any
+
 import numpy as np
+import numpy.typing as npt
 from PIL import Image
 
 from app.schemas import LetterboxMeta
 
+Array = npt.NDArray[Any]
 
-def letterbox_image(image: Image.Image, input_height: int, input_width: int) -> tuple[np.ndarray, LetterboxMeta]:
+
+def letterbox_image(image: Image.Image, input_height: int, input_width: int) -> tuple[Array, LetterboxMeta]:
     original_width, original_height = image.size
     scale = min(input_width / original_width, input_height / original_height)
     resized_width = max(1, int(round(original_width * scale)))
@@ -30,7 +35,7 @@ def letterbox_image(image: Image.Image, input_height: int, input_width: int) -> 
     return tensor, meta
 
 
-def resize_image_tensor(image: Image.Image, input_height: int, input_width: int, normalize: str = "none") -> np.ndarray:
+def resize_image_tensor(image: Image.Image, input_height: int, input_width: int, normalize: str = "none") -> Array:
     resized = image.resize((input_width, input_height), Image.Resampling.BILINEAR)
     array = np.asarray(resized, dtype=np.float32) / 255.0
     if normalize == "imagenet":
@@ -38,3 +43,9 @@ def resize_image_tensor(image: Image.Image, input_height: int, input_width: int,
         std = np.asarray([0.229, 0.224, 0.225], dtype=np.float32)
         array = (array - mean) / std
     return np.transpose(array, (2, 0, 1))
+
+
+__all__ = [
+    "letterbox_image",
+    "resize_image_tensor",
+]

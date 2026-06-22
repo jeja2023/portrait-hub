@@ -1,4 +1,4 @@
-# 影鉴GPU 推理服务
+# 影鉴
 
 面向 Ubuntu + Docker + NVIDIA GPU 的 ONNX 推理服务。服务通过 FastAPI 暴露接口，按 GPU 拆成多个 worker，适合给人像识别、人像检索、ReID 等业务项目提供共享推理能力。
 

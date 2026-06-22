@@ -136,3 +136,12 @@ def resolve_model_reference(
 
     project, model = split_cache_key(model_ref)
     return project, model, cache_key(project, model), alias_name
+
+
+__all__ = [
+    "rollout_candidates",
+    "weighted_rollout_target",
+    "alias_resolution",
+    "alias_target",
+    "resolve_model_reference",
+]

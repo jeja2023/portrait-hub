@@ -4,12 +4,13 @@ import threading
 from fastapi import HTTPException, Request, status
 
 from app.observability import wall_time
-from app.portrait_security import tenant_id_from_request
+from app.security import authenticated_request_identity
 from app.settings import (
     RATE_LIMIT_BUCKET_TTL_SECONDS,
     RATE_LIMIT_BURST,
     RATE_LIMIT_MAX_BUCKETS,
     RATE_LIMIT_PER_MINUTE,
+    RATE_LIMIT_TRUST_FORWARDED_FOR,
 )
 
 
@@ -35,9 +36,37 @@ def rate_limit_enabled() -> bool:
     return RATE_LIMIT_PER_MINUTE > 0
 
 
+def client_identity(request: Request) -> str:
+    """Stable per-caller identity for throttling.
+
+    Authenticated callers are keyed by their authenticated identity; anonymous
+    callers fall back to the client IP (optionally the left-most X-Forwarded-For
+    hop when the deployment trusts a reverse proxy).
+    """
+    identity = authenticated_request_identity(
+        request.headers.get("authorization"),
+        request.headers.get("x-api-key"),
+        request.headers.get("x-tenant-id"),
+    )
+    if identity:
+        return identity
+    if RATE_LIMIT_TRUST_FORWARDED_FOR:
+        forwarded = request.headers.get("x-forwarded-for")
+        if forwarded:
+            first_hop = forwarded.split(",", 1)[0].strip()
+            if first_hop:
+                return first_hop
+    client = request.client
+    if client and client.host:
+        return client.host
+    return "unknown"
+
+
 def bucket_key(request: Request) -> str:
-    tenant_id = tenant_id_from_request(request)
-    return f"{tenant_id}:{request.url.path}"
+    # Key on the stable client identity, not the client-controlled x-tenant-id
+    # header; otherwise a caller rotates the header to mint a fresh bucket per
+    # request and defeats the limiter entirely.
+    return f"{client_identity(request)}:{request.url.path}"
 
 
 def cleanup_idle_buckets(now: float) -> None:

@@ -17,7 +17,6 @@ from app.core import (
     model_package_info,
     public_model_config,
     resolve_model_reference,
-    split_cache_key,
     unload_model_by_key,
 )
 from app.observability import logger
@@ -29,6 +28,7 @@ from app.portrait_response import exception_log_summary, portrait_success, raise
 from app.portrait_security import tenant_id_from_request
 from app.portrait_thresholds import THRESHOLD_PROFILES, save_threshold_state, threshold_snapshot, update_threshold_profile
 from app.security import require_api_token
+from app.schemas import ModelBundle
 
 
 router = APIRouter(dependencies=[Depends(require_api_token)])
@@ -52,7 +52,7 @@ class ThresholdUpdateRequest(BaseModel):
         return value
 
 
-def model_registry_snapshot() -> OrderedDict[str, dict[str, Any]]:
+def model_registry_snapshot() -> OrderedDict[str, ModelBundle]:
     return OrderedDict(MODEL_REGISTRY)
 
 
@@ -61,7 +61,7 @@ def model_load_locks_snapshot() -> dict[str, Any]:
 
 
 def restore_model_registry_snapshot(
-    previous_registry: OrderedDict[str, dict[str, Any]],
+    previous_registry: OrderedDict[str, ModelBundle],
     previous_locks: dict[str, Any],
 ) -> None:
     MODEL_REGISTRY.clear()
@@ -161,12 +161,9 @@ async def v1_model_unload(request: Request, model_id: str) -> dict[str, Any]:
 @router.get("/v1/models/{model_id:path}", dependencies=[Depends(permission_dependency("models:read"))])
 async def v1_model_detail(request: Request, model_id: str) -> dict[str, Any]:
     request_id = request_id_from_headers(request)
-    try:
-        project, model, key, alias_name = resolve_model_reference(model_id, None, None)
-    except HTTPException:
-        project, model = split_cache_key(model_id)
-        key = f"{project}/{model}"
-        alias_name = None
+    # Let validation errors from resolve_model_reference propagate; previously they
+    # were swallowed and the raw, unvalidated model_id was used to build the key.
+    project, model, key, alias_name = resolve_model_reference(model_id, None, None)
     config = model_config(key)
     payload: dict[str, Any] = {
         "model_id": key,

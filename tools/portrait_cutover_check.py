@@ -13,11 +13,11 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from tools.portrait_model_regression import run_model_regression
-from tools.portrait_algorithm_eval import load_manifest
+from tools.portrait_model_regression import run_model_regression  # noqa: E402
+from tools.portrait_algorithm_eval import load_manifest  # noqa: E402
 
 
-REQUIRED_PRODUCTION_CAPABILITIES = {
+REQUIRED_PRODUCTION_CAPABILITIES: dict[str, dict[str, Any]] = {
     "face_detection": {"adapter": "scrfd"},
     "face_embedding": {"adapter": "arcface", "embedding_dim": 512},
     "pose": {"adapter": "rtmpose"},
@@ -42,7 +42,8 @@ def sha256_file(path: Path) -> str:
 
 
 def configured_model_path(model_id: str, config: dict[str, Any], models_root: Path) -> tuple[Path | None, str | None]:
-    artifact = config.get("artifact") if isinstance(config.get("artifact"), dict) else {}
+    raw_artifact = config.get("artifact")
+    artifact = raw_artifact if isinstance(raw_artifact, dict) else {}
     artifact_path = artifact.get("path")
     if isinstance(artifact_path, str) and artifact_path.strip():
         candidate = Path(artifact_path.strip())
@@ -60,7 +61,8 @@ def configured_model_path(model_id: str, config: dict[str, Any], models_root: Pa
 
 def check_capability_contract(capabilities: dict[str, Any]) -> list[dict[str, Any]]:
     checks: list[dict[str, Any]] = []
-    for name, expected in REQUIRED_PRODUCTION_CAPABILITIES.items():
+    for name, expected_raw in REQUIRED_PRODUCTION_CAPABILITIES.items():
+        expected: dict[str, Any] = dict(expected_raw)
         item = capabilities.get(name)
         ok = isinstance(item, dict)
         status = item.get("status") if isinstance(item, dict) else None
@@ -78,7 +80,8 @@ def check_capability_contract(capabilities: dict[str, Any]) -> list[dict[str, An
         ok = ok and isinstance(model_id, str) and bool(model_id.strip()) and model_id != fallback_model_id
         if "embedding_dim" in expected:
             try:
-                detail["embedding_dim"] = int(item.get("embedding_dim")) if isinstance(item, dict) else None
+                raw_embedding_dim = item.get("embedding_dim") if isinstance(item, dict) else None
+                detail["embedding_dim"] = int(raw_embedding_dim) if raw_embedding_dim is not None else None
                 ok = ok and detail["embedding_dim"] == expected["embedding_dim"]
             except (TypeError, ValueError):
                 ok = False
@@ -113,7 +116,8 @@ def check_artifacts(
             continue
         path, error = configured_model_path(model_id, config, models_root)
         exists = bool(path and path.is_file())
-        artifact = config.get("artifact") if isinstance(config.get("artifact"), dict) else {}
+        raw_artifact = config.get("artifact")
+        artifact = raw_artifact if isinstance(raw_artifact, dict) else {}
         expected_sha = str(artifact.get("sha256") or "").strip().lower()
         actual_sha = sha256_file(path) if path and path.is_file() else None
         hash_ok = bool(actual_sha and expected_sha and expected_sha == actual_sha)
@@ -144,12 +148,14 @@ def check_regression(manifest_path: Path | None) -> list[dict[str, Any]]:
     if not manifest_path.is_file():
         return [{"name": "regression:manifest", "ok": False, "detail": {"path": str(manifest_path), "error": "manifest not found"}}]
     report = run_model_regression(load_manifest(manifest_path))
+    metrics = report.get("metrics")
+    metric_sections = sorted(metrics.keys()) if isinstance(metrics, dict) else []
     return [
         {
             "name": "regression:gates",
             "ok": bool(report.get("ok")),
             "detail": {
-                "metric_sections": sorted(report.get("metrics", {}).keys()),
+                "metric_sections": metric_sections,
                 "gate_failures": report.get("gate_failures", []),
             },
         }
@@ -166,13 +172,11 @@ def run_cutover_check(
     validate_onnx: bool = False,
 ) -> dict[str, Any]:
     model_payload = load_yaml(models_config_path)
-    models = model_payload.get("models", model_payload)
+    raw_models = model_payload.get("models", model_payload)
     capability_payload = load_yaml(capabilities_path)
-    capabilities = capability_payload.get("capabilities", capability_payload)
-    if not isinstance(models, dict):
-        models = {}
-    if not isinstance(capabilities, dict):
-        capabilities = {}
+    raw_capabilities = capability_payload.get("capabilities", capability_payload)
+    models = raw_models if isinstance(raw_models, dict) else {}
+    capabilities = raw_capabilities if isinstance(raw_capabilities, dict) else {}
     checks = [
         {"name": "config:models_yml", "ok": models_config_path.is_file() and bool(models), "detail": {"path": str(models_config_path)}},
         {"name": "config:model_capabilities_yml", "ok": capabilities_path.is_file() and bool(capabilities), "detail": {"path": str(capabilities_path)}},

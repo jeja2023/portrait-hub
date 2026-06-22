@@ -1,6 +1,6 @@
 import hashlib
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import yaml
 from fastapi import HTTPException
@@ -199,7 +199,7 @@ def load_model_config_document() -> tuple[dict[str, ModelConfig], dict[str, Any]
 
 
 def normalize_model_config(cache_key_value: str, raw_config: dict[str, Any]) -> ModelConfig:
-    config: ModelConfig = dict(raw_config)
+    config = cast(ModelConfig, dict(raw_config))
     model_type = str(config.get("type") or config.get("task") or "").strip().lower()
     if model_type in {"yolo", "yolov8", "detector"}:
         config.setdefault("task", "detection")
@@ -244,3 +244,17 @@ def normalize_model_config(cache_key_value: str, raw_config: dict[str, Any]) -> 
             config_value_fingerprint(cache_key_value),
         )
     return config
+
+
+__all__ = [
+    "config_value_fingerprint",
+    "configured_model_entries",
+    "configured_alias_weight",
+    "configured_alias_targets",
+    "configured_alias_target",
+    "configured_alias_entries",
+    "model_config_path_fingerprint",
+    "empty_model_config_or_raise",
+    "load_model_config_document",
+    "normalize_model_config",
+]

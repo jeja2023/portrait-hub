@@ -8,7 +8,7 @@ from app.model_config_resolver import resolve_model_reference
 from app.model_package import get_model_path
 from app.portrait_model_capabilities import capability_status, production_model_ready
 from app.runtime_registry import get_or_load_model
-from app.schemas import ModelBundle
+from app.schemas import ModelBundle, ModelConfig
 
 
 @dataclass(frozen=True)
@@ -18,7 +18,7 @@ class CapabilityRuntime:
     cache_key: str
     adapter: str
     capability: dict[str, Any]
-    config: dict[str, Any]
+    config: ModelConfig
     bundle: ModelBundle
     cold_loaded: bool = False
     load_seconds: float = 0.0

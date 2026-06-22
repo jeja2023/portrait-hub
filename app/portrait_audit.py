@@ -159,14 +159,14 @@ def sanitize_audit_value(
             return "<cycle>"
         seen.add(object_id)
         try:
-            output: list[Any] = []
+            items_output: list[Any] = []
             max_items = _positive_int(MAX_AUDIT_LIST_ITEMS, default=64)
             for index, item in enumerate(value):
                 if index >= max_items:
                     stats.truncated = True
                     stats.omitted_items += 1
                     break
-                output.append(
+                items_output.append(
                     sanitize_audit_value(
                         item,
                         depth=depth + 1,
@@ -175,7 +175,7 @@ def sanitize_audit_value(
                         seen=seen,
                     )
                 )
-            return output
+            return items_output
         finally:
             seen.remove(object_id)
 

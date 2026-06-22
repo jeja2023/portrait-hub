@@ -1,9 +1,13 @@
 from __future__ import annotations
 
 import numpy as np
+import numpy.typing as npt
+from typing import Any
 
 from app.portrait_compare import l2_normalize_vector
 from app.portrait_model_runtime_preprocess import batch_slice
+
+Array = npt.NDArray[Any]
 
 
 COCO17_KEYPOINT_NAMES = [
@@ -46,7 +50,7 @@ COCO17_SKELETON = [
 ]
 
 
-def rows_with_last_dim(array: np.ndarray) -> np.ndarray:
+def rows_with_last_dim(array: Array) -> Array:
     if array.ndim == 0:
         return array.reshape(1, 1)
     if array.ndim == 1:
@@ -54,14 +58,14 @@ def rows_with_last_dim(array: np.ndarray) -> np.ndarray:
     return array.reshape(-1, array.shape[-1])
 
 
-def normalize_scores(scores: np.ndarray) -> np.ndarray:
+def normalize_scores(scores: Array) -> Array:
     scores = np.asarray(scores, dtype=np.float32).reshape(-1)
     if scores.size and (float(scores.min()) < 0.0 or float(scores.max()) > 1.0):
         scores = 1.0 / (1.0 + np.exp(-scores))
     return scores
 
 
-def embedding_rows(raw_outputs: list[np.ndarray], batch_size: int) -> np.ndarray:
+def embedding_rows(raw_outputs: list[Array], batch_size: int) -> Array:
     for output in raw_outputs:
         array = np.asarray(output, dtype=np.float32)
         if array.ndim == 1:
@@ -73,12 +77,12 @@ def embedding_rows(raw_outputs: list[np.ndarray], batch_size: int) -> np.ndarray
     return np.empty((0, 0), dtype=np.float32)
 
 
-def round_normalized_embedding(vector: np.ndarray | list[float]) -> list[float]:
+def round_normalized_embedding(vector: Array | list[float]) -> list[float]:
     normalized = l2_normalize_vector(vector)
     return [round(float(value), 8) for value in normalized.tolist()]
 
 
-def batch_rows_with_last_dim(array: np.ndarray, batch_index: int, batch_size: int) -> np.ndarray:
+def batch_rows_with_last_dim(array: Array, batch_index: int, batch_size: int) -> Array:
     return rows_with_last_dim(batch_slice(array, batch_index, batch_size))
 
 

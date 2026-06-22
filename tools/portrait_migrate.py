@@ -10,12 +10,12 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from app.portrait_errors import MigrationError
-from app.portrait_gallery_records import PersonRecord
-from app.portrait_postgres import replace_gallery_snapshot
-from app.portrait_vector_store import VECTOR_STORE
-from app.portrait_gallery import GALLERY, load_gallery_state
-from app.settings import PORTRAIT_STORAGE_BACKEND
+from app.portrait_errors import MigrationError  # noqa: E402
+from app.portrait_gallery_records import PersonRecord  # noqa: E402
+from app.portrait_postgres import replace_gallery_snapshot  # noqa: E402
+from app.portrait_vector_store import VECTOR_STORE  # noqa: E402
+from app.portrait_gallery import GALLERY, load_gallery_state  # noqa: E402
+from app.settings import PORTRAIT_STORAGE_BACKEND  # noqa: E402
 
 
 def load_gallery_json(path: Path) -> dict[str, Any]:

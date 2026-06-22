@@ -8,7 +8,9 @@ import sys
 from pathlib import Path
 
 
-DEFAULT_REQUIREMENTS = ["requirements.txt", "requirements/prod-optional.txt"]
+# 除直接/可选清单外，还审计完全钉版的锁文件（传递依赖的版本实际存在于此，例如
+# python-multipart），这样即使某个有漏洞的传递依赖从不出现在 requirements.txt 中也能被发现。
+DEFAULT_REQUIREMENTS = ["requirements.lock", "requirements.txt", "requirements/prod-optional.txt"]
 DEFAULT_CACHE_DIR = Path(".codex-tmp") / "pip-audit-cache"
 DEFAULT_TMP_DIR = Path(".codex-tmp") / "pip-audit-tmp"
 TEMP_ENV_FAILURE_MARKERS = (

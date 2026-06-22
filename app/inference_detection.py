@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+import numpy.typing as npt
 from PIL import Image
 
 from app.model_config import config_value, configured_input_size, model_config
@@ -11,6 +12,24 @@ from app.observability import now
 from app.runtime import run_yolo_frames
 from app.schemas import LetterboxMeta, ModelBundle
 from app.vision import letterbox_image, yolo_detections, yolo_person_detections
+
+Array = npt.NDArray[Any]
+
+
+def _letterbox_batch(
+    images: list[Image.Image],
+    input_height: int,
+    input_width: int,
+) -> tuple[Array, list[LetterboxMeta]]:
+    # 在单个工作线程里对整批做 letterbox（一次 asyncio.to_thread 跳转），而不是每张图
+    # await 一次跳转——后者会把 resize 串行化。
+    tensors: list[Array] = []
+    metas: list[LetterboxMeta] = []
+    for image in images:
+        tensor, meta = letterbox_image(image, input_height, input_width)
+        tensors.append(tensor)
+        metas.append(meta)
+    return np.stack(tensors, axis=0), metas
 
 
 async def infer_person_frames(
@@ -28,19 +47,13 @@ async def infer_person_frames(
     person_class_id = int(config.get("person_class_id", 0))
 
     preprocess_start = now()
-    image_tensors: list[np.ndarray] = []
-    image_metas: list[LetterboxMeta] = []
-    for image in images:
-        tensor, meta = await asyncio.to_thread(letterbox_image, image, input_height, input_width)
-        image_tensors.append(tensor)
-        image_metas.append(meta)
-    input_array = np.stack(image_tensors, axis=0).astype(np.float32)
+    input_array, image_metas = await asyncio.to_thread(_letterbox_batch, images, input_height, input_width)
     preprocess_seconds = now() - preprocess_start
 
     raw_outputs, queue_seconds, inference_seconds, inference_mode = await run_yolo_frames(bundle, input_array)
 
     postprocess_start = now()
-    frames = []
+    frames: list[dict[str, Any]] = []
     output_shapes = [list(output.shape) for output in raw_outputs]
     for index, meta in enumerate(image_metas):
         frame_outputs = []
@@ -74,13 +87,13 @@ async def infer_person_frames(
         "inference_seconds": inference_seconds,
         "postprocess_seconds": postprocess_seconds,
     }
-    meta = {
+    runtime_meta: dict[str, Any] = {
         "input_shape": list(input_array.shape),
         "output_shapes": output_shapes,
         "inference_mode": inference_mode,
         "timing": timing,
     }
-    return frames, meta
+    return frames, runtime_meta
 async def infer_detection_images(
     bundle: ModelBundle,
     key: str,
@@ -101,19 +114,13 @@ async def infer_detection_images(
     class_filter_ids = parse_class_filter(config_value(config, "output", "class_filter"), labels)
 
     preprocess_start = now()
-    image_tensors: list[np.ndarray] = []
-    image_metas: list[LetterboxMeta] = []
-    for image in images:
-        tensor, meta = await asyncio.to_thread(letterbox_image, image, input_height, input_width)
-        image_tensors.append(tensor)
-        image_metas.append(meta)
-    input_array = np.stack(image_tensors, axis=0).astype(np.float32)
+    input_array, image_metas = await asyncio.to_thread(_letterbox_batch, images, input_height, input_width)
     preprocess_seconds = now() - preprocess_start
 
     raw_outputs, queue_seconds, inference_seconds, inference_mode = await run_yolo_frames(bundle, input_array)
 
     postprocess_start = now()
-    frames = []
+    frames: list[dict[str, Any]] = []
     output_shapes = [list(output.shape) for output in raw_outputs]
     for index, meta in enumerate(image_metas):
         frame_outputs = []
@@ -142,7 +149,7 @@ async def infer_detection_images(
         )
     postprocess_seconds = now() - postprocess_start
 
-    meta = {
+    runtime_meta: dict[str, Any] = {
         "input_shape": list(input_array.shape),
         "output_shapes": output_shapes,
         "inference_mode": inference_mode,
@@ -160,4 +167,10 @@ async def infer_detection_images(
             "class_filter": sorted(class_filter_ids) if class_filter_ids else None,
         },
     }
-    return frames, meta
+    return frames, runtime_meta
+
+
+__all__ = [
+    "infer_person_frames",
+    "infer_detection_images",
+]

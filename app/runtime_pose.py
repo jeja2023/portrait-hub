@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 import numpy as np
+import numpy.typing as npt
 from PIL import Image
 
 from app.media.quality import assess_image_quality, clamp01
@@ -12,8 +13,10 @@ from app.portrait_model_runtime_preprocess import batch_slice, resize_tensor
 from app.runtime_common import COCO17_KEYPOINT_NAMES, COCO17_SKELETON, normalize_scores, rows_with_last_dim
 from app.runtime_execution import run_model_bundle
 
+Array = npt.NDArray[Any]
 
-def softmax_max(logits: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+
+def softmax_max(logits: Array) -> tuple[Array, Array]:
     logits = np.asarray(logits, dtype=np.float32)
     shifted = logits - logits.max(axis=-1, keepdims=True)
     exp = np.exp(shifted)
@@ -36,13 +39,13 @@ def scale_pose_point(
 
 
 def decode_rtmpose_outputs(
-    raw_outputs: list[np.ndarray],
+    raw_outputs: list[Array],
     *,
     image_width: int,
     image_height: int,
     input_width: int,
     input_height: int,
-) -> tuple[np.ndarray, np.ndarray]:
+) -> tuple[Array, Array]:
     arrays = [np.asarray(output, dtype=np.float32) for output in raw_outputs]
     for array in arrays:
         sliced = batch_slice(array, 0, 1)
@@ -146,7 +149,9 @@ async def infer_pose_record_for_image(image: Image.Image) -> dict[str, Any]:
 
 __all__ = [
     "decode_rtmpose_outputs",
+    "get_capability_runtime",
     "infer_pose_record_for_image",
+    "run_model_bundle",
     "run_rtmpose",
     "scale_pose_point",
     "softmax_max",

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from copy import deepcopy
 import json
 import threading
@@ -9,12 +10,17 @@ from uuid import uuid4
 from fastapi import HTTPException, status
 
 from app.observability import logger, wall_time
-from app.portrait_gallery_records import FeatureRecord, GalleryKey, PersonRecord, feature_object_infos, gallery_key
+from app.portrait_gallery_records import FeatureRecord, GalleryKey, PersonRecord, gallery_key
 from app.portrait_response import exception_log_summary
 from app.portrait_security import validate_person_id
 from app.portrait_state import append_jsonl, handle_state_read_error, read_json_state, state_path_fingerprint, write_json_state
 from app.portrait_thresholds import normalize_modality
 from app.settings import PORTRAIT_GALLERY_STATE_PATH, PORTRAIT_GALLERY_WAL_COMPACT_EVERY, PORTRAIT_GALLERY_WAL_ENABLED, PORTRAIT_STORAGE_BACKEND
+
+
+PersistPersonHook = Callable[[PersonRecord], None]
+PersistFeatureHook = Callable[[PersonRecord, FeatureRecord], None]
+PersistDeleteHook = Callable[[str, str], None]
 
 
 def postgres_gallery_enabled() -> bool:
@@ -192,7 +198,9 @@ def upsert_person(
     display_name: str | None,
     metadata: dict[str, Any] | None = None,
     tenant_id: str = "default",
+    persist_hook: PersistPersonHook | None = None,
 ) -> PersonRecord:
+    persist = persist_hook or persist_person
     with GALLERY_LOCK:
         resolved_id = validate_person_id(person_id or f"p_{uuid4().hex[:12]}")
         key = gallery_key(tenant_id, resolved_id)
@@ -208,7 +216,7 @@ def upsert_person(
                 person.metadata.update(metadata)
             person.updated_at = wall_time()
         try:
-            persist_person(person)
+            persist(person)
         except Exception:
             if previous_person is None:
                 GALLERY.pop(key, None)
@@ -228,7 +236,9 @@ def add_feature(
     quality_score: float,
     source_id: str,
     object_info: dict[str, Any] | None = None,
+    persist_hook: PersistFeatureHook | None = None,
 ) -> FeatureRecord:
+    persist = persist_hook or persist_feature
     with GALLERY_LOCK:
         modality_key = normalize_modality(modality)
         feature = FeatureRecord(
@@ -247,7 +257,7 @@ def add_feature(
         person.features.append(feature)
         person.updated_at = wall_time()
         try:
-            persist_feature(person, feature)
+            persist(person, feature)
         except Exception:
             key = gallery_key(person.tenant_id, person.person_id)
             GALLERY[key] = previous_person
@@ -268,7 +278,13 @@ def get_person_or_404(person_id: str, tenant_id: str = "default") -> PersonRecor
     return person
 
 
-def patch_person(person_id: str, payload: dict[str, Any], tenant_id: str = "default") -> PersonRecord:
+def patch_person(
+    person_id: str,
+    payload: dict[str, Any],
+    tenant_id: str = "default",
+    persist_hook: PersistPersonHook | None = None,
+) -> PersonRecord:
+    persist = persist_hook or persist_person
     with GALLERY_LOCK:
         resolved_id = validate_person_id(person_id)
         person = get_person_or_404(resolved_id, tenant_id=tenant_id)
@@ -279,7 +295,7 @@ def patch_person(person_id: str, payload: dict[str, Any], tenant_id: str = "defa
             person.metadata.update(payload["metadata"])
         person.updated_at = wall_time()
         try:
-            persist_person(person)
+            persist(person)
         except Exception:
             GALLERY[gallery_key(tenant_id, resolved_id)] = previous_person
             person.display_name = previous_person.display_name
@@ -290,17 +306,48 @@ def patch_person(person_id: str, payload: dict[str, Any], tenant_id: str = "defa
         return person
 
 
-def delete_person(person_id: str, tenant_id: str = "default") -> bool:
+def delete_person(
+    person_id: str,
+    tenant_id: str = "default",
+    persist_delete_hook: PersistDeleteHook | None = None,
+) -> bool:
+    persist_delete = persist_delete_hook or persist_person_delete
     with GALLERY_LOCK:
         resolved_id = validate_person_id(person_id)
         key = gallery_key(tenant_id, resolved_id)
         removed = GALLERY.pop(key, None)
         if removed is not None:
             try:
-                persist_person_delete(tenant_id, resolved_id)
+                persist_delete(tenant_id, resolved_id)
             except Exception:
                 GALLERY[key] = removed
                 raise
             return True
         return False
 
+
+__all__ = [
+    "GALLERY",
+    "GALLERY_LOCK",
+    "GALLERY_WAL_COUNTER",
+    "PORTRAIT_GALLERY_STATE_PATH",
+    "PORTRAIT_GALLERY_WAL_COMPACT_EVERY",
+    "PORTRAIT_GALLERY_WAL_ENABLED",
+    "PORTRAIT_STORAGE_BACKEND",
+    "add_feature",
+    "append_gallery_wal",
+    "apply_gallery_wal",
+    "delete_person",
+    "gallery_state_payload",
+    "gallery_wal_path",
+    "get_person_or_404",
+    "list_gallery_people",
+    "load_gallery_state",
+    "patch_person",
+    "persist_feature",
+    "persist_person",
+    "persist_person_delete",
+    "postgres_gallery_enabled",
+    "save_gallery_state",
+    "upsert_person",
+]

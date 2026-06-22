@@ -12,8 +12,14 @@ from app.runtime import get_or_load_model, touch_model
 from app.vision import crop_person, person_crop_quality
 
 
+def timing_payload(meta: dict[str, Any]) -> dict[str, Any]:
+    timing = meta.get("timing")
+    return timing if isinstance(timing, dict) else {}
+
+
 def merge_person_quality(person: dict[str, Any], crop_quality: dict[str, Any]) -> None:
-    existing = person.get("quality") if isinstance(person.get("quality"), dict) else {}
+    raw_existing = person.get("quality")
+    existing = raw_existing if isinstance(raw_existing, dict) else {}
     detection_score = max(0.0, min(1.0, float(person.get("score", 0.0))))
     crop_score = max(0.0, min(1.0, float(crop_quality.get("score", 0.0))))
     existing_score = max(0.0, min(1.0, float(existing.get("score", detection_score))))
@@ -107,8 +113,10 @@ async def infer_tracks_for_images(
     await touch_model(reid_key, reid_bundle)
     observe("persons_detected_total", person_count)
     observe("persons_frames_total", len(frames))
-    observe("preprocess_seconds_sum", detector_meta["timing"]["preprocess_seconds"] + embedding_meta["timing"]["preprocess_seconds"])
-    observe("postprocess_seconds_sum", detector_meta["timing"]["postprocess_seconds"] + embedding_meta["timing"]["postprocess_seconds"])
+    detector_timing = timing_payload(detector_meta)
+    embedding_timing = timing_payload(embedding_meta)
+    observe("preprocess_seconds_sum", float(detector_timing.get("preprocess_seconds", 0.0)) + float(embedding_timing.get("preprocess_seconds", 0.0)))
+    observe("postprocess_seconds_sum", float(detector_timing.get("postprocess_seconds", 0.0)) + float(embedding_timing.get("postprocess_seconds", 0.0)))
 
     return {
         "detector_key": detector_key,
@@ -126,3 +134,9 @@ async def infer_tracks_for_images(
         "person_count": person_count,
         "embedding_count": embedding_count,
     }
+
+
+__all__ = [
+    "merge_person_quality",
+    "infer_tracks_for_images",
+]

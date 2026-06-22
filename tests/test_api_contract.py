@@ -1,3 +1,5 @@
+import os
+
 import pytest
 import numpy as np
 from fastapi import HTTPException, Request
@@ -8,6 +10,7 @@ import app.rate_limit as rate_limit
 import app.settings as settings
 from app import (
     portrait_auth,
+    portrait_model_capabilities,
     routes_debug,
     routes_model_lifecycle,
     routes_model_query,
@@ -39,6 +42,66 @@ def test_env_hot_reload_updates_loaded_settings_modules(monkeypatch, workspace_t
         monkeypatch.setenv("RATE_LIMIT_PER_MINUTE", str(original_env))
         config_hot_reload.reload_settings_modules()
         rate_limit.RATE_LIMIT_PER_MINUTE = original_rate_limit
+
+
+def test_env_hot_reload_updates_model_capabilities(monkeypatch, workspace_tmp_path) -> None:
+    capabilities_path = workspace_tmp_path / "model-capabilities.yml"
+    capabilities_path.write_text(
+        """
+capabilities:
+  face_embedding:
+    status: ready
+    model_id: portrait_hub/arcface_r100.onnx
+    adapter: arcface
+    fallback_model_id: portrait_hub/image_fingerprint_v1
+""",
+        encoding="utf-8",
+    )
+    env_path = workspace_tmp_path / ".env"
+    env_path.write_text(
+        f"MODEL_CAPABILITIES_PATH={capabilities_path}\n"
+        "PORTRAIT_REQUIRE_PRODUCTION_MODEL_CAPABILITIES=false\n",
+        encoding="utf-8",
+    )
+    original_env = os.environ.get("MODEL_CAPABILITIES_PATH")
+    original_require_env = os.environ.get("PORTRAIT_REQUIRE_PRODUCTION_MODEL_CAPABILITIES")
+    original_capabilities = dict(portrait_model_capabilities.MODEL_CAPABILITIES)
+    monkeypatch.setattr(config_hot_reload, "ENV_PATH", env_path)
+    monkeypatch.setattr(config_hot_reload, "audit_config_reload", lambda source, result: None)
+
+    try:
+        result = config_hot_reload.reload_runtime_config(source="test-capabilities", include_env=True)
+
+        assert result["model_capabilities_reloaded"] is True
+        assert portrait_model_capabilities.MODEL_CAPABILITIES["face_embedding"]["model_id"] == "portrait_hub/arcface_r100.onnx"
+        assert portrait_model_capabilities.MODEL_CAPABILITIES["face_embedding"]["embedding_dim"] == 512
+    finally:
+        if original_env is None:
+            os.environ.pop("MODEL_CAPABILITIES_PATH", None)
+        else:
+            os.environ["MODEL_CAPABILITIES_PATH"] = original_env
+        if original_require_env is None:
+            os.environ.pop("PORTRAIT_REQUIRE_PRODUCTION_MODEL_CAPABILITIES", None)
+        else:
+            os.environ["PORTRAIT_REQUIRE_PRODUCTION_MODEL_CAPABILITIES"] = original_require_env
+        config_hot_reload.reload_settings_modules()
+        portrait_model_capabilities.MODEL_CAPABILITIES.clear()
+        portrait_model_capabilities.MODEL_CAPABILITIES.update(original_capabilities)
+
+
+def test_production_capability_requirement_rejects_fallback(monkeypatch) -> None:
+    monkeypatch.setattr(portrait_model_capabilities, "PORTRAIT_REQUIRE_PRODUCTION_MODEL_CAPABILITIES", True)
+
+    with pytest.raises(RuntimeError, match="face_embedding"):
+        portrait_model_capabilities.validate_required_production_capabilities(
+            {
+                "face_embedding": {
+                    "status": "fallback",
+                    "model_id": "portrait_hub/image_fingerprint_v1",
+                    "fallback_model_id": "portrait_hub/image_fingerprint_v1",
+                }
+            }
+        )
 
 
 def test_openapi_keeps_core_routes() -> None:

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 
-from app.portrait_gallery import GALLERY, add_feature, gallery_key, upsert_person
+from app.portrait_gallery import GALLERY, add_feature, upsert_person
 from tools import load_test, portrait_migrate
 
 

@@ -3,12 +3,15 @@ from __future__ import annotations
 from typing import Any
 
 import numpy as np
+import numpy.typing as npt
 from PIL import Image
 
 from app.schemas import LetterboxMeta
 
+Array = npt.NDArray[Any]
 
-def preprocess_rgb_array(image: Image.Image, *, normalize: str = "none", color: str = "rgb") -> np.ndarray:
+
+def preprocess_rgb_array(image: Image.Image, *, normalize: str = "none", color: str = "rgb") -> Array:
     array = np.asarray(image.convert("RGB"), dtype=np.float32)
     if str(color).strip().lower() == "bgr":
         array = array[:, :, ::-1]
@@ -24,7 +27,7 @@ def preprocess_rgb_array(image: Image.Image, *, normalize: str = "none", color: 
         pass
     else:
         array = array / 255.0
-    return np.transpose(array, (2, 0, 1)).astype(np.float32)
+    return np.transpose(array, (2, 0, 1))
 
 
 def resize_tensor(
@@ -34,7 +37,7 @@ def resize_tensor(
     *,
     normalize: str = "none",
     color: str = "rgb",
-) -> np.ndarray:
+) -> Array:
     resized = image.resize((input_width, input_height), Image.Resampling.BILINEAR)
     return preprocess_rgb_array(resized, normalize=normalize, color=color)[None, :, :, :]
 
@@ -46,7 +49,7 @@ def letterbox_tensor(
     *,
     normalize: str = "none",
     color: str = "rgb",
-) -> tuple[np.ndarray, LetterboxMeta]:
+) -> tuple[Array, LetterboxMeta]:
     original_width, original_height = image.size
     scale = min(input_width / max(1, original_width), input_height / max(1, original_height))
     resized_width = max(1, int(round(original_width * scale)))
@@ -68,7 +71,7 @@ def letterbox_tensor(
     return preprocess_rgb_array(canvas, normalize=normalize, color=color)[None, :, :, :], meta
 
 
-def batch_slice(output: Any, batch_index: int, batch_size: int) -> np.ndarray:
+def batch_slice(output: Any, batch_index: int, batch_size: int) -> Array:
     array = np.asarray(output)
     if array.ndim >= 3 and array.shape[0] == batch_size:
         return np.asarray(array[batch_index])

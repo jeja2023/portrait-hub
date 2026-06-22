@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 import numpy as np
+import numpy.typing as npt
 from PIL import Image
 
 from app.media.quality import assess_image_quality
@@ -11,19 +12,21 @@ from app.portrait_model_runtime_capability import get_capability_runtime, runtim
 from app.runtime_common import embedding_rows, round_normalized_embedding
 from app.runtime_execution import run_model_bundle
 
+Array = npt.NDArray[Any]
 
-def gait_sequence_tensor(images: list[Image.Image], input_height: int, input_width: int, *, layout: str = "ntchw") -> np.ndarray:
-    frames: list[np.ndarray] = []
+
+def gait_sequence_tensor(images: list[Image.Image], input_height: int, input_width: int, *, layout: str = "ntchw") -> Array:
+    frames: list[Array] = []
     for image in images:
         gray = image.convert("L").resize((input_width, input_height), Image.Resampling.BILINEAR)
         frames.append(np.asarray(gray, dtype=np.float32) / 255.0)
     sequence = np.stack(frames, axis=0)
     layout_key = str(layout or "ntchw").strip().lower()
     if layout_key in {"ncthw", "batch_channel_time_height_width"}:
-        return sequence[None, None, :, :, :].astype(np.float32)
+        return np.asarray(sequence[None, None, :, :, :], dtype=np.float32)
     if layout_key in {"nthw", "batch_time_height_width"}:
-        return sequence[None, :, :, :].astype(np.float32)
-    return sequence[None, :, None, :, :].astype(np.float32)
+        return np.asarray(sequence[None, :, :, :], dtype=np.float32)
+    return np.asarray(sequence[None, :, None, :, :], dtype=np.float32)
 
 
 async def run_opengait(images: list[Image.Image]) -> tuple[list[float] | None, dict[str, Any]] | None:
@@ -60,4 +63,4 @@ async def infer_gait_embedding_for_images(images: list[Image.Image]) -> tuple[li
     return fallback_gait_embedding(images)
 
 
-__all__ = ["gait_sequence_tensor", "infer_gait_embedding_for_images", "run_opengait"]
+__all__ = ["gait_sequence_tensor", "get_capability_runtime", "infer_gait_embedding_for_images", "run_model_bundle", "run_opengait"]

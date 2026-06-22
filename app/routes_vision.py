@@ -8,15 +8,80 @@ from app.inference import infer_classification_images, infer_detection_images, i
 from app.metrics import observe
 from app.model_config import model_config, model_task, resolve_model_reference
 from app.model_package import get_model_path, model_package_info
-from app.observability import log_json, logger, now, request_id_from_headers
+from app.observability import log_json, now, request_id_from_headers
 from app.portrait_auth import permission_dependency
-from app.portrait_response import exception_log_summary, raise_internal_error
+from app.portrait_request_validation import validate_int_range
+from app.routes_inference_common import inference_error_boundary, validate_detection_parameters, validate_image_files
 from app.runtime import get_or_load_model, touch_model
+from app.schemas import ModelBundle
 from app.security import require_api_token
-from app.settings import MAX_VISION_IMAGES
+from app.settings import MAX_TOP_K, MAX_VISION_IMAGES
+
+from PIL import Image
 
 
 router = APIRouter()
+
+DETECTION_TASKS = {"detection", "detect", "yolo"}
+CLASSIFICATION_TASKS = {"classification", "classify", "classifier"}
+REID_TASKS = {"reid", "embedding", "embeddings"}
+
+
+async def _run_detection_task(
+    bundle: ModelBundle,
+    key: str,
+    images: list[Image.Image],
+    filenames: list[str | None],
+    *,
+    confidence: float | None,
+    iou: float | None,
+    max_detections: int | None,
+) -> tuple[list[dict[str, Any]], dict[str, Any], int]:
+    results, infer_meta = await infer_detection_images(
+        bundle,
+        key,
+        images,
+        filenames,
+        confidence=confidence,
+        iou=iou,
+        max_detections=max_detections,
+    )
+    return results, infer_meta, sum(item["detection_count"] for item in results)
+
+
+async def _run_classification_task(
+    bundle: ModelBundle,
+    key: str,
+    images: list[Image.Image],
+    filenames: list[str | None],
+    *,
+    top_k: int | None,
+) -> tuple[list[dict[str, Any]], dict[str, Any], int]:
+    results, infer_meta = await infer_classification_images(bundle, key, images, filenames, top_k=top_k)
+    return results, infer_meta, sum(item["prediction_count"] for item in results)
+
+
+async def _run_reid_task(
+    bundle: ModelBundle,
+    key: str,
+    images: list[Image.Image],
+    filenames: list[str | None],
+    *,
+    include_vectors: bool,
+) -> tuple[list[dict[str, Any]], dict[str, Any], int]:
+    embeddings, infer_meta = await infer_reid_images(bundle, key, images)
+    results: list[dict[str, Any]] = []
+    for index, _filename in enumerate(filenames):
+        item: dict[str, Any] = {
+            "image_index": index,
+            "width": images[index].width,
+            "height": images[index].height,
+            "embedding_dim": infer_meta["embedding_dim"],
+        }
+        if include_vectors:
+            item["embedding"] = [round(float(value), 8) for value in embeddings[index].tolist()]
+        results.append(item)
+    return results, infer_meta, len(results)
 
 
 @router.post("/vision/infer", dependencies=[Depends(require_api_token), Depends(permission_dependency("infer"))])
@@ -39,23 +104,17 @@ async def vision_infer(
     observe("vision_requests_total")
     total_start = now()
 
-    if not files:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="at least one image file is required")
-    if len(files) > MAX_VISION_IMAGES:
-        raise HTTPException(
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail=f"too many image files: {len(files)}, max {MAX_VISION_IMAGES}",
-        )
-    if confidence is not None and not 0 <= confidence <= 1:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="confidence must be between 0 and 1")
-    if iou is not None and not 0 <= iou <= 1:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="iou must be between 0 and 1")
-    if max_detections is not None and (max_detections < 1 or max_detections > 1000):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="max_detections must be between 1 and 1000")
-    if top_k is not None and (top_k < 1 or top_k > 100):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="top_k must be between 1 and 100")
+    validate_image_files(files, max_images=MAX_VISION_IMAGES)
+    validate_detection_parameters(confidence=confidence, iou=iou, max_detections=max_detections)
+    if top_k is not None:
+        validate_int_range("top_k", top_k, minimum=1, maximum=MAX_TOP_K)
 
-    try:
+    with inference_error_boundary(
+        request_id,
+        errors_metric="vision_errors_total",
+        log_label="vision inference failed",
+        internal_message="vision inference runtime error",
+    ):
         rollout_key = traffic_key or request_id
         project, model, key, alias_name = resolve_model_reference(
             requested_model_id,
@@ -69,43 +128,19 @@ async def vision_infer(
         bundle, cold_loaded, load_seconds = await get_or_load_model(key, model_path)
         images, filenames, decode_seconds = await load_images(files)
 
-        if task_name in {"detection", "detect", "yolo"}:
-            results, infer_meta = await infer_detection_images(
-                bundle,
-                key,
-                images,
-                filenames,
-                confidence=confidence,
-                iou=iou,
-                max_detections=max_detections,
-            )
+        if task_name in DETECTION_TASKS:
             task_name = "detection"
-            result_count = sum(item["detection_count"] for item in results)
-        elif task_name in {"classification", "classify", "classifier"}:
-            results, infer_meta = await infer_classification_images(
-                bundle,
-                key,
-                images,
-                filenames,
-                top_k=top_k,
+            results, infer_meta, result_count = await _run_detection_task(
+                bundle, key, images, filenames, confidence=confidence, iou=iou, max_detections=max_detections
             )
+        elif task_name in CLASSIFICATION_TASKS:
             task_name = "classification"
-            result_count = sum(item["prediction_count"] for item in results)
-        elif task_name in {"reid", "embedding", "embeddings"}:
-            embeddings, infer_meta = await infer_reid_images(bundle, key, images)
-            results = []
-            for index, _filename in enumerate(filenames):
-                item: dict[str, Any] = {
-                    "image_index": index,
-                    "width": images[index].width,
-                    "height": images[index].height,
-                    "embedding_dim": infer_meta["embedding_dim"],
-                }
-                if include_vectors:
-                    item["embedding"] = [round(float(value), 8) for value in embeddings[index].tolist()]
-                results.append(item)
+            results, infer_meta, result_count = await _run_classification_task(bundle, key, images, filenames, top_k=top_k)
+        elif task_name in REID_TASKS:
             task_name = "reid"
-            result_count = len(results)
+            results, infer_meta, result_count = await _run_reid_task(
+                bundle, key, images, filenames, include_vectors=include_vectors
+            )
         else:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -142,13 +177,6 @@ async def vision_infer(
             postprocess_seconds=round(infer_meta["timing"]["postprocess_seconds"], 6),
             total_seconds=round(total_seconds, 6),
         )
-    except HTTPException:
-        observe("vision_errors_total")
-        raise
-    except Exception as exc:
-        observe("vision_errors_total")
-        logger.warning("vision inference failed: request_id=%s error=%s", request_id, exception_log_summary(exc))
-        raise_internal_error(request_id, "vision inference runtime error")
 
     return {
         "status": "success",

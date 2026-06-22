@@ -24,7 +24,10 @@ async def read_image_file(file: UploadFile) -> bytes:
 
 
 def decode_image(data: bytes, filename: str | None) -> Image.Image:
-    return decode_image_bytes(data, filename).image
+    image = decode_image_bytes(data, filename).image
+    if not isinstance(image, Image.Image):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="uploaded file is not a valid image")
+    return image
 
 
 async def load_images(files: list[UploadFile]) -> tuple[list[Image.Image], list[str | None], float]:
@@ -37,3 +40,10 @@ async def load_images(files: list[UploadFile]) -> tuple[list[Image.Image], list[
         images.append(image)
         filenames.append(file.filename)
     return images, filenames, now() - decode_start
+
+
+__all__ = [
+    "read_image_file",
+    "decode_image",
+    "load_images",
+]

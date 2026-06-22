@@ -1,11 +1,16 @@
+from typing import Any
+
 import numpy as np
+import numpy.typing as npt
 from PIL import Image
 
 from app.media.quality import assess_image_quality, clamp01
 from app.schemas import LetterboxMeta
 
+Array = npt.NDArray[Any]
 
-def xywh_to_xyxy(boxes: np.ndarray) -> np.ndarray:
+
+def xywh_to_xyxy(boxes: Array) -> Array:
     result = np.empty_like(boxes, dtype=np.float32)
     result[:, 0] = boxes[:, 0] - boxes[:, 2] / 2
     result[:, 1] = boxes[:, 1] - boxes[:, 3] / 2
@@ -14,7 +19,7 @@ def xywh_to_xyxy(boxes: np.ndarray) -> np.ndarray:
     return result
 
 
-def restore_boxes(boxes: np.ndarray, meta: LetterboxMeta) -> np.ndarray:
+def restore_boxes(boxes: Array, meta: LetterboxMeta) -> Array:
     restored = boxes.copy()
     restored[:, [0, 2]] = (restored[:, [0, 2]] - meta["pad_left"]) / meta["scale"]
     restored[:, [1, 3]] = (restored[:, [1, 3]] - meta["pad_top"]) / meta["scale"]
@@ -23,7 +28,7 @@ def restore_boxes(boxes: np.ndarray, meta: LetterboxMeta) -> np.ndarray:
     return restored
 
 
-def nms(boxes: np.ndarray, scores: np.ndarray, iou_threshold: float) -> list[int]:
+def nms(boxes: Array, scores: Array, iou_threshold: float) -> list[int]:
     if boxes.size == 0:
         return []
 
@@ -67,7 +72,7 @@ def crop_person(image: Image.Image, box: list[float], min_size: int = 2) -> Imag
     return image.crop((left, top, right, bottom))
 
 
-def person_crop_quality(image: Image.Image, box: list[float], min_size: int = 2) -> dict[str, object]:
+def person_crop_quality(image: Image.Image, box: list[float], min_size: int = 2) -> dict[str, Any]:
     width, height = image.size
     if len(box) < 4 or width <= 0 or height <= 0:
         return {
@@ -91,7 +96,13 @@ def person_crop_quality(image: Image.Image, box: list[float], min_size: int = 2)
             "reason": "crop_too_small",
             "clipped_box": [round(value, 3) for value in clipped],
         }
-    crop = image.crop(tuple(int(round(value)) for value in clipped))
+    crop_box: tuple[int, int, int, int] = (
+        int(round(clipped[0])),
+        int(round(clipped[1])),
+        int(round(clipped[2])),
+        int(round(clipped[3])),
+    )
+    crop = image.crop(crop_box)
     quality = assess_image_quality(crop)
     area_ratio = clamp01((box_width * box_height) / max(1.0, float(width * height)))
     aspect_ratio = box_width / max(1.0, box_height)
@@ -122,3 +133,12 @@ def person_crop_quality(image: Image.Image, box: list[float], min_size: int = 2)
         "reason": "ok" if usable else "low_crop_quality",
         "quality": quality,
     }
+
+
+__all__ = [
+    "xywh_to_xyxy",
+    "restore_boxes",
+    "nms",
+    "crop_person",
+    "person_crop_quality",
+]

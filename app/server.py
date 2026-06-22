@@ -4,7 +4,7 @@ import hashlib
 import signal
 from contextlib import asynccontextmanager
 from collections.abc import AsyncIterator
-from typing import Any
+from typing import Any, cast
 
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.exceptions import RequestValidationError
@@ -136,7 +136,7 @@ def limit_request_body(request: Request) -> Request:
 
     async def limited_receive() -> dict[str, Any]:
         nonlocal received
-        message = await receive()
+        message = dict(await receive())
         if message.get("type") == "http.request":
             received += len(message.get("body", b""))
             if received > MAX_REQUEST_BODY_BYTES:
@@ -163,7 +163,8 @@ def validation_error_payload(exc: RequestValidationError, request_id: str | None
 
 
 def validation_error_loc(error: dict[str, Any]) -> list[Any]:
-    loc = list(error.get("loc", []))
+    raw_loc = error.get("loc", [])
+    loc = list(raw_loc) if isinstance(raw_loc, (list, tuple)) else []
     if error.get("type") == "extra_forbidden" and loc:
         loc[-1] = "extra_field"
     return loc
@@ -244,7 +245,7 @@ def create_app() -> FastAPI:
                 status_code=response.status_code,
                 duration_seconds=round(duration, 6),
             )
-            return response
+            return cast(Response, response)
         finally:
             reset_log_context(context_tokens)
 

@@ -18,7 +18,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from tools.report_redaction import redact_for_report
+from tools.report_redaction import redact_for_report  # noqa: E402
 
 
 @dataclass
@@ -82,6 +82,7 @@ def check_required_files(root: Path, report: DeployReport) -> None:
         "tools/portrait_backup_scheduler.py",
         "tools/load_test.py",
         "tools/type_check.py",
+        "tools/workspace_hygiene.py",
         "tools/portrait_postgres_schema.sql",
         "tools/qdrant_collections.json",
         "examples/portrait-model-regression.example.yml",
@@ -125,7 +126,6 @@ def check_code_quality(root: Path, report: DeployReport) -> None:
     runtime_gait = read_text(root / "app" / "runtime_gait.py")
     runtime_appearance = read_text(root / "app" / "runtime_appearance.py")
     vector_store = read_text(root / "app" / "portrait_vector_store.py")
-    postgres = read_text(root / "app" / "portrait_postgres.py")
     postgres_core = read_text(root / "app" / "postgres_core.py")
     config_hot_reload = read_text(root / "app" / "config_hot_reload.py")
     websocket_routes = read_text(root / "app" / "routes_portrait_ws.py")
@@ -144,10 +144,13 @@ def check_code_quality(root: Path, report: DeployReport) -> None:
         "strict_type_check_gate",
         "[tool.mypy]" in pyproject
         and "strict = true" in pyproject
+        and 'requires-python = ">=3.12"' in pyproject
         and "mypy==" in dev_requirements
         and "python tools/type_check.py" in ci
         and "discover_default_targets" in type_check
-        and "DEFAULT_TARGET_ROOTS" in type_check,
+        and "DEFAULT_TARGET_ROOTS" in type_check
+        and "--fallback-ok" in type_check
+        and "mypy is not installed; install requirements/dev.txt" in type_check,
         None,
     )
     report.add(
@@ -358,6 +361,7 @@ def check_docker_files(root: Path, report: DeployReport) -> None:
                 "HSTS_PRELOAD",
                 "STATE_READ_FAIL_CLOSED",
                 "STATE_WRITE_FAIL_CLOSED",
+                "PORTRAIT_REQUIRE_PRODUCTION_MODEL_CAPABILITIES",
                 "MODEL_CONFIG_READ_FAIL_CLOSED",
                 "AUDIT_WRITE_FAIL_CLOSED",
                 "PORTRAIT_JOBS_STATE_PATH",
@@ -508,6 +512,7 @@ def check_ci_workflows(root: Path, report: DeployReport) -> None:
         all(
             item in ci
             for item in [
+                'python-version: "3.12"',
                 "python -m pytest -q",
                 "node tests/test_node_sdk.js",
                 "python tools/deploy_check.py --json",
@@ -528,7 +533,7 @@ def check_import_app(root: Path, report: DeployReport) -> None:
         sys.path.insert(0, str(root))
         import main
 
-        paths = {route.path for route in main.app.routes}
+        paths = {path for route in main.app.routes if isinstance((path := getattr(route, "path", None)), str)}
         required = {
             "/health",
             "/ready",

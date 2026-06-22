@@ -98,11 +98,12 @@ class PersonRecord:
 
     @classmethod
     def from_state(cls, payload: dict[str, Any]) -> "PersonRecord":
+        metadata = payload.get("metadata")
         return cls(
             tenant_id=str(payload.get("tenant_id", "default")),
             person_id=str(payload["person_id"]),
             display_name=payload.get("display_name"),
-            metadata=payload.get("metadata") if isinstance(payload.get("metadata"), dict) else {},
+            metadata=deepcopy(metadata) if isinstance(metadata, dict) else {},
             features=[FeatureRecord.from_state(item) for item in payload.get("features", [])],
             created_at=float(payload.get("created_at", wall_time())),
             updated_at=float(payload.get("updated_at", wall_time())),

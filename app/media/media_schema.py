@@ -44,3 +44,9 @@ class DecodedImage:
     format: str
     bytes_count: int
     data: bytes | None = None
+
+
+__all__ = [
+    "MediaFrame",
+    "DecodedImage",
+]

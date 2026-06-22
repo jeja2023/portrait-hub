@@ -79,6 +79,7 @@ def audit_config_reload(source: str, result: dict[str, Any]) -> None:
             env_key_count=int(result.get("env_key_count", 0) or 0),
             env_changed_key_count=int(result.get("env_changed_key_count", 0) or 0),
             model_config_reloaded=bool(result.get("model_config_reloaded", False)),
+            model_capabilities_reloaded=bool(result.get("model_capabilities_reloaded", False)),
         )
     except Exception as exc:
         logger.warning("configuration hot reload audit failed: %s", exc)
@@ -91,14 +92,17 @@ def reload_runtime_config(*, source: str = "manual", include_env: bool = True) -
         reload_settings_modules()
 
     from app.model_config_state import reload_model_config_state
+    from app.portrait_model_capabilities import reload_model_capabilities
 
     reload_model_config_state()
+    reload_model_capabilities()
     result = {
         "source": source,
         "env_loaded": bool(env_result.get("loaded", False)),
         "env_key_count": int(env_result.get("key_count", 0) or 0),
         "env_changed_key_count": len(env_result.get("changed_keys", [])),
         "model_config_reloaded": True,
+        "model_capabilities_reloaded": True,
     }
     audit_config_reload(source, result)
     return result

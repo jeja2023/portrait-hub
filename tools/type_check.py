@@ -11,6 +11,7 @@ import tomllib
 
 DEFAULT_TARGET_ROOTS = ("app", "tools", "sdk")
 IGNORED_PATH_PARTS = {".git", ".mypy_cache", ".pytest_cache", ".venv", "__pycache__"}
+MYPY_CACHE_DIR = Path(".codex-tmp") / "mypy-cache"
 
 
 def discover_default_targets() -> list[str]:
@@ -57,6 +58,11 @@ def annotation_errors(targets: list[str]) -> list[str]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run the whole-repository strict type gate for PortraitHub Python modules.")
+    parser.add_argument(
+        "--fallback-ok",
+        action="store_true",
+        help="Allow the lightweight annotation gate when mypy is unavailable. Intended only for constrained local environments.",
+    )
     parser.add_argument("targets", nargs="*")
     args = parser.parse_args()
     targets = args.targets or discover_default_targets()
@@ -71,13 +77,21 @@ def main() -> int:
         return 2
 
     if importlib.util.find_spec("mypy") is not None:
-        return subprocess.call([sys.executable, "-m", "mypy", *targets])
+        MYPY_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        return subprocess.call([sys.executable, "-m", "mypy", "--cache-dir", str(MYPY_CACHE_DIR), *targets])
+
+    if not args.fallback_ok:
+        print(
+            "mypy is not installed; install requirements/dev.txt or rerun with --fallback-ok for the lightweight annotation gate.",
+            file=sys.stderr,
+        )
+        return 2
 
     errors = annotation_errors(targets)
     if errors:
         print("\n".join(errors), file=sys.stderr)
         return 1
-    print("mypy is not installed; fallback annotation gate passed")
+    print("mypy is not installed; fallback annotation gate passed (--fallback-ok)")
     return 0
 
 

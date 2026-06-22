@@ -34,7 +34,7 @@ def parse_csv_env(name: str, default: str = "") -> list[str]:
     return [item.strip() for item in os.getenv(name, default).split(",") if item.strip()]
 
 
-APP_VERSION = "0.5.35"
+APP_VERSION = "0.5.38"
 MODELS_ROOT = Path(os.getenv("MODELS_ROOT", "models")).resolve()
 MODEL_CONFIG_PATH = Path(os.getenv("MODEL_CONFIG_PATH", "models.yml"))
 MODEL_CONFIG_READ_FAIL_CLOSED = parse_bool_env("MODEL_CONFIG_READ_FAIL_CLOSED", True)
@@ -49,12 +49,27 @@ VIDEO_FRAME_INTERVAL = parse_int_env("VIDEO_FRAME_INTERVAL", 15)
 MAX_VIDEO_FRAMES = parse_int_env("MAX_VIDEO_FRAMES", 64)
 VIDEO_JOB_MAX_RETRIES = parse_int_env("VIDEO_JOB_MAX_RETRIES", 2)
 VIDEO_JOB_RETRY_BACKOFF_SECONDS = parse_float_env("VIDEO_JOB_RETRY_BACKOFF_SECONDS", 0.25)
+# 每帧进度更新最多按此间隔持久化。终态（完成/取消/失败/重试）始终立即落盘，因此这里
+# 只节流那些原本每帧都会重写整个任务状态文件（或整行 JSONB）的中间进度写入。<=0 关闭节流。
+VIDEO_JOB_PROGRESS_PERSIST_INTERVAL_SECONDS = parse_float_env("VIDEO_JOB_PROGRESS_PERSIST_INTERVAL_SECONDS", 2.0)
 STREAM_FRAME_INTERVAL = parse_int_env("STREAM_FRAME_INTERVAL", 15)
 MAX_STREAM_FRAMES = parse_int_env("MAX_STREAM_FRAMES", 32)
 STREAM_READ_TIMEOUT_SECONDS = parse_int_env("STREAM_READ_TIMEOUT_SECONDS", 10)
 STREAM_WORKER_POLL_INTERVAL_SECONDS = parse_float_env("STREAM_WORKER_POLL_INTERVAL_SECONDS", 5.0)
 STREAM_WORKER_MAX_RECONNECTS = parse_int_env("STREAM_WORKER_MAX_RECONNECTS", 3)
 MAX_VISION_IMAGES = parse_int_env("MAX_VISION_IMAGES", 16)
+MAX_COMPARE_BATCH_PAIRS = parse_int_env("MAX_COMPARE_BATCH_PAIRS", 64)
+# 共享的推理请求边界 / 默认值，此前散落硬编码在 person 与 vision 路由处理器中。
+MAX_DETECTIONS = parse_int_env("MAX_DETECTIONS", 1000)
+MAX_TOP_K = parse_int_env("MAX_TOP_K", 100)
+DEFAULT_CONFIDENCE = parse_float_env("DEFAULT_CONFIDENCE", 0.25)
+DEFAULT_IOU = parse_float_env("DEFAULT_IOU", 0.45)
+DEFAULT_DETECTOR_PROJECT = os.getenv("DEFAULT_DETECTOR_PROJECT", "portrait_hub").strip() or "portrait_hub"
+DEFAULT_DETECTOR_ARTIFACT = os.getenv("DEFAULT_DETECTOR_ARTIFACT", "yolov8n.onnx").strip() or "yolov8n.onnx"
+DEFAULT_REID_ARTIFACT = os.getenv("DEFAULT_REID_ARTIFACT", "osnet_ibn_x1_0.onnx").strip() or "osnet_ibn_x1_0.onnx"
+# Cooldown before retrying a capability runtime (body embedding / person detection)
+# that failed to load or infer, instead of latching it off until process restart.
+RUNTIME_CAPABILITY_RETRY_COOLDOWN_SECONDS = parse_float_env("RUNTIME_CAPABILITY_RETRY_COOLDOWN_SECONDS", 60.0)
 MAX_REQUEST_BODY_BYTES = parse_int_env("MAX_REQUEST_BODY_BYTES", 768 * 1024 * 1024)
 ALLOW_STREAM_URLS = parse_bool_env("ALLOW_STREAM_URLS", False)
 MAX_LOADED_MODELS = parse_int_env("MAX_LOADED_MODELS", 0)
@@ -99,21 +114,29 @@ JWT_AUDIENCE = os.getenv("JWT_AUDIENCE", "portrait-hub-api")
 JWT_REQUIRE_EXP = parse_bool_env("JWT_REQUIRE_EXP", True)
 JWT_REQUIRE_ISS = parse_bool_env("JWT_REQUIRE_ISS", True)
 JWT_REQUIRE_AUD = parse_bool_env("JWT_REQUIRE_AUD", True)
+# 安全敏感开关默认取“安全（fail-closed）”值，使得从未加载 .env / docker-compose 的
+# 部署处于锁定状态而非完全开放。已提交的 .env(.example) 与 compose 文件仍会显式设置它们；
+# 本地开发通过 dev_start.py、测试套件通过 tests/conftest.py 重新选用宽松值。
 RBAC_ENABLED = parse_bool_env("RBAC_ENABLED", False)
-AUTH_REQUIRED = parse_bool_env("AUTH_REQUIRED", False)
+AUTH_REQUIRED = parse_bool_env("AUTH_REQUIRED", True)
 DEBUG_ENDPOINTS_ENABLED = parse_bool_env("DEBUG_ENDPOINTS_ENABLED", False)
-ENABLE_API_DOCS = parse_bool_env("ENABLE_API_DOCS", True)
-TRUSTED_HOSTS = parse_csv_env("TRUSTED_HOSTS", "*")
-TENANT_HEADER_REQUIRED = parse_bool_env("TENANT_HEADER_REQUIRED", False)
+ENABLE_API_DOCS = parse_bool_env("ENABLE_API_DOCS", False)
+TRUSTED_HOSTS = parse_csv_env("TRUSTED_HOSTS", "127.0.0.1,localhost")
+TENANT_HEADER_REQUIRED = parse_bool_env("TENANT_HEADER_REQUIRED", True)
 JWT_REQUIRE_TENANT = parse_bool_env("JWT_REQUIRE_TENANT", True)
 PORTRAIT_STORAGE_BACKEND = os.getenv("PORTRAIT_STORAGE_BACKEND", "json").strip().lower()
 PORTRAIT_VECTOR_BACKEND = os.getenv("PORTRAIT_VECTOR_BACKEND", "local").strip().lower()
 PORTRAIT_REQUIRE_PRODUCTION_VECTOR_BACKEND = parse_bool_env("PORTRAIT_REQUIRE_PRODUCTION_VECTOR_BACKEND", False)
+PORTRAIT_REQUIRE_PRODUCTION_MODEL_CAPABILITIES = parse_bool_env("PORTRAIT_REQUIRE_PRODUCTION_MODEL_CAPABILITIES", False)
 PORTRAIT_OBJECT_STORAGE_BACKEND = os.getenv("PORTRAIT_OBJECT_STORAGE_BACKEND", "local").strip().lower()
 POSTGRES_DSN = os.getenv("POSTGRES_DSN", "")
 POSTGRES_CONNECT_TIMEOUT_SECONDS = parse_int_env("POSTGRES_CONNECT_TIMEOUT_SECONDS", 3)
 POSTGRES_POOL_MIN_SIZE = parse_int_env("POSTGRES_POOL_MIN_SIZE", 1)
 POSTGRES_POOL_MAX_SIZE = parse_int_env("POSTGRES_POOL_MAX_SIZE", 10)
+# pgvector HNSW 候选列表大小。ANN 索引只按 embedding_dim 分区，因此 tenant_id/modality
+# 的等值过滤是在 ANN 候选之上施加的；当许多 tenant 或 modality 共享同一维度时，更大的
+# ef_search 可保持较高召回。实际生效值为 max(本值, top_k)。
+PGVECTOR_HNSW_EF_SEARCH = parse_int_env("PGVECTOR_HNSW_EF_SEARCH", 100)
 QDRANT_URL = os.getenv("QDRANT_URL", "")
 QDRANT_API_KEY = os.getenv("QDRANT_API_KEY", "")
 QDRANT_PREFER_GRPC = parse_bool_env("QDRANT_PREFER_GRPC", False)
@@ -128,7 +151,7 @@ ENCRYPTION_KEY_ID = os.getenv("ENCRYPTION_KEY_ID", "primary").strip()
 ENCRYPTION_KEYRING = os.getenv("ENCRYPTION_KEYRING", "")
 ENCRYPTION_KDF = os.getenv("ENCRYPTION_KDF", "pbkdf2-sha256").strip().lower()
 ENCRYPTION_PBKDF2_ITERATIONS = parse_int_env("ENCRYPTION_PBKDF2_ITERATIONS", 210_000)
-REQUIRE_ENCRYPTION = parse_bool_env("REQUIRE_ENCRYPTION", False)
+REQUIRE_ENCRYPTION = parse_bool_env("REQUIRE_ENCRYPTION", True)
 TASK_QUEUE_BACKEND = os.getenv("TASK_QUEUE_BACKEND", "local").strip().lower()
 TASK_QUEUE_STATE_PATH = Path(os.getenv("TASK_QUEUE_STATE_PATH", str(RUNTIME_STATE_DIR / "portrait-task-queue.jsonl")))
 REDIS_URL = os.getenv("REDIS_URL", "")
@@ -138,6 +161,10 @@ RATE_LIMIT_PER_MINUTE = parse_int_env("RATE_LIMIT_PER_MINUTE", 0)
 RATE_LIMIT_BURST = parse_int_env("RATE_LIMIT_BURST", 0)
 RATE_LIMIT_MAX_BUCKETS = parse_int_env("RATE_LIMIT_MAX_BUCKETS", 10_000)
 RATE_LIMIT_BUCKET_TTL_SECONDS = parse_int_env("RATE_LIMIT_BUCKET_TTL_SECONDS", 3600)
+# When the service runs behind a trusted reverse proxy, derive the client IP from
+# the left-most X-Forwarded-For entry. Leave disabled when directly exposed so the
+# header cannot be spoofed to forge a fresh rate-limit bucket per request.
+RATE_LIMIT_TRUST_FORWARDED_FOR = parse_bool_env("RATE_LIMIT_TRUST_FORWARDED_FOR", False)
 SECURITY_HEADERS_ENABLED = parse_bool_env("SECURITY_HEADERS_ENABLED", True)
 CONTENT_SECURITY_POLICY = os.getenv(
     "CONTENT_SECURITY_POLICY",

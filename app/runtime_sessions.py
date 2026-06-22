@@ -2,12 +2,15 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+import numpy.typing as npt
 import onnxruntime as ort
 
 from app.model_config import model_config
 from app.observability import logger
 from app.portrait_response import exception_log_summary
 from app.settings import CPU_FALLBACK_ENABLED, CPU_PROVIDERS, CUDA_PROVIDERS, ENABLE_TENSORRT, TENSORRT_ENGINE_CACHE_ENABLE, TENSORRT_ENGINE_CACHE_PATH
+
+Array = npt.NDArray[Any]
 
 
 def cuda_providers_for_device(device_id: int | None = None) -> list[Any]:
@@ -160,9 +163,23 @@ def input_dtype(input_type: str) -> Any:
     if "bool" in input_type:
         return np.bool_
     return np.float32
-def run_session(session: ort.InferenceSession, input_array: np.ndarray) -> list[np.ndarray]:
+def run_session(session: ort.InferenceSession, input_array: Array) -> list[Array]:
     input_meta = session.get_inputs()[0]
     dtype = input_dtype(input_meta.type)
     if input_array.dtype != dtype:
         input_array = input_array.astype(dtype, copy=False)
-    return session.run(None, {input_meta.name: input_array})
+    outputs = session.run(None, {input_meta.name: input_array})
+    return [np.asarray(output) for output in outputs]
+
+
+__all__ = [
+    "cuda_providers_for_device",
+    "runtime_provider_status",
+    "primary_execution_provider",
+    "uses_cpu_provider_only",
+    "io_meta",
+    "session_providers",
+    "create_session",
+    "input_dtype",
+    "run_session",
+]

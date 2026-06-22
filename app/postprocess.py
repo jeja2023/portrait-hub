@@ -1,15 +1,17 @@
 from typing import Any
 
 import numpy as np
+import numpy.typing as npt
 
 from app.constants import COCO_CLASSES
 from app.geometry import nms, restore_boxes, xywh_to_xyxy
 from app.model_package import class_name
 from app.schemas import LetterboxMeta
 
+Array = npt.NDArray[Any]
 
 def yolo_detections(
-    raw_outputs: list[np.ndarray],
+    raw_outputs: list[Array],
     meta: LetterboxMeta,
     confidence_threshold: float,
     iou_threshold: float,
@@ -84,7 +86,7 @@ def yolo_detections(
 
 
 def yolo_person_detections(
-    raw_outputs: list[np.ndarray],
+    raw_outputs: list[Array],
     meta: LetterboxMeta,
     confidence_threshold: float,
     iou_threshold: float,
@@ -106,7 +108,7 @@ def yolo_person_detections(
     return detections
 
 
-def normalize_embeddings(output: np.ndarray, mode: str = "l2") -> np.ndarray:
+def normalize_embeddings(output: Array, mode: str = "l2") -> Array:
     embeddings = np.asarray(output, dtype=np.float32)
     if embeddings.ndim > 2:
         embeddings = embeddings.reshape((embeddings.shape[0], -1))
@@ -118,18 +120,18 @@ def normalize_embeddings(output: np.ndarray, mode: str = "l2") -> np.ndarray:
     return embeddings
 
 
-def softmax(values: np.ndarray) -> np.ndarray:
+def softmax(values: Array) -> Array:
     shifted = values - np.max(values, axis=1, keepdims=True)
     exp = np.exp(shifted)
-    return exp / np.maximum(np.sum(exp, axis=1, keepdims=True), 1e-12)
+    return np.asarray(exp / np.maximum(np.sum(exp, axis=1, keepdims=True), 1e-12), dtype=np.float32)
 
 
-def sigmoid(values: np.ndarray) -> np.ndarray:
-    return 1.0 / (1.0 + np.exp(-values))
+def sigmoid(values: Array) -> Array:
+    return np.asarray(1.0 / (1.0 + np.exp(-values)), dtype=np.float32)
 
 
 def classification_predictions(
-    raw_outputs: list[np.ndarray],
+    raw_outputs: list[Array],
     labels: list[str],
     top_k: int,
     activation: str,
@@ -170,3 +172,13 @@ def classification_predictions(
         ]
         batch_predictions.append(predictions)
     return batch_predictions, class_count
+
+
+__all__ = [
+    "yolo_detections",
+    "yolo_person_detections",
+    "normalize_embeddings",
+    "softmax",
+    "sigmoid",
+    "classification_predictions",
+]

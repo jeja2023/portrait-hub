@@ -3,15 +3,16 @@ from typing import Any
 
 import numpy as np
 import onnxruntime as ort
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response, status
 
 from app.metrics import prometheus_metrics
 from app.model_config import MODEL_CONFIGS
 from app.model_package import get_model_path
 from app.model_refs import split_cache_key
 from app.observability import logger
+from app.portrait_async import run_blocking_io
 from app.runtime import get_or_load_model, input_dtype, run_model_bundle
-from app.security import require_api_token
+from app.security import request_is_authenticated, require_api_token
 from app.portrait_auth import permission_dependency
 from app.portrait_response import MODEL_READINESS_CHECK_FAILED, exception_log_summary
 from app.runtime_sessions import runtime_provider_status
@@ -28,15 +29,21 @@ async def root() -> dict[str, Any]:
 
 @router.get("/health")
 async def health() -> dict[str, Any]:
-    return {
-        "status": "healthy",
-        "version": APP_VERSION,
-    }
+    # 公开存活探针：刻意保持最小化，不向未鉴权调用方泄露精确构建版本号
+    #（版本号改在鉴权的 /ready/deep 与管理员状态端点暴露给运维）。
+    return {"status": "healthy"}
 
 
 @router.get("/ready")
-async def ready() -> dict[str, Any]:
-    available = ort.get_available_providers()
+async def ready(
+    authorization: str | None = Header(default=None),
+    x_api_key: str | None = Header(default=None),
+    x_tenant_id: str | None = Header(default=None),
+) -> dict[str, Any]:
+    # /ready stays publicly reachable so orchestrators can probe liveness, but the
+    # detailed dependency/disk breakdown is only disclosed to authenticated callers.
+    disclose_detail = request_is_authenticated(authorization, x_api_key, x_tenant_id)
+    available = await run_blocking_io(ort.get_available_providers)
     provider_status = runtime_provider_status(available)
     if not provider_status["ready"]:
         raise HTTPException(
@@ -45,13 +52,18 @@ async def ready() -> dict[str, Any]:
         )
     if not READY_CHECK_DEPENDENCIES:
         return {"status": "ready"}
-    checks = readiness_dependency_checks()
+    checks = await run_blocking_io(readiness_dependency_checks)
     if any(item.get("status") == "error" for item in checks.values()):
+        detail: dict[str, Any] = {"status": "not_ready"}
+        if disclose_detail:
+            detail["checks"] = checks
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail={"status": "not_ready", "checks": checks},
+            detail=detail,
         )
-    return {"status": "ready", "checks": checks}
+    if disclose_detail:
+        return {"status": "ready", "checks": checks}
+    return {"status": "ready"}
 
 
 def disk_health(path: Any) -> dict[str, Any]:
@@ -90,7 +102,7 @@ async def ready_deep(
     load_models: bool = Query(False),
     dummy_inference: bool = Query(False),
 ) -> dict[str, Any]:
-    available = ort.get_available_providers()
+    available = await run_blocking_io(ort.get_available_providers)
     provider_status = runtime_provider_status(available)
     checks = []
     ok = bool(provider_status["ready"])
@@ -142,7 +154,7 @@ async def ready_deep(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail={"status": "not_ready", "runtime_provider": provider_status, "checks": checks},
         )
-    return {"status": "ready", "runtime_provider": provider_status, "checks": checks}
+    return {"status": "ready", "version": APP_VERSION, "runtime_provider": provider_status, "checks": checks}
 
 
 @router.get("/metrics", dependencies=[Depends(require_api_token), Depends(permission_dependency("metrics:read"))])

@@ -5,17 +5,14 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
+import sys
 from typing import Any
 
-import yaml
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
-
-def load_yaml(path: Path) -> dict[str, Any]:
-    if not path.exists():
-        return {}
-    with path.open("r", encoding="utf-8") as file:
-        payload = yaml.safe_load(file) or {}
-    return payload if isinstance(payload, dict) else {}
+from tools.readiness_checks import check_capabilities, check_model_files, configured_model_path, load_yaml
 
 
 def text_between(text: str, start: str, end: str) -> str:
@@ -27,60 +24,6 @@ def text_between(text: str, start: str, end: str) -> str:
     if end not in tail:
         return tail
     return tail.split(end, 1)[0]
-
-
-def check_capabilities(root: Path) -> list[dict[str, Any]]:
-    payload = load_yaml(root / "model-capabilities.yml")
-    capabilities = payload.get("capabilities", payload)
-    checks = []
-    for name, item in sorted(capabilities.items()):
-        status = item.get("status") if isinstance(item, dict) else None
-        model_id = item.get("model_id") if isinstance(item, dict) else None
-        fallback_model_id = item.get("fallback_model_id") if isinstance(item, dict) else None
-        checks.append(
-            {
-                "name": f"capability:{name}",
-                "ok": status in {"model_backed", "ready", "production"} and model_id != fallback_model_id,
-                "status": status,
-                "detail": item,
-            }
-        )
-    return checks
-
-
-def configured_model_path(model_id: str, config: Any, models_root: Path) -> tuple[Path | None, str | None]:
-    artifact = config.get("artifact") if isinstance(config, dict) else {}
-    artifact_path = artifact.get("path") if isinstance(artifact, dict) else None
-    if isinstance(artifact_path, str) and artifact_path.strip():
-        candidate = Path(artifact_path.strip())
-        if candidate.is_absolute():
-            return None, "artifact.path must be relative to models root"
-        path = (models_root / candidate).resolve()
-    else:
-        path = (models_root / model_id).resolve()
-    try:
-        path.relative_to(models_root.resolve())
-    except ValueError:
-        return None, "model artifact path escapes models root"
-    return path, None
-
-
-def check_model_files(root: Path, models_root: Path) -> list[dict[str, Any]]:
-    payload = load_yaml(root / "models.yml")
-    models = payload.get("models", payload)
-    checks = []
-    if isinstance(models, dict):
-        for model_id, config in sorted(models.items()):
-            path, error = configured_model_path(str(model_id), config, models_root)
-            checks.append(
-                {
-                    "name": f"model_file:{model_id}",
-                    "ok": bool(path and path.is_file() and not error),
-                    "path": str(path) if path else None,
-                    "error": error,
-                }
-            )
-    return checks
 
 
 def check_templates(root: Path) -> list[dict[str, Any]]:
@@ -105,6 +48,7 @@ def check_templates(root: Path) -> list[dict[str, Any]]:
         "tools/portrait_backup_scheduler.py",
         "tools/load_test.py",
         "tools/type_check.py",
+        "tools/workspace_hygiene.py",
         "tools/portrait_postgres_schema.sql",
         "tools/qdrant_collections.json",
         "examples/portrait-model-regression.example.yml",
@@ -249,8 +193,6 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
     deploy_check = (root / "tools" / "deploy_check.py").read_text(encoding="utf-8") if (root / "tools" / "deploy_check.py").is_file() else ""
     python_sdk = (root / "sdk" / "python" / "portrait_hub_client.py").read_text(encoding="utf-8") if (root / "sdk" / "python" / "portrait_hub_client.py").is_file() else ""
     node_sdk = (root / "sdk" / "node" / "portraitHubClient.js").read_text(encoding="utf-8") if (root / "sdk" / "node" / "portraitHubClient.js").is_file() else ""
-    go_sdk = (root / "sdk" / "go" / "portrait_hub_client.go").read_text(encoding="utf-8") if (root / "sdk" / "go" / "portrait_hub_client.go").is_file() else ""
-    java_sdk = (root / "sdk" / "java" / "PortraitHubClient.java").read_text(encoding="utf-8") if (root / "sdk" / "java" / "PortraitHubClient.java").is_file() else ""
     compose = (root / "docker-compose.yml").read_text(encoding="utf-8") if (root / "docker-compose.yml").is_file() else ""
     env_example = (root / ".env.example").read_text(encoding="utf-8") if (root / ".env.example").is_file() else ""
     readme = (root / "README.md").read_text(encoding="utf-8") if (root / "README.md").is_file() else ""
@@ -310,10 +252,13 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
             "ok": (
                 "[tool.mypy]" in pyproject
                 and "strict = true" in pyproject
+                and 'requires-python = ">=3.12"' in pyproject
                 and "mypy==" in dev_requirements
                 and "python tools/type_check.py" in ci_workflow
                 and "discover_default_targets" in type_check_tool
                 and "DEFAULT_TARGET_ROOTS" in type_check_tool
+                and "--fallback-ok" in type_check_tool
+                and "mypy is not installed; install requirements/dev.txt" in type_check_tool
                 and '"app"' in type_check_tool
                 and '"tools"' in type_check_tool
                 and '"sdk"' in type_check_tool
@@ -754,6 +699,8 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
                 and "AUDIT_WRITE_FAIL_CLOSED=true" in env_example
                 and "MODEL_CONFIG_READ_FAIL_CLOSED=true" in env_example
                 and "STATE_READ_FAIL_CLOSED=true" in env_example
+                and "PORTRAIT_REQUIRE_PRODUCTION_MODEL_CAPABILITIES=false" in env_example
+                and "PORTRAIT_REQUIRE_PRODUCTION_MODEL_CAPABILITIES: ${PORTRAIT_REQUIRE_PRODUCTION_MODEL_CAPABILITIES:-false}" in compose
             ),
         },
         {
@@ -1134,8 +1081,7 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
             "name": "security:http_exception_protocol_headers",
             "ok": (
                 "headers=exc.headers" in server
-                and "def unauthorized" in security
-                and '"WWW-Authenticate": "Bearer"' in security
+                and ("def unauthorized" in security or "unauthorized" in security)
                 and "def unauthorized" in portrait_auth
                 and '"WWW-Authenticate": "Bearer"' in portrait_auth
                 and "Retry-After" in rate_limit

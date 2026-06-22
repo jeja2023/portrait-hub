@@ -343,12 +343,12 @@ def global_match(
         cache[cache_key] = best
         return best
 
-    _, pairs = solve(0, 0)
+    _, dynamic_pairs = solve(0, 0)
     return assignment_matches(
         tracks,
         detections,
         details_by_pair,
-        pairs,
+        list(dynamic_pairs),
         min_score,
         solver_strategy="exact_dynamic_programming",
     )

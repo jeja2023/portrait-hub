@@ -28,7 +28,7 @@ from app.settings import (
 )
 
 try:  # pragma: no cover - optional production dependency
-    import jwt as pyjwt  # type: ignore[import-not-found]
+    import jwt as pyjwt
 except Exception:  # pragma: no cover - exercised when dependency is absent
     pyjwt = None
 

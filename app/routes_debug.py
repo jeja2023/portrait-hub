@@ -7,7 +7,6 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Uplo
 
 from app.image_io import load_images
 from app.model_config_access import configured_input_size
-from app.metrics import observe
 from app.model_config import config_value, model_config
 from app.model_package import get_model_path
 from app.model_refs import cache_key, validate_model_reference_parts

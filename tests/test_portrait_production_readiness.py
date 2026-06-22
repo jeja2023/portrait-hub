@@ -3,7 +3,8 @@ from pathlib import Path
 import yaml
 
 from tools.portrait_cutover_check import run_cutover_check, sha256_file
-from tools.portrait_production_readiness import check_capabilities, check_model_files, check_templates, configured_model_path
+from tools.portrait_production_readiness import check_templates
+from tools.readiness_checks import check_capabilities, check_model_files, configured_model_path
 
 
 def test_readiness_model_check_uses_artifact_path(workspace_tmp_path: Path) -> None:
@@ -80,6 +81,20 @@ def test_readiness_templates_include_cutover_and_worker_artifacts() -> None:
 def test_readiness_accepts_ready_or_production_capabilities(workspace_tmp_path: Path) -> None:
     root = workspace_tmp_path / "ready-capabilities"
     root.mkdir()
+    (root / "models.yml").write_text(
+        yaml.safe_dump(
+            {
+                "aliases": {
+                    "gait_default": {"target": "portrait_hub/opengait.onnx"},
+                },
+                "models": {
+                    "portrait_hub/arcface.onnx": {"task": "reid"},
+                    "portrait_hub/opengait.onnx": {"task": "gait"},
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
     (root / "model-capabilities.yml").write_text(
         yaml.safe_dump(
             {
@@ -91,7 +106,7 @@ def test_readiness_accepts_ready_or_production_capabilities(workspace_tmp_path: 
                     },
                     "gait": {
                         "status": "ready",
-                        "model_id": "portrait_hub/opengait.onnx",
+                        "model_id": "gait_default",
                         "fallback_model_id": "portrait_hub/tracklet_fingerprint_v1",
                     },
                     "appearance": {
@@ -108,8 +123,35 @@ def test_readiness_accepts_ready_or_production_capabilities(workspace_tmp_path: 
     checks = {item["name"]: item for item in check_capabilities(root)}
 
     assert checks["capability:face_embedding"]["ok"] is True
+    assert checks["capability:face_embedding"]["resolved_model_id"] == "portrait_hub/arcface.onnx"
     assert checks["capability:gait"]["ok"] is True
+    assert checks["capability:gait"]["resolved_model_id"] == "portrait_hub/opengait.onnx"
     assert checks["capability:appearance"]["ok"] is False
+
+
+def test_readiness_rejects_ready_capability_without_configured_model(workspace_tmp_path: Path) -> None:
+    root = workspace_tmp_path / "missing-capability-model"
+    root.mkdir()
+    (root / "models.yml").write_text(yaml.safe_dump({"models": {}}), encoding="utf-8")
+    (root / "model-capabilities.yml").write_text(
+        yaml.safe_dump(
+            {
+                "capabilities": {
+                    "face_embedding": {
+                        "status": "production",
+                        "model_id": "portrait_hub/missing_arcface.onnx",
+                        "fallback_model_id": "portrait_hub/image_fingerprint_v1",
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    checks = {item["name"]: item for item in check_capabilities(root)}
+
+    assert checks["capability:face_embedding"]["ok"] is False
+    assert checks["capability:face_embedding"]["model_error"] == "model_id is not configured in models.yml or aliases"
 
 
 def test_cutover_check_passes_with_real_artifact_hashes(workspace_tmp_path: Path) -> None:

@@ -1,8 +1,12 @@
 from typing import Any
 
 import numpy as np
+import numpy.typing as npt
 
 from app.portrait_thresholds import get_threshold, normalize_modality, validate_threshold_profile
+
+FloatArray = npt.NDArray[np.float32]
+EmbeddingInput = list[float] | FloatArray
 
 
 def clamp_score(value: float) -> float:
@@ -21,7 +25,7 @@ def coerce_quality_values(*qualities: float | None) -> list[float]:
     return values
 
 
-def l2_normalize_vector(vector: list[float] | np.ndarray) -> np.ndarray:
+def l2_normalize_vector(vector: EmbeddingInput) -> FloatArray:
     array = np.asarray(vector, dtype=np.float32).reshape(-1)
     norm = float(np.linalg.norm(array))
     if norm <= 0:
@@ -29,7 +33,7 @@ def l2_normalize_vector(vector: list[float] | np.ndarray) -> np.ndarray:
     return array / norm
 
 
-def cosine_similarity(vector_a: list[float] | np.ndarray, vector_b: list[float] | np.ndarray) -> float:
+def cosine_similarity(vector_a: EmbeddingInput, vector_b: EmbeddingInput) -> float:
     a = l2_normalize_vector(vector_a)
     b = l2_normalize_vector(vector_b)
     if a.shape != b.shape:
@@ -37,7 +41,7 @@ def cosine_similarity(vector_a: list[float] | np.ndarray, vector_b: list[float] 
     return float(np.dot(a, b))
 
 
-def euclidean_distance(vector_a: list[float] | np.ndarray, vector_b: list[float] | np.ndarray) -> float:
+def euclidean_distance(vector_a: EmbeddingInput, vector_b: EmbeddingInput) -> float:
     a = l2_normalize_vector(vector_a)
     b = l2_normalize_vector(vector_b)
     if a.shape != b.shape:
@@ -46,8 +50,8 @@ def euclidean_distance(vector_a: list[float] | np.ndarray, vector_b: list[float]
 
 
 def compare_embeddings(
-    embedding_a: list[float] | np.ndarray,
-    embedding_b: list[float] | np.ndarray,
+    embedding_a: EmbeddingInput,
+    embedding_b: EmbeddingInput,
     *,
     modality: str,
     threshold_profile: str = "normal",
@@ -68,8 +72,8 @@ def compare_embeddings(
 
 
 def quality_aware_compare(
-    embedding_a: list[float] | np.ndarray,
-    embedding_b: list[float] | np.ndarray,
+    embedding_a: EmbeddingInput,
+    embedding_b: EmbeddingInput,
     *,
     modality: str,
     threshold_profile: str = "normal",
@@ -187,13 +191,15 @@ def compare_track_templates(
             "passed": False,
             "reason": "template_embedding_missing",
         }
+    quality_a_raw = template_a.get("quality")
+    quality_b_raw = template_b.get("quality")
     comparison = quality_aware_compare(
         embedding_a,
         embedding_b,
         modality=modality,
         threshold_profile=profile_key,
-        quality_a=float(template_a.get("quality") if template_a.get("quality") is not None else 1.0),
-        quality_b=float(template_b.get("quality") if template_b.get("quality") is not None else 1.0),
+        quality_a=float(quality_a_raw) if quality_a_raw is not None else 1.0,
+        quality_b=float(quality_b_raw) if quality_b_raw is not None else 1.0,
     )
     comparison["comparison_type"] = "track_template"
     comparison["template_a"] = {

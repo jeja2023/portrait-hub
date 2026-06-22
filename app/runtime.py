@@ -1,4 +1,81 @@
-from app.runtime_execution import *
-from app.runtime_registry import *
-from app.runtime_sessions import *
-from app.runtime_state import *
+"""Model runtime: registry, sessions, execution, and state (re-export facade)."""
+
+from app.runtime_execution import (
+    build_input_array,
+    bundle_execution_provider,
+    acquire_with_timeout,
+    run_model_bundle,
+    run_model_bundle_batch,
+    stack_outputs,
+    run_yolo_frames,
+)
+from app.runtime_registry import (
+    bundle_providers,
+    bundle_info,
+    model_path_fingerprint,
+    model_runtime_limits,
+    model_gpu_device_id,
+    release_model_bundle,
+    get_model_load_lock,
+    evict_lru_if_needed,
+    unload_model_by_key,
+    touch_model,
+    get_or_load_model,
+)
+from app.runtime_sessions import (
+    cuda_providers_for_device,
+    runtime_provider_status,
+    primary_execution_provider,
+    uses_cpu_provider_only,
+    io_meta,
+    session_providers,
+    create_session,
+    input_dtype,
+    run_session,
+)
+from app.runtime_state import (
+    MODEL_REGISTRY,
+    MODEL_LOAD_LOCKS,
+    REGISTRY_LOCK,
+    GPU_SEMAPHORE,
+    GPU_DEVICE_SEMAPHORES,
+    gpu_device_ids,
+    gpu_semaphore_for_device,
+)
+
+__all__ = [
+    "build_input_array",
+    "bundle_execution_provider",
+    "acquire_with_timeout",
+    "run_model_bundle",
+    "run_model_bundle_batch",
+    "stack_outputs",
+    "run_yolo_frames",
+    "bundle_providers",
+    "bundle_info",
+    "model_path_fingerprint",
+    "model_runtime_limits",
+    "model_gpu_device_id",
+    "release_model_bundle",
+    "get_model_load_lock",
+    "evict_lru_if_needed",
+    "unload_model_by_key",
+    "touch_model",
+    "get_or_load_model",
+    "cuda_providers_for_device",
+    "runtime_provider_status",
+    "primary_execution_provider",
+    "uses_cpu_provider_only",
+    "io_meta",
+    "session_providers",
+    "create_session",
+    "input_dtype",
+    "run_session",
+    "MODEL_REGISTRY",
+    "MODEL_LOAD_LOCKS",
+    "REGISTRY_LOCK",
+    "GPU_SEMAPHORE",
+    "GPU_DEVICE_SEMAPHORES",
+    "gpu_device_ids",
+    "gpu_semaphore_for_device",
+]

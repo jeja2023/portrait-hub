@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from tools.portrait_algorithm_eval import load_manifest, run_evaluation
+from tools.portrait_algorithm_eval import load_manifest, run_evaluation  # noqa: E402
 
 
 def value_at_path(payload: dict[str, Any], path: str) -> Any:

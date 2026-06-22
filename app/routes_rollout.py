@@ -6,12 +6,16 @@ from app.model_config import MODEL_ALIASES, alias_resolution, reload_model_confi
 from app.model_config_writer import configure_weighted_alias_rollout, rollback_alias_target, switch_alias_target
 from app.model_package import get_model_path
 from app.model_refs import split_cache_key, validate_alias_name
+from app.observability import logger
 from app.portrait_auth import permission_dependency
+from app.portrait_response import exception_log_summary
 from app.schemas import AliasRollbackRequest, AliasSwitchRequest, AliasWeightedRolloutRequest
 from app.security import require_api_token
 
 
 router = APIRouter()
+
+ALIAS_RESOLUTION_FAILED = "alias resolution failed"
 
 
 def alias_view(alias_name: str, alias_config: Any) -> dict[str, Any]:
@@ -21,10 +25,11 @@ def alias_view(alias_name: str, alias_config: Any) -> dict[str, Any]:
         ok = True
         error = None
     except Exception as exc:
+        logger.warning("alias resolution failed for %s: %s", alias_name, exception_log_summary(exc))
         resolution = None
         target = None
         ok = False
-        error = str(exc)
+        error = ALIAS_RESOLUTION_FAILED
     return {
         "alias": alias_name,
         "target": target,

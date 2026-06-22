@@ -10,10 +10,6 @@ from app.observability import logger
 from app.portrait_async import run_blocking_io
 from app.portrait_audit import audit_event
 from app.portrait_auth import permission_dependency
-from app.portrait_embeddings import (
-    FALLBACK_EMBEDDING_MODEL_ID,
-    FALLBACK_EMBEDDING_VERSION,
-)
 from app.portrait_model_runtime import (
     embedding_model_info,
     infer_appearance_record_for_image,
@@ -427,13 +423,14 @@ async def v1_gallery_search_batch(
         async def handler(batch_job: VideoJob) -> dict[str, Any]:
             from io import BytesIO
             from fastapi import UploadFile
+            from starlette.datastructures import Headers
 
             async def update_progress(progress: float) -> None:
                 batch_job.progress = progress
                 await run_blocking_io(persist_video_job, batch_job)
 
             upload_files = [
-                UploadFile(filename=name, file=BytesIO(data), headers={"content-type": ctype or "application/octet-stream"})
+                UploadFile(filename=name, file=BytesIO(data), headers=Headers({"content-type": ctype or "application/octet-stream"}))
                 for name, ctype, data in file_payloads
             ]
             results = await gallery_search_batch_results(

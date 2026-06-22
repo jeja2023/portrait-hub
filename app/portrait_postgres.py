@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import threading
+
 from app import postgres_audit as _audit
 from app import postgres_core as _core
 from app import postgres_gallery as _gallery
@@ -7,7 +9,19 @@ from app import postgres_jobs as _jobs
 from app import postgres_objects as _objects
 from app import postgres_streams as _streams
 from app import postgres_thresholds as _thresholds
-from app.postgres_core import *  # noqa: F401,F403
+from app.postgres_core import (  # re-exported for backwards-compatible imports
+    PostgresUnavailable,
+    embedding_bytes,
+    get_postgres_pool,
+    jsonb,
+    normalized_embedding,
+    postgres_configured,
+    postgres_connection,
+    postgres_driver_available,
+    postgres_pool_available,
+    require_postgres,
+    vector_literal,
+)
 
 
 POSTGRES_DSN = _core.POSTGRES_DSN
@@ -18,6 +32,7 @@ POSTGRES_POOL = _core.POSTGRES_POOL
 psycopg = _core.psycopg
 dict_row = _core.dict_row
 ConnectionPool = _core.ConnectionPool
+_CORE_DEPENDENCY_LOCK = threading.RLock()
 
 
 def _sync_core_dependencies() -> None:
@@ -32,33 +47,39 @@ def _sync_core_dependencies() -> None:
 
 
 def postgres_health() -> dict[str, object]:
-    _sync_core_dependencies()
-    return _core.postgres_health()
+    with _CORE_DEPENDENCY_LOCK:
+        _sync_core_dependencies()
+        return _core.postgres_health()
 
 
 def load_gallery_snapshot() -> dict[str, object]:
-    _sync_core_dependencies()
-    return _gallery.load_gallery_snapshot()
+    with _CORE_DEPENDENCY_LOCK:
+        _sync_core_dependencies()
+        return _gallery.load_gallery_snapshot()
 
 
 def upsert_gallery_person(person: dict[str, object]) -> None:
-    _sync_core_dependencies()
-    _gallery.upsert_gallery_person(person)
+    with _CORE_DEPENDENCY_LOCK:
+        _sync_core_dependencies()
+        _gallery.upsert_gallery_person(person)
 
 
 def upsert_gallery_feature(tenant_id: str, person_id: str, feature: dict[str, object]) -> None:
-    _sync_core_dependencies()
-    _gallery.upsert_gallery_feature(tenant_id, person_id, feature)
+    with _CORE_DEPENDENCY_LOCK:
+        _sync_core_dependencies()
+        _gallery.upsert_gallery_feature(tenant_id, person_id, feature)
 
 
 def delete_gallery_person(tenant_id: str, person_id: str) -> None:
-    _sync_core_dependencies()
-    _gallery.delete_gallery_person(tenant_id, person_id)
+    with _CORE_DEPENDENCY_LOCK:
+        _sync_core_dependencies()
+        _gallery.delete_gallery_person(tenant_id, person_id)
 
 
 def replace_gallery_snapshot(snapshot: dict[str, object]) -> None:
-    _sync_core_dependencies()
-    _gallery.replace_gallery_snapshot(snapshot)
+    with _CORE_DEPENDENCY_LOCK:
+        _sync_core_dependencies()
+        _gallery.replace_gallery_snapshot(snapshot)
 
 
 def search_pgvector(
@@ -70,65 +91,76 @@ def search_pgvector(
     top_k: int,
     tenant_id: str,
 ) -> list[dict[str, object]]:
-    _sync_core_dependencies()
-    return _gallery.search_pgvector(
-        query_embedding,
-        modality=modality,
-        threshold=threshold,
-        threshold_profile=threshold_profile,
-        top_k=top_k,
-        tenant_id=tenant_id,
-    )
+    with _CORE_DEPENDENCY_LOCK:
+        _sync_core_dependencies()
+        return _gallery.search_pgvector(
+            query_embedding,
+            modality=modality,
+            threshold=threshold,
+            threshold_profile=threshold_profile,
+            top_k=top_k,
+            tenant_id=tenant_id,
+        )
 
 
 def load_threshold_snapshot() -> dict[str, object]:
-    _sync_core_dependencies()
-    return _thresholds.load_threshold_snapshot()
+    with _CORE_DEPENDENCY_LOCK:
+        _sync_core_dependencies()
+        return _thresholds.load_threshold_snapshot()
 
 
 def save_threshold_snapshot(thresholds: dict[str, object]) -> None:
-    _sync_core_dependencies()
-    _thresholds.save_threshold_snapshot(thresholds)
+    with _CORE_DEPENDENCY_LOCK:
+        _sync_core_dependencies()
+        _thresholds.save_threshold_snapshot(thresholds)
 
 
 def insert_audit_event(payload: dict[str, object]) -> None:
-    _sync_core_dependencies()
-    _audit.insert_audit_event(payload)
+    with _CORE_DEPENDENCY_LOCK:
+        _sync_core_dependencies()
+        _audit.insert_audit_event(payload)
 
 
 def upsert_video_job(payload: dict[str, object]) -> None:
-    _sync_core_dependencies()
-    _jobs.upsert_video_job(payload)
+    with _CORE_DEPENDENCY_LOCK:
+        _sync_core_dependencies()
+        _jobs.upsert_video_job(payload)
 
 
 def delete_video_job(tenant_id: str, job_id: str) -> None:
-    _sync_core_dependencies()
-    _jobs.delete_video_job(tenant_id, job_id)
+    with _CORE_DEPENDENCY_LOCK:
+        _sync_core_dependencies()
+        _jobs.delete_video_job(tenant_id, job_id)
 
 
 def load_video_jobs_snapshot() -> list[dict[str, object]]:
-    _sync_core_dependencies()
-    return _jobs.load_video_jobs_snapshot()
+    with _CORE_DEPENDENCY_LOCK:
+        _sync_core_dependencies()
+        return _jobs.load_video_jobs_snapshot()
 
 
 def upsert_stream(payload: dict[str, object]) -> None:
-    _sync_core_dependencies()
-    _streams.upsert_stream(payload)
+    with _CORE_DEPENDENCY_LOCK:
+        _sync_core_dependencies()
+        _streams.upsert_stream(payload)
 
 
 def delete_stream(tenant_id: str, stream_id: str) -> None:
-    _sync_core_dependencies()
-    _streams.delete_stream(tenant_id, stream_id)
+    with _CORE_DEPENDENCY_LOCK:
+        _sync_core_dependencies()
+        _streams.delete_stream(tenant_id, stream_id)
 
 
 def load_streams_snapshot() -> list[dict[str, object]]:
-    _sync_core_dependencies()
-    return _streams.load_streams_snapshot()
+    with _CORE_DEPENDENCY_LOCK:
+        _sync_core_dependencies()
+        return _streams.load_streams_snapshot()
 
 
 def insert_object_record(tenant_id: str, info: dict[str, object], metadata: dict[str, object] | None = None) -> None:
-    _sync_core_dependencies()
-    _objects.insert_object_record(tenant_id, info, metadata)
+    with _CORE_DEPENDENCY_LOCK:
+        _sync_core_dependencies()
+        _objects.insert_object_record(tenant_id, info, metadata)
 
 
 __all__ = [

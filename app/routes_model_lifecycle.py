@@ -12,13 +12,13 @@ from app.portrait_auth import permission_dependency
 from app.portrait_security import tenant_id_from_request
 from app.runtime import MODEL_LOAD_LOCKS, MODEL_REGISTRY, get_or_load_model, unload_model_by_key
 from app.security import require_api_token
-from app.schemas import ModelRequest, WarmupRequest
+from app.schemas import ModelBundle, ModelRequest, WarmupRequest
 
 
 router = APIRouter()
 
 
-def model_registry_snapshot() -> OrderedDict[str, dict[str, Any]]:
+def model_registry_snapshot() -> OrderedDict[str, ModelBundle]:
     return OrderedDict(MODEL_REGISTRY)
 
 
@@ -27,7 +27,7 @@ def model_load_locks_snapshot() -> dict[str, Any]:
 
 
 def restore_model_registry_snapshot(
-    previous_registry: OrderedDict[str, dict[str, Any]],
+    previous_registry: OrderedDict[str, ModelBundle],
     previous_locks: dict[str, Any],
 ) -> None:
     MODEL_REGISTRY.clear()

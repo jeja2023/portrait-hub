@@ -42,22 +42,13 @@ _state_persist_feature = _gallery_state.persist_feature
 _state_persist_person_delete = _gallery_state.persist_person_delete
 
 
-def _sync_state_dependencies() -> None:
+def _sync_state_config() -> None:
     _gallery_state.PORTRAIT_STORAGE_BACKEND = PORTRAIT_STORAGE_BACKEND
     _gallery_state.PORTRAIT_GALLERY_STATE_PATH = PORTRAIT_GALLERY_STATE_PATH
     _gallery_state.PORTRAIT_GALLERY_WAL_ENABLED = PORTRAIT_GALLERY_WAL_ENABLED
     _gallery_state.PORTRAIT_GALLERY_WAL_COMPACT_EVERY = PORTRAIT_GALLERY_WAL_COMPACT_EVERY
     _gallery_state.GALLERY = GALLERY
     _gallery_state.GALLERY_LOCK = GALLERY_LOCK
-    _gallery_state.persist_person = persist_person
-    _gallery_state.persist_feature = persist_feature
-    _gallery_state.persist_person_delete = persist_person_delete
-
-
-def _restore_state_dependencies() -> None:
-    _gallery_state.persist_person = _state_persist_person
-    _gallery_state.persist_feature = _state_persist_feature
-    _gallery_state.persist_person_delete = _state_persist_person_delete
 
 
 def _sync_search_dependencies() -> None:
@@ -65,59 +56,38 @@ def _sync_search_dependencies() -> None:
 
 
 def load_gallery_state() -> None:
-    _sync_state_dependencies()
-    try:
-        _gallery_state.load_gallery_state()
-    finally:
-        _restore_state_dependencies()
+    _sync_state_config()
+    _gallery_state.load_gallery_state()
 
 
 def save_gallery_state() -> None:
-    _sync_state_dependencies()
-    try:
-        _gallery_state.save_gallery_state()
-    finally:
-        _restore_state_dependencies()
+    _sync_state_config()
+    _gallery_state.save_gallery_state()
 
 
 def append_gallery_wal(op: str, *, tenant_id: str, person_id: str, person: PersonRecord | None = None) -> None:
-    _sync_state_dependencies()
-    try:
-        _gallery_state.append_gallery_wal(op, tenant_id=tenant_id, person_id=person_id, person=person)
-    finally:
-        _restore_state_dependencies()
+    _sync_state_config()
+    _gallery_state.append_gallery_wal(op, tenant_id=tenant_id, person_id=person_id, person=person)
 
 
 def persist_person(person: PersonRecord) -> None:
-    _sync_state_dependencies()
-    try:
-        _state_persist_person(person)
-    finally:
-        _restore_state_dependencies()
+    _sync_state_config()
+    _state_persist_person(person)
 
 
 def persist_feature(person: PersonRecord, feature: FeatureRecord) -> None:
-    _sync_state_dependencies()
-    try:
-        _state_persist_feature(person, feature)
-    finally:
-        _restore_state_dependencies()
+    _sync_state_config()
+    _state_persist_feature(person, feature)
 
 
 def persist_person_delete(tenant_id: str, person_id: str) -> None:
-    _sync_state_dependencies()
-    try:
-        _state_persist_person_delete(tenant_id, person_id)
-    finally:
-        _restore_state_dependencies()
+    _sync_state_config()
+    _state_persist_person_delete(tenant_id, person_id)
 
 
 def list_gallery_people(tenant_id: str = "default") -> list[dict[str, Any]]:
-    _sync_state_dependencies()
-    try:
-        return _gallery_state.list_gallery_people(tenant_id)
-    finally:
-        _restore_state_dependencies()
+    _sync_state_config()
+    return _gallery_state.list_gallery_people(tenant_id)
 
 
 def upsert_person(
@@ -126,11 +96,8 @@ def upsert_person(
     metadata: dict[str, Any] | None = None,
     tenant_id: str = "default",
 ) -> PersonRecord:
-    _sync_state_dependencies()
-    try:
-        return _gallery_state.upsert_person(person_id, display_name, metadata, tenant_id=tenant_id)
-    finally:
-        _restore_state_dependencies()
+    _sync_state_config()
+    return _gallery_state.upsert_person(person_id, display_name, metadata, tenant_id=tenant_id, persist_hook=persist_person)
 
 
 def add_feature(
@@ -144,44 +111,33 @@ def add_feature(
     source_id: str,
     object_info: dict[str, Any] | None = None,
 ) -> FeatureRecord:
-    _sync_state_dependencies()
-    try:
-        return _gallery_state.add_feature(
-            person,
-            modality=modality,
-            embedding=embedding,
-            model_id=model_id,
-            model_version=model_version,
-            quality_score=quality_score,
-            source_id=source_id,
-            object_info=object_info,
-        )
-    finally:
-        _restore_state_dependencies()
+    _sync_state_config()
+    return _gallery_state.add_feature(
+        person,
+        modality=modality,
+        embedding=embedding,
+        model_id=model_id,
+        model_version=model_version,
+        quality_score=quality_score,
+        source_id=source_id,
+        object_info=object_info,
+        persist_hook=persist_feature,
+    )
 
 
 def get_person_or_404(person_id: str, tenant_id: str = "default") -> PersonRecord:
-    _sync_state_dependencies()
-    try:
-        return _gallery_state.get_person_or_404(person_id, tenant_id=tenant_id)
-    finally:
-        _restore_state_dependencies()
+    _sync_state_config()
+    return _gallery_state.get_person_or_404(person_id, tenant_id=tenant_id)
 
 
 def patch_person(person_id: str, payload: dict[str, Any], tenant_id: str = "default") -> PersonRecord:
-    _sync_state_dependencies()
-    try:
-        return _gallery_state.patch_person(person_id, payload, tenant_id=tenant_id)
-    finally:
-        _restore_state_dependencies()
+    _sync_state_config()
+    return _gallery_state.patch_person(person_id, payload, tenant_id=tenant_id, persist_hook=persist_person)
 
 
 def delete_person(person_id: str, tenant_id: str = "default") -> bool:
-    _sync_state_dependencies()
-    try:
-        return _gallery_state.delete_person(person_id, tenant_id=tenant_id)
-    finally:
-        _restore_state_dependencies()
+    _sync_state_config()
+    return _gallery_state.delete_person(person_id, tenant_id=tenant_id, persist_delete_hook=persist_person_delete)
 
 
 def reindex_gallery_vectors(

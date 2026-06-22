@@ -11,11 +11,13 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from app.portrait_stream_worker import stream_worker_sessions_snapshot
+from app.portrait_stream_worker import stream_worker_sessions_snapshot  # noqa: E402
 
 
 def session_age(now: float, session: dict[str, Any]) -> float | None:
     value = session.get("last_heartbeat_at")
+    if value is None:
+        return None
     try:
         return now - float(value)
     except (TypeError, ValueError):
@@ -37,7 +39,7 @@ def evaluate_stream_worker_health(*, max_heartbeat_age_seconds: float = 30.0) ->
         if session.get("status") == "running"
         and (
             session.get("heartbeat_age_seconds") is None
-            or float(session["heartbeat_age_seconds"]) > max_heartbeat_age_seconds
+            or float(session.get("heartbeat_age_seconds") or 0.0) > max_heartbeat_age_seconds
         )
     ]
     return {

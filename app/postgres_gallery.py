@@ -5,6 +5,7 @@ from typing import Any
 
 from app.observability import logger, trace_span
 from app.portrait_response import exception_log_summary
+from app.settings import PGVECTOR_HNSW_EF_SEARCH
 from app import postgres_core as _core
 
 
@@ -42,42 +43,40 @@ def load_gallery_snapshot() -> dict[str, Any]:
             with _core.postgres_connection(row_factory=_core.dict_row) as connection:
                 with connection.cursor() as cursor:
                     cursor.execute(query)
-                    rows = cursor.fetchall()
+                    for row in cursor:
+                        key = (str(row["tenant_id"]), str(row["person_id"]))
+                        person = people.setdefault(
+                            key,
+                            {
+                                "tenant_id": row["tenant_id"],
+                                "person_id": row["person_id"],
+                                "display_name": row["display_name"],
+                                "metadata": row["metadata"] if isinstance(row["metadata"], dict) else {},
+                                "created_at": float(row["person_created_at"] or 0.0),
+                                "updated_at": float(row["person_updated_at"] or 0.0),
+                                "features": [],
+                            },
+                        )
+                        if row["feature_id"] is None:
+                            continue
+                        embedding = row["embedding_json"] if isinstance(row["embedding_json"], list) else []
+                        person["features"].append(
+                            {
+                                "feature_id": row["feature_id"],
+                                "modality": row["modality"],
+                                "embedding": [float(value) for value in embedding],
+                                "embedding_dim": int(row["embedding_dim"] or len(embedding)),
+                                "model_id": row["model_id"],
+                                "model_version": row["model_version"],
+                                "quality_score": float(row["quality_score"] or 0.0),
+                                "source_id": row["source_id"],
+                                "object_info": row["object_info"] if isinstance(row["object_info"], dict) else {},
+                                "created_at": float(row["feature_created_at"] or 0.0),
+                            }
+                        )
     except Exception as exc:  # pragma: no cover - requires external database
         logger.warning("postgres gallery load failed: %s", exception_log_summary(exc))
         return {"people": []}
-
-    for row in rows:
-        key = (str(row["tenant_id"]), str(row["person_id"]))
-        person = people.setdefault(
-            key,
-            {
-                "tenant_id": row["tenant_id"],
-                "person_id": row["person_id"],
-                "display_name": row["display_name"],
-                "metadata": row["metadata"] if isinstance(row["metadata"], dict) else {},
-                "created_at": float(row["person_created_at"] or 0.0),
-                "updated_at": float(row["person_updated_at"] or 0.0),
-                "features": [],
-            },
-        )
-        if row["feature_id"] is None:
-            continue
-        embedding = row["embedding_json"] if isinstance(row["embedding_json"], list) else []
-        person["features"].append(
-            {
-                "feature_id": row["feature_id"],
-                "modality": row["modality"],
-                "embedding": [float(value) for value in embedding],
-                "embedding_dim": int(row["embedding_dim"] or len(embedding)),
-                "model_id": row["model_id"],
-                "model_version": row["model_version"],
-                "quality_score": float(row["quality_score"] or 0.0),
-                "source_id": row["source_id"],
-                "object_info": row["object_info"] if isinstance(row["object_info"], dict) else {},
-                "created_at": float(row["feature_created_at"] or 0.0),
-            }
-        )
     return {"version": 1, "people": list(people.values())}
 
 
@@ -178,17 +177,51 @@ def replace_gallery_snapshot(snapshot: dict[str, Any]) -> None:
     people = snapshot.get("people") if isinstance(snapshot, dict) else []
     if not isinstance(people, list):
         people = []
+    person_rows: list[tuple[Any, ...]] = []
+    feature_rows: list[tuple[Any, ...]] = []
+    for person in people:
+        if not isinstance(person, dict):
+            continue
+        person_rows.append(
+            (
+                person["tenant_id"],
+                person["person_id"],
+                person.get("display_name"),
+                _core.jsonb(person.get("metadata") or {}),
+                float(person.get("created_at") or 0.0),
+                float(person.get("updated_at") or 0.0),
+            )
+        )
+        for feature in person.get("features", []):
+            if not isinstance(feature, dict):
+                continue
+            embedding = _core.normalized_embedding(feature.get("embedding") or [])
+            feature_rows.append(
+                (
+                    str(person["tenant_id"]),
+                    str(person["person_id"]),
+                    feature["feature_id"],
+                    feature["modality"],
+                    feature["model_id"],
+                    feature["model_version"],
+                    int(feature.get("embedding_dim") or len(embedding)),
+                    _core.embedding_bytes(embedding),
+                    json.dumps(embedding, separators=(",", ":")),
+                    _core.vector_literal(embedding),
+                    float(feature.get("quality_score") or 0.0),
+                    feature.get("source_id") or "",
+                    _core.jsonb(feature.get("object_info") if isinstance(feature.get("object_info"), dict) else {}),
+                    float(feature.get("created_at") or 0.0),
+                )
+            )
     with _core.postgres_connection() as connection:
         with connection.cursor() as cursor:
             cursor.execute("DELETE FROM portrait_features")
             cursor.execute("DELETE FROM portrait_people")
-            for person in people:
-                if not isinstance(person, dict):
-                    continue
-                _execute_upsert_gallery_person(cursor, person)
-                for feature in person.get("features", []):
-                    if isinstance(feature, dict):
-                        _execute_upsert_gallery_feature(cursor, str(person["tenant_id"]), str(person["person_id"]), feature)
+            if person_rows:
+                cursor.executemany(UPSERT_PERSON_SQL, person_rows)
+            if feature_rows:
+                cursor.executemany(UPSERT_FEATURE_SQL, feature_rows)
 
 
 def search_pgvector(
@@ -206,6 +239,8 @@ def search_pgvector(
         distance_expr = f"(f.embedding_vector::vector({dimension}) <=> %s::vector({dimension}))"
     else:
         distance_expr = "(f.embedding_vector <=> %s::vector)"
+    # 按 SELECT 别名排序，使距离表达式（及其向量字面量）只绑定并求值一次而非两次；
+    # PostgreSQL 仍会把别名解析回被索引的表达式，因此 HNSW 索引依然可用。
     query = f"""
         SELECT
           p.tenant_id,
@@ -226,14 +261,21 @@ def search_pgvector(
         WHERE f.tenant_id = %s
           AND f.modality = %s
           AND f.embedding_dim = %s
-        ORDER BY {distance_expr}
+        ORDER BY cosine_distance
         LIMIT %s
     """
+    # 放宽 HNSW 候选列表，使 tenant_id/modality 等值过滤（施加在 ANN 候选之上）
+    # 不会让结果少于 top_k。
+    ef_search = max(int(PGVECTOR_HNSW_EF_SEARCH), int(top_k))
     with _core.postgres_connection(row_factory=_core.dict_row) as connection:
         with connection.cursor() as cursor:
+            try:
+                cursor.execute(f"SET LOCAL hnsw.ef_search = {ef_search}")
+            except Exception as exc:  # pragma: no cover - 无 pgvector HNSW 时该 GUC 不存在
+                logger.warning("could not set hnsw.ef_search, using server default: %s", exception_log_summary(exc))
             literal = _core.vector_literal(embedding)
-            cursor.execute(query, (literal, tenant_id, modality, len(embedding), literal, int(top_k)))
-            rows = cursor.fetchall()
+            cursor.execute(query, (literal, tenant_id, modality, len(embedding), int(top_k)))
+            rows = list(cursor)
 
     candidates: list[dict[str, Any]] = []
     for row in rows:

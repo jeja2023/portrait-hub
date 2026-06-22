@@ -2,7 +2,7 @@ import asyncio
 import gc
 import hashlib
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from fastapi import HTTPException, status
 
@@ -80,9 +80,9 @@ def model_gpu_device_id(cache_key_value: str) -> int:
 def release_model_bundle(bundle: ModelBundle | None) -> None:
     if not bundle:
         return
-    session = bundle.pop("session", None)
-    if session is None:
-        return
+    # 在强制 GC 前先移除 bundle 字典自身对 ONNX session 的强引用。仅删除局部变量名
+    # 会让 session 仍可通过字典被引用，导致其 GPU 显存要等到 bundle 自身被回收时才释放。
+    session = cast(dict[str, Any], bundle).pop("session", None)
     try:
         del session
     finally:
@@ -102,9 +102,18 @@ async def evict_lru_if_needed(except_key: str | None = None) -> None:
 
     async with REGISTRY_LOCK:
         while len(MODEL_REGISTRY) > MAX_LOADED_MODELS:
-            evict_key = next((key for key in MODEL_REGISTRY if key != except_key), None)
-            if evict_key is None:
+            # Evict the genuinely least-recently-used model, but never one that has
+            # an inference in flight (in_use > 0) — releasing its session mid-run is
+            # undefined behaviour. If every evictable model is busy, stop and let the
+            # registry exceed the cap transiently rather than corrupt a live session.
+            evictable = [
+                key
+                for key, bundle in MODEL_REGISTRY.items()
+                if key != except_key and not int(bundle.get("in_use", 0))
+            ]
+            if not evictable:
                 return
+            evict_key = min(evictable, key=lambda key: MODEL_REGISTRY[key].get("last_used_at", 0.0))
             removed = MODEL_REGISTRY.pop(evict_key, None)
             MODEL_LOAD_LOCKS.pop(evict_key, None)
             release_model_bundle(removed)
@@ -184,6 +193,7 @@ async def get_or_load_model(
             "last_used_at": wall_time(),
             "load_count": 1,
             "inference_count": 0,
+            "in_use": 0,
             "max_concurrency": max_concurrency,
             "queue_timeout_seconds": queue_timeout,
             "execution_provider": execution_provider,
@@ -202,3 +212,18 @@ async def get_or_load_model(
             digest,
         )
         return bundle, True, load_seconds
+
+
+__all__ = [
+    "bundle_providers",
+    "bundle_info",
+    "model_path_fingerprint",
+    "model_runtime_limits",
+    "model_gpu_device_id",
+    "release_model_bundle",
+    "get_model_load_lock",
+    "evict_lru_if_needed",
+    "unload_model_by_key",
+    "touch_model",
+    "get_or_load_model",
+]

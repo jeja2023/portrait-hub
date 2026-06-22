@@ -6,19 +6,18 @@ from contextlib import contextmanager
 from typing import Any, Iterator
 
 from app.observability import logger, trace_span
-from app.portrait_crypto import decrypt_bytes, encrypt_bytes
 from app.portrait_response import HEALTH_CHECK_FAILED, exception_log_summary
 from app.settings import POSTGRES_CONNECT_TIMEOUT_SECONDS, POSTGRES_DSN, POSTGRES_POOL_MAX_SIZE, POSTGRES_POOL_MIN_SIZE
 
 try:  # pragma: no cover - optional production dependency
-    import psycopg  # type: ignore[import-not-found]
-    from psycopg.rows import dict_row  # type: ignore[import-not-found]
+    import psycopg
+    from psycopg.rows import dict_row
 except Exception:  # pragma: no cover - exercised when dependency is absent
     psycopg = None
     dict_row = None
 
 try:  # pragma: no cover - optional production dependency
-    from psycopg_pool import ConnectionPool  # type: ignore[import-not-found]
+    from psycopg_pool import ConnectionPool
 except Exception:  # pragma: no cover - exercised when dependency is absent
     ConnectionPool = None
 
@@ -136,3 +135,27 @@ def vector_literal(values: list[float]) -> str:
     numbers = normalized_embedding(values)
     return "[" + ",".join(format(value, ".8g") for value in numbers) + "]"
 
+
+
+__all__ = [
+    "ConnectionPool",
+    "PostgresUnavailable",
+    "POSTGRES_CONNECT_TIMEOUT_SECONDS",
+    "POSTGRES_DSN",
+    "POSTGRES_POOL",
+    "POSTGRES_POOL_MAX_SIZE",
+    "POSTGRES_POOL_MIN_SIZE",
+    "dict_row",
+    "postgres_configured",
+    "postgres_driver_available",
+    "postgres_pool_available",
+    "psycopg",
+    "require_postgres",
+    "get_postgres_pool",
+    "postgres_connection",
+    "postgres_health",
+    "jsonb",
+    "normalized_embedding",
+    "embedding_bytes",
+    "vector_literal",
+]

@@ -1,5 +1,6 @@
 import hashlib
 from pathlib import Path
+from collections.abc import Mapping
 from typing import Any
 
 import yaml
@@ -141,7 +142,7 @@ def load_text_labels(path: Path, *, required: bool = False) -> list[str]:
     return labels
 
 
-def labels_from_config(config: ModelConfig, model_path: Path | None = None) -> list[str]:
+def labels_from_config(config: Mapping[str, Any], model_path: Path | None = None) -> list[str]:
     labels_path = config_section(config, "artifact").get("labels")
     if model_path is not None and isinstance(labels_path, str) and labels_path.strip():
         return load_text_labels(safe_sidecar_path(model_path, labels_path.strip()), required=True)
@@ -188,7 +189,7 @@ def parse_class_filter(raw_filter: Any, labels: list[str]) -> set[int] | None:
     return class_ids or None
 
 
-def model_card_for_path(config: ModelConfig, model_path: Path) -> dict[str, Any]:
+def model_card_for_path(config: Mapping[str, Any], model_path: Path) -> dict[str, Any]:
     card_path = config_section(config, "artifact").get("model_card")
     if isinstance(card_path, str) and card_path.strip():
         return load_yaml_sidecar(safe_sidecar_path(model_path, card_path.strip()), required=True)
@@ -224,7 +225,7 @@ def model_package_info(cache_key_value: str, model_path: Path, digest: str | Non
     }
 
 
-def public_model_config(cache_key_value: str, config: dict[str, Any], *, loaded: bool = False) -> dict[str, Any]:
+def public_model_config(cache_key_value: str, config: Mapping[str, Any], *, loaded: bool = False) -> dict[str, Any]:
     artifact = config_section(config, "artifact")
     return {
         "model_id": cache_key_value,

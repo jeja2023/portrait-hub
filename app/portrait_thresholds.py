@@ -9,7 +9,10 @@ from app.portrait_state import handle_state_read_error, read_json_state, write_j
 from app.settings import PORTRAIT_STORAGE_BACKEND, PORTRAIT_THRESHOLDS_STATE_PATH
 
 
-DEFAULT_THRESHOLD_PROFILES: dict[str, dict[str, dict[str, float]]] = {
+ThresholdProfiles = dict[str, dict[str, float]]
+
+
+DEFAULT_THRESHOLD_PROFILES: ThresholdProfiles = {
     "face": {"strict": 0.82, "normal": 0.76, "loose": 0.70},
     "body": {"strict": 0.74, "normal": 0.68, "loose": 0.62},
     "gait": {"strict": 0.70, "normal": 0.64, "loose": 0.58},
@@ -17,7 +20,7 @@ DEFAULT_THRESHOLD_PROFILES: dict[str, dict[str, dict[str, float]]] = {
     "fusion": {"strict": 0.80, "normal": 0.72, "loose": 0.64},
 }
 
-THRESHOLD_PROFILES = deepcopy(DEFAULT_THRESHOLD_PROFILES)
+THRESHOLD_PROFILES: ThresholdProfiles = deepcopy(DEFAULT_THRESHOLD_PROFILES)
 THRESHOLD_PROFILES_LOCK = threading.RLock()
 SUPPORTED_THRESHOLD_PROFILES = frozenset({"strict", "normal", "loose"})
 
@@ -53,7 +56,7 @@ def load_threshold_state() -> None:
 
 
 def save_threshold_state() -> None:
-    payload = {"version": 1, "thresholds": threshold_snapshot()}
+    payload: dict[str, Any] = {"version": 1, "thresholds": threshold_snapshot()}
     if PORTRAIT_STORAGE_BACKEND == "postgres":
         from app.portrait_postgres import save_threshold_snapshot
 
@@ -62,7 +65,7 @@ def save_threshold_state() -> None:
     write_json_state(PORTRAIT_THRESHOLDS_STATE_PATH, payload)
 
 
-def threshold_snapshot() -> dict[str, Any]:
+def threshold_snapshot() -> ThresholdProfiles:
     with THRESHOLD_PROFILES_LOCK:
         return deepcopy(THRESHOLD_PROFILES)
 
@@ -71,8 +74,7 @@ def get_threshold(modality: str, profile: str = "normal") -> float:
     modality_key = validate_threshold_modality(modality)
     profile_key = validate_threshold_profile(profile)
     with THRESHOLD_PROFILES_LOCK:
-        thresholds = THRESHOLD_PROFILES.get(modality_key)
-        return float(thresholds[profile_key])
+        return float(THRESHOLD_PROFILES[modality_key][profile_key])
 
 
 def normalize_modality(modality: str) -> str:

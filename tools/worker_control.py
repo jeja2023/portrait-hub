@@ -93,7 +93,7 @@ def main() -> int:
     args = parser.parse_args()
 
     base_urls = args.base_url or ["http://127.0.0.1:9001", "http://127.0.0.1:9002"]
-    results = []
+    results: list[dict[str, Any]] = []
     with ThreadPoolExecutor(max_workers=len(base_urls)) as executor:
         futures = {executor.submit(request_worker, base_url, args): base_url for base_url in base_urls}
         for future in as_completed(futures):
@@ -102,17 +102,19 @@ def main() -> int:
             except Exception as exc:
                 results.append({"base_url": futures[future], "action": args.action, "ok": False, "error": redact_for_report(str(exc))})
 
-    report = {"ok": all(item["ok"] for item in results), "results": sorted(results, key=lambda item: item["base_url"])}
+    ok = all(bool(item.get("ok")) for item in results)
+    sorted_results = sorted(results, key=lambda item: str(item.get("base_url", "")))
+    report = {"ok": ok, "results": sorted_results}
     if args.json:
         print(json.dumps(report, ensure_ascii=False, indent=2))
     else:
-        print(f"worker control: {'OK' if report['ok'] else 'FAILED'}")
-        for item in report["results"]:
+        print(f"worker control: {'OK' if ok else 'FAILED'}")
+        for item in sorted_results:
             marker = "ok" if item["ok"] else "fail"
             print(f"{marker}: {item['base_url']} action={item['action']}")
             if not item["ok"]:
                 print(f"  detail: {item.get('error') or item.get('payload')}")
-    return 0 if report["ok"] else 1
+    return 0 if ok else 1
 
 
 if __name__ == "__main__":

@@ -1,8 +1,9 @@
+from copy import deepcopy
 from typing import Any
 
 import yaml
 
-from app.settings import MODEL_CAPABILITIES_PATH
+from app.settings import MODEL_CAPABILITIES_PATH, PORTRAIT_REQUIRE_PRODUCTION_MODEL_CAPABILITIES
 
 
 DEFAULT_CAPABILITIES = {
@@ -125,7 +126,7 @@ ADAPTER_SCHEMAS = {
 
 
 def normalize_capabilities(raw: dict[str, Any]) -> dict[str, Any]:
-    capabilities = DEFAULT_CAPABILITIES.copy()
+    capabilities: dict[str, Any] = deepcopy(DEFAULT_CAPABILITIES)
     for name, value in raw.items():
         if not isinstance(value, dict):
             continue
@@ -157,14 +158,22 @@ def load_capabilities() -> dict[str, Any]:
             raw = payload.get("capabilities", payload)
             if isinstance(raw, dict):
                 return normalize_capabilities(raw)
-    return DEFAULT_CAPABILITIES.copy()
+    return deepcopy(DEFAULT_CAPABILITIES)
 
 
 MODEL_CAPABILITIES = load_capabilities()
 
 
+def reload_model_capabilities() -> dict[str, Any]:
+    MODEL_CAPABILITIES.clear()
+    MODEL_CAPABILITIES.update(load_capabilities())
+    validate_required_production_capabilities(MODEL_CAPABILITIES)
+    return MODEL_CAPABILITIES
+
+
 def capability_status(name: str) -> dict[str, Any]:
-    return MODEL_CAPABILITIES.get(name, {"status": "not_configured"})
+    capability = MODEL_CAPABILITIES.get(name)
+    return capability if isinstance(capability, dict) else {"status": "not_configured"}
 
 
 def embedding_dimension_for_modality(modality: str) -> int:
@@ -184,3 +193,29 @@ def embedding_dimension_for_modality(modality: str) -> int:
 def production_model_ready(name: str) -> bool:
     capability = capability_status(name)
     return capability.get("status") in {"ready", "production"} and capability.get("model_id") != capability.get("fallback_model_id")
+
+
+def non_production_capability_names(capabilities: dict[str, Any] | None = None) -> list[str]:
+    current = capabilities if capabilities is not None else MODEL_CAPABILITIES
+    names: list[str] = []
+    for name, capability in current.items():
+        if not isinstance(capability, dict):
+            names.append(str(name))
+            continue
+        if capability.get("status") not in {"ready", "production"} or capability.get("model_id") == capability.get("fallback_model_id"):
+            names.append(str(name))
+    return sorted(names)
+
+
+def validate_required_production_capabilities(capabilities: dict[str, Any] | None = None) -> None:
+    if not PORTRAIT_REQUIRE_PRODUCTION_MODEL_CAPABILITIES:
+        return
+    missing = non_production_capability_names(capabilities)
+    if missing:
+        raise RuntimeError(
+            "production model capabilities are required but not ready: "
+            + ", ".join(missing)
+        )
+
+
+validate_required_production_capabilities(MODEL_CAPABILITIES)

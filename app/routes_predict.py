@@ -1,7 +1,7 @@
 import logging
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request
 
 from app.metrics import observe
 from app.model_package import get_model_path

@@ -2,11 +2,13 @@ from typing import Any
 
 import cv2
 import numpy as np
+import numpy.typing as npt
 from PIL import Image
 
 from app.media.quality import assess_image_quality, clamp01
 from app.portrait_compare import l2_normalize_vector
 
+Array = npt.NDArray[Any]
 
 FALLBACK_EMBEDDING_MODEL_ID = "portrait_hub/image_fingerprint_v1"
 FALLBACK_EMBEDDING_VERSION = "1.0.0"
@@ -31,19 +33,24 @@ def image_fingerprint_embedding(image: Image.Image) -> list[float]:
 def best_quality_index(items: list[dict[str, Any]]) -> int:
     if not items:
         return -1
-    return max(range(len(items)), key=lambda index: float(items[index].get("quality", {}).get("score", 0.0)))
+    def quality_score(index: int) -> float:
+        quality = items[index].get("quality")
+        return float(quality.get("score", 0.0)) if isinstance(quality, dict) else 0.0
+
+    return max(range(len(items)), key=quality_score)
 
 
 def face_cascade() -> cv2.CascadeClassifier | None:
     global FACE_CASCADE
     if FACE_CASCADE is None:
-        cascade_path = getattr(cv2.data, "haarcascades", "") + "haarcascade_frontalface_default.xml"
+        cv2_data = getattr(cv2, "data", None)
+        cascade_path = getattr(cv2_data, "haarcascades", "") + "haarcascade_frontalface_default.xml"
         cascade = cv2.CascadeClassifier(cascade_path)
         FACE_CASCADE = None if cascade.empty() else cascade
     return FACE_CASCADE
 
 
-def face_detection_image(image: Image.Image) -> tuple[np.ndarray, float]:
+def face_detection_image(image: Image.Image) -> tuple[Array, float]:
     rgb = np.asarray(image.convert("RGB"), dtype=np.uint8)
     max_side = max(image.width, image.height)
     if max_side > FACE_DETECT_MAX_SIDE:
@@ -193,11 +200,13 @@ def dominant_color(image: Image.Image) -> dict[str, Any]:
 
 def appearance_record(image: Image.Image, include_embedding: bool = True) -> dict[str, Any]:
     quality = assess_image_quality(image)
+    # 整图主色既用作顶层 dominant_color，也用作上半身颜色；只计算一次，避免重复跑直方图。
+    full_image_color = dominant_color(image)
     record: dict[str, Any] = {
         "quality": quality,
-        "dominant_color": dominant_color(image),
+        "dominant_color": full_image_color,
         "attributes": {
-            "upper_color": dominant_color(image),
+            "upper_color": full_image_color,
             "lower_color": dominant_color(image.crop((0, image.height // 2, image.width, image.height))),
         },
         "embedding_dim": 64,
@@ -210,7 +219,7 @@ def appearance_record(image: Image.Image, include_embedding: bool = True) -> dic
 
 def pose_record(image: Image.Image) -> dict[str, Any]:
     width, height = image.size
-    keypoints = [
+    keypoints: list[dict[str, Any]] = [
         {"name": "nose", "point": [width * 0.50, height * 0.18], "score": 0.15},
         {"name": "left_shoulder", "point": [width * 0.36, height * 0.34], "score": 0.15},
         {"name": "right_shoulder", "point": [width * 0.64, height * 0.34], "score": 0.15},

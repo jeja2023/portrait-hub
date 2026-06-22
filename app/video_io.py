@@ -2,17 +2,18 @@ import asyncio
 from copy import deepcopy
 from pathlib import Path
 from tempfile import NamedTemporaryFile
-from typing import Any
+from typing import Any, cast
 
 import cv2
 import numpy as np
+import numpy.typing as npt
 from fastapi import HTTPException, UploadFile, status
 from PIL import Image
 
 from app.media.fingerprint import hamming_hex, perceptual_hash_payload
 from app.media.frame_sampler import hybrid_sample_indexes
 from app.media.quality import assess_image_quality, clamp01
-from app.media.stream_decode import validate_media_stream_url
+from app.media.stream_decode import revalidate_stream_url, validate_media_stream_url
 from app.observability import logger, now
 from app.settings import MAX_VIDEO_BYTES
 
@@ -27,6 +28,7 @@ VIDEO_EXTENSION_CONTAINERS = {
     ".mkv": {"matroska"},
     ".webm": {"matroska"},
 }
+Array = npt.NDArray[Any]
 
 
 def public_video_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
@@ -91,9 +93,9 @@ async def read_video_file(file: UploadFile) -> bytes:
     return data
 
 
-def cv_frame_to_image(frame: np.ndarray) -> Image.Image:
+def cv_frame_to_image(frame: Array) -> Image.Image:
     rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-    return Image.fromarray(rgb)
+    return cast(Image.Image, Image.fromarray(rgb))  # type: ignore[no-untyped-call]
 
 
 def frame_change_score(previous: Image.Image | None, current: Image.Image) -> float:
@@ -280,7 +282,7 @@ def select_quality_diverse_positions(
         selected = sorted(segment_best_candidates, key=lambda index: source_frame_indexes[index])
 
     while len(selected) < max_frames:
-        best_index: int | None = None
+        best_position: int | None = None
         best_score = -1.0
         for index in range(len(source_frame_indexes)):
             if index in selected:
@@ -296,10 +298,10 @@ def select_quality_diverse_positions(
             score = relevance[index] * 0.60 + diversity * 0.16 + temporal_coverage * 0.12 + scene_coverage * 0.12
             if score > best_score:
                 best_score = score
-                best_index = index
-        if best_index is None:
+                best_position = index
+        if best_position is None:
             break
-        selected.append(best_index)
+        selected.append(best_position)
 
     if len(selected) < max_frames:
         ranked = sorted(range(len(source_frame_indexes)), key=lambda index: relevance[index], reverse=True)
@@ -535,6 +537,9 @@ def extract_video_frames_from_path(
     max_frames: int,
     read_timeout_seconds: int | None = None,
 ) -> tuple[list[Image.Image], dict[str, Any]]:
+    # 在连接前立即重新校验远程流 URL，以缓解先前校验与本次拉流之间的 DNS rebinding
+    #（对本地路径为空操作）。
+    revalidate_stream_url(source)
     capture = cv2.VideoCapture(source)
     try:
         return extract_video_frames_from_capture(capture, frame_interval, max_frames, read_timeout_seconds, source)
@@ -569,3 +574,37 @@ async def extract_video_frames_from_upload(
                 Path(temp_path).unlink(missing_ok=True)
             except Exception:
                 logger.warning("failed to remove temp video file")
+
+
+__all__ = [
+    "SUPPORTED_VIDEO_EXTENSIONS",
+    "SENSITIVE_VIDEO_METADATA_KEYS",
+    "VIDEO_EXTENSION_CONTAINERS",
+    "public_video_metadata",
+    "validate_video_filename",
+    "sniff_video_container",
+    "validate_video_content",
+    "read_video_file",
+    "cv_frame_to_image",
+    "frame_change_score",
+    "frame_hash_distance",
+    "scene_change_at",
+    "frame_relevance_score",
+    "frame_diversity_score",
+    "frame_temporal_coverage_score",
+    "derive_scene_segments",
+    "frame_scene_coverage_score",
+    "is_near_duplicate_frame",
+    "count_near_duplicate_fingerprints",
+    "consecutive_hash_distances",
+    "select_quality_diverse_positions",
+    "validate_stream_url",
+    "sample_candidate_indexes",
+    "candidate_analysis_image",
+    "collect_frame_candidates",
+    "read_frames_at_indexes",
+    "select_frames_from_candidates",
+    "extract_video_frames_from_capture",
+    "extract_video_frames_from_path",
+    "extract_video_frames_from_upload",
+]

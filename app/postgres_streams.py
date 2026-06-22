@@ -49,20 +49,25 @@ def upsert_stream(payload: dict[str, Any]) -> None:
                     float(payload.get("updated_at") or 0.0),
                 ),
             )
+            events = [event for event in payload.get("events", []) if isinstance(event, dict)]
+            kept_event_ids = [event["event_id"] for event in events]
+            # 只删除已从（裁剪后的）内存集合中移出的事件，而不是每次追加都删光再重插全部
+            # 事件。配合下方批量 ON CONFLICT DO NOTHING 插入，把原先的“删全部 + N 次插入”
+            # 变为两条语句，并保持未变更的行不动。
             cursor.execute(
-                "DELETE FROM portrait_stream_events WHERE tenant_id = %s AND stream_id = %s",
-                (tenant_id, stream_id),
+                "DELETE FROM portrait_stream_events WHERE tenant_id = %s AND stream_id = %s AND event_id <> ALL(%s)",
+                (tenant_id, stream_id, kept_event_ids),
             )
-            for event in payload.get("events", []):
-                if isinstance(event, dict):
-                    cursor.execute(
-                        """
-                        INSERT INTO portrait_stream_events (
-                          tenant_id, stream_id, event_id, type, message, payload, created_at
-                        )
-                        VALUES (%s, %s, %s, %s, %s, %s::jsonb, to_timestamp(%s))
-                        ON CONFLICT (tenant_id, stream_id, event_id) DO NOTHING
-                        """,
+            if events:
+                cursor.executemany(
+                    """
+                    INSERT INTO portrait_stream_events (
+                      tenant_id, stream_id, event_id, type, message, payload, created_at
+                    )
+                    VALUES (%s, %s, %s, %s, %s, %s::jsonb, to_timestamp(%s))
+                    ON CONFLICT (tenant_id, stream_id, event_id) DO NOTHING
+                    """,
+                    [
                         (
                             tenant_id,
                             stream_id,
@@ -71,8 +76,10 @@ def upsert_stream(payload: dict[str, Any]) -> None:
                             event.get("message") or "",
                             _core.jsonb(event.get("payload") or {}),
                             float(event.get("created_at") or 0.0),
-                        ),
-                    )
+                        )
+                        for event in events
+                    ],
+                )
 
 
 def delete_stream(tenant_id: str, stream_id: str) -> None:
@@ -87,9 +94,29 @@ def delete_stream(tenant_id: str, stream_id: str) -> None:
 def load_streams_snapshot() -> list[dict[str, Any]]:
     if not _core.postgres_configured() or _core.psycopg is None:
         return []
+    events_by_stream: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    streams = []
     try:
         with _core.postgres_connection(row_factory=_core.dict_row) as connection:
             with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT tenant_id, stream_id, event_id, type, message, payload,
+                           EXTRACT(EPOCH FROM created_at)::double precision AS created_at
+                    FROM portrait_stream_events
+                    ORDER BY created_at
+                    """
+                )
+                for row in cursor:
+                    events_by_stream.setdefault((row["tenant_id"], row["stream_id"]), []).append(
+                        {
+                            "event_id": row["event_id"],
+                            "type": row["type"],
+                            "message": row["message"],
+                            "payload": row["payload"] if isinstance(row["payload"], dict) else {},
+                            "created_at": float(row["created_at"] or 0.0),
+                        }
+                    )
                 cursor.execute(
                     """
                     SELECT tenant_id, stream_id, stream_url_ciphertext, name, settings, metadata, status,
@@ -99,51 +126,26 @@ def load_streams_snapshot() -> list[dict[str, Any]]:
                     ORDER BY created_at
                     """
                 )
-                stream_rows = cursor.fetchall()
-                cursor.execute(
-                    """
-                    SELECT tenant_id, stream_id, event_id, type, message, payload,
-                           EXTRACT(EPOCH FROM created_at)::double precision AS created_at
-                    FROM portrait_stream_events
-                    ORDER BY created_at
-                    """
-                )
-                event_rows = cursor.fetchall()
+                for row in cursor:
+                    try:
+                        stream_url = decode_stream_url(bytes(row["stream_url_ciphertext"]))
+                    except Exception:
+                        stream_url = ""
+                    streams.append(
+                        {
+                            "tenant_id": row["tenant_id"],
+                            "stream_id": row["stream_id"],
+                            "stream_url": stream_url,
+                            "name": row["name"],
+                            "settings": row["settings"] if isinstance(row["settings"], dict) else {},
+                            "metadata": row["metadata"] if isinstance(row["metadata"], dict) else {},
+                            "status": row["status"],
+                            "created_at": float(row["created_at"] or 0.0),
+                            "updated_at": float(row["updated_at"] or 0.0),
+                            "events": events_by_stream.get((row["tenant_id"], row["stream_id"]), []),
+                        }
+                    )
     except Exception as exc:  # pragma: no cover - requires external database
         logger.warning("postgres stream load failed: %s", exception_log_summary(exc))
         return []
-
-    events_by_stream: dict[tuple[str, str], list[dict[str, Any]]] = {}
-    for row in event_rows:
-        events_by_stream.setdefault((row["tenant_id"], row["stream_id"]), []).append(
-            {
-                "event_id": row["event_id"],
-                "type": row["type"],
-                "message": row["message"],
-                "payload": row["payload"] if isinstance(row["payload"], dict) else {},
-                "created_at": float(row["created_at"] or 0.0),
-            }
-        )
-
-    streams = []
-    for row in stream_rows:
-        try:
-            stream_url = decode_stream_url(bytes(row["stream_url_ciphertext"]))
-        except Exception:
-            stream_url = ""
-        streams.append(
-            {
-                "tenant_id": row["tenant_id"],
-                "stream_id": row["stream_id"],
-                "stream_url": stream_url,
-                "name": row["name"],
-                "settings": row["settings"] if isinstance(row["settings"], dict) else {},
-                "metadata": row["metadata"] if isinstance(row["metadata"], dict) else {},
-                "status": row["status"],
-                "created_at": float(row["created_at"] or 0.0),
-                "updated_at": float(row["updated_at"] or 0.0),
-                "events": events_by_stream.get((row["tenant_id"], row["stream_id"]), []),
-            }
-        )
     return streams
-

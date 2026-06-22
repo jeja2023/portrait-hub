@@ -59,7 +59,7 @@ async def run_daemon_forever(
     poll_interval_seconds: float = STREAM_WORKER_POLL_INTERVAL_SECONDS,
     max_reconnects: int = STREAM_WORKER_MAX_RECONNECTS,
 ) -> None:
-    active: dict[tuple[str, str], asyncio.Task] = {}
+    active: dict[tuple[str, str], asyncio.Task[Any]] = {}
     while True:
         load_streams_state()
         running = selected_running_streams(tenant_id=tenant_id, stream_id=stream_id)

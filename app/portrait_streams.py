@@ -53,12 +53,13 @@ class StreamEvent:
 
     @classmethod
     def from_state(cls, payload: dict[str, Any]) -> "StreamEvent":
+        event_payload = payload.get("payload")
         return cls(
             event_id=str(payload["event_id"]),
             type=str(payload.get("type", "")),
             message=str(payload.get("message", "")),
             created_at=float(payload.get("created_at", wall_time())),
-            payload=payload.get("payload") if isinstance(payload.get("payload"), dict) else {},
+            payload=deepcopy(event_payload) if isinstance(event_payload, dict) else {},
         )
 
 

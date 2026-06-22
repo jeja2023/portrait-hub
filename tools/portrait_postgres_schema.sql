@@ -41,9 +41,27 @@ CREATE TABLE IF NOT EXISTS portrait_features (
 CREATE INDEX IF NOT EXISTS portrait_features_lookup_idx
   ON portrait_features (tenant_id, modality, model_id, model_version);
 
+-- Covers the exact equality predicates of the vector search query
+-- (tenant_id, modality, embedding_dim). This bounds the candidate set before the
+-- ANN/sequential distance work and is the only index that helps dimensions
+-- without an HNSW index (e.g. 2048, which exceeds pgvector's HNSW dimension limit).
+CREATE INDEX IF NOT EXISTS portrait_features_search_idx
+  ON portrait_features (tenant_id, modality, embedding_dim);
+
+-- HNSW indexes per supported embedding dimension. pgvector requires a fixed
+-- dimension for an HNSW index, hence one partial index per dimension. Note:
+-- pgvector caps HNSW indexes at 2000 dimensions, so 2048-d embeddings rely on the
+-- btree predicate index above plus an exact distance sort.
+-- 索引只按 embedding_dim 分区（tenant_id/modality 是动态的，无法各自单独建索引）；
+-- 搜索查询在 ANN 候选之上施加这些等值过滤，并按查询提升 hnsw.ef_search
+--（见 search_pgvector / PGVECTOR_HNSW_EF_SEARCH），从而在过滤下保持较高召回。
 CREATE INDEX IF NOT EXISTS portrait_features_vector_64_hnsw_idx
   ON portrait_features USING hnsw ((embedding_vector::vector(64)) vector_cosine_ops)
   WHERE embedding_dim = 64;
+
+CREATE INDEX IF NOT EXISTS portrait_features_vector_128_hnsw_idx
+  ON portrait_features USING hnsw ((embedding_vector::vector(128)) vector_cosine_ops)
+  WHERE embedding_dim = 128;
 
 CREATE INDEX IF NOT EXISTS portrait_features_vector_256_hnsw_idx
   ON portrait_features USING hnsw ((embedding_vector::vector(256)) vector_cosine_ops)
@@ -52,6 +70,10 @@ CREATE INDEX IF NOT EXISTS portrait_features_vector_256_hnsw_idx
 CREATE INDEX IF NOT EXISTS portrait_features_vector_512_hnsw_idx
   ON portrait_features USING hnsw ((embedding_vector::vector(512)) vector_cosine_ops)
   WHERE embedding_dim = 512;
+
+CREATE INDEX IF NOT EXISTS portrait_features_vector_1024_hnsw_idx
+  ON portrait_features USING hnsw ((embedding_vector::vector(1024)) vector_cosine_ops)
+  WHERE embedding_dim = 1024;
 
 CREATE TABLE IF NOT EXISTS portrait_thresholds (
   profile TEXT NOT NULL,

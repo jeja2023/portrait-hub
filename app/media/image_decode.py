@@ -101,7 +101,10 @@ def decode_image_bytes(data: bytes, filename: str | None = None, source_id: str 
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="image content did not match decoded image format",
                 )
-            image = ImageOps.exif_transpose(opened).convert("RGB")
+            transposed = ImageOps.exif_transpose(opened)
+            if transposed is None:
+                transposed = opened
+            image = transposed.convert("RGB")
     except HTTPException:
         raise
     except (Image.DecompressionBombError, UnidentifiedImageError, OSError, ValueError) as exc:
@@ -171,3 +174,20 @@ def mark_near_duplicates(decoded: list[DecodedImage], max_hash_distance: int = 4
                 item.frame.duplicate_distance = distance
                 break
         seen.append(item)
+
+
+__all__ = [
+    "SUPPORTED_IMAGE_EXTENSIONS",
+    "SUPPORTED_IMAGE_FORMATS",
+    "IMAGE_EXTENSION_FORMATS",
+    "validate_image_filename",
+    "expected_format_from_filename",
+    "sniff_image_format",
+    "validate_image_content",
+    "read_limited_upload",
+    "decode_image_bytes",
+    "decode_upload_image",
+    "decode_upload_images",
+    "duplicate_distance",
+    "mark_near_duplicates",
+]

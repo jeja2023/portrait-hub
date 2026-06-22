@@ -1,19 +1,19 @@
 import logging
 from typing import Any
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
 
 from app.image_io import load_images
 from app.inference import infer_person_frames
 from app.metrics import observe
 from app.model_package import get_model_path
 from app.model_refs import cache_key, validate_model_reference_parts
-from app.observability import log_json, logger, now, request_id_from_headers
+from app.observability import log_json, now, request_id_from_headers
 from app.portrait_auth import permission_dependency
-from app.portrait_response import exception_log_summary, raise_internal_error
+from app.routes_inference_common import inference_error_boundary, validate_detection_parameters, validate_image_files
 from app.runtime import get_or_load_model, touch_model
 from app.security import require_api_token
-from app.settings import MAX_PERSON_FRAMES
+from app.settings import DEFAULT_CONFIDENCE, DEFAULT_DETECTOR_ARTIFACT, DEFAULT_DETECTOR_PROJECT, DEFAULT_IOU, MAX_PERSON_FRAMES
 
 
 router = APIRouter()
@@ -23,10 +23,10 @@ router = APIRouter()
 async def infer_persons(
     request: Request,
     files: list[UploadFile] = File(...),
-    project_name: str = Form("portrait_hub"),
-    artifact_name: str = Form("yolov8n.onnx", alias="model_name"),
-    confidence: float = Form(0.25),
-    iou: float = Form(0.45),
+    project_name: str = Form(DEFAULT_DETECTOR_PROJECT),
+    artifact_name: str = Form(DEFAULT_DETECTOR_ARTIFACT, alias="model_name"),
+    confidence: float = Form(DEFAULT_CONFIDENCE),
+    iou: float = Form(DEFAULT_IOU),
     max_detections: int = Form(100),
 ) -> dict[str, Any]:
     request_id = request_id_from_headers(request)
@@ -34,25 +34,18 @@ async def infer_persons(
     total_start = now()
 
     project_name, model_name = validate_model_reference_parts(project_name, artifact_name)
-
-    if not files:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="at least one image file is required")
-    if len(files) > MAX_PERSON_FRAMES:
-        raise HTTPException(
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail=f"too many image files: {len(files)}, max {MAX_PERSON_FRAMES}",
-        )
-    if not 0 <= confidence <= 1:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="confidence must be between 0 and 1")
-    if not 0 <= iou <= 1:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="iou must be between 0 and 1")
-    if max_detections < 1 or max_detections > 1000:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="max_detections must be between 1 and 1000")
+    validate_image_files(files, max_images=MAX_PERSON_FRAMES)
+    validate_detection_parameters(confidence=confidence, iou=iou, max_detections=max_detections)
 
     key = cache_key(project_name, model_name)
     model_path = get_model_path(project_name, model_name)
 
-    try:
+    with inference_error_boundary(
+        request_id,
+        errors_metric="persons_errors_total",
+        log_label="person inference failed",
+        internal_message="person inference runtime error",
+    ):
         bundle, cold_loaded, load_seconds = await get_or_load_model(key, model_path)
         images, filenames, decode_seconds = await load_images(files)
         frames, infer_meta = await infer_person_frames(
@@ -92,13 +85,6 @@ async def infer_persons(
             postprocess_seconds=round(infer_meta["timing"]["postprocess_seconds"], 6),
             total_seconds=round(total_seconds, 6),
         )
-    except HTTPException:
-        observe("persons_errors_total")
-        raise
-    except Exception as exc:
-        observe("persons_errors_total")
-        logger.warning("person inference failed: request_id=%s error=%s", request_id, exception_log_summary(exc))
-        raise_internal_error(request_id, "person inference runtime error")
 
     return {
         "status": "success",

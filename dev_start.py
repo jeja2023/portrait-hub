@@ -44,6 +44,10 @@ LOCAL_DEV_DEFAULTS = {
     "RBAC_ENABLED": "false",
     "TENANT_HEADER_REQUIRED": "false",
     "ENABLE_API_DOCS": "true",
+    # 生产代码默认值现在是 fail-closed（开启鉴权、要求加密、限制主机）。通过显式重新选用
+    # 宽松值来保持本地开发的顺畅，同时与“默认安全”的生产姿态保持镜像对应。
+    "REQUIRE_ENCRYPTION": "false",
+    "TRUSTED_HOSTS": "127.0.0.1,localhost",
 }
 
 

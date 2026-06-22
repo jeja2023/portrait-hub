@@ -21,7 +21,7 @@ from app.settings import (
 )
 
 try:  # pragma: no cover - optional production dependency
-    import boto3  # type: ignore[import-not-found]  # optional, from requirements-prod-optional.txt
+    import boto3  # optional, from requirements-prod-optional.txt
 except Exception:  # pragma: no cover - exercised when dependency is absent
     boto3 = None
 
@@ -168,18 +168,25 @@ class LocalObjectStore:
 class S3ObjectStore(LocalObjectStore):
     backend_name = "s3"
 
+    def __init__(self) -> None:
+        self._cached_client: Any | None = None
+
     def _client(self) -> Any:
         if boto3 is None:
             raise RuntimeError("boto3 is not installed; install requirements-prod-optional.txt")
         if not S3_BUCKET:
             raise RuntimeError("S3_BUCKET is not configured")
-        kwargs: dict[str, Any] = {"region_name": S3_REGION or None}
-        if S3_ENDPOINT_URL:
-            kwargs["endpoint_url"] = S3_ENDPOINT_URL
-        if S3_ACCESS_KEY_ID and S3_SECRET_ACCESS_KEY:
-            kwargs["aws_access_key_id"] = S3_ACCESS_KEY_ID
-            kwargs["aws_secret_access_key"] = S3_SECRET_ACCESS_KEY
-        return boto3.client("s3", **kwargs)
+        # boto3 client creation is expensive (session, signer setup); reuse one
+        # client across requests instead of building it on every put/delete.
+        if self._cached_client is None:
+            kwargs: dict[str, Any] = {"region_name": S3_REGION or None}
+            if S3_ENDPOINT_URL:
+                kwargs["endpoint_url"] = S3_ENDPOINT_URL
+            if S3_ACCESS_KEY_ID and S3_SECRET_ACCESS_KEY:
+                kwargs["aws_access_key_id"] = S3_ACCESS_KEY_ID
+                kwargs["aws_secret_access_key"] = S3_SECRET_ACCESS_KEY
+            self._cached_client = boto3.client("s3", **kwargs)
+        return self._cached_client
 
     def put_bytes(self, tenant_id: str, object_type: str, filename: str | None, data: bytes) -> dict[str, Any]:
         digest = hashlib.sha256(data).hexdigest()

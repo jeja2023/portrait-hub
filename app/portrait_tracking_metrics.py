@@ -3,8 +3,11 @@ from __future__ import annotations
 from typing import Any
 
 import numpy as np
+import numpy.typing as npt
 
 from app.portrait_compare import cosine_similarity, l2_normalize_vector
+
+Array = npt.NDArray[Any]
 
 
 def box_area(box: list[float]) -> float:
@@ -31,7 +34,7 @@ def embedding_score(embedding_a: list[float] | None, embedding_b: list[float] | 
     return max(0.0, min(1.0, (cosine_similarity(embedding_a, embedding_b) + 1.0) / 2.0))
 
 
-def normalized_agreement(vector_a: np.ndarray, vector_b: np.ndarray) -> float:
+def normalized_agreement(vector_a: Array, vector_b: Array) -> float:
     return max(0.0, min(1.0, (float(np.dot(vector_a, vector_b)) + 1.0) / 2.0))
 
 
@@ -55,7 +58,8 @@ def person_confidence(person: dict[str, Any]) -> float:
 def make_embedding_sample(frame_index: int, person: dict[str, Any], embedding: list[float] | None) -> dict[str, Any] | None:
     if not embedding:
         return None
-    crop_quality = person.get("crop_quality") if isinstance(person.get("crop_quality"), dict) else {}
+    raw_crop_quality = person.get("crop_quality")
+    crop_quality = raw_crop_quality if isinstance(raw_crop_quality, dict) else {}
     return {
         "frame_index": frame_index,
         "embedding": [float(value) for value in embedding],
@@ -91,7 +95,7 @@ def aggregate_track_template(
         }
 
     embedding_dim = len(valid[0]["embedding"])
-    vectors: list[np.ndarray] = []
+    vectors: list[Array] = []
     weights: list[float] = []
     qualities: list[float] = []
     confidences: list[float] = []
@@ -126,19 +130,20 @@ def aggregate_track_template(
         }
 
     if len(vectors) == 1:
-        consensus_scores = [1.0]
+        consensus_scores: list[float] = [1.0]
         refined_weights = weights[:]
         consensus_floor = 1.0
         outlier_count = 0
     else:
-        consensus_scores: list[float] = []
+        pairwise_consensus_scores: list[float] = []
         for index, vector in enumerate(vectors):
             other_scores: list[float] = []
             for other_index, other in enumerate(vectors):
                 if other_index == index:
                     continue
                 other_scores.append(normalized_agreement(vector, other))
-            consensus_scores.append(sum(other_scores) / max(1, len(other_scores)))
+            pairwise_consensus_scores.append(sum(other_scores) / max(1, len(other_scores)))
+        consensus_scores = pairwise_consensus_scores
         median_consensus = float(np.median(consensus_scores))
         consensus_spread = float(np.std(consensus_scores))
         consensus_floor = (
@@ -161,7 +166,7 @@ def aggregate_track_template(
 
     total_weight = max(1e-9, sum(refined_weights))
     template = sum(vector * weight for vector, weight in zip(vectors, refined_weights)) / total_weight
-    template = l2_normalize_vector(template)
+    template = l2_normalize_vector(np.asarray(template, dtype=np.float32))
     consensus_score = sum(consensus * weight for consensus, weight in zip(consensus_scores, refined_weights)) / total_weight
     payload: dict[str, Any] = {
         "embedding_dim": int(template.shape[0]),

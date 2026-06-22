@@ -1,19 +1,11 @@
 name: security-audit
 
 on:
+  # 每个 PR 与 push 都运行（不仅在清单变更时），使针对已钉版传递依赖的新披露公告
+  # 能够阻断合并。
   pull_request:
-    paths:
-      - "requirements.txt"
-      - "requirements/**"
-      - "tools/security_audit.py"
-      - ".github/workflows/security-audit.yml"
   push:
     branches: ["main", "master"]
-    paths:
-      - "requirements.txt"
-      - "requirements/**"
-      - "tools/security_audit.py"
-      - ".github/workflows/security-audit.yml"
   workflow_dispatch:
   schedule:
     - cron: "23 19 * * 1"

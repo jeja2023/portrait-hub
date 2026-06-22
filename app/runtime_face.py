@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 import cv2
 import numpy as np
+import numpy.typing as npt
 from PIL import Image
 
 from app.geometry import crop_person, nms, restore_boxes
@@ -22,6 +23,7 @@ from app.runtime_common import embedding_rows, normalize_scores, round_normalize
 from app.runtime_execution import run_model_bundle_batch
 from app.schemas import LetterboxMeta
 
+Array = npt.NDArray[Any]
 
 FACE_DETECTION_FALLBACK_MODEL_ID = "opencv/haarcascade_frontalface_default"
 FACE_KEYPOINT_NAMES = ["left_eye", "right_eye", "nose", "left_mouth", "right_mouth"]
@@ -47,7 +49,7 @@ def infer_scrfd_stride(count: int, input_height: int, input_width: int) -> tuple
     return None
 
 
-def scrfd_anchor_centers(count: int, input_height: int, input_width: int) -> tuple[np.ndarray, int] | None:
+def scrfd_anchor_centers(count: int, input_height: int, input_width: int) -> tuple[Array, int] | None:
     inferred = infer_scrfd_stride(count, input_height, input_width)
     if inferred is None:
         return None
@@ -61,13 +63,13 @@ def scrfd_anchor_centers(count: int, input_height: int, input_width: int) -> tup
 
 
 def decode_scrfd_anchor_outputs(
-    boxes: np.ndarray,
-    landmarks: np.ndarray | None,
+    boxes: Array,
+    landmarks: Array | None,
     *,
     input_height: int,
     input_width: int,
     scale: str | float,
-) -> tuple[np.ndarray, np.ndarray | None]:
+) -> tuple[Array, Array | None]:
     anchors = scrfd_anchor_centers(len(boxes), input_height, input_width)
     if anchors is None:
         return boxes, landmarks
@@ -91,7 +93,7 @@ def decode_scrfd_anchor_outputs(
     return decoded_boxes, decoded_landmarks
 
 
-def match_rows_by_length(rows: list[np.ndarray], length: int, used: set[int]) -> np.ndarray | None:
+def match_rows_by_length(rows: list[Array], length: int, used: set[int]) -> Array | None:
     for index, row in enumerate(rows):
         if index not in used and len(row) == length:
             used.add(index)
@@ -100,7 +102,7 @@ def match_rows_by_length(rows: list[np.ndarray], length: int, used: set[int]) ->
 
 
 def parse_scrfd_outputs(
-    raw_outputs: list[np.ndarray],
+    raw_outputs: list[Array],
     *,
     batch_index: int,
     batch_size: int,
@@ -108,11 +110,11 @@ def parse_scrfd_outputs(
     input_width: int,
     decoded_output: bool,
     bbox_scale: str | float,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray | None]:
-    combined_rows: list[np.ndarray] = []
-    score_rows: list[np.ndarray] = []
-    box_rows: list[np.ndarray] = []
-    landmark_rows: list[np.ndarray] = []
+) -> tuple[Array, Array, Array | None]:
+    combined_rows: list[Array] = []
+    score_rows: list[Array] = []
+    box_rows: list[Array] = []
+    landmark_rows: list[Array] = []
     for output in raw_outputs:
         rows = rows_with_last_dim(batch_slice(output, batch_index, batch_size))
         if rows.shape[1] >= 5:
@@ -131,26 +133,25 @@ def parse_scrfd_outputs(
         landmarks = rows[:, 5:15].reshape(-1, 5, 2) if rows.shape[1] >= 15 else None
         return boxes, scores, landmarks
 
-    decoded_boxes: list[np.ndarray] = []
-    decoded_scores: list[np.ndarray] = []
-    decoded_landmarks: list[np.ndarray] = []
+    decoded_boxes: list[Array] = []
+    decoded_scores: list[Array] = []
+    decoded_landmarks: list[Array] = []
     used_scores: set[int] = set()
     used_landmarks: set[int] = set()
     for boxes in box_rows:
-        scores = match_rows_by_length(score_rows, len(boxes), used_scores)
-        landmarks = match_rows_by_length(landmark_rows, len(boxes), used_landmarks)
-        if scores is None:
-            scores = np.ones((len(boxes),), dtype=np.float32)
+        matched_scores = match_rows_by_length(score_rows, len(boxes), used_scores)
+        matched_landmarks = match_rows_by_length(landmark_rows, len(boxes), used_landmarks)
+        scores = matched_scores if matched_scores is not None else np.ones((len(boxes),), dtype=np.float32)
         if not decoded_output:
             boxes, decoded_lm = decode_scrfd_anchor_outputs(
                 boxes,
-                landmarks,
+                matched_landmarks,
                 input_height=input_height,
                 input_width=input_width,
                 scale=bbox_scale,
             )
         else:
-            decoded_lm = landmarks.reshape(-1, 5, 2) if landmarks is not None else None
+            decoded_lm = matched_landmarks.reshape(-1, 5, 2) if matched_landmarks is not None else None
         decoded_boxes.append(boxes)
         decoded_scores.append(normalize_scores(scores))
         if decoded_lm is not None:
@@ -162,7 +163,7 @@ def parse_scrfd_outputs(
     return np.concatenate(decoded_boxes, axis=0), np.concatenate(decoded_scores, axis=0), landmarks_out
 
 
-def restore_landmarks(landmarks: np.ndarray | None, meta: LetterboxMeta) -> np.ndarray | None:
+def restore_landmarks(landmarks: Array | None, meta: LetterboxMeta) -> Array | None:
     if landmarks is None:
         return None
     restored = landmarks.copy().astype(np.float32)
@@ -272,7 +273,7 @@ def arcface_aligned_crop(
         return crop
     rgb = np.asarray(image.convert("RGB"), dtype=np.uint8)
     aligned = cv2.warpAffine(rgb, matrix, (output_width, output_height), flags=cv2.INTER_LINEAR, borderValue=(0, 0, 0))
-    return Image.fromarray(aligned)
+    return cast(Image.Image, Image.fromarray(aligned))  # type: ignore[no-untyped-call]
 
 
 async def apply_arcface_embeddings(image: Image.Image, faces: list[dict[str, Any]]) -> bool:
@@ -282,7 +283,7 @@ async def apply_arcface_embeddings(image: Image.Image, faces: list[dict[str, Any
     input_height, input_width = runtime_input_size(runtime, (112, 112))
     normalize = str(runtime_input_value(runtime, "normalize", runtime.capability.get("preprocess", "rgb_minus_127p5_div_128")))
     color = str(runtime_input_value(runtime, "color", "rgb"))
-    inputs: list[np.ndarray] = []
+    inputs: list[Array] = []
     for face in faces:
         crop = face.get("crop")
         if not isinstance(crop, Image.Image):
@@ -394,12 +395,14 @@ __all__ = [
     "face_crop_from_box",
     "face_model_summary",
     "fallback_face_records_with_crops",
+    "get_capability_runtime",
     "infer_best_face_embedding_for_image",
     "infer_face_records_for_image",
     "infer_scrfd_stride",
     "match_rows_by_length",
     "parse_scrfd_outputs",
     "restore_landmarks",
+    "run_model_bundle_batch",
     "run_scrfd_face_detection",
     "scrfd_anchor_centers",
     "strip_face_crop",

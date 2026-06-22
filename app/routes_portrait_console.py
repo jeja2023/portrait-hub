@@ -1,3 +1,4 @@
+from functools import lru_cache
 from pathlib import Path
 from secrets import token_urlsafe
 
@@ -23,7 +24,10 @@ def console_csp(nonce: str) -> str:
     )
 
 
+@lru_cache(maxsize=1)
 def render_console_html() -> str:
+    # 控制台页面是静态资源，没有逐请求的模板渲染（CSP nonce 只存在于响应头），
+    # 因此只从磁盘读取一次并缓存。
     return CONSOLE_HTML_PATH.read_text(encoding="utf-8")
 
 

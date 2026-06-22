@@ -1,4 +1,5 @@
-from typing import Any
+from collections.abc import Mapping
+from typing import Any, cast
 
 import onnxruntime as ort
 
@@ -7,7 +8,7 @@ from app.schemas import ModelConfig
 
 
 def model_config(cache_key_value: str, default_type: str | None = None) -> ModelConfig:
-    config: ModelConfig = dict(MODEL_CONFIGS.get(cache_key_value, {}))
+    config = cast(ModelConfig, dict(MODEL_CONFIGS.get(cache_key_value, {})))
     if default_type and "type" not in config:
         config["type"] = default_type
     if default_type and "task" not in config:
@@ -20,19 +21,19 @@ def model_config(cache_key_value: str, default_type: str | None = None) -> Model
     return config
 
 
-def config_section(config: ModelConfig, name: str) -> dict[str, Any]:
+def config_section(config: Mapping[str, Any], name: str) -> dict[str, Any]:
     value = config.get(name)
     return value if isinstance(value, dict) else {}
 
 
-def config_value(config: ModelConfig, section: str, key: str, default: Any = None) -> Any:
+def config_value(config: Mapping[str, Any], section: str, key: str, default: Any = None) -> Any:
     section_value = config_section(config, section).get(key)
     if section_value is not None:
         return section_value
     return config.get(key, default)
 
 
-def model_task(config: ModelConfig, default: str = "detection") -> str:
+def model_task(config: Mapping[str, Any], default: str = "detection") -> str:
     task = str(config.get("task") or config.get("type") or default).strip().lower()
     if task in {"yolo", "yolov8", "detector"}:
         return "detection"
@@ -43,7 +44,7 @@ def model_task(config: ModelConfig, default: str = "detection") -> str:
     return task
 
 
-def configured_sha256(config: ModelConfig) -> str | None:
+def configured_sha256(config: Mapping[str, Any]) -> str | None:
     raw = config_section(config, "artifact").get("sha256") or config.get("sha256")
     if isinstance(raw, str) and raw.strip():
         return raw.strip().lower()
@@ -71,3 +72,14 @@ def configured_input_size(
         if isinstance(height, int) and isinstance(width, int) and height > 0 and width > 0:
             return height, width
     return parse_image_size(session, default=default)
+
+
+__all__ = [
+    "model_config",
+    "config_section",
+    "config_value",
+    "model_task",
+    "configured_sha256",
+    "parse_image_size",
+    "configured_input_size",
+]

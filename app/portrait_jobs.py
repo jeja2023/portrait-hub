@@ -1,5 +1,6 @@
 import asyncio
 import hashlib
+import inspect
 import threading
 from copy import deepcopy
 from dataclasses import dataclass, field
@@ -14,7 +15,13 @@ from app.portrait_async import run_blocking_io
 from app.portrait_model_runtime import infer_appearance_record_for_image
 from app.portrait_response import exception_log_summary
 from app.portrait_state import handle_state_read_error, read_json_state, write_json_state
-from app.settings import PORTRAIT_JOBS_STATE_PATH, PORTRAIT_STORAGE_BACKEND, VIDEO_JOB_MAX_RETRIES, VIDEO_JOB_RETRY_BACKOFF_SECONDS
+from app.settings import (
+    PORTRAIT_JOBS_STATE_PATH,
+    PORTRAIT_STORAGE_BACKEND,
+    VIDEO_JOB_MAX_RETRIES,
+    VIDEO_JOB_PROGRESS_PERSIST_INTERVAL_SECONDS,
+    VIDEO_JOB_RETRY_BACKOFF_SECONDS,
+)
 from app.video_io import public_video_metadata
 
 
@@ -26,10 +33,10 @@ async def appearance_record(image: Any, include_embedding: bool = True) -> dict[
 
 
 async def resolve_appearance_record(image: Any, *, include_embedding: bool = True) -> dict[str, Any]:
-    record = appearance_record(image, include_embedding=include_embedding)
-    if hasattr(record, "__await__"):
-        return await record
-    return record
+    record: Any = appearance_record(image, include_embedding=include_embedding)
+    if inspect.isawaitable(record):
+        record = await record
+    return record if isinstance(record, dict) else {}
 
 
 class JobStatus(StrEnum):
@@ -386,6 +393,10 @@ async def run_video_job(
             frames, metadata = await extract_video_frames_from_bytes(data, filename, frame_interval, max_frames)
             frame_results: list[dict[str, Any]] = []
             total = max(1, len(frames))
+            # 对中间进度写入做节流：每帧都持久化会每次重写整个任务状态文件（或整行 JSONB），
+            # 开销随 任务数 × 帧数 增长。下方的终态仍会立即落盘，完成后的结果也在循环结束后持久化。
+            persist_interval = float(VIDEO_JOB_PROGRESS_PERSIST_INTERVAL_SECONDS)
+            last_progress_persist_at = wall_time()
             for index, image in enumerate(frames):
                 if job.cancel_requested:
                     job.status = JobStatus.CANCELLED
@@ -409,7 +420,9 @@ async def run_video_job(
                 )
                 job.progress = 0.10 + 0.85 * ((index + 1) / total)
                 job.updated_at = wall_time()
-                await run_blocking_io(persist_video_job, job)
+                if persist_interval <= 0 or (job.updated_at - last_progress_persist_at) >= persist_interval:
+                    await run_blocking_io(persist_video_job, job)
+                    last_progress_persist_at = job.updated_at
 
             job.result = public_video_job_result(
                 {

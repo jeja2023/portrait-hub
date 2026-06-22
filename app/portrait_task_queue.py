@@ -5,11 +5,11 @@ from uuid import uuid4
 from app.observability import logger, wall_time
 from app.portrait_response import HEALTH_CHECK_FAILED, exception_log_summary
 from app.portrait_security import redact_sensitive_fields
-from app.portrait_state import append_jsonl, handle_state_write_error
+from app.portrait_state import append_jsonl
 from app.settings import REDIS_URL, TASK_QUEUE_BACKEND, TASK_QUEUE_STATE_PATH
 
 try:  # pragma: no cover - optional production dependency
-    import redis  # type: ignore[import-not-found]  # optional, from requirements-prod-optional.txt
+    import redis  # optional, from requirements-prod-optional.txt
 except Exception:  # pragma: no cover - exercised when dependency is absent
     redis = None
 
@@ -71,12 +71,18 @@ class ExternalTaskQueue(LocalTaskQueue):
 class RedisTaskQueue(LocalTaskQueue):
     backend_name = "redis"
 
+    def __init__(self) -> None:
+        self._cached_client: Any | None = None
+
     def _client(self) -> Any:
         if redis is None:
             raise RuntimeError("redis is not installed; install requirements-prod-optional.txt")
         if not REDIS_URL:
             raise RuntimeError("REDIS_URL is not configured")
-        return redis.Redis.from_url(REDIS_URL, decode_responses=True)
+        # Reuse a single client/connection pool instead of building one per call.
+        if self._cached_client is None:
+            self._cached_client = redis.Redis.from_url(REDIS_URL, decode_responses=True)
+        return self._cached_client
 
     def enqueue(self, queue: str, payload: dict[str, Any]) -> QueueMessage:
         import json

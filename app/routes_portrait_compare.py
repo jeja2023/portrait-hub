@@ -19,7 +19,7 @@ from app.portrait_response import portrait_success
 from app.portrait_request_context import PortraitRequestContext, portrait_request_context
 from app.portrait_thresholds import validate_threshold_profile
 from app.security import require_api_token
-from app.settings import MAX_VIDEO_FRAMES
+from app.settings import MAX_COMPARE_BATCH_PAIRS, MAX_VIDEO_FRAMES
 
 
 router = APIRouter(dependencies=[Depends(require_api_token)])
@@ -358,6 +358,11 @@ async def v1_compare_batch(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="unsupported modality")
     if not image_a or len(image_a) != len(image_b):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="image_a and image_b must contain the same number of files")
+    if len(image_a) > MAX_COMPARE_BATCH_PAIRS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"too many pairs: {len(image_a)}, max {MAX_COMPARE_BATCH_PAIRS}",
+        )
     if async_mode:
         left_payloads = [(file.filename, file.content_type, await file.read()) for file in image_a]
         right_payloads = [(file.filename, file.content_type, await file.read()) for file in image_b]
@@ -371,13 +376,20 @@ async def v1_compare_batch(
         async def handler(batch_job: VideoJob) -> dict[str, Any]:
             from io import BytesIO
             from fastapi import UploadFile
+            from starlette.datastructures import Headers
 
             async def update_progress(progress: float) -> None:
                 batch_job.progress = progress
                 await run_blocking_io(persist_video_job, batch_job)
 
-            left_files = [UploadFile(filename=name, file=BytesIO(data), headers={"content-type": ctype or "application/octet-stream"}) for name, ctype, data in left_payloads]
-            right_files = [UploadFile(filename=name, file=BytesIO(data), headers={"content-type": ctype or "application/octet-stream"}) for name, ctype, data in right_payloads]
+            left_files = [
+                UploadFile(filename=name, file=BytesIO(data), headers=Headers({"content-type": ctype or "application/octet-stream"}))
+                for name, ctype, data in left_payloads
+            ]
+            right_files = [
+                UploadFile(filename=name, file=BytesIO(data), headers=Headers({"content-type": ctype or "application/octet-stream"}))
+                for name, ctype, data in right_payloads
+            ]
             results = await compare_batch_results(
                 left_files,
                 right_files,

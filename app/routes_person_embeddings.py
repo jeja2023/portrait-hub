@@ -1,19 +1,19 @@
 import logging
 from typing import Any
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
 
 from app.image_io import load_images
 from app.inference import infer_reid_images
 from app.metrics import observe
 from app.model_package import get_model_path
 from app.model_refs import cache_key, validate_model_reference_parts
-from app.observability import log_json, logger, now, request_id_from_headers
+from app.observability import log_json, now, request_id_from_headers
 from app.portrait_auth import permission_dependency
-from app.portrait_response import exception_log_summary, raise_internal_error
+from app.routes_inference_common import inference_error_boundary, validate_image_files
 from app.runtime import get_or_load_model, touch_model
 from app.security import require_api_token
-from app.settings import MAX_EMBEDDING_IMAGES
+from app.settings import DEFAULT_DETECTOR_PROJECT, DEFAULT_REID_ARTIFACT, MAX_EMBEDDING_IMAGES
 
 
 router = APIRouter()
@@ -23,8 +23,8 @@ router = APIRouter()
 async def infer_person_embeddings(
     request: Request,
     files: list[UploadFile] = File(...),
-    project_name: str = Form("portrait_hub"),
-    artifact_name: str = Form("osnet_ibn_x1_0.onnx", alias="model_name"),
+    project_name: str = Form(DEFAULT_DETECTOR_PROJECT),
+    artifact_name: str = Form(DEFAULT_REID_ARTIFACT, alias="model_name"),
     include_vectors: bool = Form(False),
 ) -> dict[str, Any]:
     request_id = request_id_from_headers(request)
@@ -32,19 +32,17 @@ async def infer_person_embeddings(
     total_start = now()
 
     project_name, model_name = validate_model_reference_parts(project_name, artifact_name)
-
-    if not files:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="at least one image file is required")
-    if len(files) > MAX_EMBEDDING_IMAGES:
-        raise HTTPException(
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail=f"too many image files: {len(files)}, max {MAX_EMBEDDING_IMAGES}",
-        )
+    validate_image_files(files, max_images=MAX_EMBEDDING_IMAGES)
 
     key = cache_key(project_name, model_name)
     model_path = get_model_path(project_name, model_name)
 
-    try:
+    with inference_error_boundary(
+        request_id,
+        errors_metric="embeddings_errors_total",
+        log_label="embedding inference failed",
+        internal_message="embedding inference runtime error",
+    ):
         bundle, cold_loaded, load_seconds = await get_or_load_model(key, model_path)
         images, filenames, decode_seconds = await load_images(files)
         embeddings, infer_meta = await infer_reid_images(bundle, key, images)
@@ -84,13 +82,6 @@ async def infer_person_embeddings(
             postprocess_seconds=round(infer_meta["timing"]["postprocess_seconds"], 6),
             total_seconds=round(total_seconds, 6),
         )
-    except HTTPException:
-        observe("embeddings_errors_total")
-        raise
-    except Exception as exc:
-        observe("embeddings_errors_total")
-        logger.warning("embedding inference failed: request_id=%s error=%s", request_id, exception_log_summary(exc))
-        raise_internal_error(request_id, "embedding inference runtime error")
 
     return {
         "status": "success",

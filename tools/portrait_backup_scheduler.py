@@ -25,7 +25,8 @@ def post_backup(base_url: str, *, token: str | None, tenant_id: str, updated_sin
     if token:
         request.add_header("authorization", f"Bearer {token}")
     with urllib.request.urlopen(request, timeout=timeout) as response:
-        return json.loads(response.read().decode("utf-8"))
+        payload = json.loads(response.read().decode("utf-8"))
+    return payload if isinstance(payload, dict) else {}
 
 
 def run_scheduler(

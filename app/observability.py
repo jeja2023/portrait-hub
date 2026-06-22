@@ -75,9 +75,11 @@ def request_id_from_headers(request: Request) -> str:
 def traceparent_from_headers(request: Request) -> str | None:
     raw_traceparent = request.headers.get("traceparent")
     if raw_traceparent and TRACEPARENT_PATTERN.fullmatch(raw_traceparent.strip().lower()):
-        request.state.traceparent = raw_traceparent.strip().lower()
-        return request.state.traceparent
-    return getattr(request.state, "traceparent", None)
+        traceparent_value = raw_traceparent.strip().lower()
+        request.state.traceparent = traceparent_value
+        return traceparent_value
+    traceparent = getattr(request.state, "traceparent", None)
+    return traceparent if isinstance(traceparent, str) else None
 
 
 def current_request_id() -> str | None:

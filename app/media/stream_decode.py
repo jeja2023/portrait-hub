@@ -105,6 +105,16 @@ def validate_media_stream_url(stream_url: str) -> str:
     return stream_url
 
 
+def revalidate_stream_url(stream_url: str) -> None:
+    # 在解码器连接前立即重跑 SSRF 校验。这里会再次解析主机，缩小原始校验（在注册/请求时）
+    # 与实际拉流之间的 DNS-rebinding（TOCTOU）窗口——对常驻流 worker 而言该窗口可能任意长。
+    # 本地文件路径（无流 scheme）保持不动，不影响本地视频解码。
+    parsed = urlsplit(stream_url)
+    if parsed.scheme not in SUPPORTED_STREAM_SCHEMES:
+        return
+    validate_media_stream_url(stream_url)
+
+
 def mask_stream_url(stream_url: str) -> str:
     parsed = urlsplit(stream_url)
     if not parsed.username and not parsed.password and not parsed.query and not parsed.fragment:
@@ -119,3 +129,17 @@ def mask_stream_url(stream_url: str) -> str:
     query = "<redacted>" if parsed.query else ""
     fragment = "<redacted>" if parsed.fragment else ""
     return urlunsplit((parsed.scheme, masked_netloc, parsed.path, query, fragment))
+
+
+__all__ = [
+    "SUPPORTED_STREAM_SCHEMES",
+    "host_matches_allowlist",
+    "is_blocked_stream_address",
+    "reject_blocked_stream_address",
+    "reject_private_ip_literal",
+    "resolve_stream_host_addresses",
+    "reject_private_resolved_addresses",
+    "validate_media_stream_url",
+    "revalidate_stream_url",
+    "mask_stream_url",
+]

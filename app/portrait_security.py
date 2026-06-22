@@ -171,6 +171,8 @@ def normalize_public_metadata(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"{field_name} contains unsupported value type")
 
     normalized = normalize(value, 1, "")
+    if not isinstance(normalized, dict):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"{field_name} must be a JSON object")
     encoded = json.dumps(normalized, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
     if len(encoded) > max_bytes:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"{field_name} exceeds max size {max_bytes} bytes")
