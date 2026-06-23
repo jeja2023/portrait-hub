@@ -177,7 +177,7 @@ def test_console_is_product_admin_shell_with_strict_inline_policy() -> None:
 
     assert response.status_code == 200
     body = response.text
-    assert "PortraitHub 业务控制台" in body
+    assert "影鉴 业务控制台" in body
     assert "启用 JavaScript" in body
     csp = response.headers["Content-Security-Policy"]
     assert "img-src 'self' data: blob:" in csp

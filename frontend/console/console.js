@@ -3,6 +3,7 @@ const state = {
   apiKey: localStorage.getItem("portraitHubApiKey") || "",
   bearer: localStorage.getItem("portraitHubBearer") || "",
   view: localStorage.getItem("portraitHubView") || "overview",
+  isLoggedIn: localStorage.getItem("portraitHubLoggedIn") === "true",
   dashboard: {},
   galleryExport: {},
   latestPayloads: {},
@@ -49,43 +50,88 @@ function loadAlertConfig() {
 }
 
 const template = `
-  <header class="topbar">
-    <div class="brand">
-      <h1>PortraitHub 业务控制台</h1>
-      <p>面向业务项目的人像解析、比对、图库检索、离线视频和视频流服务控制台。可直接操作，也可复制接口调用示例接入其它系统。<a href="/docs" target="_blank" rel="noreferrer">接口文档</a></p>
-    </div>
-    <nav aria-label="控制台视图">
-      <button type="button" data-nav="overview">总览</button>
-      <button type="button" data-nav="vision">图片解析</button>
-      <button type="button" data-nav="compare">人像比对</button>
-      <button type="button" data-nav="gallery">人员库</button>
-      <button type="button" data-nav="video">离线视频</button>
-      <button type="button" data-nav="streams">视频流</button>
-      <button type="button" data-nav="models">模型</button>
-      <button type="button" data-nav="admin">治理</button>
-      <button type="button" data-nav="alerts">告警</button>
-    </nav>
-  </header>
-  <main class="shell">
-    <aside class="panel auth-panel">
-      <h2>调用凭证</h2>
-      <label>租户 ID <input id="tenant-input" autocomplete="off" value="default" /></label>
-      <label>接口令牌（API Key） <input id="api-key-input" type="password" autocomplete="off" /></label>
-      <label>JWT 令牌（Bearer） <input id="bearer-input" type="password" autocomplete="off" /></label>
-      <div class="actions">
-        <button type="button" id="save-auth-button" class="primary">保存</button>
-        <button type="button" id="refresh-button">刷新全部</button>
+  <!-- 登录页面 -->
+  <div id="login-view" class="login-container hidden">
+    <div class="login-card">
+      <div class="login-brand">
+        <h1><span class="brand-logo brand-logo--large">影</span>影鉴</h1>
+        <p>面向业务项目的离线人像解析与比对控制台</p>
       </div>
-      <div id="status-strip" class="status-strip">就绪</div>
-      <div class="quick-links">
-        <button type="button" class="ghost" data-nav-shortcut="vision">上传图片解析</button>
-        <button type="button" class="ghost" data-nav-shortcut="compare">两张图比对</button>
-        <button type="button" class="ghost" data-nav-shortcut="gallery">人员入库检索</button>
-        <button type="button" class="ghost" data-nav-shortcut="video">创建视频任务</button>
-        <a href="/openapi.json" target="_blank" rel="noreferrer">接口定义</a>
+      <form id="login-form">
+        <div class="field">
+          <label>租户 ID (Tenant ID) <input id="tenant-input" autocomplete="off" value="default" /></label>
+        </div>
+        <div class="field">
+          <label>接口令牌 (API Key) <input id="api-key-input" type="password" autocomplete="off" /></label>
+        </div>
+        <div class="field">
+          <label>JWT 令牌 (Bearer Token) <input id="bearer-input" type="password" autocomplete="off" /></label>
+        </div>
+        <button type="submit" class="primary login-button">登录系统</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- 主控制台布局 -->
+  <div id="console-view" class="console-layout hidden">
+    <aside class="sidebar">
+      <div class="sidebar-brand">
+        <h2><span class="brand-logo">影</span>影鉴</h2>
+        <p>业务控制台</p>
+        <div class="brand-links">
+          <a href="/docs" target="_blank" rel="noreferrer">接口文档</a>
+          <span>·</span>
+          <a href="/openapi.json" target="_blank" rel="noreferrer">接口定义</a>
+        </div>
+      </div>
+      <nav class="sidebar-nav" aria-label="控制台视图">
+        <button type="button" class="nav-item nav-item--solo" data-nav="overview">总览</button>
+        <details class="nav-group" data-nav-group="vision">
+          <summary>智能解析</summary>
+          <div class="nav-group-items">
+            <button type="button" class="nav-item" data-nav="vision">图片解析</button>
+            <button type="button" class="nav-item" data-nav="compare">人像比对</button>
+          </div>
+        </details>
+        <details class="nav-group" data-nav-group="gallery">
+          <summary>人员库</summary>
+          <div class="nav-group-items">
+            <button type="button" class="nav-item" data-nav="gallery-enroll">人员注册</button>
+            <button type="button" class="nav-item" data-nav="gallery-search">以图搜人</button>
+            <button type="button" class="nav-item" data-nav="gallery-manage">人员管理</button>
+          </div>
+        </details>
+        <details class="nav-group" data-nav-group="video">
+          <summary>视频分析</summary>
+          <div class="nav-group-items">
+            <button type="button" class="nav-item" data-nav="video">离线视频</button>
+            <button type="button" class="nav-item" data-nav="streams">视频流</button>
+          </div>
+        </details>
+        <details class="nav-group" data-nav-group="ops">
+          <summary>运维治理</summary>
+          <div class="nav-group-items">
+            <button type="button" class="nav-item" data-nav="models">模型管理</button>
+            <button type="button" class="nav-item" data-nav="admin-threshold">比对阈值</button>
+            <button type="button" class="nav-item" data-nav="admin-data">数据保留与备份</button>
+            <button type="button" class="nav-item" data-nav="alerts">告警评估</button>
+          </div>
+        </details>
+      </nav>
+      <div class="sidebar-footer">
+        <div class="tenant-info">
+          <span>当前租户</span>
+          <strong id="current-tenant-display">default</strong>
+        </div>
+        <div id="status-strip" class="status-strip">就绪</div>
+        <div class="sidebar-actions">
+          <button type="button" id="refresh-button" class="small">刷新全部</button>
+          <button type="button" id="logout-button" class="danger small">退出登录</button>
+        </div>
       </div>
     </aside>
-    <section class="workspace">
+    <main class="console-main">
+      <section class="workspace">
       <section class="view" data-view="overview">
         <div class="view-header">
           <div class="section-title">
@@ -94,16 +140,14 @@ const template = `
           </div>
           <button type="button" id="dashboard-refresh-button">刷新状态</button>
         </div>
-        <div class="metric-grid">
+        <div class="stats-row">
           <div class="metric"><span>推理请求</span><strong id="metric-requests">0</strong></div>
           <div class="metric"><span>错误率</span><strong id="metric-error-rate">0%</strong></div>
           <div class="metric"><span>P95 推理耗时</span><strong id="metric-p95">0s</strong></div>
           <div class="metric"><span>GPU 空闲显存</span><strong id="metric-gpu-free">--</strong></div>
-        </div>
-        <div class="product-grid">
           <button type="button" class="product-tile" data-nav-shortcut="vision"><strong>图片解析</strong><span>人脸、人体、姿态、衣着、步态、检测和 ReID embedding。</span></button>
           <button type="button" class="product-tile" data-nav-shortcut="compare"><strong>人像比对</strong><span>人脸、人体、步态、多模态融合和批量比对。</span></button>
-          <button type="button" class="product-tile" data-nav-shortcut="gallery"><strong>人员库查询</strong><span>人员注册、图库检索、候选排序和人员资料维护。</span></button>
+          <button type="button" class="product-tile" data-nav-shortcut="gallery-search"><strong>人员库查询</strong><span>人员注册、图库检索、候选排序和人员资料维护。</span></button>
           <button type="button" class="product-tile" data-nav-shortcut="streams"><strong>视频服务</strong><span>离线视频轨迹任务、视频流注册、事件查询和实时订阅。</span></button>
         </div>
         <div class="split-grid">
@@ -225,54 +269,75 @@ const template = `
         </div>
       </section>
 
-      <section class="view" data-view="gallery">
+      <section class="view" data-view="gallery-enroll">
         <div class="view-header">
           <div class="section-title">
-            <h2>人员库</h2>
-            <p>用于业务人员注册、以图搜人、人员资料维护和向量重建。</p>
+            <h2>人员注册</h2>
+            <p>支持同一人员多图入库，自动跳过重复输入。</p>
+          </div>
+        </div>
+        <form id="enroll-form" class="form-grid">
+          <label>人员 ID <input id="enroll-person-id-input" name="person_id" placeholder="留空自动生成" /></label>
+          <label>显示名称 <input id="enroll-display-name-input" name="display_name" placeholder="姓名或业务编号" /></label>
+          <label>特征模态
+            <select id="enroll-modality-input" name="modality">
+              <option value="body">人体</option>
+              <option value="face">人脸</option>
+              <option value="appearance">衣着外观</option>
+            </select>
+          </label>
+          <label class="span-2">注册图片 <input id="enroll-file-input" name="files" type="file" accept="image/*" multiple /></label>
+          <label class="span-2">元数据（JSON） <textarea id="enroll-metadata-input" name="metadata" placeholder='{"source":"case-001"}'></textarea></label>
+          <button type="submit" class="primary">注册入库</button>
+        </form>
+        <div class="result-panel">
+          <div class="section-title">
+            <h3>注册结果</h3>
+            <p>入库人员、特征数量和质量信息会在此展示。</p>
+          </div>
+          <div id="enroll-summary" class="result-summary"></div>
+          <div id="enroll-json" class="json-view data-viewer" role="region" aria-label="人员注册响应数据"></div>
+        </div>
+      </section>
+
+      <section class="view" data-view="gallery-search">
+        <div class="view-header">
+          <div class="section-title">
+            <h2>以图搜人</h2>
+            <p>返回人员级候选、质量信息和排序风险。</p>
+          </div>
+          <button type="button" id="gallery-copy-button">复制检索示例</button>
+        </div>
+        <form id="search-form" class="form-grid">
+          <label class="span-2">检索图片 <input id="search-file-input" name="file" type="file" accept="image/*" /></label>
+          <label>特征模态
+            <select id="search-modality-input" name="modality">
+              <option value="body">人体</option>
+              <option value="face">人脸</option>
+              <option value="appearance">衣着外观</option>
+            </select>
+          </label>
+          <label>前 K <input id="search-top-k-input" name="top_k" type="number" min="1" value="5" /></label>
+          <label>阈值方案 <input id="search-threshold-input" name="threshold_profile" value="normal" /></label>
+          <button type="submit" class="primary">图库检索</button>
+        </form>
+        <div class="result-panel">
+          <div class="section-title">
+            <h3>检索结果</h3>
+            <p>候选人员按相似度排序，附带质量与风险提示。</p>
+          </div>
+          <div id="search-summary" class="result-summary"></div>
+          <div id="search-json" class="json-view data-viewer" role="region" aria-label="以图搜人响应数据"></div>
+        </div>
+      </section>
+
+      <section class="view" data-view="gallery-manage">
+        <div class="view-header">
+          <div class="section-title">
+            <h2>人员管理</h2>
+            <p>浏览人员列表、查改删人员记录，并按模态重建向量索引。</p>
           </div>
           <button type="button" id="gallery-refresh-button">刷新人员库</button>
-        </div>
-        <div class="gallery-layout">
-          <div class="card">
-            <div class="section-title">
-              <h3>人员注册</h3>
-              <p>支持同一人员多图入库，自动跳过重复输入。</p>
-            </div>
-            <form id="enroll-form" class="form-grid">
-              <label>人员 ID <input id="enroll-person-id-input" name="person_id" placeholder="留空自动生成" /></label>
-              <label>显示名称 <input id="enroll-display-name-input" name="display_name" placeholder="姓名或业务编号" /></label>
-              <label>特征模态
-                <select id="enroll-modality-input" name="modality">
-                  <option value="body">人体</option>
-                  <option value="face">人脸</option>
-                  <option value="appearance">衣着外观</option>
-                </select>
-              </label>
-              <label class="span-2">注册图片 <input id="enroll-file-input" name="files" type="file" accept="image/*" multiple /></label>
-              <label class="span-2">元数据（JSON） <textarea id="enroll-metadata-input" name="metadata" placeholder='{"source":"case-001"}'></textarea></label>
-              <button type="submit" class="primary">注册入库</button>
-            </form>
-          </div>
-          <div class="card">
-            <div class="section-title">
-              <h3>以图搜人</h3>
-              <p>返回人员级候选、质量信息和排序风险。</p>
-            </div>
-            <form id="search-form" class="form-grid">
-              <label class="span-2">检索图片 <input id="search-file-input" name="file" type="file" accept="image/*" /></label>
-              <label>特征模态
-                <select id="search-modality-input" name="modality">
-                  <option value="body">人体</option>
-                  <option value="face">人脸</option>
-                  <option value="appearance">衣着外观</option>
-                </select>
-              </label>
-              <label>前 K <input id="search-top-k-input" name="top_k" type="number" min="1" value="5" /></label>
-              <label>阈值方案 <input id="search-threshold-input" name="threshold_profile" value="normal" /></label>
-              <button type="submit" class="primary">图库检索</button>
-            </form>
-          </div>
         </div>
         <div class="split-grid">
           <div class="list-panel">
@@ -296,13 +361,12 @@ const template = `
             <p>查询、更新、删除人员记录，或按模态重建向量索引。</p>
           </div>
           <div class="form-grid">
-            <label>人员 ID <input id="person-id-input" placeholder="person_id" /></label>
+            <label>人员 ID <input id="person-id-input" placeholder="人员 ID" /></label>
             <label>新显示名称 <input id="person-display-name-input" placeholder="可选" /></label>
             <label class="span-2">新元数据（JSON） <input id="person-metadata-input" placeholder='{"department":"A"}' /></label>
             <button type="button" id="person-get-button">查询人员</button>
             <button type="button" id="person-patch-button">更新人员</button>
             <button type="button" id="person-delete-button" class="danger">删除人员</button>
-            <button type="button" id="gallery-copy-button">复制检索示例</button>
           </div>
           <div class="form-grid compact">
             <label>重建模态
@@ -366,7 +430,7 @@ const template = `
         </form>
         <div class="card">
           <div class="form-grid compact">
-            <label class="span-2">视频流 ID <input id="stream-id-input" placeholder="stream_id" /></label>
+            <label class="span-2">视频流 ID <input id="stream-id-input" placeholder="视频流 ID" /></label>
             <button type="button" id="stream-get-button">详情</button>
             <button type="button" id="stream-start-button" class="primary">启动分析</button>
             <button type="button" id="stream-stop-button">停止分析</button>
@@ -399,48 +463,58 @@ const template = `
         </div>
       </section>
 
-      <section class="view" data-view="admin">
+      <section class="view" data-view="admin-threshold">
         <div class="view-header">
           <div class="section-title">
-            <h2>治理配置</h2>
-            <p>管理比对阈值、数据保留、导出和备份。</p>
+            <h2>比对阈值</h2>
+            <p>按 profile 更新各模态比对阈值。</p>
           </div>
           <button type="button" id="admin-refresh-button">刷新治理状态</button>
+        </div>
+        <form id="threshold-form" class="form-grid">
+          <label>阈值方案 <input id="threshold-profile-input" value="normal" /></label>
+          <label>人体 <input id="threshold-body-input" type="number" min="0" max="1" step="0.01" /></label>
+          <label>人脸 <input id="threshold-face-input" type="number" min="0" max="1" step="0.01" /></label>
+          <label>步态 <input id="threshold-gait-input" type="number" min="0" max="1" step="0.01" /></label>
+          <label>外观 <input id="threshold-appearance-input" type="number" min="0" max="1" step="0.01" /></label>
+          <label>融合 <input id="threshold-fusion-input" type="number" min="0" max="1" step="0.01" /></label>
+          <button type="submit" class="primary">保存阈值</button>
+        </form>
+        <div id="admin-threshold-json" class="json-view data-viewer" role="region" aria-label="比对阈值响应数据"></div>
+      </section>
+
+      <section class="view" data-view="admin-data">
+        <div class="view-header">
+          <div class="section-title">
+            <h2>数据保留与备份</h2>
+            <p>清理和备份会按当前租户执行。</p>
+          </div>
         </div>
         <div class="split-grid">
           <div class="card">
             <div class="section-title">
-              <h3>比对阈值</h3>
-              <p>按 profile 更新各模态阈值。</p>
-            </div>
-            <form id="threshold-form" class="form-grid">
-              <label>阈值方案 <input id="threshold-profile-input" value="normal" /></label>
-              <label>人体 <input id="threshold-body-input" type="number" min="0" max="1" step="0.01" /></label>
-              <label>人脸 <input id="threshold-face-input" type="number" min="0" max="1" step="0.01" /></label>
-              <label>步态 <input id="threshold-gait-input" type="number" min="0" max="1" step="0.01" /></label>
-              <label>外观 <input id="threshold-appearance-input" type="number" min="0" max="1" step="0.01" /></label>
-              <label>融合 <input id="threshold-fusion-input" type="number" min="0" max="1" step="0.01" /></label>
-              <button type="submit" class="primary">保存阈值</button>
-            </form>
-          </div>
-          <div class="card">
-            <div class="section-title">
-              <h3>数据保留与备份</h3>
-              <p>清理和备份会按当前租户执行。</p>
+              <h3>数据保留</h3>
+              <p>按保留天数清理过期数据，需输入确认词。</p>
             </div>
             <form id="retention-form" class="form-grid">
               <label>保留天数 <input id="retention-days-input" type="number" min="0" value="30" /></label>
               <label>输入 cleanup 确认 <input id="retention-confirm-input" placeholder="cleanup" /></label>
               <button type="submit" class="danger">执行清理</button>
             </form>
+          </div>
+          <div class="card">
+            <div class="section-title">
+              <h3>数据备份</h3>
+              <p>导出当前租户数据，需输入确认词。</p>
+            </div>
             <form id="backup-form" class="form-grid">
-              <label>updated_since <input id="backup-updated-since-input" type="number" min="0" placeholder="可选 Unix 秒" /></label>
+              <label>更新时间起点 (updated_since) <input id="backup-updated-since-input" type="number" min="0" placeholder="可选 Unix 秒" /></label>
               <label>输入 backup 确认 <input id="backup-confirm-input" placeholder="backup" /></label>
               <button type="submit">创建备份</button>
             </form>
           </div>
         </div>
-        <div id="admin-json" class="json-view data-viewer" role="region" aria-label="治理响应数据"></div>
+        <div id="admin-data-json" class="json-view data-viewer" role="region" aria-label="数据保留与备份响应数据"></div>
       </section>
 
       <section class="view" data-view="alerts">
@@ -462,6 +536,7 @@ const template = `
       </section>
     </section>
   </main>
+  </div>
   <div id="vision-lightbox" class="vision-lightbox hidden" aria-hidden="true"></div>`;
 
 function qs(selector) {
@@ -501,9 +576,48 @@ function isScalar(value) {
   return value === null || ["string", "number", "boolean"].includes(typeof value);
 }
 
-function compactValue(value) {
+function formatDateTime(val) {
+  let date;
+  if (typeof val === "number") {
+    date = new Date(val < 10000000000 ? val * 1000 : val);
+  } else if (typeof val === "string") {
+    date = new Date(val);
+  } else {
+    return String(val);
+  }
+  if (isNaN(date.getTime())) return String(val);
+  
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  const hh = String(date.getHours()).padStart(2, "0");
+  const mm = String(date.getMinutes()).padStart(2, "0");
+  const ss = String(date.getSeconds()).padStart(2, "0");
+  return `${y}年${m}月${d}日 ${hh}时${mm}分${ss}秒`;
+}
+
+function compactValue(value, key = "") {
   if (value === null || value === undefined) return "--";
   if (typeof value === "boolean") return value ? "是" : "否";
+  
+  const isTime = (typeof key === "string" && (
+    key.toLowerCase().endsWith("_at") || 
+    key.toLowerCase().includes("time") || 
+    key.toLowerCase().includes("date") || 
+    key.toLowerCase() === "since" || 
+    key.toLowerCase().endsWith("_since")
+  ))
+  || (typeof value === "number" && value > 1000000000 && value < 3000000000)
+  || (typeof value === "string" && /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}/.test(value));
+  
+  if (isTime) {
+    try {
+      return formatDateTime(value);
+    } catch (e) {
+      // ignore and fallback
+    }
+  }
+  
   if (typeof value === "number") return Number.isInteger(value) ? String(value) : String(Number(value.toFixed(6)));
   if (typeof value === "string") return localizeValue(value) || "--";
   if (Array.isArray(value)) return `${value.length} 项`;
@@ -512,10 +626,10 @@ function compactValue(value) {
 }
 
 const fieldLabels = {
-  aliases: "别名",
+  aliases: "模型别名映射",
   appearance: "衣着外观",
   async_mode: "异步模式",
-  backend: "后端",
+  backend: "后端服务",
   body: "人体",
   candidate_count: "候选数",
   confidence: "置信度",
@@ -525,7 +639,7 @@ const fieldLabels = {
   data: "数据",
   detail: "详情",
   display_name: "显示名称",
-  dry_run: "仅预演",
+  dry_run: "仅预演（模拟运行）",
   error_rate: "错误率",
   face: "人脸",
   face_count: "人脸数",
@@ -542,13 +656,13 @@ const fieldLabels = {
   max_detections: "最大目标数",
   message: "消息",
   metadata: "元数据",
-  method: "方法",
-  modality: "模态",
+  method: "请求方法",
+  modality: "特征模态",
   modalities: "模态列表",
   model_id: "模型 ID",
   name: "名称",
-  pagination: "分页",
-  path: "路径",
+  pagination: "分页信息",
+  path: "请求路径",
   people: "人员列表",
   person_count: "人员数",
   person_id: "人员 ID",
@@ -563,49 +677,167 @@ const fieldLabels = {
   stream_id: "视频流 ID",
   stream_url: "流地址",
   tenant_id: "租户 ID",
-  threshold: "阈值",
+  threshold: "比对阈值",
   threshold_profile: "阈值方案",
-  thresholds: "阈值",
-  top_k: "前 K",
+  thresholds: "各模态阈值",
+  top_k: "前 K 个候选",
   total: "总数",
   track_count: "轨迹数",
   transport: "传输方式",
   updated_since: "更新时间起点",
   version: "版本",
   visuals: "可视化结果",
+  storage: "数据库存储",
+  vector_store: "特征向量库",
+  object_storage: "对象存储服务",
+  task_queue: "异步任务队列",
+  stream_worker: "视频流分析进程",
+  security: "安全鉴权配置",
+  rbac_enabled: "角色控制 (RBAC)",
+  auth_required: "强制鉴权",
+  tenant_header_required: "强制要求租户头",
+  trusted_hosts: "可信任主机列表",
+  require_encryption: "传输加密",
+  configured_backends: "已配置后台服务",
+  app_version: "系统应用版本",
+  metrics: "系统指标监控",
+  error_count: "推理请求错误数",
+  requests_total: "推理总请求量",
+  errors_total: "推理总错误数",
+  p95_seconds: "P95 响应耗时（秒）",
+  timing: "耗时分析",
+  total_seconds: "总耗时（秒）",
+  image_count: "图片数",
+  frame_count: "视频帧数",
+  result_count: "检测结果数",
+  passed: "比对是否通过",
+  risk: "安全与质量风险",
+  adjusted_threshold: "自适应调整阈值",
+  quality_adjusted_similarity: "质量自适应相似度",
+  people_limit: "人员导出上限",
+  jobs_limit: "任务导出上限",
+  streams_limit: "视频流导出上限",
+  next_cursor: "下一页分页游标",
+  reindex_modality: "索引重建特征模态",
+  updated_at: "最后更新时间",
+  created_at: "任务创建时间",
+  finished_at: "任务结束时间",
+  frame_interval: "视频抽帧间隔",
+  max_frames: "最大允许抽帧数",
+  device: "运行设备 (GPU/CPU)",
+  running: "运行状态",
+  error: "错误信息",
+  feature_count: "已注册特征数",
+  quality_score: "特征质量分",
+  quality: "特征质量",
+  combined_quality_score: "多模态组合质量分",
+  features: "特征数据列表",
+  job: "后台任务状态",
+  result: "任务提取结果",
+  stream: "注册视频流详情",
+  person: "人员注册详情",
+  gpu_worker_requests_total: "总推理请求计数",
+  gpu_worker_predict_errors_total: "通用预测错误计数",
+  gpu_worker_persons_errors_total: "人体解析错误计数",
+  gpu_worker_embeddings_errors_total: "特征向量错误计数",
+  gpu_worker_tracks_errors_total: "轨迹跟踪错误计数",
+  gpu_worker_vision_errors_total: "图像解析错误计数",
+  gpu_worker_gpu_memory_free_bytes: "显卡空闲显存 (字节)",
+  gpu_worker_inference_seconds: "显卡推理延迟 (秒)",
+  gpu_worker_requests_active: "当前活跃推理量",
+  comparison: "比对结果明细",
+  reason: "未通过原因/异常",
+  checks: "告警健康指标检查",
+  config: "本地评估配置",
+  maxErrorRate: "容许最大错误率",
+  maxP95Latency: "容许最大P95延迟 (秒)",
+  minFreeGpuMemoryGb: "容许最小空闲显存 (GB)",
+  current: "当前监测值",
+  limit: "监控阈值线",
+  ok: "指标状态是否正常",
+  unit: "指标计量单位",
+  scale: "单位换算倍率",
+  totals: "总计数据汇总",
+  configured: "配置状态",
+  driver: "驱动类型",
+  host: "主机地址",
+  port: "端口号",
+  database: "数据库名称",
+  user: "用户名",
+  url: "流地址",
+  jobs: "任务统计",
+  streams: "视频流统计",
+  active_workers: "活跃工作进程",
+  max_workers: "最大工作进程数",
+  queue_length: "队列排队长度",
+  redis_url: "Redis 连接地址",
+  postgres_url: "PostgreSQL 连接地址",
+  sqlite_path: "SQLite 文件路径",
+  index: "索引类型",
+  production_ready: "生产环境就绪",
+  note: "备注",
+  notes: "备注",
+  storage_dir_configured: "存储目录已配置",
+  queued_messages: "队列排队消息数",
+  active_sessions: "活动会话数",
+  sessions: "会话列表",
+  daemon_entrypoint: "守护进程入口",
+  configured: "已配置",
+  driver_available: "驱动是否可用",
+  bucket_configured: "存储桶已配置",
+  endpoint_configured: "服务终结点已配置",
+  region_configured: "区域已配置",
 };
 
 const valueLabels = {
   active: "运行中",
   appearance: "衣着外观",
-  backup: "备份",
+  backup: "系统备份",
   body: "人体",
-  cleanup: "清理",
+  cleanup: "数据清理",
   completed: "已完成",
-  detect: "检测",
-  embeddings: "向量",
-  error: "错误",
+  detect: "通用检测",
+  embeddings: "提取特征向量",
+  error: "发生异常",
   face: "人脸",
-  failed: "失败",
+  failed: "失败已终止",
   false: "否",
-  fusion: "融合",
-  gait: "步态",
+  fusion: "多模态融合",
+  gait: "步态序列",
   inactive: "未启用",
-  loaded: "已加载",
+  loaded: "模型已加载",
   no: "否",
-  normal: "标准",
-  ok: "正常",
-  pending: "待处理",
-  persons: "人体",
-  pose: "姿态",
+  normal: "标准模式",
+  ok: "指标正常",
+  pending: "排队中",
+  persons: "人体解析",
+  pose: "姿态解析",
   ready: "就绪",
-  running: "运行中",
+  running: "分析中",
   success: "成功",
   text: "文本",
-  tracks: "轨迹",
+  tracks: "轨迹提取",
   true: "是",
-  unloaded: "未加载",
+  unloaded: "模型未加载",
   yes: "是",
+  local: "本地服务",
+  json: "JSON持久化",
+  sqlite: "SQLite数据库",
+  postgresql: "Postgres数据库",
+  memory: "运行内存",
+  none: "无",
+  null: "无",
+  local_numpy: "本地 NumPy 矩阵",
+  numpy_matrix_topk: "NumPy 矩阵 Top-K",
+  local_file: "本地文件系统",
+  local_background: "本地后台线程",
+  daemon_capable_session_controller: "守护进程会话控制器",
+  json_file: "JSON 文件持久化",
+  pgvector: "Postgres 向量索引",
+  qdrant: "Qdrant 向量数据库",
+  external_queue: "外部消息队列",
+  "use portrait_vector_backend=pgvector or qdrant for production galleries.": "生产环境推荐使用 pgvector 或 qdrant 向量后端。",
+  "run the daemon entrypoint as a separate process for production stream pulling.": "生产环境请将守护进程作为独立进程运行以拉取视频流。",
 };
 
 function localizeValue(value) {
@@ -637,10 +869,14 @@ function payloadLabel(name) {
     vision: "图片解析响应",
     compare: "人像比对响应",
     gallery: "人员库响应",
+    enroll: "人员注册响应",
+    search: "以图搜人响应",
     jobs: "视频任务响应",
     streams: "视频流响应",
     models: "模型管理响应",
     admin: "治理配置响应",
+    "admin-threshold": "比对阈值响应",
+    "admin-data": "数据保留与备份响应",
     alerts: "告警评估响应",
   };
   return labels[name] || "接口响应";
@@ -668,13 +904,13 @@ function collectInsights(payload) {
   const items = [];
   preferred.forEach((key) => {
     if (source[key] !== undefined && isScalar(source[key])) {
-      items.push({ label: titleFromKey(key), value: compactValue(source[key]) });
+      items.push({ label: titleFromKey(key), value: compactValue(source[key], key) });
     }
   });
   Object.entries(source).forEach(([key, value]) => {
     if (items.length >= 6) return;
     if (preferred.includes(key) || !isScalar(value)) return;
-    items.push({ label: titleFromKey(key), value: compactValue(value) });
+    items.push({ label: titleFromKey(key), value: compactValue(value, key) });
   });
   if (!items.length && Array.isArray(root)) {
     items.push({ label: "记录数", value: root.length });
@@ -682,9 +918,9 @@ function collectInsights(payload) {
   return items.slice(0, 6);
 }
 
-function objectPreview(value) {
-  if (isScalar(value)) return escapeHtml(compactValue(value));
-  return escapeHtml(compactValue(value));
+function objectPreview(value, key = "") {
+  if (isScalar(value)) return escapeHtml(compactValue(value, key));
+  return escapeHtml(compactValue(value, key));
 }
 
 function tableFromObjects(items) {
@@ -702,7 +938,7 @@ function tableFromObjects(items) {
       <table class="data-table">
         <thead><tr>${keys.map((key) => `<th>${escapeHtml(titleFromKey(key))}</th>`).join("")}</tr></thead>
         <tbody>
-          ${rows.map((row) => `<tr>${keys.map((key) => `<td>${objectPreview(row[key])}</td>`).join("")}</tr>`).join("")}
+          ${rows.map((row) => `<tr>${keys.map((key) => `<td>${objectPreview(row[key], key)}</td>`).join("")}</tr>`).join("")}
         </tbody>
       </table>
     </div>`;
@@ -717,7 +953,7 @@ function kvGridMarkup(value) {
       ${entries.map(([key, item]) => `
         <div class="data-kv-item">
           <span>${escapeHtml(titleFromKey(key))}</span>
-          <strong title="${escapeHtml(compactValue(item))}">${escapeHtml(compactValue(item))}</strong>
+          <strong title="${escapeHtml(compactValue(item, key))}">${escapeHtml(compactValue(item, key))}</strong>
         </div>`).join("")}
     </div>`;
 }
@@ -730,7 +966,7 @@ function listMarkup(items) {
 
 function dataSectionMarkup(key, value, index) {
   const label = titleFromKey(key);
-  const summary = compactValue(value);
+  const summary = compactValue(value, key);
   let body = "";
   if (Array.isArray(value)) {
     body = tableFromObjects(value) || listMarkup(value) || `<div class="data-empty">暂无记录</div>`;
@@ -743,7 +979,7 @@ function dataSectionMarkup(key, value, index) {
       .join("");
     body = [body, nested].filter(Boolean).join("");
   } else {
-    body = `<div class="data-list"><li>${objectPreview(value)}</li></div>`;
+    body = `<div class="data-list"><li>${objectPreview(value, key)}</li></div>`;
   }
   return `
     <details class="data-section" ${index < 2 ? "open" : ""}>
@@ -835,10 +1071,21 @@ function fitVisualSize(width, height, maxWidth, maxHeight, allowUpscale = false)
 }
 
 function setView(view) {
+  // 兼容旧版本残留的视图名（如 gallery/admin 已拆分），无匹配时回退到总览
+  if (!document.querySelector(`[data-view="${view}"]`)) view = "overview";
   state.view = view;
   localStorage.setItem("portraitHubView", view);
   qsa("[data-view]").forEach((item) => item.classList.toggle("active", item.dataset.view === view));
-  qsa("[data-nav]").forEach((item) => item.setAttribute("aria-pressed", String(item.dataset.nav === view)));
+  const activeNav = qsa("[data-nav]").reduce((found, item) => {
+    const isActive = item.dataset.nav === view;
+    item.setAttribute("aria-pressed", String(isActive));
+    return isActive ? item : found;
+  }, null);
+  // 自动展开当前视图所在的侧栏分组，便于定位
+  const activeGroup = activeNav ? activeNav.closest(".nav-group") : null;
+  qsa(".nav-group").forEach((group) => {
+    group.open = group === activeGroup;
+  });
   closeVisionLightbox();
 }
 
@@ -1329,10 +1576,10 @@ function renderDashboard(summary) {
   qs("#metric-gpu-free").textContent = metrics.gpu_free_gb === null ? "--" : `${formatNumber(metrics.gpu_free_gb, 1)}GB`;
   const status = summary.status || {};
   renderBadges("#overview-badges", [
-    { label: "图库", value: status.configured_backends?.gallery || "--", tone: "ok" },
-    { label: "向量库", value: status.configured_backends?.vector || "--", tone: "ok" },
-    { label: "对象存储", value: status.configured_backends?.object_storage || "--", tone: "ok" },
-    { label: "队列", value: status.configured_backends?.task_queue || "--", tone: "ok" },
+    { label: "图库", value: localizeValue(status.configured_backends?.gallery || "--"), tone: "ok" },
+    { label: "向量库", value: localizeValue(status.configured_backends?.vector || "--"), tone: "ok" },
+    { label: "对象存储", value: localizeValue(status.configured_backends?.object_storage || "--"), tone: "ok" },
+    { label: "队列", value: localizeValue(status.configured_backends?.task_queue || "--"), tone: "ok" },
     { label: "RBAC", value: status.security?.rbac_enabled ? "开启" : "关闭", tone: status.security?.rbac_enabled ? "ok" : "warn" },
   ]);
 }
@@ -1444,7 +1691,7 @@ async function refreshStreams() {
 
 async function refreshAdmin() {
   const [status, thresholds] = await Promise.all([api("/v1/admin/status"), api("/v1/thresholds")]);
-  renderPayload("admin", "#admin-json", { status, thresholds });
+  renderPayload("admin-threshold", "#admin-threshold-json", { status, thresholds });
 }
 
 async function refreshAll() {
@@ -1595,8 +1842,14 @@ async function submitGalleryEnroll(event) {
     return;
   }
   const payload = await api("/v1/gallery/enroll", { method: "POST", body: form });
-  renderPayload("gallery", "#gallery-json", payload);
-  renderGallerySummary({ people: [payload.person], tenant_id: state.tenantId });
+  renderPayload("enroll", "#enroll-json", payload);
+  const person = payload.person || {};
+  renderSummary("#enroll-summary", [
+    { label: "人员 ID", value: person.person_id || "--" },
+    { label: "显示名称", value: person.display_name || "--" },
+    { label: "特征数", value: person.feature_count ?? (person.features || []).length ?? "--" },
+    { label: "租户", value: payload.tenant_id || state.tenantId },
+  ]);
   await refreshGallery();
 }
 
@@ -1607,8 +1860,8 @@ async function submitGallerySearch(event) {
     return;
   }
   const payload = await api("/v1/gallery/search", { method: "POST", body: new FormData(event.target) });
-  renderPayload("gallery", "#gallery-json", payload);
-  renderSummary("#gallery-summary", [
+  renderPayload("search", "#search-json", payload);
+  renderSummary("#search-summary", [
     { label: "候选数", value: payload.candidate_count ?? 0 },
     { label: "前 K", value: payload.query?.top_k ?? "--" },
     { label: "模态", value: payload.query?.modality ?? "--" },
@@ -1650,24 +1903,51 @@ async function submitStream(event) {
   renderPayload("streams", "#streams-json", payload);
 }
 
-function saveAuth() {
+function handleLogin(event) {
+  if (event) event.preventDefault();
   state.tenantId = qs("#tenant-input").value.trim() || "default";
   state.apiKey = qs("#api-key-input").value.trim();
   state.bearer = qs("#bearer-input").value.trim();
+  state.isLoggedIn = true;
   localStorage.setItem("portraitHubTenant", state.tenantId);
   localStorage.setItem("portraitHubApiKey", state.apiKey);
   localStorage.setItem("portraitHubBearer", state.bearer);
+  localStorage.setItem("portraitHubLoggedIn", "true");
   closeSocket("job");
   closeSocket("stream");
   renderIntegrationSnippet();
   updateSnippetButtons();
-  setStatus("凭证已保存");
+  updateAuthView();
+}
+
+function handleLogout() {
+  state.isLoggedIn = false;
+  localStorage.setItem("portraitHubLoggedIn", "false");
+  closeSocket("job");
+  closeSocket("stream");
+  updateAuthView();
+}
+
+function updateAuthView() {
+  if (state.isLoggedIn) {
+    qs("#login-view").classList.add("hidden");
+    qs("#console-view").classList.remove("hidden");
+    qs("#current-tenant-display").textContent = state.tenantId;
+    wrapHandler(refreshAll)();
+  } else {
+    qs("#login-view").classList.remove("hidden");
+    qs("#console-view").classList.add("hidden");
+    qs("#tenant-input").value = state.tenantId;
+    qs("#api-key-input").value = state.apiKey;
+    qs("#bearer-input").value = state.bearer;
+  }
 }
 
 function setupEvents() {
   qsa("[data-nav]").forEach((button) => button.addEventListener("click", () => setView(button.dataset.nav)));
   qsa("[data-nav-shortcut]").forEach((button) => button.addEventListener("click", () => setView(button.dataset.navShortcut)));
-  qs("#save-auth-button").addEventListener("click", saveAuth);
+  qs("#login-form").addEventListener("submit", handleLogin);
+  qs("#logout-button").addEventListener("click", handleLogout);
   qs("#refresh-button").addEventListener("click", wrapHandler(refreshAll));
   qs("#dashboard-refresh-button").addEventListener("click", wrapHandler(refreshDashboard));
   qs("#models-refresh-button").addEventListener("click", wrapHandler(refreshModels));
@@ -1828,11 +2108,11 @@ function setupEvents() {
       const value = qs(selector).value;
       if (value !== "") payload[key] = Number(value);
     });
-    renderPayload("admin", "#admin-json", await api(`/v1/thresholds/${encodeURIComponent(profile)}`, { method: "PUT", json: payload }));
+    renderPayload("admin-threshold", "#admin-threshold-json", await api(`/v1/thresholds/${encodeURIComponent(profile)}`, { method: "PUT", json: payload }));
   }));
   qs("#retention-form").addEventListener("submit", wrapHandler(async (event) => {
     event.preventDefault();
-    renderPayload("admin", "#admin-json", await api("/v1/admin/retention/cleanup", {
+    renderPayload("admin-data", "#admin-data-json", await api("/v1/admin/retention/cleanup", {
       method: "POST",
       json: { retention_days: Number(qs("#retention-days-input").value), confirm: qs("#retention-confirm-input").value },
     }));
@@ -1840,7 +2120,7 @@ function setupEvents() {
   qs("#backup-form").addEventListener("submit", wrapHandler(async (event) => {
     event.preventDefault();
     const updatedSince = qs("#backup-updated-since-input").value;
-    renderPayload("admin", "#admin-json", await api("/v1/admin/backup", {
+    renderPayload("admin-data", "#admin-data-json", await api("/v1/admin/backup", {
       method: "POST",
       json: {
         updated_since: updatedSince === "" ? null : Number(updatedSince),
@@ -1862,15 +2142,12 @@ function setupEvents() {
 
 function init() {
   qs("#console-app").innerHTML = template;
-  qs("#tenant-input").value = state.tenantId;
-  qs("#api-key-input").value = state.apiKey;
-  qs("#bearer-input").value = state.bearer;
   setAlertInputs();
   renderIntegrationSnippet();
   setupEvents();
   updateSnippetButtons();
   setView(state.view);
-  wrapHandler(refreshAll)();
+  updateAuthView();
 }
 
 init();
