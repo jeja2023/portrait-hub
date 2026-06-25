@@ -1,18 +1,22 @@
 from copy import deepcopy
 from typing import Any
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, UploadFile, status
 
 from app.observability import logger
 from app.portrait_async import run_blocking_io
 from app.portrait_audit import audit_event
 from app.portrait_auth import permission_dependency
+from app.portrait_pagination import normalize_list_pagination, page_items_keyset
 from app.portrait_jobs import (
     VIDEO_JOBS,
+    VIDEO_JOBS_LOCK,
+    JobStatus,
     VideoJob,
     create_video_job,
     get_video_job,
     job_key,
+    normalize_job_status,
     persist_video_job,
     public_video_job_result,
     remove_video_job,
@@ -82,6 +86,43 @@ async def v1_create_video_job(
         await run_blocking_io(remove_video_job, job.job_id, tenant_id)
         raise
     return portrait_success(request_id, {"job": job.public_dict(include_result=False), "queue_message": queue_message.public_dict()})
+
+
+@router.get("/v1/jobs/video/results", dependencies=[Depends(permission_dependency("jobs:read"))])
+async def v1_list_video_job_results(
+    limit: int | None = Query(None),
+    offset: int | None = Query(None),
+    cursor: str | None = Query(None),
+    ctx: PortraitRequestContext = Depends(portrait_request_context),
+) -> dict[str, Any]:
+    request_id = ctx.request_id
+    tenant_id = ctx.tenant_id
+    pagination_request = normalize_list_pagination(limit, offset, cursor)
+    with VIDEO_JOBS_LOCK:
+        items: list[dict[str, Any]] = []
+        for job in VIDEO_JOBS.values():
+            if job.tenant_id != tenant_id:
+                continue
+            if normalize_job_status(job.status) != JobStatus.COMPLETED:
+                continue
+            result = job.result if isinstance(job.result, dict) else None
+            frames = result.get("frames") if isinstance(result, dict) else None
+            if not isinstance(frames, list) or not frames:
+                continue
+            items.append({"sort_key": -float(job.updated_at or job.created_at or 0.0), "job_id": job.job_id, "job": job})
+        items.sort(key=lambda item: (item["sort_key"], item["job_id"]))
+        page, pagination = page_items_keyset(
+            items,
+            limit=pagination_request.limit,
+            offset=pagination_request.offset,
+            cursor=pagination_request.cursor,
+            key_fields=["sort_key", "job_id"],
+        )
+    results = [
+        {"job": item["job"].public_dict(include_result=False), "result": public_video_job_result(item["job"].result)}
+        for item in page
+    ]
+    return portrait_success(request_id, {"results": results, **pagination})
 
 
 @router.get("/v1/jobs/{job_id}", dependencies=[Depends(permission_dependency("jobs:read"))])

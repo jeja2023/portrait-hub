@@ -1105,6 +1105,7 @@ async def test_run_video_job_is_tenant_scoped(monkeypatch) -> None:
     assert VIDEO_JOBS[job_key("tenant-b", "job_same")].status == "completed"
     frame = VIDEO_JOBS[job_key("tenant-b", "job_same")].result["frames"][0]
     assert frame["embedding_dim"] == 64
+    assert frame["thumbnail"].startswith("data:image/jpeg;base64,")
     assert "embedding" not in frame
     assert "filename" not in VIDEO_JOBS[job_key("tenant-b", "job_same")].result["metadata"]
     assert "video_bytes" not in VIDEO_JOBS[job_key("tenant-b", "job_same")].result["metadata"]

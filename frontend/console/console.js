@@ -105,6 +105,7 @@ const template = `
           <summary>视频分析</summary>
           <div class="nav-group-items">
             <button type="button" class="nav-item" data-nav="video">离线视频</button>
+            <button type="button" class="nav-item" data-nav="video-results">解析结果</button>
             <button type="button" class="nav-item" data-nav="streams">视频流</button>
           </div>
         </details>
@@ -149,6 +150,7 @@ const template = `
           <button type="button" class="product-tile" data-nav-shortcut="compare"><strong>人像比对</strong><span>人脸、人体、步态、多模态融合和批量比对。</span></button>
           <button type="button" class="product-tile" data-nav-shortcut="gallery-search"><strong>人员库查询</strong><span>人员注册、图库检索、候选排序和人员资料维护。</span></button>
           <button type="button" class="product-tile" data-nav-shortcut="streams"><strong>视频服务</strong><span>离线视频轨迹任务、视频流注册、事件查询和实时订阅。</span></button>
+          <button type="button" class="product-tile" data-nav-shortcut="video-results"><strong>解析结果图片</strong><span>集中查看所有已完成离线视频任务的解析帧缩略图。</span></button>
         </div>
         <div class="split-grid">
           <div class="card">
@@ -410,7 +412,28 @@ const template = `
           </div>
           <div id="job-ws-status" class="ws-status">未订阅任务进度</div>
           <div id="jobs-summary" class="result-summary"></div>
+          <div id="job-visuals" class="result-visual-grid"></div>
           <div id="jobs-json" class="json-view data-viewer" role="region" aria-label="视频任务响应数据"></div>
+        </div>
+      </section>
+
+
+      <section class="view" data-view="video-results">
+        <div class="view-header">
+          <div class="section-title">
+            <h2>视频解析结果</h2>
+            <p>汇总当前租户已完成视频任务的解析帧图片，便于集中查看和核验。</p>
+          </div>
+          <button type="button" id="video-results-refresh-button">刷新结果</button>
+        </div>
+        <div class="result-panel">
+          <div class="section-title">
+            <h3>全部结果图片</h3>
+            <p>点击任意缩略图可放大查看。</p>
+          </div>
+          <div id="video-results-summary" class="result-summary"></div>
+          <div id="video-results-visuals" class="result-visual-grid"></div>
+          <div id="video-results-json" class="json-view data-viewer" role="region" aria-label="视频解析结果数据"></div>
         </div>
       </section>
 
@@ -597,6 +620,7 @@ function formatDateTime(val) {
 }
 
 function compactValue(value, key = "") {
+  if (typeof value === "string" && value.startsWith("data:image/")) return "[image]";
   if (value === null || value === undefined) return "--";
   if (typeof value === "boolean") return value ? "是" : "否";
   
@@ -1033,14 +1057,30 @@ function renderJson(selector, payload) {
   node.textContent = JSON.stringify(payload || {}, null, 2);
 }
 
+
+function isImageData(value) {
+  return typeof value === "string" && value.startsWith("data:image/");
+}
+
+function sanitizeVideoPayload(value) {
+  if (Array.isArray(value)) return value.map(sanitizeVideoPayload);
+  if (!value || typeof value !== "object") return value;
+  const output = {};
+  Object.entries(value).forEach(([key, item]) => {
+    output[key] = key === "thumbnail" && isImageData(item) ? "[image]" : sanitizeVideoPayload(item);
+  });
+  return output;
+}
+
 function renderPayload(name, selector, payload) {
   state.latestPayloads[name] = payload;
+  const renderedPayload = ["jobs", "job", "video-results"].includes(name) ? sanitizeVideoPayload(payload) : payload;
   const node = qs(selector);
   if (node && node.classList.contains("data-viewer")) {
-    renderDataViewer(selector, payload, name);
+    renderDataViewer(selector, renderedPayload, name);
     return;
   }
-  renderJson(selector, payload);
+  renderJson(selector, renderedPayload);
 }
 
 function escapeHtml(value) {
@@ -1087,6 +1127,7 @@ function setView(view) {
     group.open = group === activeGroup;
   });
   closeVisionLightbox();
+  if (view === "video-results" && state.isLoggedIn) refreshVideoResults().catch(() => {});
 }
 
 function closeSocket(name) {
@@ -1109,7 +1150,13 @@ function watchJsonSocket(name, path, statusSelector, outputSelector) {
     try {
       const payload = JSON.parse(event.data);
       state.latestPayloads[name] = payload;
-      renderDataViewer(outputSelector, payload, name);
+      if (name === "job") {
+        renderJobSummary(payload);
+        renderJobVisuals(payload);
+        renderPayload("job", outputSelector, payload);
+      } else {
+        renderDataViewer(outputSelector, payload, name);
+      }
     } catch {
       const payload = { transport: "text", message: event.data };
       state.latestPayloads[name] = payload;
@@ -1695,7 +1742,7 @@ async function refreshAdmin() {
 }
 
 async function refreshAll() {
-  await Promise.allSettled([refreshDashboard(), refreshModels(), refreshGallery(), refreshStreams(), refreshAdmin()]);
+  await Promise.allSettled([refreshDashboard(), refreshModels(), refreshGallery(), refreshStreams(), refreshAdmin(), refreshVideoResults()]);
 }
 
 function renderGallerySummary(payload) {
@@ -1757,15 +1804,101 @@ function renderCompareSummary(payload) {
   ]);
 }
 
+
+function videoFrameVisual(frame, frameIndex, jobLabel) {
+  const src = frame?.thumbnail || frame?.image || frame?.preview || "";
+  if (!src) return null;
+  const label = jobLabel ? `${jobLabel} / 第 ${frameIndex + 1} 帧` : `第 ${frameIndex + 1} 帧`;
+  return {
+    item: {
+      src,
+      name: label,
+      label,
+      width: frame.width || 1,
+      height: frame.height || 1,
+    },
+    frame,
+    frameIndex,
+  };
+}
+
+function videoJobVisualInfo(payload) {
+  const data = payloadData(payload);
+  const job = data.job || {};
+  const result = data.result || job.result || {};
+  const frames = Array.isArray(result.frames) ? result.frames : [];
+  const jobLabel = job.job_id || data.job_id || "视频任务";
+  return {
+    data,
+    job,
+    result,
+    frames,
+    visuals: frames.map((frame, index) => videoFrameVisual(frame, index, jobLabel)).filter(Boolean),
+  };
+}
+
+function renderVideoVisualGrid(selector, visuals, emptyText) {
+  const node = qs(selector);
+  if (!node) return;
+  node.dataset.visualSource = selector;
+  node.__visuals = visuals;
+  if (!visuals.length) {
+    node.innerHTML = emptyText ? `<div class="result-empty">${escapeHtml(emptyText)}</div>` : "";
+    return;
+  }
+  node.innerHTML = visuals.map((entry, index) => resultVisualMarkup(entry, index, { variant: "thumb", maxWidth: 180, maxHeight: 130 })).join("");
+}
+
+function renderJobVisuals(payload) {
+  const info = videoJobVisualInfo(payload);
+  renderVideoVisualGrid("#job-visuals", info.visuals, info.job.status === "completed" ? "该任务暂无可视化结果" : "解析进行中，有帧结果后会实时显示");
+}
+
+function videoResultsVisualInfo(payload) {
+  const data = payloadData(payload);
+  const results = Array.isArray(data.results) ? data.results : [];
+  const visuals = [];
+  results.forEach((entry) => {
+    const job = entry.job || {};
+    const result = entry.result || {};
+    const frames = Array.isArray(result.frames) ? result.frames : [];
+    const jobLabel = job.job_id || "视频任务";
+    frames.forEach((frame, index) => {
+      const visual = videoFrameVisual(frame, index, jobLabel);
+      if (visual) visuals.push(visual);
+    });
+  });
+  return { data, results, visuals };
+}
+
+function renderVideoResults(payload) {
+  const info = videoResultsVisualInfo(payload);
+  renderSummary("#video-results-summary", [
+    { label: "任务数", value: info.results.length },
+    { label: "图片数", value: info.visuals.length },
+    { label: "租户", value: state.tenantId || "--" },
+  ]);
+  renderVideoVisualGrid("#video-results-visuals", info.visuals, "暂无已完成的视频解析图片");
+  renderPayload("video-results", "#video-results-json", payload);
+}
+
+async function refreshVideoResults() {
+  const payload = await api("/v1/jobs/video/results?limit=48");
+  renderVideoResults(payload);
+  return payload;
+}
+
 function renderJobSummary(payload) {
   const data = payloadData(payload);
   const job = data.job || {};
-  const result = data.result || {};
+  const result = data.result || job.result || {};
+  const frames = Array.isArray(result.frames) ? result.frames : [];
+  const visualCount = frames.filter((frame) => isImageData(frame?.thumbnail || frame?.image || frame?.preview)).length;
   renderSummary("#jobs-summary", [
     { label: "任务状态", value: job.status || "--" },
     { label: "进度", value: job.progress !== undefined ? `${formatNumber(job.progress * 100, 1)}%` : "--" },
-    { label: "轨迹数", value: result.track_count ?? job.result?.track_count ?? "--" },
-    { label: "人员数", value: result.person_count ?? job.result?.person_count ?? "--" },
+    { label: "解析帧", value: result.frame_count ?? frames.length ?? "--" },
+    { label: "结果图片", value: visualCount },
   ]);
 }
 
@@ -1879,6 +2012,7 @@ async function submitVideoJob(event) {
   const jobId = payload.job?.job_id;
   if (jobId) qs("#job-id-input").value = jobId;
   renderJobSummary(payload);
+  renderJobVisuals(payload);
   renderPayload("jobs", "#jobs-json", payload);
 }
 
@@ -1934,6 +2068,7 @@ function updateAuthView() {
     qs("#console-view").classList.remove("hidden");
     qs("#current-tenant-display").textContent = state.tenantId;
     wrapHandler(refreshAll)();
+    if (state.view === "video-results") wrapHandler(refreshVideoResults)();
   } else {
     qs("#login-view").classList.remove("hidden");
     qs("#console-view").classList.add("hidden");
@@ -1965,12 +2100,16 @@ function setupEvents() {
   qs("#search-form").addEventListener("submit", wrapHandler(submitGallerySearch));
   qs("#video-form").addEventListener("submit", wrapHandler(submitVideoJob));
   qs("#stream-form").addEventListener("submit", wrapHandler(submitStream));
-  qs("#vision-visuals").addEventListener("click", (event) => {
+  ["#vision-visuals", "#job-visuals", "#video-results-visuals"].forEach((selector) => qs(selector).addEventListener("click", (event) => {
     const trigger = event.target instanceof Element ? event.target.closest("[data-result-visual-index]") : null;
     if (!trigger) return;
     const index = Number(trigger.dataset.resultVisualIndex);
-    if (Number.isFinite(index)) openVisionLightbox(index);
-  });
+    if (Number.isFinite(index)) {
+      const visuals = Array.isArray(event.currentTarget.__visuals) ? event.currentTarget.__visuals : state.visionResultVisuals;
+      state.visionResultVisuals = visuals;
+      openVisionLightbox(index);
+    }
+  }));
   qs("#vision-lightbox").addEventListener("click", (event) => {
     const target = event.target instanceof Element ? event.target.closest("[data-lightbox-close]") : null;
     if (target) closeVisionLightbox();
@@ -2040,6 +2179,7 @@ function setupEvents() {
     if (!id) return;
     const payload = await api(`/v1/jobs/${id}`);
     renderJobSummary(payload);
+    renderJobVisuals(payload);
     renderPayload("jobs", "#jobs-json", payload);
   }));
   qs("#job-result-button").addEventListener("click", wrapHandler(async () => {
@@ -2047,6 +2187,7 @@ function setupEvents() {
     if (!id) return;
     const payload = await api(`/v1/jobs/${id}/result`);
     renderJobSummary(payload);
+    renderJobVisuals(payload);
     renderPayload("jobs", "#jobs-json", payload);
   }));
   qs("#job-cancel-button").addEventListener("click", wrapHandler(async () => {
@@ -2054,6 +2195,7 @@ function setupEvents() {
     if (!id) return;
     const payload = await api(`/v1/jobs/${id}/cancel`, { method: "POST" });
     renderJobSummary(payload);
+    renderJobVisuals(payload);
     renderPayload("jobs", "#jobs-json", payload);
   }));
   qs("#job-watch-button").addEventListener("click", () => {
@@ -2061,6 +2203,7 @@ function setupEvents() {
     if (!id) return;
     watchJsonSocket("job", `/ws/jobs/${id}`, "#job-ws-status", "#jobs-json");
   });
+  qs("#video-results-refresh-button").addEventListener("click", wrapHandler(refreshVideoResults));
 
   qs("#stream-get-button").addEventListener("click", wrapHandler(async () => {
     const id = encodedInput("#stream-id-input", "视频流 ID");

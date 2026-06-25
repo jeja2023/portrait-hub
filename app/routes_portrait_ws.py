@@ -69,7 +69,7 @@ async def ws_job_progress(websocket: WebSocket, job_id: str) -> None:
         job = get_video_job(job_id, tenant_id=tenant_id)
         if job is None:
             return {"status": "not_found", "job_id": job_id, "tenant_id": tenant_id}
-        return {"status": "success", "job": job.public_dict(include_result=False)}
+        return {"status": "success", "job": job.public_dict(include_result=isinstance(job.result, dict))}
 
     await send_until_closed(websocket, payload)
 

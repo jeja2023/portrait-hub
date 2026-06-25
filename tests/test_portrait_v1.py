@@ -790,6 +790,38 @@ def test_v1_video_job_cancel_rolls_back_when_audit_fails(monkeypatch) -> None:
     assert stored.cancel_requested is False
 
 
+
+def test_v1_video_job_results_lists_completed_jobs_with_thumbnails(monkeypatch) -> None:
+    client = TestClient(app)
+    VIDEO_JOBS.clear()
+    job = VideoJob(job_id="job_video_done", tenant_id="default", filename="video.mp4", status="completed")
+    job.result = {
+        "metadata": {"filename": "video.mp4"},
+        "frame_count": 1,
+        "analysis_mode": "async_media_fallback",
+        "frames": [
+            {
+                "frame_index": 0,
+                "source_frame_index": 0,
+                "width": 64,
+                "height": 64,
+                "thumbnail": "data:image/jpeg;base64,abcd",
+                "quality": {"score": 0.9},
+                "appearance": {"quality": {"score": 0.9}},
+                "embedding_dim": 64,
+            }
+        ],
+    }
+    VIDEO_JOBS[job_key(job.tenant_id, job.job_id)] = job
+
+    response = client.get("/v1/jobs/video/results")
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["results"][0]["job"]["job_id"] == "job_video_done"
+    assert data["results"][0]["result"]["frames"][0]["thumbnail"].startswith("data:image/jpeg;base64,")
+
+
 def test_v1_video_job_not_found_does_not_echo_job_id() -> None:
     client = TestClient(app)
     VIDEO_JOBS.clear()

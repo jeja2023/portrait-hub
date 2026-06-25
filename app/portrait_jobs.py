@@ -1,12 +1,16 @@
 import asyncio
+import base64
 import hashlib
 import inspect
 import threading
 from copy import deepcopy
 from dataclasses import dataclass, field
 from enum import StrEnum
+from io import BytesIO
 from typing import Any
 from uuid import uuid4
+
+from PIL import Image
 
 from app.media.quality import assess_image_quality
 from app.media.video_decode import extract_video_frames_from_bytes
@@ -80,6 +84,20 @@ def video_job_identifier_fingerprint(value: str) -> str:
 def public_video_job_error(error: Any) -> str | None:
     return VIDEO_JOB_ERROR_MESSAGE if error else None
 
+
+
+
+def image_thumbnail_data_url(image: Any, max_side: int = 240) -> str | None:
+    if not isinstance(image, Image.Image):
+        return None
+    preview = image.copy()
+    if preview.mode not in {"RGB", "L"}:
+        preview = preview.convert("RGB")
+    preview.thumbnail((max_side, max_side))
+    buffer = BytesIO()
+    preview.save(buffer, format="JPEG", quality=78, optimize=True)
+    data = base64.b64encode(buffer.getvalue()).decode("ascii")
+    return f"data:image/jpeg;base64,{data}"
 
 def public_video_job_result(result: dict[str, Any] | None) -> dict[str, Any] | None:
     if not isinstance(result, dict):
@@ -380,6 +398,7 @@ async def run_video_job(
         job.progress = 0.05
         job.error = None
         job.next_retry_at = None
+        job.result = None
         job.attempts = normalize_retry_count(job.attempts) + 1
         job.updated_at = wall_time()
         await run_blocking_io(persist_video_job, job)
@@ -413,9 +432,18 @@ async def run_video_job(
                         else index,
                         "width": image.width,
                         "height": image.height,
+                        "thumbnail": image_thumbnail_data_url(image),
                         "quality": quality,
                         "appearance": appearance,
                         "embedding_dim": 64,
+                    }
+                )
+                job.result = public_video_job_result(
+                    {
+                        "metadata": metadata,
+                        "frames": frame_results,
+                        "frame_count": len(frame_results),
+                        "analysis_mode": "async_media_fallback",
                     }
                 )
                 job.progress = 0.10 + 0.85 * ((index + 1) / total)
