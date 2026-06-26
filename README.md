@@ -115,6 +115,8 @@ v1 已加入的生产加固：
 
 Ubuntu 服务器完整部署步骤见 [docs/deployment/DEPLOY_UBUNTU.md](docs/deployment/DEPLOY_UBUNTU.md)。
 
+CPU-only（无 GPU / 无 CUDA）部署请使用独立编排：`docker compose -f docker-compose.cpu.yml up -d --build`。该编排使用 `Dockerfile.cpu` 和 `requirements-cpu.txt` / `requirements-cpu.lock`，容器内安装 CPU 版 `onnxruntime==1.20.1`，并在 compose 中固定 `FORCE_CPU="true"`，不会被通用 `.env` 里的 `FORCE_CPU=false` 覆盖。CPU 编排同时使用 `CPU_TRUSTED_HOSTS` 独立设置 Host 白名单，默认包含 `cpu-worker-0`，避免 GPU 部署的 `TRUSTED_HOSTS` 隐式覆盖 CPU 服务名。
+
 运行镜像基于 `nvidia/cuda:12.4.1-cudnn-runtime-ubuntu22.04`，容器内使用 Python 3.12。当前依赖固定为 `onnxruntime-gpu==1.20.1`，需要 CUDA 12.x 运行库与 cuDNN 9（CUDA 12 的镜像 tag 使用不带数字的 `-cudnn-`，内置 cuDNN 9）。宿主机 NVIDIA 驱动需满足 CUDA 12.4 的最低版本要求（Linux ≥ 550.54.14）。默认开启 `CPU_FALLBACK_ENABLED=true`，无 CUDA/GPU 时会使用 `CPUExecutionProvider` 继续推理；生产若必须强制 GPU，可设为 `false`。
 
 ## 目录结构

@@ -1576,13 +1576,17 @@ body.lightbox-open {
   }
 
   .sidebar-nav {
-    flex-direction: row;
-    flex-wrap: wrap;
+    flex-direction: column;
+    flex-wrap: nowrap;
     margin-bottom: 16px;
   }
 
+  .nav-group {
+    width: 100%;
+  }
+
   .sidebar-nav button {
-    width: auto;
+    width: 100%;
   }
 
   .console-main {

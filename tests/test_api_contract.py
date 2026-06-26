@@ -207,6 +207,13 @@ def test_console_assets_use_light_structured_response_panels() -> None:
     assert "--code" not in css_body
     assert "#111827" not in css_body
     assert "background: #fbfdff" in css_body
+    assert "解析处理" in js_body
+    assert "比对检索" in js_body
+    assert "视频解析结果" in js_body
+    assert "视频流解析" in js_body
+    assert "人员库查询" not in js_body
+    assert "智能解析" not in js_body
+    assert "视频分析" not in js_body
 
 
 def test_api_docs_can_be_disabled_in_production(monkeypatch) -> None:

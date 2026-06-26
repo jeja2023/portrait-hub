@@ -34,6 +34,11 @@ METRICS: dict[str, float] = {
     "postprocess_seconds_sum": 0,
 }
 REQUEST_STATUS_COUNTS: dict[str, int] = {}
+# 每个活跃的执行提供程序（例如 CUDA / CPU / TensorRT）所创建的会话数。
+PROVIDER_SESSION_COUNTS: dict[str, int] = {}
+# 按原因（cuda_provider_unavailable / session_init_failed / ...）分类的 CPU 回退次数。
+# 在 GPU 主机上，非零率表示运行时状态下降；在 FORCE_CPU 主机上则保持为空。
+CPU_FALLBACK_COUNTS: dict[str, int] = {}
 METRICS_LOCK = threading.RLock()
 PROMETHEUS_CACHE: dict[str, Any] = {"expires_at": 0.0, "text": ""}
 
@@ -74,6 +79,20 @@ def observe_request_status(status_code: int) -> None:
         PROMETHEUS_CACHE["expires_at"] = 0.0
 
 
+def record_session_provider(provider: str) -> None:
+    """记录一次 ONNX 会话最终落在哪个执行 provider 上（CUDA/CPU/TensorRT）。"""
+    with METRICS_LOCK:
+        PROVIDER_SESSION_COUNTS[provider] = PROVIDER_SESSION_COUNTS.get(provider, 0) + 1
+        PROMETHEUS_CACHE["expires_at"] = 0.0
+
+
+def record_cpu_fallback(reason: str) -> None:
+    """记录一次“本想用 GPU 却回退到 CPU”的事件及其原因。FORCE_CPU 的主动选择不计入。"""
+    with METRICS_LOCK:
+        CPU_FALLBACK_COUNTS[reason] = CPU_FALLBACK_COUNTS.get(reason, 0) + 1
+        PROMETHEUS_CACHE["expires_at"] = 0.0
+
+
 def observe_histogram(metric: str, value: float) -> None:
     histogram = HISTOGRAMS.get(metric)
     if histogram is None:
@@ -91,11 +110,11 @@ def observe_histogram(metric: str, value: float) -> None:
 
 
 def gpu_memory_metrics() -> list[dict[str, int]]:
-    try:  # pragma: no cover - requires an NVIDIA runtime
-        import pynvml  # optional, from nvidia-ml-py (requirements-prod-optional.txt)
+    try:  # pragma: no cover - 需要 NVIDIA 运行环境
+        import pynvml  # 可选，来自 nvidia-ml-py (requirements-prod-optional.txt)
     except Exception:
         return []
-    try:  # pragma: no cover - requires an NVIDIA runtime
+    try:  # pragma: no cover - 需要 NVIDIA 运行环境
         pynvml.nvmlInit()
         devices = []
         for index in range(pynvml.nvmlDeviceGetCount()):
@@ -167,102 +186,106 @@ def build_prometheus_metrics() -> str:
     loaded_models = len(MODEL_REGISTRY)
     active_stream_sessions = sum(1 for item in STREAM_WORKER_SESSIONS.values() if item.get("status") == "running")
     stream_backpressure_drops = sum(int(item.get("backpressure_drops", 0)) for item in STREAM_WORKER_SESSIONS.values())
+    stream_reconnects_total = sum(int(item.get("restart_count", 0)) for item in STREAM_WORKER_SESSIONS.values())
     queue_depth = max(0, len(getattr(GPU_SEMAPHORE, "_waiters", []) or []))
     device_queue_depths = {
         int(device_id): max(0, len(getattr(semaphore, "_waiters", []) or []))
         for device_id, semaphore in GPU_DEVICE_SEMAPHORES.items()
     }
     lines = [
-        "# HELP gpu_worker_requests_total Total HTTP requests observed by app middleware.",
+        "# HELP gpu_worker_requests_total 应用中间件接收到的 HTTP 请求总数。",
         "# TYPE gpu_worker_requests_total counter",
         f"gpu_worker_requests_total {METRICS.get('requests_total', 0)}",
-        "# HELP gpu_worker_predict_requests_total Total predict requests.",
+        "# HELP gpu_worker_predict_requests_total 预测请求总数。",
         "# TYPE gpu_worker_predict_requests_total counter",
         f"gpu_worker_predict_requests_total {METRICS.get('predict_requests_total', 0)}",
-        "# HELP gpu_worker_predict_errors_total Total predict errors.",
+        "# HELP gpu_worker_predict_errors_total 预测错误总数。",
         "# TYPE gpu_worker_predict_errors_total counter",
         f"gpu_worker_predict_errors_total {METRICS.get('predict_errors_total', 0)}",
-        "# HELP gpu_worker_model_loads_total Total successful model loads.",
+        "# HELP gpu_worker_model_loads_total 成功的模型加载总数。",
         "# TYPE gpu_worker_model_loads_total counter",
         f"gpu_worker_model_loads_total {METRICS.get('model_loads_total', 0)}",
-        "# HELP gpu_worker_model_load_errors_total Total failed model loads.",
+        "# HELP gpu_worker_model_load_errors_total 失败的模型加载总数。",
         "# TYPE gpu_worker_model_load_errors_total counter",
         f"gpu_worker_model_load_errors_total {METRICS.get('model_load_errors_total', 0)}",
-        "# HELP gpu_worker_cache_hits_total Total model cache hits.",
+        "# HELP gpu_worker_cache_hits_total 模型缓存命中总数。",
         "# TYPE gpu_worker_cache_hits_total counter",
         f"gpu_worker_cache_hits_total {METRICS.get('cache_hits_total', 0)}",
-        "# HELP gpu_worker_cache_misses_total Total model cache misses.",
+        "# HELP gpu_worker_cache_misses_total 模型缓存未命中总数。",
         "# TYPE gpu_worker_cache_misses_total counter",
         f"gpu_worker_cache_misses_total {METRICS.get('cache_misses_total', 0)}",
-        "# HELP gpu_worker_model_unloads_total Total model unloads or evictions.",
+        "# HELP gpu_worker_model_unloads_total 模型卸载或逐出的总数。",
         "# TYPE gpu_worker_model_unloads_total counter",
         f"gpu_worker_model_unloads_total {METRICS.get('model_unloads_total', 0)}",
-        "# HELP gpu_worker_loaded_models Current loaded model count.",
+        "# HELP gpu_worker_loaded_models 当前加载的模型数。",
         "# TYPE gpu_worker_loaded_models gauge",
         f"gpu_worker_loaded_models {loaded_models}",
-        "# HELP gpu_worker_gpu_queue_depth Current number of coroutines waiting for global GPU access.",
+        "# HELP gpu_worker_gpu_queue_depth 当前等待全局 GPU 访问的协程数。",
         "# TYPE gpu_worker_gpu_queue_depth gauge",
         f"gpu_worker_gpu_queue_depth {queue_depth}",
-        "# HELP gpu_worker_gpu_device_queue_depth Current number of coroutines waiting for a GPU device queue.",
+        "# HELP gpu_worker_gpu_device_queue_depth 当前等待 GPU 设备队列的协程数。",
         "# TYPE gpu_worker_gpu_device_queue_depth gauge",
-        "# HELP gpu_worker_stream_active_sessions Current running stream worker session count.",
+        "# HELP gpu_worker_stream_active_sessions 当前运行的流处理工作器会话数。",
         "# TYPE gpu_worker_stream_active_sessions gauge",
         f"gpu_worker_stream_active_sessions {active_stream_sessions}",
-        "# HELP gpu_worker_stream_backpressure_drops_total Total frames dropped by stream backpressure.",
+        "# HELP gpu_worker_stream_backpressure_drops_total 因流背压丢弃的总帧数。",
         "# TYPE gpu_worker_stream_backpressure_drops_total counter",
         f"gpu_worker_stream_backpressure_drops_total {stream_backpressure_drops}",
-        "# HELP gpu_worker_inference_seconds_sum Sum of inference execution seconds.",
+        "# HELP gpu_worker_stream_reconnects_total 所有会话中流处理工作器的重连总次数。",
+        "# TYPE gpu_worker_stream_reconnects_total counter",
+        f"gpu_worker_stream_reconnects_total {stream_reconnects_total}",
+        "# HELP gpu_worker_inference_seconds_sum 推理执行时间累计秒数。",
         "# TYPE gpu_worker_inference_seconds_sum counter",
         f"gpu_worker_inference_seconds_sum {METRICS.get('inference_seconds_sum', 0)}",
-        "# HELP gpu_worker_queue_seconds_sum Sum of queue wait seconds.",
+        "# HELP gpu_worker_queue_seconds_sum 队列等待时间累计秒数。",
         "# TYPE gpu_worker_queue_seconds_sum counter",
         f"gpu_worker_queue_seconds_sum {METRICS.get('queue_seconds_sum', 0)}",
-        "# HELP gpu_worker_model_load_seconds_sum Sum of model load seconds.",
+        "# HELP gpu_worker_model_load_seconds_sum 模型加载时间累计秒数。",
         "# TYPE gpu_worker_model_load_seconds_sum counter",
         f"gpu_worker_model_load_seconds_sum {METRICS.get('model_load_seconds_sum', 0)}",
-        "# HELP gpu_worker_persons_requests_total Total /infer/persons requests.",
+        "# HELP gpu_worker_persons_requests_total /infer/persons 请求总数。",
         "# TYPE gpu_worker_persons_requests_total counter",
         f"gpu_worker_persons_requests_total {METRICS.get('persons_requests_total', 0)}",
-        "# HELP gpu_worker_persons_errors_total Total /infer/persons errors.",
+        "# HELP gpu_worker_persons_errors_total /infer/persons 错误总数。",
         "# TYPE gpu_worker_persons_errors_total counter",
         f"gpu_worker_persons_errors_total {METRICS.get('persons_errors_total', 0)}",
-        "# HELP gpu_worker_persons_detected_total Total detected persons.",
+        "# HELP gpu_worker_persons_detected_total 检测到的总人数。",
         "# TYPE gpu_worker_persons_detected_total counter",
         f"gpu_worker_persons_detected_total {METRICS.get('persons_detected_total', 0)}",
-        "# HELP gpu_worker_persons_frames_total Total frames processed by person detection.",
+        "# HELP gpu_worker_persons_frames_total 行人检测处理的总帧数。",
         "# TYPE gpu_worker_persons_frames_total counter",
         f"gpu_worker_persons_frames_total {METRICS.get('persons_frames_total', 0)}",
-        "# HELP gpu_worker_embeddings_requests_total Total /infer/person-embeddings requests.",
+        "# HELP gpu_worker_embeddings_requests_total /infer/person-embeddings 请求总数。",
         "# TYPE gpu_worker_embeddings_requests_total counter",
         f"gpu_worker_embeddings_requests_total {METRICS.get('embeddings_requests_total', 0)}",
-        "# HELP gpu_worker_embeddings_errors_total Total /infer/person-embeddings errors.",
+        "# HELP gpu_worker_embeddings_errors_total /infer/person-embeddings 错误总数。",
         "# TYPE gpu_worker_embeddings_errors_total counter",
         f"gpu_worker_embeddings_errors_total {METRICS.get('embeddings_errors_total', 0)}",
-        "# HELP gpu_worker_tracks_requests_total Total /infer/person-tracks requests.",
+        "# HELP gpu_worker_tracks_requests_total /infer/person-tracks 请求总数。",
         "# TYPE gpu_worker_tracks_requests_total counter",
         f"gpu_worker_tracks_requests_total {METRICS.get('tracks_requests_total', 0)}",
-        "# HELP gpu_worker_tracks_errors_total Total /infer/person-tracks errors.",
+        "# HELP gpu_worker_tracks_errors_total /infer/person-tracks 错误总数。",
         "# TYPE gpu_worker_tracks_errors_total counter",
         f"gpu_worker_tracks_errors_total {METRICS.get('tracks_errors_total', 0)}",
-        "# HELP gpu_worker_vision_requests_total Total generic /vision inference requests.",
+        "# HELP gpu_worker_vision_requests_total 通用 /vision 推理请求总数。",
         "# TYPE gpu_worker_vision_requests_total counter",
         f"gpu_worker_vision_requests_total {METRICS.get('vision_requests_total', 0)}",
-        "# HELP gpu_worker_vision_errors_total Total generic /vision inference errors.",
+        "# HELP gpu_worker_vision_errors_total 通用 /vision 推理错误总数。",
         "# TYPE gpu_worker_vision_errors_total counter",
         f"gpu_worker_vision_errors_total {METRICS.get('vision_errors_total', 0)}",
-        "# HELP gpu_worker_vision_images_total Total images processed by generic /vision inference.",
+        "# HELP gpu_worker_vision_images_total 通用 /vision 推理处理的总图像数。",
         "# TYPE gpu_worker_vision_images_total counter",
         f"gpu_worker_vision_images_total {METRICS.get('vision_images_total', 0)}",
-        "# HELP gpu_worker_decode_seconds_sum Sum of image decode seconds.",
+        "# HELP gpu_worker_decode_seconds_sum 图像解码时间累计秒数。",
         "# TYPE gpu_worker_decode_seconds_sum counter",
         f"gpu_worker_decode_seconds_sum {METRICS.get('decode_seconds_sum', 0)}",
-        "# HELP gpu_worker_preprocess_seconds_sum Sum of preprocessing seconds.",
+        "# HELP gpu_worker_preprocess_seconds_sum 预处理时间累计秒数。",
         "# TYPE gpu_worker_preprocess_seconds_sum counter",
         f"gpu_worker_preprocess_seconds_sum {METRICS.get('preprocess_seconds_sum', 0)}",
-        "# HELP gpu_worker_postprocess_seconds_sum Sum of postprocessing seconds.",
+        "# HELP gpu_worker_postprocess_seconds_sum 后处理时间累计秒数。",
         "# TYPE gpu_worker_postprocess_seconds_sum counter",
         f"gpu_worker_postprocess_seconds_sum {METRICS.get('postprocess_seconds_sum', 0)}",
-        "# HELP gpu_worker_model_config_info Configured model metadata. Value is always 1.",
+        "# HELP gpu_worker_model_config_info 已配置的模型元数据。值始终为 1。",
         "# TYPE gpu_worker_model_config_info gauge",
     ]
     for model, config in sorted(MODEL_CONFIGS.items()):
@@ -277,15 +300,33 @@ def build_prometheus_metrics() -> str:
 
     lines.extend(
         [
-            "# HELP gpu_worker_model_loaded_info Loaded model metadata. Value is always 1.",
+            "# HELP gpu_worker_model_session_provider_total 每个活动执行提供程序创建的 ONNX 会话总数。",
+            "# TYPE gpu_worker_model_session_provider_total counter",
+        ]
+    )
+    for provider, count in sorted(PROVIDER_SESSION_COUNTS.items()):
+        lines.append(f'gpu_worker_model_session_provider_total{{provider="{metric_label(provider)}"}} {count}')
+
+    lines.extend(
+        [
+            "# HELP gpu_worker_cpu_fallback_total 预期 GPU 运行时回退到 CPU 的总次数，按原因分类。",
+            "# TYPE gpu_worker_cpu_fallback_total counter",
+        ]
+    )
+    for reason, count in sorted(CPU_FALLBACK_COUNTS.items()):
+        lines.append(f'gpu_worker_cpu_fallback_total{{reason="{metric_label(reason)}"}} {count}')
+
+    lines.extend(
+        [
+            "# HELP gpu_worker_model_loaded_info 已加载的模型元数据。值始终为 1。",
             "# TYPE gpu_worker_model_loaded_info gauge",
-            "# HELP gpu_worker_model_file_bytes Model artifact file size in bytes.",
+            "# HELP gpu_worker_model_file_bytes 模型构件文件大小（字节）。",
             "# TYPE gpu_worker_model_file_bytes gauge",
-            "# HELP gpu_worker_model_load_count_total Model load count in this worker.",
+            "# HELP gpu_worker_model_load_count_total 该工作器中模型加载总次数。",
             "# TYPE gpu_worker_model_load_count_total counter",
-            "# HELP gpu_worker_model_inference_count_total Model inference count in this worker.",
+            "# HELP gpu_worker_model_inference_count_total 该工作器中模型推理总次数。",
             "# TYPE gpu_worker_model_inference_count_total counter",
-            "# HELP gpu_worker_model_last_used_at_seconds Last model use time as Unix timestamp.",
+            "# HELP gpu_worker_model_last_used_at_seconds 最后一次模型使用时间的 Unix 时间戳。",
             "# TYPE gpu_worker_model_last_used_at_seconds gauge",
         ]
     )
@@ -304,19 +345,19 @@ def build_prometheus_metrics() -> str:
         lines.append(f"gpu_worker_model_load_count_total{{{labels}}} {bundle.get('load_count', 0)}")
         lines.append(f"gpu_worker_model_inference_count_total{{{labels}}} {bundle.get('inference_count', 0)}")
         lines.append(f"gpu_worker_model_last_used_at_seconds{{{labels}}} {bundle.get('last_used_at', 0)}")
-    append_histogram(lines, "inference_seconds", "Inference execution latency in seconds.")
-    append_histogram(lines, "queue_seconds", "Inference queue wait latency in seconds.")
-    append_histogram(lines, "model_load_seconds", "Model load latency in seconds.")
-    append_histogram(lines, "decode_seconds", "Image or video decode latency in seconds.")
-    append_histogram(lines, "preprocess_seconds", "Preprocess latency in seconds.")
-    append_histogram(lines, "postprocess_seconds", "Postprocess latency in seconds.")
+    append_histogram(lines, "inference_seconds", "推理执行延迟（秒）。")
+    append_histogram(lines, "queue_seconds", "推理队列等待延迟（秒）。")
+    append_histogram(lines, "model_load_seconds", "模型加载延迟（秒）。")
+    append_histogram(lines, "decode_seconds", "图像或视频解码延迟（秒）。")
+    append_histogram(lines, "preprocess_seconds", "预处理延迟（秒）。")
+    append_histogram(lines, "postprocess_seconds", "后处理延迟（秒）。")
     lines.extend(
         [
-            "# HELP gpu_worker_gpu_memory_used_bytes GPU memory currently used by device.",
+            "# HELP gpu_worker_gpu_memory_used_bytes 按设备分类的当前已用 GPU 内存字节数。",
             "# TYPE gpu_worker_gpu_memory_used_bytes gauge",
-            "# HELP gpu_worker_gpu_memory_free_bytes GPU memory currently free by device.",
+            "# HELP gpu_worker_gpu_memory_free_bytes 按设备分类的当前空闲 GPU 内存字节数。",
             "# TYPE gpu_worker_gpu_memory_free_bytes gauge",
-            "# HELP gpu_worker_gpu_memory_total_bytes GPU memory total by device.",
+            "# HELP gpu_worker_gpu_memory_total_bytes 按设备分类的 GPU 总内存字节数。",
             "# TYPE gpu_worker_gpu_memory_total_bytes gauge",
         ]
     )

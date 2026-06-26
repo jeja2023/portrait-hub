@@ -41,6 +41,8 @@ nvidia-smi
 
 能看到 GPU 列表、驱动版本、显存信息，就可以继续。
 
+如果是纯 CPU 主机，可以跳过 NVIDIA 驱动检查，直接使用 CPU-only 编排：`docker compose -f docker-compose.cpu.yml up -d --build`。该编排使用 `Dockerfile.cpu`、`requirements-cpu.txt` 和 `requirements-cpu.lock`，安装 CPU 版 `onnxruntime==1.20.1`，并在 compose 中固定 `FORCE_CPU="true"`。即使共享 `.env` 仍保留 GPU 部署默认的 `FORCE_CPU=false`，CPU 容器也会强制使用 `CPUExecutionProvider`。CPU 版 Host 白名单使用 `CPU_TRUSTED_HOSTS`，默认包含 `cpu-worker-0`。
+
 > 镜像基于 CUDA 12.4（`onnxruntime-gpu==1.20.1`，需 cuDNN 9）。宿主机 NVIDIA 驱动需满足 CUDA 12.4 的最低版本要求（Linux ≥ 550.54.14）。默认 `CPU_FALLBACK_ENABLED=true` 时，容器内 `CUDAExecutionProvider` 不可用会回退 `CPUExecutionProvider` 继续推理；生产若必须强制 GPU，请设为 `false`。`nvidia-smi` 右上角的 `CUDA Version` 表示驱动支持的最高 CUDA 版本，需 ≥ 12.4。
 
 如果没有驱动，可以用 Ubuntu 推荐驱动安装：

@@ -3,7 +3,7 @@ from pathlib import Path
 import yaml
 
 from tools.portrait_cutover_check import run_cutover_check, sha256_file
-from tools.portrait_production_readiness import check_templates
+from tools.portrait_production_readiness import check_security_controls, check_templates
 from tools.readiness_checks import check_capabilities, check_model_files, configured_model_path
 
 
@@ -76,6 +76,16 @@ def test_readiness_templates_include_cutover_and_worker_artifacts() -> None:
         ".github/workflows/ci.yml",
     ]:
         assert checks[f"template:{item}"]["ok"] is True
+
+
+def test_runtime_error_redaction_contract_holds_in_repo() -> None:
+    # 锁定运行期错误脱敏契约：响应只回 request-id、日志只记脱敏摘要。这两项由共享的
+    # inference_error_boundary 统一实现，任何路由绕过边界、内联泄露 exc 或重新引入
+    # logger.exception，都会让下面的断言转红，从而被 CI 门禁拦截。
+    checks = {item["name"]: item for item in check_security_controls(Path("."))}
+
+    assert checks["security:runtime_error_response_redaction"]["ok"] is True
+    assert checks["security:runtime_error_log_minimal_disclosure"]["ok"] is True
 
 
 def test_readiness_accepts_ready_or_production_capabilities(workspace_tmp_path: Path) -> None:
