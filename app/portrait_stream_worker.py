@@ -208,7 +208,7 @@ async def run_stream_worker_session(
     frame_handler: Callable[[Any, StreamRecord, int], Any] | None = None,
     max_reconnects: int = 3,
 ) -> dict[str, Any]:
-    """Pull a stream once per reconnect window and expose heartbeat/backpressure state."""
+    """在每个重连窗口内拉取一次视频流，并暴露心跳/背压状态。"""
     session = start_stream_worker_session(stream)
     attempts = 0
     while stream.status == StreamStatus.RUNNING and attempts <= max_reconnects:

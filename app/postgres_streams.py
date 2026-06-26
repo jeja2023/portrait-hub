@@ -145,7 +145,7 @@ def load_streams_snapshot() -> list[dict[str, Any]]:
                             "events": events_by_stream.get((row["tenant_id"], row["stream_id"]), []),
                         }
                     )
-    except Exception as exc:  # pragma: no cover - requires external database
+    except Exception as exc:  # pragma: no cover - 需要外部数据库支持
         logger.warning("postgres stream load failed: %s", exception_log_summary(exc))
         return []
     return streams

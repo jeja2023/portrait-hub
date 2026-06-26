@@ -20,9 +20,9 @@ from app.settings import (
     S3_SECRET_ACCESS_KEY,
 )
 
-try:  # pragma: no cover - optional production dependency
-    import boto3  # optional, from requirements-prod-optional.txt
-except Exception:  # pragma: no cover - exercised when dependency is absent
+try:  # pragma: no cover - 可选的生产环境依赖
+    import boto3  # 可选依赖，来自 requirements-prod-optional.txt
+except Exception:  # pragma: no cover - 当依赖不存在时执行
     boto3 = None
 
 
@@ -176,8 +176,8 @@ class S3ObjectStore(LocalObjectStore):
             raise RuntimeError("boto3 is not installed; install requirements-prod-optional.txt")
         if not S3_BUCKET:
             raise RuntimeError("S3_BUCKET is not configured")
-        # boto3 client creation is expensive (session, signer setup); reuse one
-        # client across requests instead of building it on every put/delete.
+        # boto3 客户端的创建非常昂贵（包含会话和签名器设置）；在请求之间复用同一个
+        # 客户端，而不是在每次上传/删除（put/delete）时都重新构建。
         if self._cached_client is None:
             kwargs: dict[str, Any] = {"region_name": S3_REGION or None}
             if S3_ENDPOINT_URL:

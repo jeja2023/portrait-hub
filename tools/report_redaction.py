@@ -1,4 +1,4 @@
-"""Helpers for keeping operational tool reports free of secrets."""
+"""确保运维工具报告中不包含敏感泄密信息的辅助函数。"""
 
 from __future__ import annotations
 

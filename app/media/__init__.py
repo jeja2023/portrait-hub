@@ -1,4 +1,4 @@
-"""Media decoding, sampling, quality, and stream helpers (re-export facade)."""
+"""媒体解码、采样、质量和视频流辅助函数（重新导出外观门面）。"""
 
 from app.media.frame_sampler import (
     normalize_frame_interval,

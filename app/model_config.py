@@ -1,4 +1,4 @@
-"""Model configuration access, loading, resolution, and state (re-export facade)."""
+"""模型配置的访问、加载、解析和状态（重新导出外观门面）。"""
 
 from app.model_config_access import (
     model_config,

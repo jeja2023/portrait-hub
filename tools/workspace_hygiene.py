@@ -1,4 +1,4 @@
-"""Inspect and optionally clean ignored local cache artifacts."""
+"""检查并可选地清理被忽略的本地缓存工件的脚本。"""
 
 from __future__ import annotations
 

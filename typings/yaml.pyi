@@ -1,3 +1,4 @@
+# 简体中文：YAML 模块的类型声明存根文件
 from typing import Any, IO
 
 def safe_load(stream: Any) -> Any: ...

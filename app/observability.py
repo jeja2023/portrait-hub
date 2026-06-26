@@ -124,7 +124,7 @@ def log_json(level: int, event: str, **fields: Any) -> None:
 
 @contextmanager
 def trace_span(name: str, **attributes: Any) -> Iterator[None]:
-    try:  # pragma: no cover - optional production dependency
+    try:  # pragma: no cover - 可选的生产环境依赖
         from opentelemetry import trace
     except Exception:
         yield

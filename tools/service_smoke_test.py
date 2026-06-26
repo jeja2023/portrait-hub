@@ -1,4 +1,4 @@
-"""HTTP smoke test for a running gpu-services worker or gateway."""
+"""针对运行中的 gpu-services 工作节点或网关的 HTTP 冒烟测试脚本。"""
 
 from __future__ import annotations
 

@@ -34,7 +34,7 @@ def parse_csv_env(name: str, default: str = "") -> list[str]:
     return [item.strip() for item in os.getenv(name, default).split(",") if item.strip()]
 
 
-APP_VERSION = "0.5.48"
+APP_VERSION = "0.5.49"
 MODELS_ROOT = Path(os.getenv("MODELS_ROOT", "models")).resolve()
 MODEL_CONFIG_PATH = Path(os.getenv("MODEL_CONFIG_PATH", "models.yml"))
 MODEL_CONFIG_READ_FAIL_CLOSED = parse_bool_env("MODEL_CONFIG_READ_FAIL_CLOSED", True)
@@ -70,8 +70,8 @@ DEFAULT_IOU = parse_float_env("DEFAULT_IOU", 0.45)
 DEFAULT_DETECTOR_PROJECT = os.getenv("DEFAULT_DETECTOR_PROJECT", "portrait_hub").strip() or "portrait_hub"
 DEFAULT_DETECTOR_ARTIFACT = os.getenv("DEFAULT_DETECTOR_ARTIFACT", "yolov8n.onnx").strip() or "yolov8n.onnx"
 DEFAULT_REID_ARTIFACT = os.getenv("DEFAULT_REID_ARTIFACT", "osnet_ibn_x1_0.onnx").strip() or "osnet_ibn_x1_0.onnx"
-# Cooldown before retrying a capability runtime (body embedding / person detection)
-# that failed to load or infer, instead of latching it off until process restart.
+# 在重试失败的可用性运行时（人体特征提取/人员检测）之前的冷却秒数，
+# 而不是将其一直锁定为禁用状态直至进程重启。
 RUNTIME_CAPABILITY_RETRY_COOLDOWN_SECONDS = parse_float_env("RUNTIME_CAPABILITY_RETRY_COOLDOWN_SECONDS", 60.0)
 # 主模型注册表加载失败后的冷却秒数：一个模型加载失败后，冷却窗口内的请求直接 503 快速失败，
 # 而不是每次都重新走昂贵的 hash + create_session；窗口过后自动重试，实现加载失败的自愈。
@@ -177,9 +177,8 @@ RATE_LIMIT_PER_MINUTE = parse_int_env("RATE_LIMIT_PER_MINUTE", 0)
 RATE_LIMIT_BURST = parse_int_env("RATE_LIMIT_BURST", 0)
 RATE_LIMIT_MAX_BUCKETS = parse_int_env("RATE_LIMIT_MAX_BUCKETS", 10_000)
 RATE_LIMIT_BUCKET_TTL_SECONDS = parse_int_env("RATE_LIMIT_BUCKET_TTL_SECONDS", 3600)
-# When the service runs behind a trusted reverse proxy, derive the client IP from
-# the left-most X-Forwarded-For entry. Leave disabled when directly exposed so the
-# header cannot be spoofed to forge a fresh rate-limit bucket per request.
+# 当服务运行在受信任的反向代理之后时，从最左侧的 X-Forwarded-For 条目中获取客户端 IP。
+# 直接暴露时应保持禁用，以防通过伪造该请求头来为每次请求刷新限流令牌桶。
 RATE_LIMIT_TRUST_FORWARDED_FOR = parse_bool_env("RATE_LIMIT_TRUST_FORWARDED_FOR", False)
 SECURITY_HEADERS_ENABLED = parse_bool_env("SECURITY_HEADERS_ENABLED", True)
 CONTENT_SECURITY_POLICY = os.getenv(

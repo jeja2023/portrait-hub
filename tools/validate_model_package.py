@@ -1,4 +1,4 @@
-"""Validate configured model packages before loading them in the service."""
+"""在服务中加载已配置的模型包之前，对其进行有效性验证的脚本。"""
 
 from __future__ import annotations
 
@@ -151,7 +151,7 @@ def alias_targets(alias_name: str, alias_config: Any, result: CheckResult) -> li
             weight = alias_weight(alias_name, item.get("weight", 0), result)
             if weight is None:
                 continue
-            target = validated_target(str(item["target"]))
+            target = validated_target(item["target"])
             if target:
                 candidates.append((weight, target))
         if candidates:

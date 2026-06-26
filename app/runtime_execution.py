@@ -32,7 +32,9 @@ def bundle_execution_provider(bundle: ModelBundle) -> str:
         return configured
     get_providers = getattr(bundle["session"], "get_providers", None)
     if callable(get_providers):
-        return primary_execution_provider(get_providers())
+        providers = get_providers()
+        if isinstance(providers, list):
+            return primary_execution_provider([str(p) for p in providers])
     return "CUDAExecutionProvider"
 
 
@@ -59,9 +61,9 @@ async def run_model_bundle(bundle: ModelBundle, input_array: Array) -> tuple[lis
     queue_start = now()
     model_acquired = False
     gpu_acquired = False
-    # Mark the bundle as in-use so LRU eviction cannot release the ONNX session
-    # while this inference (which awaits a worker thread) is still running.
-    bundle["in_use"] = int(bundle.get("in_use", 0)) + 1
+    # 标记该 Bundle 为使用中（in-use），以便在当前推理（该推理正在等待工作线程）
+    # 仍运行期间，LRU 淘汰机制不会释放其 ONNX 会话。
+    bundle["in_use"] = bundle.get("in_use", 0) + 1
     try:
         if model_semaphore is not None:
             await acquire_with_timeout(
@@ -91,7 +93,7 @@ async def run_model_bundle(bundle: ModelBundle, input_array: Array) -> tuple[lis
             model=str(bundle.get("key", "")),
             gpu_device_id=gpu_device_id,
             execution_provider=execution_provider,
-            batch_size=int(input_array.shape[0]) if input_array.ndim > 0 else 1,
+            batch_size=input_array.shape[0] if input_array.ndim > 0 else 1,
         ):
             raw_outputs = await asyncio.to_thread(run_session, session, input_array)
         inference_seconds = now() - inference_start
@@ -103,12 +105,12 @@ async def run_model_bundle(bundle: ModelBundle, input_array: Array) -> tuple[lis
                 model_semaphore.release()
             else:
                 bundle["lock"].release()
-        bundle["in_use"] = max(0, int(bundle.get("in_use", 1)) - 1)
-        # Refresh recency on actual inference so a hot model reached only through
-        # single-model endpoints is not evicted as "least recently used".
+        bundle["in_use"] = max(0, bundle.get("in_use", 1) - 1)
+        # 在实际推理时刷新最后使用时间，以免仅通过单模型端点
+        # 访问的热点模型被作为“最久未使用（LRU）”而淘汰。
         bundle["last_used_at"] = wall_time()
 
-    batch_size = int(input_array.shape[0]) if input_array.ndim > 0 else 1
+    batch_size = input_array.shape[0] if input_array.ndim > 0 else 1
     bundle["inference_count"] += max(1, batch_size)
     observe("queue_seconds_sum", queue_seconds)
     observe("inference_seconds_sum", inference_seconds)

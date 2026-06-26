@@ -1,4 +1,4 @@
-"""Image, video, and post-processing helpers (re-export facade)."""
+"""图像、视频以及后处理辅助函数（重新导出外观门面）。"""
 
 from app.geometry import (
     xywh_to_xyxy,

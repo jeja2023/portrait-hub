@@ -59,13 +59,12 @@ def reindex_gallery_vectors(
     from app.portrait_vector_store import VECTOR_STORE
 
     modality_key = normalize_modality(modality) if modality else None
-    model_key = str(model_id).strip() if model_id else None
+    model_key = model_id.strip() if model_id else None
     if model_key == "":
         model_key = None
 
-    # Snapshot the matching people and their feature lists under the lock so a
-    # concurrent upsert (which mutates GALLERY and person.features in place) cannot
-    # raise "changed size during iteration" during the long, I/O-bound reindex below.
+    # 在锁保护下对匹配的人员及其特征列表进行快照，以便在下方较长的 I/O 绑定重构索引过程中，
+    # 并发更新（这会就地修改 GALLERY 和 person.features）不会引发 "changed size during iteration"（迭代期间大小改变）的异常。
     with GALLERY_LOCK:
         people_with_features = [
             (person, list(person.features))
@@ -127,7 +126,7 @@ def reindex_gallery_vectors(
         "skipped_feature_count": skipped_feature_count,
         "failed_feature_count": failed_feature_count,
         "error_count": failed_feature_count,
-        "dry_run": bool(dry_run),
+        "dry_run": dry_run,
         "filters": {
             "modality": modality_key,
             "model_id": model_key,
@@ -180,7 +179,7 @@ def apply_gallery_rank_context(candidates: list[dict[str, Any]]) -> None:
         existing_risk = str(decision.get("risk", "clear"))
         raw_risk_factors = decision.get("risk_factors", [])
         risk_factors = [
-            str(risk)
+            risk
             for risk in raw_risk_factors
             if isinstance(risk, str) and risk and risk != "clear"
         ] if isinstance(raw_risk_factors, list) else []
@@ -225,7 +224,7 @@ def gallery_query_quality_gate(query_quality: float | None) -> dict[str, Any] | 
     if query_quality is None:
         return None
     try:
-        score = max(0.0, min(1.0, float(query_quality)))
+        score = max(0.0, min(1.0, query_quality))
     except (TypeError, ValueError):
         return None
 
@@ -264,7 +263,7 @@ def apply_gallery_query_quality(candidates: list[dict[str, Any]], query_quality:
 
         raw_risk_factors = decision.get("risk_factors", [])
         risk_factors = [
-            str(risk)
+            risk
             for risk in raw_risk_factors
             if isinstance(risk, str) and risk and risk != "clear"
         ] if isinstance(raw_risk_factors, list) else []

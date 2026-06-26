@@ -20,7 +20,9 @@ from app.settings import MAX_LOADED_MODELS, MODEL_CONCURRENCY_LIMIT, MODEL_LOAD_
 def bundle_providers(bundle: ModelBundle) -> list[str]:
     get_providers = getattr(bundle["session"], "get_providers", None)
     if callable(get_providers):
-        return list(get_providers())
+        providers = get_providers()
+        if isinstance(providers, list):
+            return [str(p) for p in providers]
     provider = bundle.get("execution_provider")
     return [provider] if isinstance(provider, str) and provider else []
 
@@ -102,14 +104,13 @@ async def evict_lru_if_needed(except_key: str | None = None) -> None:
 
     async with REGISTRY_LOCK:
         while len(MODEL_REGISTRY) > MAX_LOADED_MODELS:
-            # Evict the genuinely least-recently-used model, but never one that has
-            # an inference in flight (in_use > 0) — releasing its session mid-run is
-            # undefined behaviour. If every evictable model is busy, stop and let the
-            # registry exceed the cap transiently rather than corrupt a live session.
+            # 淘汰真正最久未使用的模型，但绝对不能淘汰任何有正在进行的推理（in_use > 0）的模型
+            # ——在运行中途释放会话是未定义行为。如果每个可淘汰的模型都在忙碌，
+            # 则停止淘汰并允许注册表短暂超出容量限制，而不是去损坏一个活跃的会话。
             evictable = [
                 key
                 for key, bundle in MODEL_REGISTRY.items()
-                if key != except_key and not int(bundle.get("in_use", 0))
+                if key != except_key and not bundle.get("in_use", 0)
             ]
             if not evictable:
                 return
@@ -141,7 +142,7 @@ async def touch_model(cache_key_value: str, bundle: ModelBundle) -> None:
 
 
 def model_load_cooldown_active(cache_key_value: str) -> bool:
-    return float(MODEL_LOAD_RETRY_AFTER.get(cache_key_value, 0.0)) > wall_time()
+    return MODEL_LOAD_RETRY_AFTER.get(cache_key_value, 0.0) > wall_time()
 
 
 def mark_model_load_failed(cache_key_value: str) -> None:

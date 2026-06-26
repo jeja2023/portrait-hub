@@ -1,4 +1,4 @@
-"""Run fixed-sample regression checks against a running inference service."""
+"""对运行中的推理服务运行固定样本回归测试的脚本。"""
 
 from __future__ import annotations
 
@@ -183,7 +183,12 @@ def run_regression(args: argparse.Namespace) -> dict[str, Any]:
                 raise ValueError(f"case #{index} must be a mapping")
             name = str(case.get("name") or f"case_{index}")
             expected_status = int(case.get("expected_status", 200))
-            tolerance = float(case.get("tolerance", manifest.get("tolerance", args.tolerance)))
+            tol_val = case.get("tolerance")
+            if tol_val is None:
+                tol_val = manifest.get("tolerance")
+            if tol_val is None:
+                tol_val = args.tolerance
+            tolerance = float(tol_val) if tol_val is not None else 1e-6
             case_tenant_id = str(case.get("tenant_id", tenant_id))
             actual = run_case(client, args.base_url, args.token, case_tenant_id, case, base_dir)
             comparison = CompareResult()

@@ -84,7 +84,7 @@ def load_video_jobs_snapshot() -> list[dict[str, Any]]:
                             "cancel_requested": bool(payload.get("cancel_requested", False)),
                         }
                     )
-    except Exception as exc:  # pragma: no cover - requires external database
+    except Exception as exc:  # pragma: no cover - 需要外部数据库支持
         logger.warning("postgres video job load failed: %s", exception_log_summary(exc))
         return []
     return jobs

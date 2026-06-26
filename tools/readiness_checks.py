@@ -1,4 +1,4 @@
-"""Shared production-readiness checks for model artifacts and capabilities."""
+"""针对模型工件与服务能力的共享生产就绪度校验脚本。"""
 
 from __future__ import annotations
 
@@ -99,7 +99,7 @@ def check_model_files(root: Path, models_root: Path) -> list[dict[str, Any]]:
     models, _ = model_config_entries(root)
     checks = []
     for model_id, config in sorted(models.items()):
-        path, error = configured_model_path(str(model_id), config, models_root)
+        path, error = configured_model_path(model_id, config, models_root)
         checks.append(
             {
                 "name": f"model_file:{model_id}",
