@@ -28,3 +28,17 @@ def test_prometheus_metrics_include_latency_queue_and_gpu_memory(monkeypatch) ->
     assert "gpu_worker_inference_seconds_bucket" in text
     assert "gpu_worker_queue_seconds_bucket" in text
     assert "gpu_worker_gpu_memory_used_bytes{device=\"0\"} 10" in text
+
+
+def test_prometheus_metrics_include_provider_and_fallback_counters() -> None:
+    metrics.record_session_provider("CPUExecutionProvider")
+    metrics.record_session_provider("CUDAExecutionProvider")
+    metrics.record_cpu_fallback("cuda_provider_unavailable")
+
+    text = prometheus_metrics()
+
+    assert 'gpu_worker_model_session_provider_total{provider="CPUExecutionProvider"}' in text
+    assert 'gpu_worker_model_session_provider_total{provider="CUDAExecutionProvider"}' in text
+    assert 'gpu_worker_cpu_fallback_total{reason="cuda_provider_unavailable"}' in text
+    # Stream reconnects aggregate is always emitted as a counter (0 when no sessions).
+    assert "gpu_worker_stream_reconnects_total" in text

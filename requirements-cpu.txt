@@ -1,0 +1,13 @@
+# 纯 CPU 部署依赖清单（无 GPU / 无 CUDA 主机）。
+# 与 requirements.txt 的唯一区别：用官方 CPU 版 onnxruntime 替换 onnxruntime-gpu，
+# 体积更小，且不会在每次创建会话时打印 CUDA DLL 加载失败（error 126）的噪声日志。
+# 配合 .env 中 FORCE_CPU=true 使用，可避免模型被加载两次。
+fastapi==0.111.0
+uvicorn[standard]==0.29.0
+onnxruntime==1.20.1
+numpy==1.26.4
+opencv-python-headless==4.10.0.84
+pillow==10.3.0
+pydantic==2.7.1
+PyYAML==6.0.1
+cryptography==45.0.6

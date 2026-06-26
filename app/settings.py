@@ -34,7 +34,7 @@ def parse_csv_env(name: str, default: str = "") -> list[str]:
     return [item.strip() for item in os.getenv(name, default).split(",") if item.strip()]
 
 
-APP_VERSION = "0.5.40"
+APP_VERSION = "0.5.46"
 MODELS_ROOT = Path(os.getenv("MODELS_ROOT", "models")).resolve()
 MODEL_CONFIG_PATH = Path(os.getenv("MODEL_CONFIG_PATH", "models.yml"))
 MODEL_CONFIG_READ_FAIL_CLOSED = parse_bool_env("MODEL_CONFIG_READ_FAIL_CLOSED", True)
@@ -81,6 +81,11 @@ GPU_DEVICE_IDS = [
     if item.isdigit()
 ] or [0]
 CPU_FALLBACK_ENABLED = parse_bool_env("CPU_FALLBACK_ENABLED", True)
+# 强制纯 CPU 推理：直接以 CPUExecutionProvider 建会话，跳过 CUDA-first 的探测与回退重建。
+# onnxruntime-gpu 即使在无 CUDA 库的机器上也会把 CUDA 报成“可用”，导致 create_session
+# 先建一次 CUDA 会话（内部已回退 CPU）、再因 active 无 CUDA 而丢弃重建，模型被加载两次。
+# CPU-only 部署设为 true 可消除这次重复加载与显存峰值。
+FORCE_CPU = parse_bool_env("FORCE_CPU", False)
 MODEL_CONCURRENCY_LIMIT = parse_int_env("MODEL_CONCURRENCY_LIMIT", 1)
 MODEL_QUEUE_TIMEOUT_SECONDS = parse_float_env("MODEL_QUEUE_TIMEOUT_SECONDS", 0)
 ENABLE_TENSORRT = parse_bool_env("ENABLE_TENSORRT", False)

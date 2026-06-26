@@ -5,10 +5,19 @@ import numpy as np
 import numpy.typing as npt
 import onnxruntime as ort
 
+from app.metrics import record_cpu_fallback, record_session_provider
 from app.model_config import model_config
 from app.observability import logger
 from app.portrait_response import exception_log_summary
-from app.settings import CPU_FALLBACK_ENABLED, CPU_PROVIDERS, CUDA_PROVIDERS, ENABLE_TENSORRT, TENSORRT_ENGINE_CACHE_ENABLE, TENSORRT_ENGINE_CACHE_PATH
+from app.settings import (
+    CPU_FALLBACK_ENABLED,
+    CPU_PROVIDERS,
+    CUDA_PROVIDERS,
+    ENABLE_TENSORRT,
+    FORCE_CPU,
+    TENSORRT_ENGINE_CACHE_ENABLE,
+    TENSORRT_ENGINE_CACHE_PATH,
+)
 
 Array = npt.NDArray[Any]
 
@@ -29,12 +38,19 @@ def cuda_providers_for_device(device_id: int | None = None) -> list[Any]:
 
 def runtime_provider_status(available: list[str] | None = None) -> dict[str, Any]:
     providers = available if available is not None else ort.get_available_providers()
+    cuda_available = "CUDAExecutionProvider" in providers
+    cpu_available = "CPUExecutionProvider" in providers
+    if FORCE_CPU:
+        ready = cpu_available
+    else:
+        ready = cuda_available or (CPU_FALLBACK_ENABLED and cpu_available)
     return {
         "available_providers": providers,
-        "cuda_available": "CUDAExecutionProvider" in providers,
-        "cpu_available": "CPUExecutionProvider" in providers,
+        "cuda_available": cuda_available,
+        "cpu_available": cpu_available,
         "cpu_fallback_enabled": CPU_FALLBACK_ENABLED,
-        "ready": "CUDAExecutionProvider" in providers or (CPU_FALLBACK_ENABLED and "CPUExecutionProvider" in providers),
+        "force_cpu": FORCE_CPU,
+        "ready": ready,
     }
 
 
@@ -74,6 +90,8 @@ def session_providers(
     *,
     allow_cpu_fallback: bool = True,
 ) -> list[Any]:
+    if FORCE_CPU:
+        return CPU_PROVIDERS
     cuda_providers = cuda_providers_for_device(device_id)
     if cache_key_value is None:
         return cuda_providers
@@ -115,15 +133,37 @@ def session_providers(
     ]
 
 
+def _finalize_session(session: ort.InferenceSession, *, fallback_reason: str | None = None) -> ort.InferenceSession:
+    # 记录会话最终落在哪个 provider；fallback_reason 非空时再计一次“本想用 GPU 却回退 CPU”。
+    if fallback_reason is not None:
+        record_cpu_fallback(fallback_reason)
+    get_providers = getattr(session, "get_providers", None)
+    active = get_providers() if callable(get_providers) else []
+    record_session_provider(primary_execution_provider(active) if active else "unknown")
+    return session
+
+
 def create_session(model_path: Path, cache_key_value: str | None = None, device_id: int | None = None) -> ort.InferenceSession:
     available = set(ort.get_available_providers())
+    if FORCE_CPU:
+        # 显式纯 CPU：一次性建 CPU 会话，跳过 CUDA 探测与“active 无 CUDA”导致的丢弃重建。
+        # 这是主动选择而非回退，故只计 provider、不计 cpu_fallback。
+        if "CPUExecutionProvider" not in available:
+            raise RuntimeError(
+                f"FORCE_CPU is set but CPUExecutionProvider is not available. available providers: {sorted(available)}"
+            )
+        logger.info("FORCE_CPU enabled; creating CPU-only session for model: %s", cache_key_value or model_path.name)
+        return _finalize_session(ort.InferenceSession(str(model_path), providers=CPU_PROVIDERS))
     if "CUDAExecutionProvider" not in available:
         if CPU_FALLBACK_ENABLED and "CPUExecutionProvider" in available:
             logger.warning(
                 "CUDAExecutionProvider is not available; falling back to CPU. available providers: %s",
                 sorted(available),
             )
-            return ort.InferenceSession(str(model_path), providers=CPU_PROVIDERS)
+            return _finalize_session(
+                ort.InferenceSession(str(model_path), providers=CPU_PROVIDERS),
+                fallback_reason="cuda_provider_unavailable",
+            )
         raise RuntimeError(f"CUDAExecutionProvider is not available. available providers: {sorted(available)}")
 
     requested_providers = session_providers(cache_key_value, device_id=device_id)
@@ -132,25 +172,34 @@ def create_session(model_path: Path, cache_key_value: str | None = None, device_
     except Exception as exc:
         if CPU_FALLBACK_ENABLED and "CPUExecutionProvider" in available:
             logger.warning("CUDA session creation failed; falling back to CPU: %s", exception_log_summary(exc))
-            return ort.InferenceSession(str(model_path), providers=CPU_PROVIDERS)
+            return _finalize_session(
+                ort.InferenceSession(str(model_path), providers=CPU_PROVIDERS),
+                fallback_reason="session_init_failed",
+            )
         raise
     active = session.get_providers()
     if uses_cpu_provider_only(requested_providers):
         if "CPUExecutionProvider" not in active:
             raise RuntimeError(f"model session did not enable CPU. active providers: {active}")
-        return session
+        return _finalize_session(session)
     if requested_providers and isinstance(requested_providers[0], tuple) and requested_providers[0][0] == "TensorrtExecutionProvider":
         if "TensorrtExecutionProvider" not in active:
             if CPU_FALLBACK_ENABLED and "CPUExecutionProvider" in available:
                 logger.warning("model session did not enable TensorRT; falling back to CPU. active providers: %s", active)
-                return ort.InferenceSession(str(model_path), providers=CPU_PROVIDERS)
+                return _finalize_session(
+                    ort.InferenceSession(str(model_path), providers=CPU_PROVIDERS),
+                    fallback_reason="tensorrt_not_active",
+                )
             raise RuntimeError(f"model session did not enable TensorRT. active providers: {active}")
     if "CUDAExecutionProvider" not in active:
         if CPU_FALLBACK_ENABLED and "CPUExecutionProvider" in available:
             logger.warning("model session did not enable CUDA; falling back to CPU. active providers: %s", active)
-            return ort.InferenceSession(str(model_path), providers=CPU_PROVIDERS)
+            return _finalize_session(
+                ort.InferenceSession(str(model_path), providers=CPU_PROVIDERS),
+                fallback_reason="cuda_not_active",
+            )
         raise RuntimeError(f"model session did not enable CUDA. active providers: {active}")
-    return session
+    return _finalize_session(session)
 def input_dtype(input_type: str) -> Any:
     if "double" in input_type:
         return np.float64

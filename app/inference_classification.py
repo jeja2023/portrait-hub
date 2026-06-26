@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+import numpy.typing as npt
 from PIL import Image
 
 from app.model_config import config_section, config_value, configured_input_size, model_config
@@ -35,7 +36,7 @@ async def infer_classification_images(
 
     preprocess_start = now()
 
-    def _preprocess_batch() -> np.ndarray:
+    def _preprocess_batch() -> npt.NDArray[Any]:
         # 在单个工作线程里 resize 整批，而不是每张图一次 asyncio.to_thread 跳转
         #（会串行化并产生逐图循环往返）。
         tensors = [resize_image_tensor(image, input_height, input_width, normalize) for image in images]

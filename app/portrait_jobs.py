@@ -93,7 +93,7 @@ def image_thumbnail_data_url(image: Any, max_side: int = 240) -> str | None:
     preview = image.copy()
     if preview.mode not in {"RGB", "L"}:
         preview = preview.convert("RGB")
-    preview.thumbnail((max_side, max_side))
+    preview.thumbnail((max_side, max_side))  # type: ignore[no-untyped-call]
     buffer = BytesIO()
     preview.save(buffer, format="JPEG", quality=78, optimize=True)
     data = base64.b64encode(buffer.getvalue()).decode("ascii")

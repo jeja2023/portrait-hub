@@ -132,6 +132,7 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
     person_stream_routes = (root / "app" / "routes_person_stream.py").read_text(encoding="utf-8") if (root / "app" / "routes_person_stream.py").is_file() else ""
     vision_routes = (root / "app" / "routes_vision.py").read_text(encoding="utf-8") if (root / "app" / "routes_vision.py").is_file() else ""
     runtime_execution = (root / "app" / "runtime_execution.py").read_text(encoding="utf-8") if (root / "app" / "runtime_execution.py").is_file() else ""
+    routes_inference_common = (root / "app" / "routes_inference_common.py").read_text(encoding="utf-8") if (root / "app" / "routes_inference_common.py").is_file() else ""
     runtime_face = (root / "app" / "runtime_face.py").read_text(encoding="utf-8") if (root / "app" / "runtime_face.py").is_file() else ""
     runtime_body = (root / "app" / "runtime_body.py").read_text(encoding="utf-8") if (root / "app" / "runtime_body.py").is_file() else ""
     runtime_pose = (root / "app" / "runtime_pose.py").read_text(encoding="utf-8") if (root / "app" / "runtime_pose.py").is_file() else ""
@@ -194,6 +195,8 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
     python_sdk = (root / "sdk" / "python" / "portrait_hub_client.py").read_text(encoding="utf-8") if (root / "sdk" / "python" / "portrait_hub_client.py").is_file() else ""
     node_sdk = (root / "sdk" / "node" / "portraitHubClient.js").read_text(encoding="utf-8") if (root / "sdk" / "node" / "portraitHubClient.js").is_file() else ""
     compose = (root / "docker-compose.yml").read_text(encoding="utf-8") if (root / "docker-compose.yml").is_file() else ""
+    cpu_compose = (root / "docker-compose.cpu.yml").read_text(encoding="utf-8") if (root / "docker-compose.cpu.yml").is_file() else ""
+    cpu_dockerfile = (root / "Dockerfile.cpu").read_text(encoding="utf-8") if (root / "Dockerfile.cpu").is_file() else ""
     env_example = (root / ".env.example").read_text(encoding="utf-8") if (root / ".env.example").is_file() else ""
     readme = (root / "README.md").read_text(encoding="utf-8") if (root / "README.md").is_file() else ""
     deploy_ubuntu_path = root / "docs" / "deployment" / "DEPLOY_UBUNTU.md"
@@ -973,18 +976,34 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
             ),
         },
         {
+            # 运行期推理异常一律收敛为只含 request-id 的 500，绝不把 exc 透传给客户端。
+            # 6 条 person/vision 路由通过共享上下文管理器 inference_error_boundary 统一处理，
+            # 各自只传入专属 internal_message；predict/debug 直接内联同一对调用。本检查既校验
+            # 边界助手是“唯一事实来源”，也校验每条路由确实接入了它（不存在绕过边界的裸 500）。
             "name": "security:runtime_error_response_redaction",
             "ok": (
                 "def raise_internal_error" in portrait_response
                 and '"message": detail' in portrait_response
                 and '"request_id": request_id' in portrait_response
+                # 边界助手：客户端错误原样抛出（计数但不脱敏），服务端错误转 request-id-only 500。
+                and "def inference_error_boundary" in routes_inference_common
+                and "except HTTPException:" in routes_inference_common
+                and "raise_internal_error(request_id, internal_message)" in routes_inference_common
+                # 6 条路由各自接入边界并提供专属 internal_message。
+                and 'internal_message="vision inference runtime error"' in vision_routes
+                and 'internal_message="person inference runtime error"' in person_detection_routes
+                and 'internal_message="embedding inference runtime error"' in person_embeddings_routes
+                and 'internal_message="person track inference runtime error"' in person_tracks_routes
+                and 'internal_message="video person track inference runtime error"' in person_video_routes
+                and 'internal_message="stream person track inference runtime error"' in person_stream_routes
+                and "inference_error_boundary(" in vision_routes
+                and "inference_error_boundary(" in person_detection_routes
+                and "inference_error_boundary(" in person_embeddings_routes
+                and "inference_error_boundary(" in person_tracks_routes
+                and "inference_error_boundary(" in person_video_routes
+                and "inference_error_boundary(" in person_stream_routes
+                # predict/debug 内联同一对调用。
                 and "raise_internal_error(request_id, \"inference runtime error\")" in predict_routes
-                and "raise_internal_error(request_id, \"vision inference runtime error\")" in vision_routes
-                and "raise_internal_error(request_id, \"person inference runtime error\")" in person_detection_routes
-                and "raise_internal_error(request_id, \"embedding inference runtime error\")" in person_embeddings_routes
-                and "raise_internal_error(request_id, \"person track inference runtime error\")" in person_tracks_routes
-                and "raise_internal_error(request_id, \"video person track inference runtime error\")" in person_video_routes
-                and "raise_internal_error(request_id, \"stream person track inference runtime error\")" in person_stream_routes
                 and "raise_internal_error(request_id, \"debug model output runtime error\")" in debug_routes
                 and 'detail="failed to load model runtime"' in runtime_registry
                 and "runtime error: {exc}" not in "\n".join(
@@ -997,30 +1016,34 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
                         person_video_routes,
                         person_stream_routes,
                         debug_routes,
+                        routes_inference_common,
                     ]
                 )
                 and "failed to load model runtime: {exc}" not in runtime_registry
             ),
         },
         {
+            # 服务端错误只记录脱敏摘要（exception_log_summary：类型/状态码/detail 类型），
+            # 不落地原始 exc，且禁用 logger.exception（会写完整堆栈）。边界助手统一用
+            # log_label 记录 6 条路由；predict/debug 内联同样的 logger.warning。
             "name": "security:runtime_error_log_minimal_disclosure",
             "ok": (
-                "exception_log_summary(exc)" in predict_routes
-                and "exception_log_summary(exc)" in vision_routes
-                and "exception_log_summary(exc)" in person_detection_routes
-                and "exception_log_summary(exc)" in person_embeddings_routes
-                and "exception_log_summary(exc)" in person_tracks_routes
-                and "exception_log_summary(exc)" in person_video_routes
-                and "exception_log_summary(exc)" in person_stream_routes
+                # 边界助手：脱敏摘要 + log_label 占位。
+                'logger.warning("%s: request_id=%s error=%s", log_label, request_id, exception_log_summary(exc))'
+                in routes_inference_common
+                # 6 条路由各自提供专属 log_label。
+                and 'log_label="vision inference failed"' in vision_routes
+                and 'log_label="person inference failed"' in person_detection_routes
+                and 'log_label="embedding inference failed"' in person_embeddings_routes
+                and 'log_label="person track inference failed"' in person_tracks_routes
+                and 'log_label="video person track inference failed"' in person_video_routes
+                and 'log_label="stream person track inference failed"' in person_stream_routes
+                # predict/debug 内联脱敏日志。
+                and "exception_log_summary(exc)" in predict_routes
                 and "exception_log_summary(exc)" in debug_routes
                 and "logger.warning(\"inference failed: request_id=%s error=%s\"" in predict_routes
-                and "logger.warning(\"vision inference failed: request_id=%s error=%s\"" in vision_routes
-                and "logger.warning(\"person inference failed: request_id=%s error=%s\"" in person_detection_routes
-                and "logger.warning(\"embedding inference failed: request_id=%s error=%s\"" in person_embeddings_routes
-                and "logger.warning(\"person track inference failed: request_id=%s error=%s\"" in person_tracks_routes
-                and "logger.warning(\"video person track inference failed: request_id=%s error=%s\"" in person_video_routes
-                and "logger.warning(\"stream person track inference failed: request_id=%s error=%s\"" in person_stream_routes
                 and "logger.warning(\"debug model output failed: request_id=%s error=%s\"" in debug_routes
+                # 禁止任何路由或边界助手使用 logger.exception（完整堆栈）。
                 and "logger.exception(" not in "\n".join(
                     [
                         predict_routes,
@@ -1031,6 +1054,7 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
                         person_video_routes,
                         person_stream_routes,
                         debug_routes,
+                        routes_inference_common,
                     ]
                 )
             ),
@@ -1577,6 +1601,14 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
                 and "CPU_FALLBACK_ENABLED = parse_bool_env(\"CPU_FALLBACK_ENABLED\", True)" in settings
                 and "CPU_FALLBACK_ENABLED: ${CPU_FALLBACK_ENABLED:-true}" in compose
                 and "CPU_FALLBACK_ENABLED=true" in env_example
+                and "FORCE_CPU = parse_bool_env(\"FORCE_CPU\", False)" in settings
+                and "FORCE_CPU=true" in cpu_dockerfile
+                and 'FORCE_CPU: "true"' in cpu_compose
+                and "FORCE_CPU: ${FORCE_CPU" not in cpu_compose
+                and "CPU_TRUSTED_HOSTS" in cpu_compose
+                and "cpu-worker-0" in cpu_compose
+                and "gpu-worker-0" not in cpu_compose
+                and "CPU_TRUSTED_HOSTS=127.0.0.1,localhost,cpu-worker-0,portrait-stream-worker" in env_example
             ),
         },
         {

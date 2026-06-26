@@ -1,0 +1,54 @@
+# 纯 CPU 推理镜像（无 GPU / 无 CUDA 主机）。
+# 与 Dockerfile 的区别：基础镜像换成 python:3.12-slim（不带 CUDA 运行时，体积小很多），
+# 依赖装 requirements-cpu.txt（CPU 版 onnxruntime），并默认 FORCE_CPU=true，
+# 避免 onnxruntime 把 CUDA 误报为可用而重复加载模型。
+FROM python:3.12-slim-bookworm AS builder
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    TZ=Asia/Shanghai
+
+RUN python -m venv /opt/portrait-hub-venv \
+    && /opt/portrait-hub-venv/bin/python -m pip install --no-cache-dir --upgrade pip setuptools wheel
+
+COPY requirements-cpu.txt /tmp/requirements-cpu.txt
+COPY requirements/prod-optional.txt /tmp/requirements-prod-optional.txt
+ARG INSTALL_PROD_OPTIONAL=false
+RUN /opt/portrait-hub-venv/bin/python -m pip install --no-cache-dir -r /tmp/requirements-cpu.txt -i https://pypi.tuna.tsinghua.edu.cn/simple \
+    && if [ "$INSTALL_PROD_OPTIONAL" = "true" ]; then \
+        /opt/portrait-hub-venv/bin/python -m pip install --no-cache-dir -r /tmp/requirements-prod-optional.txt -i https://pypi.tuna.tsinghua.edu.cn/simple; \
+    fi
+
+FROM python:3.12-slim-bookworm
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    MODELS_ROOT=/models \
+    FORCE_CPU=true \
+    PATH=/opt/portrait-hub-venv/bin:$PATH \
+    TZ=Asia/Shanghai
+
+WORKDIR /workspace
+
+# opencv-python-headless 运行所需的系统库（libGL / glib）。
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        ca-certificates \
+        libglib2.0-0 \
+        libgl1 \
+        tzdata \
+    && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime \
+    && echo $TZ > /etc/timezone \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /opt/portrait-hub-venv /opt/portrait-hub-venv
+COPY app /workspace/app
+COPY frontend /workspace/frontend
+COPY main.py /workspace/main.py
+COPY models.yml /workspace/models.yml
+COPY model-capabilities.yml /workspace/model-capabilities.yml
+
+EXPOSE 8000
+
+CMD ["python", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1", "--limit-concurrency", "100"]

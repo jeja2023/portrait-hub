@@ -35,3 +35,7 @@ jobs:
         run: python tools/deploy_check.py --json
       - name: Run example model regression gates
         run: python tools/portrait_model_regression.py --manifest examples/portrait-model-regression.example.yml --json
+      - name: Run production readiness gate
+        # scope=platform 保留模板/数据栈/安全/契约/模型文件检查，跳过需要真实生产模型产物的
+        # 能力状态检查（CI runner 不携带这些大模型）。任何 strict 失败都会使该步骤非零退出。
+        run: python tools/portrait_production_readiness.py --strict --scope platform

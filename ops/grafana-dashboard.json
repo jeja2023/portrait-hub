@@ -11,7 +11,17 @@
     {
       "type": "timeseries",
       "title": "Inference p95 Latency",
-      "targets": [{"expr": "histogram_quantile(0.95, sum(rate(gpu_worker_inference_duration_seconds_bucket[5m])) by (le))"}]
+      "targets": [{"expr": "histogram_quantile(0.95, sum(rate(gpu_worker_inference_seconds_bucket[5m])) by (le))"}]
+    },
+    {
+      "type": "timeseries",
+      "title": "Decode p95 Latency",
+      "targets": [{"expr": "histogram_quantile(0.95, sum(rate(gpu_worker_decode_seconds_bucket[5m])) by (le))"}]
+    },
+    {
+      "type": "timeseries",
+      "title": "Queue Wait p95",
+      "targets": [{"expr": "histogram_quantile(0.95, sum(rate(gpu_worker_queue_seconds_bucket[5m])) by (le))"}]
     },
     {
       "type": "timeseries",
@@ -22,6 +32,24 @@
       "type": "timeseries",
       "title": "GPU Queue Depth",
       "targets": [{"expr": "gpu_worker_gpu_device_queue_depth"}]
+    },
+    {
+      "type": "timeseries",
+      "title": "Sessions by Provider",
+      "targets": [{"expr": "sum by (provider) (gpu_worker_model_session_provider_total)"}]
+    },
+    {
+      "type": "timeseries",
+      "title": "CPU Fallback Rate",
+      "targets": [{"expr": "sum by (reason) (rate(gpu_worker_cpu_fallback_total[5m]))"}]
+    },
+    {
+      "type": "timeseries",
+      "title": "Stream Reconnects & Backpressure Drops",
+      "targets": [
+        {"expr": "sum(increase(gpu_worker_stream_reconnects_total[5m]))"},
+        {"expr": "sum(increase(gpu_worker_stream_backpressure_drops_total[5m]))"}
+      ]
     },
     {
       "type": "stat",

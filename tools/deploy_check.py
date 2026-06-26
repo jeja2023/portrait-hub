@@ -41,13 +41,17 @@ def check_required_files(root: Path, report: DeployReport) -> None:
     required = [
         "main.py",
         "Dockerfile",
+        "Dockerfile.cpu",
         "docker-compose.yml",
+        "docker-compose.cpu.yml",
         "requirements.txt",
         "requirements/prod-optional.txt",
         "requirements/dev.txt",
         "requirements/base.in",
         "requirements/base.lock",
         "requirements.lock",
+        "requirements-cpu.txt",
+        "requirements-cpu.lock",
         "models.yml",
         "model-capabilities.yml",
         "app/server.py",
@@ -226,14 +230,27 @@ def has_version_range(line: str) -> bool:
     return any(operator in line for operator in [">=", "<=", "~=", ">", "<", "!="])
 
 
+def onnxruntime_version(text: str, package: str) -> str | None:
+    """从某个 requirements 文本中提取 `<package>==<version>` 的固定版本号（无则返回 None）。"""
+    for line in requirement_lines(text):
+        name, _, version = line.partition("==")
+        if name.strip() == package and version.strip():
+            return version.strip()
+    return None
+
+
 def check_dependency_lock(root: Path, report: DeployReport) -> None:
     requirements = read_text(root / "requirements.txt")
     base_in = read_text(root / "requirements" / "base.in")
     base_lock = read_text(root / "requirements" / "base.lock")
     requirements_lock = read_text(root / "requirements.lock")
+    requirements_cpu = read_text(root / "requirements-cpu.txt")
+    requirements_cpu_lock = read_text(root / "requirements-cpu.lock")
     lock_ranges = [line for line in requirement_lines(base_lock) if has_version_range(line) or "==" not in line]
     root_lock_ranges = [line for line in requirement_lines(requirements_lock) if has_version_range(line) or "==" not in line]
     runtime_ranges = [line for line in requirement_lines(requirements) if has_version_range(line) or "==" not in line]
+    cpu_ranges = [line for line in requirement_lines(requirements_cpu) if has_version_range(line) or "==" not in line]
+    cpu_lock_ranges = [line for line in requirement_lines(requirements_cpu_lock) if has_version_range(line) or "==" not in line]
     report.add(
         "dependency_lock_exact",
         not lock_ranges
@@ -252,6 +269,39 @@ def check_dependency_lock(root: Path, report: DeployReport) -> None:
         "dependency_input_keeps_compatibility_range",
         "cryptography>=42.0.0,<46.0.0" in base_in,
         None,
+    )
+    # CPU-only 部署清单与其锁文件同样必须全量精确钉版（无任何版本范围）。
+    report.add(
+        "cpu_dependency_lock_exact",
+        not cpu_ranges
+        and not cpu_lock_ranges
+        and "cryptography==45.0.6" in requirements_cpu
+        and "cryptography==45.0.6" in requirements_cpu_lock,
+        {
+            "requirements_cpu_ranges": cpu_ranges,
+            "requirements_cpu_lock_ranges": cpu_lock_ranges,
+        },
+    )
+    # CPU 与 GPU 运行时必须显式区分（onnxruntime vs onnxruntime-gpu），且锁定在同一版本，
+    # 避免两套部署的推理内核版本漂移。同时 CPU 清单不得混入 GPU 包，反之亦然。
+    gpu_version = onnxruntime_version(requirements, "onnxruntime-gpu")
+    gpu_lock_version = onnxruntime_version(requirements_lock, "onnxruntime-gpu")
+    cpu_version = onnxruntime_version(requirements_cpu, "onnxruntime")
+    cpu_lock_version = onnxruntime_version(requirements_cpu_lock, "onnxruntime")
+    versions = {gpu_version, gpu_lock_version, cpu_version, cpu_lock_version}
+    report.add(
+        "cpu_gpu_runtime_parity",
+        None not in versions
+        and len(versions) == 1
+        and "onnxruntime-gpu==" not in requirements_cpu
+        and "onnxruntime-gpu==" not in requirements_cpu_lock
+        and onnxruntime_version(requirements, "onnxruntime") is None,
+        {
+            "gpu_runtime": gpu_version,
+            "gpu_lock_runtime": gpu_lock_version,
+            "cpu_runtime": cpu_version,
+            "cpu_lock_runtime": cpu_lock_version,
+        },
     )
 
 
@@ -278,15 +328,28 @@ def check_models_config(root: Path, report: DeployReport) -> None:
 
 def check_docker_files(root: Path, report: DeployReport) -> None:
     dockerfile = read_text(root / "Dockerfile")
+    cpu_dockerfile = read_text(root / "Dockerfile.cpu")
     compose = yaml.safe_load(read_text(root / "docker-compose.yml")) or {}
+    cpu_compose_text = read_text(root / "docker-compose.cpu.yml")
+    cpu_compose = yaml.safe_load(cpu_compose_text) or {}
     services = compose.get("services", {}) if isinstance(compose, dict) else {}
+    cpu_services = cpu_compose.get("services", {}) if isinstance(cpu_compose, dict) else {}
     service_names = sorted(services) if isinstance(services, dict) else []
+    cpu_service_names = sorted(cpu_services) if isinstance(cpu_services, dict) else []
     report.add("dockerfile_copies_app", "COPY app /workspace/app" in dockerfile, None)
     report.add("dockerfile_copies_frontend", "COPY frontend /workspace/frontend" in dockerfile, None)
     report.add("dockerfile_copies_main", "COPY main.py /workspace/main.py" in dockerfile, None)
     report.add("dockerfile_copies_capabilities", "COPY model-capabilities.yml /workspace/model-capabilities.yml" in dockerfile, None)
     report.add("dockerfile_copies_prod_optional", "COPY requirements/prod-optional.txt" in dockerfile, None)
     report.add("dockerfile_prod_optional_arg", "INSTALL_PROD_OPTIONAL" in dockerfile, None)
+    report.add(
+        "cpu_dockerfile_uses_cpu_runtime",
+        "FROM python:3.12-slim-bookworm" in cpu_dockerfile
+        and "requirements-cpu.txt" in cpu_dockerfile
+        and "FORCE_CPU=true" in cpu_dockerfile
+        and "nvidia/cuda" not in cpu_dockerfile,
+        None,
+    )
     report.add("compose_services", bool(service_names), {"services": service_names})
     stream_worker = services.get("portrait-stream-worker") if isinstance(services, dict) else None
     report.add(
@@ -303,6 +366,53 @@ def check_docker_files(root: Path, report: DeployReport) -> None:
         and ("NVIDIA_VISIBLE_DEVICES" in str(service.get("environment", "")) or "gpus" in service)
     ] if isinstance(services, dict) else []
     report.add("compose_gpu_configuration", bool(gpu_like), {"gpu_services": gpu_like})
+    cpu_env_text = json.dumps(
+        [service.get("environment", {}) for service in cpu_services.values() if isinstance(service, dict)],
+        ensure_ascii=False,
+    )
+    cpu_has_gpu_reservation = any(
+        isinstance(service, dict)
+        and (
+            "deploy" in service
+            or "gpus" in service
+            or "driver: nvidia" in str(yaml.safe_dump(service, sort_keys=True))
+            or "capabilities: [gpu]" in str(yaml.safe_dump(service, sort_keys=True))
+        )
+        for service in cpu_services.values()
+    ) if isinstance(cpu_services, dict) else True
+    report.add(
+        "cpu_compose_services",
+        cpu_service_names == ["cpu-worker-0", "portrait-stream-worker"],
+        {"services": cpu_service_names},
+    )
+    report.add(
+        "cpu_compose_force_cpu_is_literal",
+        'FORCE_CPU: "true"' in cpu_compose_text
+        and "FORCE_CPU: ${FORCE_CPU" not in cpu_compose_text
+        and '"FORCE_CPU": "true"' in cpu_env_text,
+        {"environment": cpu_env_text},
+    )
+    report.add(
+        "cpu_compose_trusted_hosts_isolated",
+        "CPU_TRUSTED_HOSTS" in cpu_compose_text
+        and "cpu-worker-0" in cpu_compose_text
+        and "gpu-worker-0" not in cpu_compose_text
+        and "gpu-worker-1" not in cpu_compose_text,
+        None,
+    )
+    report.add(
+        "cpu_compose_has_no_gpu_reservation",
+        not cpu_has_gpu_reservation
+        and '"NVIDIA_VISIBLE_DEVICES": "none"' in cpu_env_text,
+        {"services": cpu_service_names},
+    )
+    report.add(
+        "cpu_compose_uses_cpu_dockerfile",
+        all(isinstance(service, dict) and service.get("build", {}).get("dockerfile") == "Dockerfile.cpu" for service in cpu_services.values())
+        if isinstance(cpu_services, dict) and cpu_services
+        else False,
+        {"services": cpu_service_names},
+    )
     volumes = [
         volume
         for service in services.values()

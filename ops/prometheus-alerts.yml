@@ -9,7 +9,7 @@ groups:
         annotations:
           summary: PortraitHub 5xx rate is above 2%
       - alert: PortraitHubHighInferenceLatency
-        expr: histogram_quantile(0.95, sum(rate(gpu_worker_inference_duration_seconds_bucket[5m])) by (le)) > 2
+        expr: histogram_quantile(0.95, sum(rate(gpu_worker_inference_seconds_bucket[5m])) by (le)) > 2
         for: 10m
         labels:
           severity: ticket
@@ -29,3 +29,26 @@ groups:
           severity: ticket
         annotations:
           summary: PortraitHub GPU queue has sustained backlog
+      - alert: PortraitHubUnexpectedCpuFallback
+        # On a GPU-intended deployment any CPU fallback means a degraded inference runtime.
+        # FORCE_CPU hosts never increment this counter, so the alert stays quiet there.
+        expr: sum(rate(gpu_worker_cpu_fallback_total[10m])) > 0
+        for: 10m
+        labels:
+          severity: page
+        annotations:
+          summary: PortraitHub fell back to CPU inference (GPU runtime degraded)
+      - alert: PortraitHubStreamReconnectSpike
+        expr: sum(increase(gpu_worker_stream_reconnects_total[15m])) > 5
+        for: 15m
+        labels:
+          severity: ticket
+        annotations:
+          summary: PortraitHub stream workers are reconnecting repeatedly
+      - alert: PortraitHubStreamBackpressureDrops
+        expr: sum(increase(gpu_worker_stream_backpressure_drops_total[15m])) > 0
+        for: 15m
+        labels:
+          severity: ticket
+        annotations:
+          summary: PortraitHub stream backpressure is dropping frames

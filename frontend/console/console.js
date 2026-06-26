@@ -86,27 +86,27 @@ const template = `
       </div>
       <nav class="sidebar-nav" aria-label="控制台视图">
         <button type="button" class="nav-item nav-item--solo" data-nav="overview">总览</button>
-        <details class="nav-group" data-nav-group="vision">
-          <summary>智能解析</summary>
+        <details class="nav-group" data-nav-group="analysis">
+          <summary>解析处理</summary>
           <div class="nav-group-items">
             <button type="button" class="nav-item" data-nav="vision">图片解析</button>
+            <button type="button" class="nav-item" data-nav="video">视频解析</button>
+            <button type="button" class="nav-item" data-nav="streams">视频流解析</button>
+            <button type="button" class="nav-item" data-nav="video-results">视频解析结果</button>
+          </div>
+        </details>
+        <details class="nav-group" data-nav-group="retrieval">
+          <summary>比对检索</summary>
+          <div class="nav-group-items">
             <button type="button" class="nav-item" data-nav="compare">人像比对</button>
+            <button type="button" class="nav-item" data-nav="gallery-search">以图搜人</button>
           </div>
         </details>
         <details class="nav-group" data-nav-group="gallery">
           <summary>人员库</summary>
           <div class="nav-group-items">
             <button type="button" class="nav-item" data-nav="gallery-enroll">人员注册</button>
-            <button type="button" class="nav-item" data-nav="gallery-search">以图搜人</button>
             <button type="button" class="nav-item" data-nav="gallery-manage">人员管理</button>
-          </div>
-        </details>
-        <details class="nav-group" data-nav-group="video">
-          <summary>视频分析</summary>
-          <div class="nav-group-items">
-            <button type="button" class="nav-item" data-nav="video">离线视频</button>
-            <button type="button" class="nav-item" data-nav="video-results">解析结果</button>
-            <button type="button" class="nav-item" data-nav="streams">视频流</button>
           </div>
         </details>
         <details class="nav-group" data-nav-group="ops">
@@ -147,10 +147,10 @@ const template = `
           <div class="metric"><span>P95 推理耗时</span><strong id="metric-p95">0s</strong></div>
           <div class="metric"><span>GPU 空闲显存</span><strong id="metric-gpu-free">--</strong></div>
           <button type="button" class="product-tile" data-nav-shortcut="vision"><strong>图片解析</strong><span>人脸、人体、姿态、衣着、步态、检测和 ReID embedding。</span></button>
-          <button type="button" class="product-tile" data-nav-shortcut="compare"><strong>人像比对</strong><span>人脸、人体、步态、多模态融合和批量比对。</span></button>
-          <button type="button" class="product-tile" data-nav-shortcut="gallery-search"><strong>人员库查询</strong><span>人员注册、图库检索、候选排序和人员资料维护。</span></button>
-          <button type="button" class="product-tile" data-nav-shortcut="streams"><strong>视频服务</strong><span>离线视频轨迹任务、视频流注册、事件查询和实时订阅。</span></button>
-          <button type="button" class="product-tile" data-nav-shortcut="video-results"><strong>解析结果图片</strong><span>集中查看所有已完成离线视频任务的解析帧缩略图。</span></button>
+          <button type="button" class="product-tile" data-nav-shortcut="video"><strong>视频解析</strong><span>离线视频任务创建、状态跟踪和结果回收。</span></button>
+          <button type="button" class="product-tile" data-nav-shortcut="streams"><strong>视频流解析</strong><span>RTSP/HTTP 注册、启动、事件查询和实时订阅。</span></button>
+          <button type="button" class="product-tile" data-nav-shortcut="video-results"><strong>视频解析结果</strong><span>集中查看所有已完成视频解析任务的解析帧缩略图。</span></button>
+          <button type="button" class="product-tile" data-nav-shortcut="gallery-search"><strong>比对检索</strong><span>以图搜人、候选排序和检索结果查看。</span></button>
         </div>
         <div class="split-grid">
           <div class="card">
@@ -391,7 +391,7 @@ const template = `
       <section class="view" data-view="video">
         <div class="view-header">
           <div class="section-title">
-            <h2>离线视频</h2>
+            <h2>视频解析</h2>
             <p>上传视频创建轨迹任务，支持查询状态、结果、取消和实时进度订阅。</p>
           </div>
           <button type="button" id="video-copy-button">复制调用示例</button>
@@ -440,16 +440,16 @@ const template = `
       <section class="view" data-view="streams">
         <div class="view-header">
           <div class="section-title">
-            <h2>视频流</h2>
+            <h2>视频流解析</h2>
             <p>注册 RTSP/HTTP 流，启动分析工作进程，查看事件并订阅实时快照。</p>
           </div>
-          <button type="button" id="streams-refresh-button">刷新视频流</button>
+          <button type="button" id="streams-refresh-button">刷新视频流解析</button>
         </div>
         <form id="stream-form" class="form-grid">
           <label class="span-2">视频流地址 <input id="stream-url-input" name="stream_url" placeholder="rtsp://user:password@host/stream1" /></label>
           <label>显示名称 <input id="stream-name-input" name="name" placeholder="门岗摄像头 1" /></label>
           <label>元数据（JSON） <input id="stream-metadata-input" placeholder='{"site":"east-gate"}' /></label>
-          <button type="submit" class="primary">注册视频流</button>
+          <button type="submit" class="primary">注册视频流解析</button>
         </form>
         <div class="card">
           <div class="form-grid compact">
@@ -790,7 +790,7 @@ const fieldLabels = {
   user: "用户名",
   url: "流地址",
   jobs: "任务统计",
-  streams: "视频流统计",
+  streams: "视频流解析统计",
   active_workers: "活跃工作进程",
   max_workers: "最大工作进程数",
   queue_length: "队列排队长度",
@@ -896,7 +896,7 @@ function payloadLabel(name) {
     enroll: "人员注册响应",
     search: "以图搜人响应",
     jobs: "视频任务响应",
-    streams: "视频流响应",
+    streams: "视频流解析响应",
     models: "模型管理响应",
     admin: "治理配置响应",
     "admin-threshold": "比对阈值响应",
@@ -1728,7 +1728,7 @@ async function refreshGallery() {
 async function refreshStreams() {
   const payload = await api("/v1/streams?limit=50");
   renderSummary("#streams-summary", [
-    { label: "视频流", value: payload.total ?? (payload.streams || []).length },
+    { label: "视频流解析", value: payload.total ?? (payload.streams || []).length },
     { label: "本页数量", value: payload.count ?? (payload.streams || []).length },
     { label: "下一页", value: payload.next_cursor ? "有" : "无" },
     { label: "租户", value: state.tenantId },
