@@ -3,7 +3,7 @@ from fastapi import HTTPException
 
 from app import runtime_registry
 from app.model_package import labels_from_config, model_card_for_path
-from app.runtime_state import MODEL_LOAD_LOCKS, MODEL_REGISTRY
+from app.runtime_state import MODEL_LOAD_LOCKS, MODEL_LOAD_RETRY_AFTER, MODEL_REGISTRY
 
 
 def test_explicit_labels_sidecar_is_required(workspace_tmp_path, caplog) -> None:
@@ -53,6 +53,65 @@ async def test_model_load_failure_logs_are_redacted(monkeypatch, workspace_tmp_p
     for secret in ["secret-model-dir", "secret-token", str(model_path)]:
         assert secret not in caplog.text
         assert secret not in str(exc_info.value.detail)
+
+
+@pytest.mark.asyncio
+async def test_load_failure_sets_cooldown_then_fast_fails(monkeypatch, workspace_tmp_path) -> None:
+    model_path = workspace_tmp_path / "model.onnx"
+    model_path.write_bytes(b"fake onnx")
+    MODEL_REGISTRY.clear()
+    MODEL_LOAD_LOCKS.clear()
+    MODEL_LOAD_RETRY_AFTER.clear()
+    create_calls = {"n": 0}
+
+    def fail_create_session(path, cache_key, device_id=None):
+        create_calls["n"] += 1
+        raise RuntimeError("load fail")
+
+    monkeypatch.setattr(runtime_registry, "model_hash", lambda path: "digest")
+    monkeypatch.setattr(runtime_registry, "validate_model_hash", lambda key, digest: None)
+    monkeypatch.setattr(runtime_registry, "create_session", fail_create_session)
+    monkeypatch.setattr(runtime_registry, "MODEL_LOAD_RETRY_COOLDOWN_SECONDS", 30.0)
+
+    # First request actually attempts the load and fails with 500.
+    with pytest.raises(HTTPException) as first:
+        await runtime_registry.get_or_load_model("proj/model.onnx", model_path)
+    assert first.value.status_code == 500
+    assert MODEL_LOAD_RETRY_AFTER.get("proj/model.onnx", 0) > 0
+
+    # Second request inside the cooldown window fast-fails with 503 WITHOUT re-attempting the load.
+    with pytest.raises(HTTPException) as second:
+        await runtime_registry.get_or_load_model("proj/model.onnx", model_path)
+    assert second.value.status_code == 503
+    assert create_calls["n"] == 1
+
+
+@pytest.mark.asyncio
+async def test_cooldown_expiry_allows_retry_and_success_clears_it(monkeypatch, workspace_tmp_path) -> None:
+    model_path = workspace_tmp_path / "model.onnx"
+    model_path.write_bytes(b"fake onnx")
+    MODEL_REGISTRY.clear()
+    MODEL_LOAD_LOCKS.clear()
+    # Simulate a still-recorded-but-expired cooldown (retry-after in the past).
+    MODEL_LOAD_RETRY_AFTER.clear()
+    MODEL_LOAD_RETRY_AFTER["proj/model.onnx"] = 1.0
+
+    class FakeSession:
+        def get_providers(self):
+            return ["CPUExecutionProvider"]
+
+    monkeypatch.setattr(runtime_registry, "model_hash", lambda path: "digest")
+    monkeypatch.setattr(runtime_registry, "validate_model_hash", lambda key, digest: None)
+    monkeypatch.setattr(runtime_registry, "create_session", lambda path, cache_key, device_id=None: FakeSession())
+    monkeypatch.setattr(runtime_registry, "model_gpu_device_id", lambda key: 0)
+
+    bundle, cold_loaded, _ = await runtime_registry.get_or_load_model("proj/model.onnx", model_path)
+
+    assert cold_loaded is True
+    # A successful load clears the stale cooldown entry so the model serves normally.
+    assert "proj/model.onnx" not in MODEL_LOAD_RETRY_AFTER
+    runtime_registry.release_model_bundle(bundle)
+    MODEL_REGISTRY.clear()
 
 
 def test_explicit_labels_sidecar_must_not_be_empty(workspace_tmp_path, caplog) -> None:

@@ -34,7 +34,7 @@ def parse_csv_env(name: str, default: str = "") -> list[str]:
     return [item.strip() for item in os.getenv(name, default).split(",") if item.strip()]
 
 
-APP_VERSION = "0.5.46"
+APP_VERSION = "0.5.47"
 MODELS_ROOT = Path(os.getenv("MODELS_ROOT", "models")).resolve()
 MODEL_CONFIG_PATH = Path(os.getenv("MODEL_CONFIG_PATH", "models.yml"))
 MODEL_CONFIG_READ_FAIL_CLOSED = parse_bool_env("MODEL_CONFIG_READ_FAIL_CLOSED", True)
@@ -70,6 +70,10 @@ DEFAULT_REID_ARTIFACT = os.getenv("DEFAULT_REID_ARTIFACT", "osnet_ibn_x1_0.onnx"
 # Cooldown before retrying a capability runtime (body embedding / person detection)
 # that failed to load or infer, instead of latching it off until process restart.
 RUNTIME_CAPABILITY_RETRY_COOLDOWN_SECONDS = parse_float_env("RUNTIME_CAPABILITY_RETRY_COOLDOWN_SECONDS", 60.0)
+# 主模型注册表加载失败后的冷却秒数：一个模型加载失败后，冷却窗口内的请求直接 503 快速失败，
+# 而不是每次都重新走昂贵的 hash + create_session；窗口过后自动重试，实现加载失败的自愈。
+# <=0 关闭冷却（保持“每次请求都重试”的旧行为）。
+MODEL_LOAD_RETRY_COOLDOWN_SECONDS = parse_float_env("MODEL_LOAD_RETRY_COOLDOWN_SECONDS", 30.0)
 MAX_REQUEST_BODY_BYTES = parse_int_env("MAX_REQUEST_BODY_BYTES", 768 * 1024 * 1024)
 ALLOW_STREAM_URLS = parse_bool_env("ALLOW_STREAM_URLS", False)
 MAX_LOADED_MODELS = parse_int_env("MAX_LOADED_MODELS", 0)
@@ -110,6 +114,10 @@ WARMUP_MODELS = [
     for item in os.getenv("WARMUP_MODELS", "").split(",")
     if item.strip()
 ]
+# 启动预热失败时是否让整个进程启动失败。默认 false：预热是尽力而为，单个模型加载失败只记录
+# 并继续预热其余模型，避免一个坏模型拖垮整个服务启动（其余可用模型仍能对外提供推理）。
+# 严格部署可设为 true，要求所有预热模型必须成功才允许启动。
+WARMUP_FAIL_FAST = parse_bool_env("WARMUP_FAIL_FAST", False)
 API_TOKEN = os.getenv("API_TOKEN")
 JWT_SECRET = os.getenv("JWT_SECRET")
 JWT_SECRET_ID = os.getenv("JWT_SECRET_ID", "primary").strip()
