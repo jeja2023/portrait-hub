@@ -8,6 +8,9 @@ from app.settings import GPU_DEVICE_IDS, GPU_QUEUE_LIMIT, GPU_QUEUE_LIMIT_PER_DE
 MODEL_REGISTRY: "OrderedDict[str, ModelBundle]" = OrderedDict()
 MODEL_LOAD_LOCKS: dict[str, asyncio.Lock] = {}
 REGISTRY_LOCK = asyncio.Lock()
+# 每个模型 cache_key 的加载“重试时间戳”（epoch 秒）。值在未来表示该模型刚加载失败、正在冷却；
+# 缺失或值已过期表示可正常尝试加载。加载成功后清除对应条目。
+MODEL_LOAD_RETRY_AFTER: dict[str, float] = {}
 GPU_SEMAPHORE = asyncio.Semaphore(max(1, GPU_QUEUE_LIMIT))
 GPU_DEVICE_SEMAPHORES = {
     int(device_id): asyncio.Semaphore(max(1, GPU_QUEUE_LIMIT_PER_DEVICE))
@@ -28,6 +31,7 @@ def gpu_semaphore_for_device(device_id: int | None) -> asyncio.Semaphore:
 __all__ = [
     "MODEL_REGISTRY",
     "MODEL_LOAD_LOCKS",
+    "MODEL_LOAD_RETRY_AFTER",
     "REGISTRY_LOCK",
     "GPU_SEMAPHORE",
     "GPU_DEVICE_SEMAPHORES",

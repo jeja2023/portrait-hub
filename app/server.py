@@ -31,9 +31,10 @@ from app.portrait_errors import PortraitError
 from app.rate_limit import check_rate_limit
 from app.routes import router
 from app.security_headers import apply_security_headers
-from app.settings import APP_VERSION, CONFIG_HOT_RELOAD_ENABLED, ENABLE_API_DOCS, MAX_REQUEST_BODY_BYTES, MODEL_CONFIG_PATH, MODEL_CAPABILITIES_PATH, OPENTELEMETRY_ENABLED, OTEL_SERVICE_NAME, TRUSTED_HOSTS
+from app.settings import APP_VERSION, CONFIG_HOT_RELOAD_ENABLED, ENABLE_API_DOCS, MAX_REQUEST_BODY_BYTES, MODEL_CONFIG_PATH, MODEL_CAPABILITIES_PATH, OPENTELEMETRY_ENABLED, OTEL_SERVICE_NAME, TRUSTED_HOSTS, WARMUP_FAIL_FAST
 from app.metrics import observe_request_status
 from app.portrait_bootstrap import ensure_portrait_runtime_state_loaded
+from app.portrait_response import exception_log_summary
 
 
 def request_body_too_large_detail() -> str:
@@ -44,12 +45,25 @@ async def warmup_models() -> None:
     if not WARMUP_MODELS:
         return
 
+    succeeded = 0
+    failed: list[str] = []
     for item in WARMUP_MODELS:
-        project_name, model_name = split_cache_key(item)
-        model_path = get_model_path(project_name, model_name)
-        key = cache_key(project_name, model_name)
-        await get_or_load_model(key, model_path)
+        try:
+            project_name, model_name = split_cache_key(item)
+            model_path = get_model_path(project_name, model_name)
+            key = cache_key(project_name, model_name)
+            await get_or_load_model(key, model_path)
+        except Exception as exc:
+            # 预热默认尽力而为：单个模型失败只记录并继续，避免一个坏模型拖垮整个启动。
+            # WARMUP_FAIL_FAST=true 时改为严格模式，任一失败即让启动失败。
+            failed.append(item)
+            logger.warning("startup warmup failed for a model: error=%s", exception_log_summary(exc))
+            if WARMUP_FAIL_FAST:
+                raise
+            continue
+        succeeded += 1
         logger.info("startup warmup completed: %s", key)
+    logger.info("startup warmup summary: succeeded=%d failed=%d total=%d", succeeded, len(failed), len(WARMUP_MODELS))
 
 
 async def config_hot_reload_loop() -> None:
