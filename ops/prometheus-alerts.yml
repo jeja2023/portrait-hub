@@ -52,3 +52,19 @@ groups:
           severity: ticket
         annotations:
           summary: PortraitHub stream backpressure is dropping frames
+      - alert: PortraitHubLowVideoSamplingQuality
+        # Median quality of selected frames dropped below 0.4 over 15min (may indicate poor source quality or over-aggressive sampling).
+        expr: histogram_quantile(0.5, sum(rate(gpu_worker_video_frame_quality_bucket[15m])) by (le)) < 0.4
+        for: 15m
+        labels:
+          severity: ticket
+        annotations:
+          summary: PortraitHub video sampling quality median is below 0.4
+      - alert: PortraitHubHighNearDuplicateDropRate
+        # >30% of considered candidates are dropped as near-duplicates (may indicate sampling-interval misconfiguration or static video).
+        expr: sum(rate(gpu_worker_video_near_duplicate_drops_total[10m])) / clamp_min(sum(rate(gpu_worker_video_frames_considered_total[10m])), 1) > 0.3
+        for: 15m
+        labels:
+          severity: ticket
+        annotations:
+          summary: PortraitHub near-duplicate drop rate is above 30%

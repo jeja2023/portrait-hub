@@ -42,3 +42,14 @@ def test_prometheus_metrics_include_provider_and_fallback_counters() -> None:
     assert 'gpu_worker_cpu_fallback_total{reason="cuda_provider_unavailable"}' in text
     # Stream reconnects aggregate is always emitted as a counter (0 when no sessions).
     assert "gpu_worker_stream_reconnects_total" in text
+
+
+def test_prometheus_metrics_include_media_pipeline_series() -> None:
+    output = prometheus_metrics()
+    assert "gpu_worker_stream_frames_sampled_total" in output
+    assert "gpu_worker_stream_frames_processed_total" in output
+    assert "gpu_worker_video_frames_considered_total" in output
+    assert "gpu_worker_video_frames_selected_total" in output
+    assert "gpu_worker_video_near_duplicate_drops_total" in output
+    assert "gpu_worker_video_decode_backend_total" in output
+    assert "gpu_worker_video_frame_quality_bucket" in output

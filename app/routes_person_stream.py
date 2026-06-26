@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
 
 from app.inference_tracks import infer_tracks_for_images
 from app.media.stream_decode import mask_stream_url
-from app.metrics import observe
+from app.metrics import observe, observe_video_sampling_metrics
 from app.model_refs import validate_model_reference_parts
 from app.observability import log_json, now, request_id_from_headers
 from app.portrait_auth import permission_dependency
@@ -104,6 +104,7 @@ async def infer_stream_person_tracks(
 
         total_seconds = now() - total_start
         observe("decode_seconds_sum", stream_meta["decode_seconds"])
+        observe_video_sampling_metrics(stream_meta)
         log_json(
             logging.INFO,
             "stream_person_tracks_completed",

@@ -34,7 +34,7 @@ def parse_csv_env(name: str, default: str = "") -> list[str]:
     return [item.strip() for item in os.getenv(name, default).split(",") if item.strip()]
 
 
-APP_VERSION = "0.5.47"
+APP_VERSION = "0.5.48"
 MODELS_ROOT = Path(os.getenv("MODELS_ROOT", "models")).resolve()
 MODEL_CONFIG_PATH = Path(os.getenv("MODEL_CONFIG_PATH", "models.yml"))
 MODEL_CONFIG_READ_FAIL_CLOSED = parse_bool_env("MODEL_CONFIG_READ_FAIL_CLOSED", True)
@@ -57,6 +57,9 @@ MAX_STREAM_FRAMES = parse_int_env("MAX_STREAM_FRAMES", 32)
 STREAM_READ_TIMEOUT_SECONDS = parse_int_env("STREAM_READ_TIMEOUT_SECONDS", 10)
 STREAM_WORKER_POLL_INTERVAL_SECONDS = parse_float_env("STREAM_WORKER_POLL_INTERVAL_SECONDS", 5.0)
 STREAM_WORKER_MAX_RECONNECTS = parse_int_env("STREAM_WORKER_MAX_RECONNECTS", 3)
+# 视频/流解码后端：auto（装了 PyAV 就用、否则 OpenCV）/ opencv / pyav。
+# PyAV 提供帧精确的单遍顺序解码；任何后端不可用或出错都会优雅回退到 OpenCV。
+VIDEO_DECODE_BACKEND = os.getenv("VIDEO_DECODE_BACKEND", "auto").strip().lower() or "auto"
 MAX_VISION_IMAGES = parse_int_env("MAX_VISION_IMAGES", 16)
 MAX_COMPARE_BATCH_PAIRS = parse_int_env("MAX_COMPARE_BATCH_PAIRS", 64)
 # 共享的推理请求边界 / 默认值，此前散落硬编码在 person 与 vision 路由处理器中。

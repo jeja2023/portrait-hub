@@ -33,6 +33,9 @@ METRICS: dict[str, float] = {
     "decode_seconds_sum": 0,
     "preprocess_seconds_sum": 0,
     "postprocess_seconds_sum": 0,
+    "video_frames_considered_total": 0,
+    "video_frames_selected_total": 0,
+    "video_near_duplicate_drops_total": 0,
 }
 REQUEST_STATUS_COUNTS: dict[str, int] = {}
 # 每个活跃的执行提供程序（例如 CUDA / CPU / TensorRT）所创建的会话数。
@@ -40,6 +43,8 @@ PROVIDER_SESSION_COUNTS: dict[str, int] = {}
 # 按原因（cuda_provider_unavailable / session_init_failed / ...）分类的 CPU 回退次数。
 # 在 GPU 主机上，非零率表示运行时状态下降；在 FORCE_CPU 主机上则保持为空。
 CPU_FALLBACK_COUNTS: dict[str, int] = {}
+# 按后端（opencv / pyav）分类的按帧号取帧次数。
+VIDEO_DECODE_BACKEND_COUNTS: dict[str, int] = {}
 METRICS_LOCK = threading.RLock()
 PROMETHEUS_CACHE: dict[str, Any] = {"expires_at": 0.0, "text": ""}
 
@@ -58,6 +63,8 @@ HISTOGRAM_BUCKETS: dict[str, tuple[float, ...]] = {
     "decode_seconds": (0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0),
     "preprocess_seconds": (0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5),
     "postprocess_seconds": (0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5),
+    # 抽帧质量分（0~1），用于观察被选中帧的质量分布。
+    "video_frame_quality": (0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0),
 }
 HISTOGRAMS: dict[str, Histogram] = {
     name: {"buckets": buckets, "counts": [0 for _ in buckets], "inf": 0, "count": 0, "sum": 0.0}
@@ -91,6 +98,32 @@ def record_cpu_fallback(reason: str) -> None:
     """记录一次“本想用 GPU 却回退到 CPU”的事件及其原因。FORCE_CPU 的主动选择不计入。"""
     with METRICS_LOCK:
         CPU_FALLBACK_COUNTS[reason] = CPU_FALLBACK_COUNTS.get(reason, 0) + 1
+        PROMETHEUS_CACHE["expires_at"] = 0.0
+
+
+def record_video_decode_backend(backend: str) -> None:
+    """记录一次按帧号取帧所用的解码后端（opencv / pyav）。"""
+    with METRICS_LOCK:
+        VIDEO_DECODE_BACKEND_COUNTS[backend] = VIDEO_DECODE_BACKEND_COUNTS.get(backend, 0) + 1
+        PROMETHEUS_CACHE["expires_at"] = 0.0
+
+
+def observe_video_sampling_metrics(metadata: dict[str, Any]) -> None:
+    """从视频/流抽帧的 metadata 记录抽帧质量与丢帧相关指标。
+
+    candidate_frames_considered=候选总数；extracted_frames=最终选中数；
+    near_duplicate_candidate_count=因近重复被剔除的候选数；frame_qualities=选中帧质量分布。
+    """
+    considered = int(metadata.get("candidate_frames_considered", 0) or 0)
+    selected = int(metadata.get("extracted_frames", 0) or 0)
+    near_dupes = int(metadata.get("near_duplicate_candidate_count", 0) or 0)
+    observe("video_frames_considered_total", considered)
+    observe("video_frames_selected_total", selected)
+    observe("video_near_duplicate_drops_total", near_dupes)
+    with METRICS_LOCK:
+        for quality in metadata.get("frame_qualities", []) or []:
+            if isinstance(quality, dict) and "score" in quality:
+                observe_histogram("video_frame_quality", float(quality["score"]))
         PROMETHEUS_CACHE["expires_at"] = 0.0
 
 
@@ -188,6 +221,8 @@ def build_prometheus_metrics() -> str:
     active_stream_sessions = sum(1 for item in STREAM_WORKER_SESSIONS.values() if item.get("status") == "running")
     stream_backpressure_drops = sum(int(item.get("backpressure_drops", 0)) for item in STREAM_WORKER_SESSIONS.values())
     stream_reconnects_total = sum(int(item.get("restart_count", 0)) for item in STREAM_WORKER_SESSIONS.values())
+    stream_frames_processed = sum(int(item.get("frames_processed", 0)) for item in STREAM_WORKER_SESSIONS.values())
+    stream_frames_sampled = sum(int(item.get("frames_sampled", 0)) for item in STREAM_WORKER_SESSIONS.values())
     queue_depth = max(0, len(getattr(GPU_SEMAPHORE, "_waiters", []) or []))
     device_queue_depths = {
         int(device_id): max(0, len(getattr(semaphore, "_waiters", []) or []))
@@ -238,6 +273,12 @@ def build_prometheus_metrics() -> str:
         "# HELP gpu_worker_stream_reconnects_total 所有会话中流处理工作器的重连总次数。",
         "# TYPE gpu_worker_stream_reconnects_total counter",
         f"gpu_worker_stream_reconnects_total {stream_reconnects_total}",
+        "# HELP gpu_worker_stream_frames_sampled_total Total frames sampled by stream workers across sessions.",
+        "# TYPE gpu_worker_stream_frames_sampled_total counter",
+        f"gpu_worker_stream_frames_sampled_total {stream_frames_sampled}",
+        "# HELP gpu_worker_stream_frames_processed_total Total frames processed by stream workers across sessions.",
+        "# TYPE gpu_worker_stream_frames_processed_total counter",
+        f"gpu_worker_stream_frames_processed_total {stream_frames_processed}",
         "# HELP gpu_worker_inference_seconds_sum 推理执行时间累计秒数。",
         "# TYPE gpu_worker_inference_seconds_sum counter",
         f"gpu_worker_inference_seconds_sum {METRICS.get('inference_seconds_sum', 0)}",
@@ -289,6 +330,15 @@ def build_prometheus_metrics() -> str:
         "# HELP gpu_worker_postprocess_seconds_sum 后处理时间累计秒数。",
         "# TYPE gpu_worker_postprocess_seconds_sum counter",
         f"gpu_worker_postprocess_seconds_sum {METRICS.get('postprocess_seconds_sum', 0)}",
+        "# HELP gpu_worker_video_frames_considered_total Total candidate frames considered during video/stream sampling.",
+        "# TYPE gpu_worker_video_frames_considered_total counter",
+        f"gpu_worker_video_frames_considered_total {METRICS.get('video_frames_considered_total', 0)}",
+        "# HELP gpu_worker_video_frames_selected_total Total frames selected after quality/scene/dedup sampling.",
+        "# TYPE gpu_worker_video_frames_selected_total counter",
+        f"gpu_worker_video_frames_selected_total {METRICS.get('video_frames_selected_total', 0)}",
+        "# HELP gpu_worker_video_near_duplicate_drops_total Total candidate frames dropped as near-duplicates.",
+        "# TYPE gpu_worker_video_near_duplicate_drops_total counter",
+        f"gpu_worker_video_near_duplicate_drops_total {METRICS.get('video_near_duplicate_drops_total', 0)}",
         "# HELP gpu_worker_model_config_info 已配置的模型元数据。值始终为 1。",
         "# TYPE gpu_worker_model_config_info gauge",
     ]
@@ -319,6 +369,15 @@ def build_prometheus_metrics() -> str:
     )
     for reason, count in sorted(CPU_FALLBACK_COUNTS.items()):
         lines.append(f'gpu_worker_cpu_fallback_total{{reason="{metric_label(reason)}"}} {count}')
+
+    lines.extend(
+        [
+            "# HELP gpu_worker_video_decode_backend_total Frame-index decode operations per backend (opencv/pyav).",
+            "# TYPE gpu_worker_video_decode_backend_total counter",
+        ]
+    )
+    for backend, count in sorted(VIDEO_DECODE_BACKEND_COUNTS.items()):
+        lines.append(f'gpu_worker_video_decode_backend_total{{backend="{metric_label(backend)}"}} {count}')
 
     lines.extend(
         [
@@ -353,6 +412,7 @@ def build_prometheus_metrics() -> str:
     append_histogram(lines, "queue_seconds", "推理队列等待延迟（秒）。")
     append_histogram(lines, "model_load_seconds", "模型加载延迟（秒）。")
     append_histogram(lines, "decode_seconds", "图像或视频解码延迟（秒）。")
+    append_histogram(lines, "video_frame_quality", "Quality score distribution of selected video frames.")
     append_histogram(lines, "preprocess_seconds", "预处理延迟（秒）。")
     append_histogram(lines, "postprocess_seconds", "后处理延迟（秒）。")
     lines.extend(
