@@ -52,6 +52,36 @@
       ]
     },
     {
+      "type": "timeseries",
+      "title": "Video Decode Backend Usage",
+      "targets": [{"expr": "sum by (backend) (rate(gpu_worker_video_decode_backend_total[5m]))"}]
+    },
+    {
+      "type": "timeseries",
+      "title": "Video Frame Sampling Rate",
+      "targets": [
+        {"expr": "rate(gpu_worker_video_frames_considered_total[5m])", "legendFormat": "considered"},
+        {"expr": "rate(gpu_worker_video_frames_selected_total[5m])", "legendFormat": "selected"},
+        {"expr": "rate(gpu_worker_video_near_duplicate_drops_total[5m])", "legendFormat": "near_dup_drops"}
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Video Frame Quality Distribution (p50/p95)",
+      "targets": [
+        {"expr": "histogram_quantile(0.5, sum(rate(gpu_worker_video_frame_quality_bucket[5m])) by (le))", "legendFormat": "p50"},
+        {"expr": "histogram_quantile(0.95, sum(rate(gpu_worker_video_frame_quality_bucket[5m])) by (le))", "legendFormat": "p95"}
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Stream Frames Processed & Sampled",
+      "targets": [
+        {"expr": "rate(gpu_worker_stream_frames_processed_total[5m])", "legendFormat": "processed"},
+        {"expr": "rate(gpu_worker_stream_frames_sampled_total[5m])", "legendFormat": "sampled"}
+      ]
+    },
+    {
       "type": "stat",
       "title": "Loaded Models",
       "targets": [{"expr": "sum(gpu_worker_loaded_models)"}]

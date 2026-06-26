@@ -4,7 +4,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile, status
 
 from app.inference_tracks import infer_tracks_for_images
-from app.metrics import observe
+from app.metrics import observe, observe_video_sampling_metrics
 from app.model_refs import validate_model_reference_parts
 from app.observability import log_json, now, request_id_from_headers
 from app.portrait_auth import permission_dependency
@@ -86,6 +86,7 @@ async def infer_video_person_tracks(
 
         total_seconds = now() - total_start
         observe("decode_seconds_sum", video_meta["decode_seconds"])
+        observe_video_sampling_metrics(video_meta)
         log_json(
             logging.INFO,
             "video_person_tracks_completed",

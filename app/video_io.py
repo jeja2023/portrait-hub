@@ -12,6 +12,7 @@ from PIL import Image
 
 from app.media.fingerprint import hamming_hex, perceptual_hash_payload
 from app.media.frame_sampler import hybrid_sample_indexes
+from app.media.video_backends import decode_frames_at_indexes
 from app.media.quality import assess_image_quality, clamp01
 from app.media.stream_decode import revalidate_stream_url, validate_media_stream_url
 from app.observability import logger, now
@@ -361,20 +362,23 @@ def collect_frame_candidates(
     return candidate_images, candidate_source_indexes, candidate_qualities, candidate_scene_scores
 
 
-def read_frames_at_indexes(source: str, source_frame_indexes: list[int], fallback_frames: list[Image.Image]) -> list[Image.Image]:
+def read_frames_at_indexes_with_backend(
+    source: str, source_frame_indexes: list[int], fallback_frames: list[Image.Image]
+) -> tuple[list[Image.Image], str]:
     if not source_frame_indexes:
-        return []
-    capture = cv2.VideoCapture(source)
-    if not capture.isOpened():
-        return fallback_frames
+        return [], "none"
+    decoded, backend = decode_frames_at_indexes(source, source_frame_indexes)
     frames: list[Image.Image] = []
-    try:
-        for position, source_index in enumerate(source_frame_indexes):
-            capture.set(cv2.CAP_PROP_POS_FRAMES, source_index)
-            ok, frame = capture.read()
-            frames.append(cv_frame_to_image(frame) if ok else fallback_frames[position])
-    finally:
-        capture.release()
+    for position, frame in enumerate(decoded):
+        if frame is not None:
+            frames.append(cv_frame_to_image(frame))
+        elif position < len(fallback_frames):
+            frames.append(fallback_frames[position])
+    return frames, backend
+
+
+def read_frames_at_indexes(source: str, source_frame_indexes: list[int], fallback_frames: list[Image.Image]) -> list[Image.Image]:
+    frames, _backend = read_frames_at_indexes_with_backend(source, source_frame_indexes, fallback_frames)
     return frames
 
 
@@ -503,9 +507,11 @@ def extract_video_frames_from_capture(
         candidate_scene_scores,
         max_frames,
     )
+    decode_backend = "opencv"
     if can_reread_source_frames and source is not None:
-        frames = read_frames_at_indexes(source, source_frame_indexes, frames)
+        frames, decode_backend = read_frames_at_indexes_with_backend(source, source_frame_indexes, frames)
     meta = {
+        "decode_backend": decode_backend,
         "source_frame_indexes": source_frame_indexes,
         "source_seconds": [round(index / fps, 6) for index in source_frame_indexes] if fps else [],
         "source_frames_read": source_frames_read,
@@ -603,6 +609,7 @@ __all__ = [
     "candidate_analysis_image",
     "collect_frame_candidates",
     "read_frames_at_indexes",
+    "read_frames_at_indexes_with_backend",
     "select_frames_from_candidates",
     "extract_video_frames_from_capture",
     "extract_video_frames_from_path",
