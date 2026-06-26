@@ -14,16 +14,16 @@ from app.portrait_response import exception_log_summary
 from app.settings import RUNTIME_CAPABILITY_RETRY_COOLDOWN_SECONDS
 
 
-# These hold a "retry-after" epoch timestamp rather than a permanent flag: a value
-# in the future means the runtime is cooling down after a failure, 0.0/False means
-# it is available. This lets a capability recover after a transient cold-start
-# failure instead of staying disabled until the process restarts.
+# 这些变量持有的是 "retry-after"（稍后重试）的时间戳，而不是一个永久的标志：
+# 未来某时刻的值意味着运行时在发生故障后处于冷却状态，而 0.0 或 False 表示
+# 它目前可用。这允许某项能力从瞬时的冷启动故障中恢复，
+# 而不用一直处于禁用状态直至进程重启。
 _BODY_EMBEDDING_RUNTIME_UNAVAILABLE: float = 0.0
 _PERSON_DETECTION_RUNTIME_UNAVAILABLE: float = 0.0
 
 
 def _runtime_cooldown_active(retry_after: float) -> bool:
-    return float(retry_after or 0.0) > wall_time()
+    return (retry_after or 0.0) > wall_time()
 
 
 def _runtime_cooldown_deadline() -> float:

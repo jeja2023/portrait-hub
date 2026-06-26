@@ -1,4 +1,4 @@
-"""Static deployment checks for gpu-services."""
+"""gpu-services 静态部署校验脚本。"""
 
 from __future__ import annotations
 

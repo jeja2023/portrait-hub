@@ -161,8 +161,8 @@ async def v1_model_unload(request: Request, model_id: str) -> dict[str, Any]:
 @router.get("/v1/models/{model_id:path}", dependencies=[Depends(permission_dependency("models:read"))])
 async def v1_model_detail(request: Request, model_id: str) -> dict[str, Any]:
     request_id = request_id_from_headers(request)
-    # Let validation errors from resolve_model_reference propagate; previously they
-    # were swallowed and the raw, unvalidated model_id was used to build the key.
+    # 允许来自 resolve_model_reference 的验证错误向上传播；此前这些错误
+    # 被吞掉了，且直接使用了未经验证的原始 model_id 来构建键。
     project, model, key, alias_name = resolve_model_reference(model_id, None, None)
     config = model_config(key)
     payload: dict[str, Any] = {

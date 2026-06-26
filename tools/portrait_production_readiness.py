@@ -1,4 +1,4 @@
-"""PortraitHub production readiness report."""
+"""PortraitHub 生产环境就绪度报告脚本。"""
 
 from __future__ import annotations
 

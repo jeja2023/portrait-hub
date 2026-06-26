@@ -34,9 +34,9 @@ Array = npt.NDArray[Any]
 
 def public_video_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
     return {
-        str(key): deepcopy(value)
+        key: deepcopy(value)
         for key, value in (metadata or {}).items()
-        if str(key) not in SENSITIVE_VIDEO_METADATA_KEYS
+        if key not in SENSITIVE_VIDEO_METADATA_KEYS
     }
 
 
@@ -125,7 +125,7 @@ def scene_change_at(scene_change_scores: list[float], index: int) -> float:
     if index < 0 or index >= len(scene_change_scores):
         return 0.0
     try:
-        return float(scene_change_scores[index])
+        return scene_change_scores[index]
     except (TypeError, ValueError):
         return 0.0
 
@@ -133,7 +133,7 @@ def scene_change_at(scene_change_scores: list[float], index: int) -> float:
 def frame_relevance_score(quality: dict[str, Any], scene_change: float) -> float:
     return (
         float(quality.get("score", 0.0)) * 0.70
-        + float(scene_change) * 0.22
+        + scene_change * 0.22
         + float(quality.get("size_score", 0.0)) * 0.05
         + float(quality.get("contrast", 0.0)) * 0.03
     )
@@ -332,7 +332,7 @@ def candidate_analysis_image(image: Image.Image, max_side: int = 320) -> Image.I
     if max(width, height) <= max_side:
         return image.copy()
     scale = max_side / float(max(width, height))
-    size = (max(1, int(round(width * scale))), max(1, int(round(height * scale))))
+    size = (max(1, round(width * scale)), max(1, round(height * scale)))
     return image.resize(size, Image.Resampling.BILINEAR)
 
 
@@ -469,7 +469,7 @@ def extract_video_frames_from_capture(
     )
 
     if not candidate_images:
-        # Fallback for streams or containers without an accurate frame count.
+        # 对没有准确帧数的视频流或容器的回退处理。
         capture.set(cv2.CAP_PROP_POS_FRAMES, 0)
         frame_index = 0
         candidate_limit = max_frames * 3

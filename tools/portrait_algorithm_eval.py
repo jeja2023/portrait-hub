@@ -1,4 +1,4 @@
-"""Offline algorithm metrics for PortraitHub outputs."""
+"""针对 PortraitHub 输出结果的离线算法指标评估脚本。"""
 
 from __future__ import annotations
 
@@ -158,7 +158,14 @@ def calibrate_thresholds(scores: list[float], labels: list[int]) -> dict[str, An
 
 def evaluate_pairs(pairs: list[dict[str, Any]], fars: list[float] | None = None) -> dict[str, Any]:
     fars = fars or [0.001, 0.01, 0.1]
-    scores = [float(item.get("score", item.get("similarity", 0.0))) for item in pairs]
+    scores: list[float] = []
+    for item in pairs:
+        score_val = item.get("score")
+        if score_val is None:
+            score_val = item.get("similarity")
+        if score_val is None:
+            score_val = 0.0
+        scores.append(float(score_val))
     labels = [1 if bool(item.get("label", item.get("same", False))) else 0 for item in pairs]
     positives = sum(labels)
     negatives = len(labels) - positives
@@ -255,8 +262,8 @@ def evaluate_retrieval(
     exclude_same_camera: bool = True,
     junk_ids: list[str] | None = None,
 ) -> dict[str, Any]:
-    ranks = sorted({int(rank) for rank in (ranks or [1, 5, 10]) if int(rank) > 0})
-    junk_id_set = {str(item) for item in (junk_ids or [])}
+    ranks = sorted({rank for rank in (ranks or [1, 5, 10]) if rank > 0})
+    junk_id_set = {item for item in (junk_ids or [])}
     valid_queries: list[dict[str, Any]] = []
     total_candidates = 0
     evaluated_candidates = 0

@@ -37,11 +37,11 @@ def rate_limit_enabled() -> bool:
 
 
 def client_identity(request: Request) -> str:
-    """Stable per-caller identity for throttling.
+    """用于限流的稳定每调用者身份。
 
-    Authenticated callers are keyed by their authenticated identity; anonymous
-    callers fall back to the client IP (optionally the left-most X-Forwarded-For
-    hop when the deployment trusts a reverse proxy).
+    已认证的调用者以其认证身份为主键；匿名
+    调用者回退到客户端 IP（在部署信任反向代理时，可选使用最左侧的 X-Forwarded-For
+    跃点）。
     """
     identity = authenticated_request_identity(
         request.headers.get("authorization"),
@@ -63,9 +63,8 @@ def client_identity(request: Request) -> str:
 
 
 def bucket_key(request: Request) -> str:
-    # Key on the stable client identity, not the client-controlled x-tenant-id
-    # header; otherwise a caller rotates the header to mint a fresh bucket per
-    # request and defeats the limiter entirely.
+    # 基于稳定的客户端身份，而不是由客户端控制的 x-tenant-id
+    # 请求头来建键；否则，调用者可以通过轮换请求头来为每次请求生成全新的令牌桶，从而完全绕过限流器。
     return f"{client_identity(request)}:{request.url.path}"
 
 

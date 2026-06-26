@@ -9,16 +9,16 @@ from app.observability import logger, trace_span
 from app.portrait_response import HEALTH_CHECK_FAILED, exception_log_summary
 from app.settings import POSTGRES_CONNECT_TIMEOUT_SECONDS, POSTGRES_DSN, POSTGRES_POOL_MAX_SIZE, POSTGRES_POOL_MIN_SIZE
 
-try:  # pragma: no cover - optional production dependency
+try:  # pragma: no cover - 可选的生产环境依赖
     import psycopg
     from psycopg.rows import dict_row
-except Exception:  # pragma: no cover - exercised when dependency is absent
+except Exception:  # pragma: no cover - 当依赖不存在时执行
     psycopg = None
     dict_row = None
 
-try:  # pragma: no cover - optional production dependency
+try:  # pragma: no cover - 可选的生产环境依赖
     from psycopg_pool import ConnectionPool
-except Exception:  # pragma: no cover - exercised when dependency is absent
+except Exception:  # pragma: no cover - 当依赖不存在时执行
     ConnectionPool = None
 
 
@@ -108,7 +108,7 @@ def postgres_health() -> dict[str, Any]:
                     cursor.execute("SELECT 1")
                     cursor.fetchone()
         return {**payload, "status": "ready"}
-    except Exception as exc:  # pragma: no cover - requires external database
+    except Exception as exc:  # pragma: no cover - 需要外部数据库支持
         logger.warning("postgres health check failed: %s", exception_log_summary(exc))
         return {**payload, "status": "error", "error": HEALTH_CHECK_FAILED}
 

@@ -1,1 +1,1 @@
-"""Operational helper scripts for the inference service."""
+"""用于推理服务的运维辅助脚本包。"""

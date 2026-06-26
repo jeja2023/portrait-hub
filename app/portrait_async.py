@@ -8,7 +8,7 @@ T = TypeVar("T")
 
 
 async def run_blocking_io(func: Callable[P, T], /, *args: P.args, **kwargs: P.kwargs) -> T:
-    """Run known blocking persistence or network IO without pinning the event loop."""
+    """运行已知的阻塞式持久化或网络 I/O，而不会卡住事件循环。"""
     def call() -> T:
         return func(*args, **kwargs)
 

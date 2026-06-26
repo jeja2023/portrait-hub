@@ -27,9 +27,9 @@ from app.settings import (
     RBAC_ENABLED,
 )
 
-try:  # pragma: no cover - optional production dependency
+try:  # pragma: no cover - 可选的生产环境依赖
     import jwt as pyjwt
-except Exception:  # pragma: no cover - exercised when dependency is absent
+except Exception:  # pragma: no cover - 当依赖不存在时执行
     pyjwt = None
 
 

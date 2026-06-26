@@ -1,2 +1,2 @@
-"""GPU inference service package."""
+"""GPU 推理服务包。"""
 

@@ -40,8 +40,8 @@ async def ready(
     x_api_key: str | None = Header(default=None),
     x_tenant_id: str | None = Header(default=None),
 ) -> dict[str, Any]:
-    # /ready stays publicly reachable so orchestrators can probe liveness, but the
-    # detailed dependency/disk breakdown is only disclosed to authenticated callers.
+    # /ready 接口保持公开可达，以便编排器（Orchestrator）探测存活状态，但
+    # 依赖项/磁盘的详细细分信息仅披露给已通过身份验证的调用者。
     disclose_detail = request_is_authenticated(authorization, x_api_key, x_tenant_id)
     available = await run_blocking_io(ort.get_available_providers)
     provider_status = runtime_provider_status(available)
@@ -73,8 +73,8 @@ def disk_health(path: Any) -> dict[str, Any]:
         usage = shutil.disk_usage(target)
         return {
             "status": "ready",
-            "free_bytes": int(usage.free),
-            "total_bytes": int(usage.total),
+            "free_bytes": usage.free,
+            "total_bytes": usage.total,
         }
     except Exception as exc:
         logger.warning("disk health check failed: %s", exception_log_summary(exc))

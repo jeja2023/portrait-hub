@@ -74,7 +74,7 @@ def load_gallery_snapshot() -> dict[str, Any]:
                                 "created_at": float(row["feature_created_at"] or 0.0),
                             }
                         )
-    except Exception as exc:  # pragma: no cover - requires external database
+    except Exception as exc:  # pragma: no cover - 需要外部数据库支持
         logger.warning("postgres gallery load failed: %s", exception_log_summary(exc))
         return {"people": []}
     return {"version": 1, "people": list(people.values())}

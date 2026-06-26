@@ -1,4 +1,4 @@
-"""Inference entry points per task (re-export facade)."""
+"""按任务划分的推理入口点（重新导出外观门面）。"""
 
 from app.inference_classification import (
     infer_classification_images,

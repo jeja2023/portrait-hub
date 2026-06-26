@@ -8,9 +8,9 @@ from app.portrait_security import redact_sensitive_fields
 from app.portrait_state import append_jsonl
 from app.settings import REDIS_URL, TASK_QUEUE_BACKEND, TASK_QUEUE_STATE_PATH
 
-try:  # pragma: no cover - optional production dependency
-    import redis  # optional, from requirements-prod-optional.txt
-except Exception:  # pragma: no cover - exercised when dependency is absent
+try:  # pragma: no cover - 可选的生产环境依赖
+    import redis  # 可选依赖，来自 requirements-prod-optional.txt
+except Exception:  # pragma: no cover - 当依赖不存在时执行
     redis = None
 
 
@@ -79,7 +79,7 @@ class RedisTaskQueue(LocalTaskQueue):
             raise RuntimeError("redis is not installed; install requirements-prod-optional.txt")
         if not REDIS_URL:
             raise RuntimeError("REDIS_URL is not configured")
-        # Reuse a single client/connection pool instead of building one per call.
+        # 复用单个客户端/连接池，而不是每次调用都重新构建一个。
         if self._cached_client is None:
             self._cached_client = redis.Redis.from_url(REDIS_URL, decode_responses=True)
         return self._cached_client
@@ -125,7 +125,7 @@ class RedisTaskQueue(LocalTaskQueue):
         try:
             self._client().ping()
             return {**payload, "status": "ready"}
-        except Exception as exc:  # pragma: no cover - requires external Redis
+        except Exception as exc:  # pragma: no cover - 需要外部 Redis 支持
             logger.warning("redis task queue health check failed: %s", exception_log_summary(exc))
             return {**payload, "status": "error", "error": HEALTH_CHECK_FAILED}
 

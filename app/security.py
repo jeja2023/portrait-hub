@@ -24,9 +24,9 @@ def authenticated_request_identity(
             if isinstance(tenants_claim, list):
                 tenants = sorted(
                     {
-                        str(item).strip()
+                        item.strip()
                         for item in tenants_claim
-                        if isinstance(item, str) and str(item).strip()
+                        if isinstance(item, str) and item.strip()
                     }
                 )
                 if tenants:
@@ -46,10 +46,10 @@ def request_is_authenticated(
     x_api_key: str | None = None,
     x_tenant_id: str | None = None,
 ) -> bool:
-    """Best-effort, non-raising check of whether a request carries valid credentials.
+    """尽力而为、且不会抛出异常的请求凭证有效性检查。
 
-    Used by probes (e.g. /ready) that stay publicly reachable but should only
-    disclose internal dependency detail to authenticated callers.
+    用于探针（例如 `/ready` 接口），这类接口保持公开可达，但仅应
+    向已通过身份验证的调用者披露内部依赖项的详细信息。
     """
     return authenticated_request_identity(authorization, x_api_key, x_tenant_id) is not None
 

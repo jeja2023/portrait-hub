@@ -3,7 +3,7 @@ import asyncio
 import hashlib
 import signal
 from contextlib import asynccontextmanager
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator
 from typing import Any, cast
 
 from fastapi import FastAPI, HTTPException, Request, Response
@@ -113,7 +113,7 @@ def install_config_reload_signal_handler() -> bool:
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     if CONFIG_HOT_RELOAD_ENABLED:
         reload_runtime_config(source="startup", include_env=True)
     await ensure_portrait_runtime_state_loaded()
@@ -270,14 +270,14 @@ def create_app() -> FastAPI:
 def configure_opentelemetry(app: FastAPI) -> None:
     if not OPENTELEMETRY_ENABLED:
         return
-    try:  # pragma: no cover - optional production dependency
+    try:  # pragma: no cover - 可选的生产环境依赖
         from opentelemetry import trace
         from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
         from opentelemetry.sdk.resources import Resource
         from opentelemetry.sdk.trace import TracerProvider
         from opentelemetry.sdk.trace.export import BatchSpanProcessor
         from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
-    except Exception as exc:  # pragma: no cover - optional dependency absent
+    except Exception as exc:  # pragma: no cover - 可选依赖缺失
         logger.warning("opentelemetry is enabled but dependencies are unavailable: %s", exc)
         return
     provider = TracerProvider(resource=Resource.create({"service.name": OTEL_SERVICE_NAME}))

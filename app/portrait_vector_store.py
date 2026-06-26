@@ -9,10 +9,10 @@ from app.portrait_response import exception_log_summary
 from app.portrait_thresholds import get_threshold, validate_threshold_profile
 from app.settings import PORTRAIT_REQUIRE_PRODUCTION_VECTOR_BACKEND, PORTRAIT_VECTOR_BACKEND, QDRANT_API_KEY, QDRANT_PREFER_GRPC, QDRANT_URL
 
-try:  # pragma: no cover - optional production dependency
+try:  # pragma: no cover - 可选的生产环境依赖
     from qdrant_client import QdrantClient
     from qdrant_client.http import models as qdrant_models
-except Exception:  # pragma: no cover - exercised when dependency is absent
+except Exception:  # pragma: no cover - 当依赖不存在时执行
     QdrantClient = None
     qdrant_models = None
 

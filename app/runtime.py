@@ -1,4 +1,4 @@
-"""Model runtime: registry, sessions, execution, and state (re-export facade)."""
+"""模型运行时：注册表、会话、执行和状态（重新导出外观门面）。"""
 
 from app.runtime_execution import (
     build_input_array,

@@ -1,4 +1,4 @@
-"""Run operational actions across multiple gpu-services workers."""
+"""在多个 gpu-services 工作节点上执行运维操作的控制脚本。"""
 
 from __future__ import annotations
 

@@ -9,7 +9,7 @@ from app import postgres_jobs as _jobs
 from app import postgres_objects as _objects
 from app import postgres_streams as _streams
 from app import postgres_thresholds as _thresholds
-from app.postgres_core import (  # re-exported for backwards-compatible imports
+from app.postgres_core import (  # 重新导出以实现向后兼容的导入
     PostgresUnavailable,
     embedding_bytes,
     get_postgres_pool,

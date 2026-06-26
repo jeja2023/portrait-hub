@@ -1,7 +1,6 @@
-"""Compatibility facade for legacy route modules.
+"""遗留路由模块的兼容性外观门面。
 
-This module intentionally re-exports a small, explicit surface.  Route modules
-should prefer direct imports from the owning modules for new code.
+此模块故意只重新导出较小的显式接口。对于新编写的代码，路由模块应优先使用直接导入的方式导入相关拥有的模块。
 """
 
 from app.constants import COCO_CLASSES
