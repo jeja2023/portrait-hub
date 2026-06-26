@@ -82,7 +82,7 @@ def observe(metric: str, value: float = 1) -> None:
 
 def observe_request_status(status_code: int) -> None:
     with METRICS_LOCK:
-        status = str(int(status_code))
+        status = str(status_code)
         REQUEST_STATUS_COUNTS[status] = REQUEST_STATUS_COUNTS.get(status, 0) + 1
         PROMETHEUS_CACHE["expires_at"] = 0.0
 
@@ -131,7 +131,7 @@ def observe_histogram(metric: str, value: float) -> None:
     histogram = HISTOGRAMS.get(metric)
     if histogram is None:
         return
-    numeric_value = max(0.0, float(value))
+    numeric_value = max(0.0, value)
     histogram["count"] += 1
     histogram["sum"] += numeric_value
     matched = False
@@ -145,7 +145,7 @@ def observe_histogram(metric: str, value: float) -> None:
 
 def gpu_memory_metrics() -> list[dict[str, int]]:
     try:  # pragma: no cover - 需要 NVIDIA 运行环境
-        import pynvml  # 可选，来自 nvidia-ml-py (requirements-prod-optional.txt)
+        import pynvml  # pyright: ignore[reportMissingImports]  # 可选，来自 nvidia-ml-py (requirements-prod-optional.txt)
     except Exception:
         return []
     try:  # pragma: no cover - 需要 NVIDIA 运行环境
@@ -208,7 +208,7 @@ def prometheus_metrics() -> str:
             return str(PROMETHEUS_CACHE["text"])
         text = build_prometheus_metrics()
         PROMETHEUS_CACHE["text"] = text
-        PROMETHEUS_CACHE["expires_at"] = now + max(0.0, float(PROMETHEUS_METRICS_CACHE_SECONDS))
+        PROMETHEUS_CACHE["expires_at"] = now + max(0.0, PROMETHEUS_METRICS_CACHE_SECONDS)
         return text
 
 
@@ -225,7 +225,7 @@ def build_prometheus_metrics() -> str:
     stream_frames_sampled = sum(int(item.get("frames_sampled", 0)) for item in STREAM_WORKER_SESSIONS.values())
     queue_depth = max(0, len(getattr(GPU_SEMAPHORE, "_waiters", []) or []))
     device_queue_depths = {
-        int(device_id): max(0, len(getattr(semaphore, "_waiters", []) or []))
+        device_id: max(0, len(getattr(semaphore, "_waiters", []) or []))
         for device_id, semaphore in GPU_DEVICE_SEMAPHORES.items()
     }
     lines = [
