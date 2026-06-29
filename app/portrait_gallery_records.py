@@ -37,6 +37,8 @@ class FeatureRecord:
             payload["embedding"] = self.embedding
         if self.object_info:
             payload["object"] = public_object_info(self.object_info)
+            if "thumbnail" in self.object_info:
+                payload["thumbnail"] = self.object_info["thumbnail"]
         return payload
 
     def state_dict(self) -> dict[str, Any]:

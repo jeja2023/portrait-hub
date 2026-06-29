@@ -32,7 +32,7 @@ from app.portrait_gallery import (
     search_gallery,
     upsert_person,
 )
-from app.portrait_jobs import VideoJob, create_batch_job, persist_video_job, run_batch_job
+from app.portrait_jobs import VideoJob, create_batch_job, persist_video_job, run_batch_job, image_thumbnail_data_url
 from app.portrait_response import OBJECT_CLEANUP_FAILED, exception_log_summary, portrait_success, raise_rollback_failure
 from app.portrait_request_context import PortraitRequestContext, portrait_request_context
 from app.portrait_request_validation import validate_int_range
@@ -285,6 +285,9 @@ async def v1_gallery_enroll(
                 item.frame.filename,
                 item.data or b"",
             )
+            thumbnail_url = await run_blocking_io(image_thumbnail_data_url, item.image)
+            if thumbnail_url:
+                object_info["thumbnail"] = thumbnail_url
             created_object_infos.append(object_info)
             embedding, quality_score, model_id, model_version = await extract_gallery_embedding(item.image, modality)
             feature = await run_blocking_io(
