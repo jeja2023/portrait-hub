@@ -3,10 +3,16 @@ const state = {
   apiKey: localStorage.getItem("portraitHubApiKey") || "",
   bearer: localStorage.getItem("portraitHubBearer") || "",
   view: localStorage.getItem("portraitHubView") || "overview",
+  analysisResultsTab: localStorage.getItem("portraitHubAnalysisResultsTab") || "image",
   isLoggedIn: localStorage.getItem("portraitHubLoggedIn") === "true",
   dashboard: {},
   galleryExport: {},
   latestPayloads: {},
+  analysisResults: {
+    image: [],
+    video: null,
+    stream: null,
+  },
   alertConfig: loadAlertConfig(),
   sockets: {},
   visionPreviews: [],
@@ -92,7 +98,7 @@ const template = `
             <button type="button" class="nav-item" data-nav="vision">图片解析</button>
             <button type="button" class="nav-item" data-nav="video">视频解析</button>
             <button type="button" class="nav-item" data-nav="streams">视频流解析</button>
-            <button type="button" class="nav-item" data-nav="video-results">视频解析结果</button>
+            <button type="button" class="nav-item" data-nav="video-results">解析结果</button>
           </div>
         </details>
         <details class="nav-group" data-nav-group="retrieval">
@@ -149,7 +155,7 @@ const template = `
           <button type="button" class="product-tile" data-nav-shortcut="vision"><strong>图片解析</strong><span>人脸、人体、姿态、衣着、步态、检测和 ReID embedding。</span></button>
           <button type="button" class="product-tile" data-nav-shortcut="video"><strong>视频解析</strong><span>离线视频任务创建、状态跟踪和结果回收。</span></button>
           <button type="button" class="product-tile" data-nav-shortcut="streams"><strong>视频流解析</strong><span>RTSP/HTTP 注册、启动、事件查询和实时订阅。</span></button>
-          <button type="button" class="product-tile" data-nav-shortcut="video-results"><strong>视频解析结果</strong><span>集中查看所有已完成视频解析任务的解析帧缩略图。</span></button>
+          <button type="button" class="product-tile" data-nav-shortcut="video-results"><strong>解析结果</strong><span>按图片、视频和视频流集中查看解析输出与关键快照。</span></button>
           <button type="button" class="product-tile" data-nav-shortcut="gallery-search"><strong>比对检索</strong><span>以图搜人、候选排序和检索结果查看。</span></button>
         </div>
         <div class="split-grid">
@@ -357,6 +363,15 @@ const template = `
             <div id="feature-scatter" class="scatter" aria-label="gallery feature distribution"></div>
           </div>
         </div>
+        <div class="card" id="person-features-card">
+          <div class="section-title">
+            <h3>特征图片列表</h3>
+            <p>展示所选人员提取出的所有特征图像及元数据。</p>
+          </div>
+          <div id="person-features-list" class="result-visual-grid">
+            <div class="result-empty">请在人员列表中选择人员以查看特征图片</div>
+          </div>
+        </div>
         <div class="card">
           <div class="section-title">
             <h3>人员维护</h3>
@@ -418,22 +433,51 @@ const template = `
       </section>
 
 
-      <section class="view" data-view="video-results">
+            <section class="view" data-view="video-results">
         <div class="view-header">
           <div class="section-title">
-            <h2>视频解析结果</h2>
-            <p>汇总当前租户已完成视频任务的解析帧图片，便于集中查看和核验。</p>
+            <h2>解析结果</h2>
+            <p>统一查看图片解析、视频解析和视频流解析结果，结果图片会标注来源类型和关键上下文。</p>
           </div>
           <button type="button" id="video-results-refresh-button">刷新结果</button>
         </div>
-        <div class="result-panel">
-          <div class="section-title">
-            <h3>全部结果图片</h3>
-            <p>点击任意缩略图可放大查看。</p>
+        <div class="tabs result-tabs" role="tablist" aria-label="解析结果分类">
+          <button type="button" data-results-tab="image" role="tab">图片解析结果</button>
+          <button type="button" data-results-tab="video" role="tab">视频解析结果</button>
+          <button type="button" data-results-tab="stream" role="tab">视频流解析结果</button>
+        </div>
+        <div class="analysis-results-panel" data-results-panel="image" role="tabpanel">
+          <div class="result-panel">
+            <div class="section-title">
+              <h3>图片解析结果</h3>
+              <p>展示当前会话最近完成的图片解析结果。</p>
+            </div>
+            <div id="image-results-summary" class="result-summary"></div>
+            <div id="image-results-visuals" class="result-visual-grid"></div>
+            <div id="image-results-json" class="json-view data-viewer" role="region" aria-label="图片解析结果数据"></div>
           </div>
-          <div id="video-results-summary" class="result-summary"></div>
-          <div id="video-results-visuals" class="result-visual-grid"></div>
-          <div id="video-results-json" class="json-view data-viewer" role="region" aria-label="视频解析结果数据"></div>
+        </div>
+        <div class="analysis-results-panel" data-results-panel="video" role="tabpanel">
+          <div class="result-panel">
+            <div class="section-title">
+              <h3>视频解析结果</h3>
+              <p>汇总当前租户已完成视频任务的解析帧缩略图。</p>
+            </div>
+            <div id="video-results-summary" class="result-summary"></div>
+            <div id="video-results-visuals" class="result-visual-grid"></div>
+            <div id="video-results-json" class="json-view data-viewer" role="region" aria-label="视频解析结果数据"></div>
+          </div>
+        </div>
+        <div class="analysis-results-panel" data-results-panel="stream" role="tabpanel">
+          <div class="result-panel">
+            <div class="section-title">
+              <h3>视频流解析结果</h3>
+              <p>展示视频流注册状态、worker 会话和最近事件快照。</p>
+            </div>
+            <div id="stream-results-summary" class="result-summary"></div>
+            <div id="stream-results-list" class="stream-result-list"></div>
+            <div id="stream-results-json" class="json-view data-viewer" role="region" aria-label="视频流解析结果数据"></div>
+          </div>
         </div>
       </section>
 
@@ -893,6 +937,9 @@ function payloadLabel(name) {
     vision: "图片解析响应",
     compare: "人像比对响应",
     gallery: "人员库响应",
+    "image-results": "图片解析结果",
+    "video-results": "视频解析结果",
+    "stream-results": "视频流解析结果",
     enroll: "人员注册响应",
     search: "以图搜人响应",
     jobs: "视频任务响应",
@@ -1063,18 +1110,19 @@ function isImageData(value) {
 }
 
 function sanitizeVideoPayload(value) {
+  if (isImageData(value)) return "[image]";
   if (Array.isArray(value)) return value.map(sanitizeVideoPayload);
   if (!value || typeof value !== "object") return value;
   const output = {};
   Object.entries(value).forEach(([key, item]) => {
-    output[key] = key === "thumbnail" && isImageData(item) ? "[image]" : sanitizeVideoPayload(item);
+    output[key] = sanitizeVideoPayload(item);
   });
   return output;
 }
 
 function renderPayload(name, selector, payload) {
   state.latestPayloads[name] = payload;
-  const renderedPayload = ["jobs", "job", "video-results"].includes(name) ? sanitizeVideoPayload(payload) : payload;
+  const renderedPayload = ["jobs", "job", "video-results", "image-results", "stream-results"].includes(name) ? sanitizeVideoPayload(payload) : payload;
   const node = qs(selector);
   if (node && node.classList.contains("data-viewer")) {
     renderDataViewer(selector, renderedPayload, name);
@@ -1127,7 +1175,10 @@ function setView(view) {
     group.open = group === activeGroup;
   });
   closeVisionLightbox();
-  if (view === "video-results" && state.isLoggedIn) refreshVideoResults().catch(() => {});
+  if (view === "video-results") {
+    renderAnalysisResultsTab(state.analysisResultsTab);
+    if (state.isLoggedIn) refreshAnalysisResults().catch(() => {});
+  }
 }
 
 function closeSocket(name) {
@@ -1430,11 +1481,14 @@ function buildVisualMeta(item, frame, frameIndex) {
   return { width, height, overlay, count, frameLabel, caption };
 }
 
-function resultVisualStageMarkup(item, meta, size) {
+function resultVisualStageMarkup(item, meta, size, variant = "thumb") {
+  const src = variant === "lightbox"
+    ? item?.lightboxSrc || item?.src || item?.displaySrc || ""
+    : item?.displaySrc || item?.src || "";
   return `
       <div class="result-visual-stage">
         <svg width="${size.width}" height="${size.height}" viewBox="0 0 ${meta.width} ${meta.height}" role="img" aria-label="${escapeHtml(item?.name || meta.frameLabel)}">
-          <image href="${escapeHtml(item?.src || "")}" x="0" y="0" width="${meta.width}" height="${meta.height}" preserveAspectRatio="none" />
+          <image href="${escapeHtml(src)}" x="0" y="0" width="${meta.width}" height="${meta.height}" preserveAspectRatio="none" />
           ${meta.overlay}
         </svg>
       </div>`;
@@ -1446,30 +1500,34 @@ function resultVisualMarkup(entry, visualIndex, options = {}) {
   const frameIndex = entry?.frameIndex ?? visualIndex;
   const meta = buildVisualMeta(item, frame, frameIndex);
   const variant = options.variant || "thumb";
-  const interactive = options.interactive ?? variant === "thumb";
+  const interactive = options.interactive ?? variant !== "lightbox";
   const maxWidth = options.maxWidth ?? (variant === "lightbox" ? Math.max(320, Math.floor(window.innerWidth * 0.86)) : 180);
   const maxHeight = options.maxHeight ?? (variant === "lightbox" ? Math.max(240, Math.floor(window.innerHeight * 0.78)) : 130);
-  const size = fitVisualSize(meta.width, meta.height, maxWidth, maxHeight, variant === "lightbox");
+  const allowUpscale = options.allowUpscale ?? variant === "lightbox";
+  const size = fitVisualSize(meta.width, meta.height, maxWidth, maxHeight, allowUpscale);
   const label = escapeHtml(item?.label || meta.frameLabel);
   const title = escapeHtml(item?.name || item?.label || meta.frameLabel);
-  const stage = resultVisualStageMarkup(item, meta, size);
+  const stage = resultVisualStageMarkup(item, meta, size, variant);
+  const cardStyle = variant === "analysis"
+    ? ` style="--visual-card-width: ${Math.max(150, size.width)}px;"`
+    : variant === "video"
+      ? ` style="--visual-card-width: ${Math.max(220, size.width)}px;"`
+      : "";
   return `
-    <figure class="result-visual-card result-visual-card--${variant}">
+    <figure class="result-visual-card result-visual-card--${variant}"${cardStyle}>
       ${interactive ? `<button type="button" class="result-visual-trigger" data-result-visual-index="${visualIndex}" aria-label="放大查看 ${title}">${stage}</button>` : stage}
       <figcaption><span>${label}</span><strong>${meta.caption}</strong></figcaption>
     </figure>`;
 }
 
-function renderVisionVisuals(payload, items) {
-  const node = qs("#vision-visuals");
-  if (!node) return;
+function visionVisualEntries(payload, items) {
   const data = payloadData(payload);
   const frames = Array.isArray(data?.frames)
     ? data.frames
     : Array.isArray(data?.results)
       ? data.results
       : [];
-  const visuals = !frames.length
+  return !frames.length
     ? items.map((item, index) => ({ item, frame: { image_index: index }, frameIndex: index }))
     : frames
       .map((frame, index) => {
@@ -1477,15 +1535,26 @@ function renderVisionVisuals(payload, items) {
         return { item: items[imageIndex] || items[index], frame, frameIndex: index };
       })
       .filter((entry) => entry.item);
+}
+
+function renderVisionVisuals(payload, items) {
+  const node = qs("#vision-visuals");
+  if (!node) return;
+  const visuals = visionVisualEntries(payload, items);
   state.visionResultVisuals = visuals;
   closeVisionLightbox();
   if (!items.length) {
     node.innerHTML = "";
+    node.__visuals = [];
     return;
   }
-  node.innerHTML = visuals.map((entry, index) => resultVisualMarkup(entry, index, { variant: "thumb", maxWidth: 180, maxHeight: 130 })).join("");
+  renderVideoVisualGrid("#vision-visuals", visuals, "", {
+    variant: "analysis",
+    maxWidth: 420,
+    maxHeight: 320,
+    allowUpscale: true,
+  });
 }
-
 function closeVisionLightbox() {
   state.visionLightboxIndex = null;
   const node = qs("#vision-lightbox");
@@ -1723,6 +1792,19 @@ async function refreshGallery() {
   renderGalleryVisuals(payload);
   renderGallerySummary(payload);
   renderPayload("gallery", "#gallery-json", payload);
+
+  // 更新或清空特征图片列表
+  const currentId = qs("#person-id-input").value.trim();
+  if (currentId && Array.isArray(payload.people)) {
+    const person = payload.people.find((p) => p.person_id === currentId);
+    if (person) {
+      renderPersonFeatures(person);
+    } else {
+      renderPersonFeatures(null);
+    }
+  } else {
+    renderPersonFeatures(null);
+  }
 }
 
 async function refreshStreams() {
@@ -1742,7 +1824,7 @@ async function refreshAdmin() {
 }
 
 async function refreshAll() {
-  await Promise.allSettled([refreshDashboard(), refreshModels(), refreshGallery(), refreshStreams(), refreshAdmin(), refreshVideoResults()]);
+  await Promise.allSettled([refreshDashboard(), refreshModels(), refreshGallery(), refreshStreams(), refreshAdmin(), refreshAnalysisResults()]);
 }
 
 function renderGallerySummary(payload) {
@@ -1769,8 +1851,11 @@ function renderGalleryVisuals(payload) {
     : "<li><span>暂无人员</span><strong>0</strong></li>";
   qsa("[data-person-id]").forEach((button) => {
     button.addEventListener("click", () => {
-      qs("#person-id-input").value = button.dataset.personId;
+      const id = button.dataset.personId;
+      qs("#person-id-input").value = id;
       setStatus("已填入人员 ID");
+      const person = people.find((p) => p.person_id === id);
+      renderPersonFeatures(person);
     });
   });
   const scatter = qs("#feature-scatter");
@@ -1781,6 +1866,50 @@ function renderGalleryVisuals(payload) {
       return `<span class="scatter-point scatter-x-${x} scatter-y-${y}" title="${escapeHtml(person.person_id)} ${escapeHtml(feature.modality)}"></span>`;
     }))
     .join("");
+}
+
+function renderPersonFeatures(person) {
+  const container = qs("#person-features-list");
+  if (!container) return;
+  if (!person || !Array.isArray(person.features) || person.features.length === 0) {
+    container.innerHTML = `<div class="result-empty">暂无特征图片</div>`;
+    return;
+  }
+  container.innerHTML = person.features.map((feature) => {
+    const modalityMap = {
+      face: "人脸",
+      body: "人体",
+      appearance: "衣着外观",
+    };
+    const modalityText = modalityMap[feature.modality] || feature.modality || "未知";
+    const modalityClass = ["face", "body", "appearance"].includes(feature.modality) ? feature.modality : "";
+    const score = typeof feature.quality_score === "number" ? feature.quality_score.toFixed(3) : "--";
+    const src = feature.thumbnail || feature.object?.thumbnail || "";
+    const createdTime = feature.created_at ? new Date(feature.created_at * 1000).toLocaleString("zh-CN") : "--";
+    const featureId = escapeHtml(feature.feature_id || "");
+    const modelId = escapeHtml(feature.model_id || "");
+    const badgeClass = modalityClass ? ` feature-badge--${modalityClass}` : "";
+    const imgHtml = src
+      ? `<img src="${escapeHtml(src)}" alt="特征" class="feature-thumbnail" />`
+      : `<div class="feature-thumbnail-placeholder">暂无图片</div>`;
+
+    return `
+      <div class="result-visual-card">
+        <div class="result-visual-stage">
+          ${imgHtml}
+        </div>
+        <figcaption style="margin-top: 8px; display: grid; gap: 4px; font-size: 11px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;">
+            <span class="feature-badge${badgeClass}">${escapeHtml(modalityText)}</span>
+            <strong style="color: var(--accent); font-weight: 600;">Q: ${escapeHtml(score)}</strong>
+          </div>
+          <strong title="${featureId}">ID: ${featureId.slice(0, 8)}...</strong>
+          <strong title="${modelId}">模型: ${modelId}</strong>
+          <strong>时间: ${escapeHtml(createdTime)}</strong>
+        </figcaption>
+      </div>
+    `;
+  }).join("");
 }
 
 function renderVisionSummary(payload) {
@@ -1806,13 +1935,17 @@ function renderCompareSummary(payload) {
 
 
 function videoFrameVisual(frame, frameIndex, jobLabel) {
-  const src = frame?.thumbnail || frame?.image || frame?.preview || "";
-  if (!src) return null;
-  const label = jobLabel ? `${jobLabel} / 第 ${frameIndex + 1} 帧` : `第 ${frameIndex + 1} 帧`;
+  const displaySrc = frame?.thumbnail || frame?.image || frame?.preview || "";
+  if (!displaySrc) return null;
+  const lightboxSrc = frame?.preview || frame?.image || frame?.thumbnail || displaySrc;
+  const label = `第 ${frameIndex + 1} 帧`;
+  const title = jobLabel ? `${jobLabel} / ${label}` : label;
   return {
     item: {
-      src,
-      name: label,
+      src: displaySrc,
+      displaySrc,
+      lightboxSrc,
+      name: title,
       label,
       width: frame.width || 1,
       height: frame.height || 1,
@@ -1837,21 +1970,35 @@ function videoJobVisualInfo(payload) {
   };
 }
 
-function renderVideoVisualGrid(selector, visuals, emptyText) {
+function renderVideoVisualGrid(selector, visuals, emptyText, options = {}) {
   const node = qs(selector);
   if (!node) return;
+  const variant = options.variant || "thumb";
+  const maxWidth = options.maxWidth ?? 180;
+  const maxHeight = options.maxHeight ?? 130;
   node.dataset.visualSource = selector;
   node.__visuals = visuals;
+  node.classList.toggle("result-visual-grid--analysis", variant === "analysis");
+  node.classList.toggle("result-visual-grid--video", variant === "video");
   if (!visuals.length) {
     node.innerHTML = emptyText ? `<div class="result-empty">${escapeHtml(emptyText)}</div>` : "";
     return;
   }
-  node.innerHTML = visuals.map((entry, index) => resultVisualMarkup(entry, index, { variant: "thumb", maxWidth: 180, maxHeight: 130 })).join("");
+  node.innerHTML = visuals.map((entry, index) => resultVisualMarkup(entry, index, {
+    variant,
+    maxWidth,
+    maxHeight,
+    allowUpscale: options.allowUpscale,
+  })).join("");
 }
 
 function renderJobVisuals(payload) {
   const info = videoJobVisualInfo(payload);
-  renderVideoVisualGrid("#job-visuals", info.visuals, info.job.status === "completed" ? "该任务暂无可视化结果" : "解析进行中，有帧结果后会实时显示");
+  renderVideoVisualGrid("#job-visuals", info.visuals, info.job.status === "completed" ? "该任务暂无可视化结果" : "解析进行中，有帧结果后会实时显示", {
+    variant: "video",
+    maxWidth: 260,
+    maxHeight: 180,
+  });
 }
 
 function videoResultsVisualInfo(payload) {
@@ -1873,12 +2020,17 @@ function videoResultsVisualInfo(payload) {
 
 function renderVideoResults(payload) {
   const info = videoResultsVisualInfo(payload);
+  state.analysisResults.video = payload;
   renderSummary("#video-results-summary", [
     { label: "任务数", value: info.results.length },
     { label: "图片数", value: info.visuals.length },
     { label: "租户", value: state.tenantId || "--" },
   ]);
-  renderVideoVisualGrid("#video-results-visuals", info.visuals, "暂无已完成的视频解析图片");
+  renderVideoVisualGrid("#video-results-visuals", info.visuals, "暂无已完成的视频解析图片", {
+    variant: "video",
+    maxWidth: 260,
+    maxHeight: 180,
+  });
   renderPayload("video-results", "#video-results-json", payload);
 }
 
@@ -1886,6 +2038,161 @@ async function refreshVideoResults() {
   const payload = await api("/v1/jobs/video/results?limit=48");
   renderVideoResults(payload);
   return payload;
+}
+
+function visionModeLabel(mode) {
+  return localizeValue(mode || "image") || "图片解析";
+}
+
+function addImageAnalysisResult(mode, endpoint, payload, previews) {
+  const visuals = visionVisualEntries(payload, previews).map((entry) => ({
+    ...entry,
+    item: {
+      ...entry.item,
+      label: `图片 / ${visionModeLabel(mode)} / ${entry.item?.label || `第${(entry.frameIndex ?? 0) + 1}帧`}`,
+      name: entry.item?.name || entry.item?.label || "图片解析结果",
+    },
+  }));
+  state.analysisResults.image.unshift({
+    id: payload?.request_id || payload?.data?.request_id || `image_${Date.now()}`,
+    created_at: Date.now(),
+    mode,
+    mode_label: visionModeLabel(mode),
+    endpoint,
+    payload,
+    visual_count: visuals.length,
+    frame_count: visuals.length,
+    visuals,
+  });
+  state.analysisResults.image = state.analysisResults.image.slice(0, 12);
+  if (state.view === "video-results" || state.analysisResultsTab === "image") renderImageResults();
+}
+
+function renderImageResults() {
+  const records = state.analysisResults.image;
+  const visuals = records.flatMap((record) => record.visuals || []);
+  const latest = records[0];
+  renderSummary("#image-results-summary", [
+    { label: "结果批次", value: records.length },
+    { label: "图片数", value: visuals.length },
+    { label: "最近能力", value: latest?.mode_label || "--" },
+    { label: "租户", value: state.tenantId || "--" },
+  ]);
+  renderVideoVisualGrid("#image-results-visuals", visuals, "暂无图片解析结果，请先在图片解析页完成一次解析", {
+    variant: "analysis",
+    maxWidth: 420,
+    maxHeight: 320,
+    allowUpscale: true,
+  });
+  renderPayload("image-results", "#image-results-json", {
+    results: records.map(({ visuals: _visuals, ...record }) => ({ ...record, visual_count: record.visual_count || 0 })),
+  });
+}
+
+function streamEventPayloads(results) {
+  return results.map((result) => (result.status === "fulfilled" ? result.value : { events: [], error: String(result.reason || "events unavailable") }));
+}
+
+function latestStreamEvent(events) {
+  return [...events].sort((left, right) => Number(right.created_at || 0) - Number(left.created_at || 0))[0] || null;
+}
+
+function renderStreamResults(payload) {
+  state.analysisResults.stream = payload;
+  const streams = Array.isArray(payload.streams) ? payload.streams : [];
+  const eventPayloads = Array.isArray(payload.event_payloads) ? payload.event_payloads : [];
+  const events = eventPayloads.flatMap((item) => Array.isArray(item.events) ? item.events : []);
+  const sessions = Array.isArray(payload.stream_worker?.sessions) ? payload.stream_worker.sessions : [];
+  const runningCount = streams.filter((stream) => stream.status === "running").length;
+  renderSummary("#stream-results-summary", [
+    { label: "视频流数", value: payload.total ?? streams.length },
+    { label: "运行中", value: runningCount },
+    { label: "最近事件", value: events.length },
+    { label: "活跃会话", value: payload.stream_worker?.active_sessions ?? sessions.length ?? 0 },
+  ]);
+  const list = qs("#stream-results-list");
+  if (list) {
+    if (!streams.length) {
+      list.innerHTML = `<div class="result-empty">暂无视频流解析结果，请先注册并启动视频流解析</div>`;
+    } else {
+      const eventMap = new Map(eventPayloads.map((item) => [item.stream_id, Array.isArray(item.events) ? item.events : []]));
+      const sessionMap = new Map(sessions.map((session) => [session.stream_id, session]));
+      list.innerHTML = streams.slice(0, 24).map((stream) => {
+        const streamEvents = eventMap.get(stream.stream_id) || [];
+        const latest = latestStreamEvent(streamEvents);
+        const session = sessionMap.get(stream.stream_id) || {};
+        const title = stream.name || stream.stream_id;
+        return `
+          <article class="stream-result-card">
+            <div class="stream-result-head">
+              <strong title="${escapeHtml(stream.stream_id)}">视频流 / ${escapeHtml(title)}</strong>
+              <span class="badge ${stream.status === "running" ? "ok" : stream.status === "failed" ? "danger" : ""}">${escapeHtml(localizeValue(stream.status || "--"))}</span>
+            </div>
+            <div class="stream-result-meta">
+              <span>流地址：${escapeHtml(stream.stream_url || "--")}</span>
+              <span>处理帧：${escapeHtml(session.frames_processed ?? "--")}</span>
+              <span>最近事件：${escapeHtml(latest?.type || "--")}</span>
+              <span>更新时间：${escapeHtml(stream.updated_at ? formatDateTime(stream.updated_at) : "--")}</span>
+            </div>
+          </article>`;
+      }).join("");
+    }
+  }
+  renderPayload("stream-results", "#stream-results-json", payload);
+}
+
+async function refreshStreamResults() {
+  const streamsPayload = await api("/v1/streams?limit=50");
+  const streams = Array.isArray(streamsPayload.streams) ? streamsPayload.streams : [];
+  const [statusResult, eventResults] = await Promise.all([
+    api("/v1/admin/status").catch(() => ({})),
+    Promise.allSettled(streams.slice(0, 24).map((stream) => api(`/v1/streams/${encodeURIComponent(stream.stream_id)}/events?limit=5`))),
+  ]);
+  const eventPayloads = streamEventPayloads(eventResults).map((item, index) => ({
+    stream_id: item.stream_id || streams[index]?.stream_id,
+    events: Array.isArray(item.events) ? item.events : [],
+    error: item.error,
+  }));
+  const payload = {
+    ...streamsPayload,
+    streams,
+    stream_worker: statusResult.stream_worker || {},
+    event_payloads: eventPayloads,
+  };
+  renderStreamResults(payload);
+  return payload;
+}
+
+function renderAnalysisResultsTab(tab = state.analysisResultsTab) {
+  const nextTab = ["image", "video", "stream"].includes(tab) ? tab : "image";
+  state.analysisResultsTab = nextTab;
+  localStorage.setItem("portraitHubAnalysisResultsTab", nextTab);
+  qsa("[data-results-tab]").forEach((button) => {
+    const isActive = button.dataset.resultsTab === nextTab;
+    button.setAttribute("aria-pressed", String(isActive));
+    button.setAttribute("aria-selected", String(isActive));
+  });
+  qsa("[data-results-panel]").forEach((panel) => panel.classList.toggle("active", panel.dataset.resultsPanel === nextTab));
+  if (nextTab === "image") {
+    renderImageResults();
+  } else if (nextTab === "video") {
+    renderVideoResults(state.analysisResults.video || { results: [] });
+  } else if (nextTab === "stream") {
+    renderStreamResults(state.analysisResults.stream || { streams: [], stream_worker: {}, event_payloads: [] });
+  }
+}
+
+async function refreshAnalysisResults() {
+  renderImageResults();
+  await Promise.allSettled([refreshVideoResults(), refreshStreamResults()]);
+  renderAnalysisResultsTab(state.analysisResultsTab);
+}
+
+async function refreshActiveAnalysisResults() {
+  if (state.analysisResultsTab === "video") return refreshVideoResults();
+  if (state.analysisResultsTab === "stream") return refreshStreamResults();
+  renderImageResults();
+  return state.analysisResults.image;
 }
 
 function renderJobSummary(payload) {
@@ -1932,6 +2239,7 @@ async function submitVision(event) {
   renderVisionSummary(payload);
   renderVisionVisuals(payload, state.visionPreviews);
   renderPayload("vision", "#vision-json", payload);
+  addImageAnalysisResult(mode, endpoint, payload, state.visionPreviews);
 }
 
 async function submitCompare(event) {
@@ -2068,7 +2376,6 @@ function updateAuthView() {
     qs("#console-view").classList.remove("hidden");
     qs("#current-tenant-display").textContent = state.tenantId;
     wrapHandler(refreshAll)();
-    if (state.view === "video-results") wrapHandler(refreshVideoResults)();
   } else {
     qs("#login-view").classList.remove("hidden");
     qs("#console-view").classList.add("hidden");
@@ -2100,7 +2407,7 @@ function setupEvents() {
   qs("#search-form").addEventListener("submit", wrapHandler(submitGallerySearch));
   qs("#video-form").addEventListener("submit", wrapHandler(submitVideoJob));
   qs("#stream-form").addEventListener("submit", wrapHandler(submitStream));
-  ["#vision-visuals", "#job-visuals", "#video-results-visuals"].forEach((selector) => qs(selector).addEventListener("click", (event) => {
+  ["#vision-visuals", "#job-visuals", "#image-results-visuals", "#video-results-visuals"].forEach((selector) => qs(selector).addEventListener("click", (event) => {
     const trigger = event.target instanceof Element ? event.target.closest("[data-result-visual-index]") : null;
     if (!trigger) return;
     const index = Number(trigger.dataset.resultVisualIndex);
@@ -2145,7 +2452,13 @@ function setupEvents() {
   qs("#person-get-button").addEventListener("click", wrapHandler(async () => {
     const id = encodedInput("#person-id-input", "人员 ID");
     if (!id) return;
-    renderPayload("gallery", "#gallery-json", await api(`/v1/gallery/${id}`));
+    const payload = await api(`/v1/gallery/${id}`);
+    renderPayload("gallery", "#gallery-json", payload);
+    if (payload && payload.person) {
+      renderPersonFeatures(payload.person);
+    } else {
+      renderPersonFeatures(null);
+    }
   }));
   qs("#person-patch-button").addEventListener("click", wrapHandler(async () => {
     const id = encodedInput("#person-id-input", "人员 ID");
@@ -2203,7 +2516,11 @@ function setupEvents() {
     if (!id) return;
     watchJsonSocket("job", `/ws/jobs/${id}`, "#job-ws-status", "#jobs-json");
   });
-  qs("#video-results-refresh-button").addEventListener("click", wrapHandler(refreshVideoResults));
+  qs("#video-results-refresh-button").addEventListener("click", wrapHandler(refreshActiveAnalysisResults));
+  qsa("[data-results-tab]").forEach((button) => button.addEventListener("click", () => {
+    renderAnalysisResultsTab(button.dataset.resultsTab);
+    if (state.isLoggedIn && state.view === "video-results") wrapHandler(refreshActiveAnalysisResults)();
+  }));
 
   qs("#stream-get-button").addEventListener("click", wrapHandler(async () => {
     const id = encodedInput("#stream-id-input", "视频流 ID");
