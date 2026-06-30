@@ -854,6 +854,42 @@ def test_gallery_json_wal_replays_incremental_mutations(monkeypatch, workspace_t
     assert len(restored.features) == 1
 
 
+def test_gallery_feature_wal_entry_is_incremental(monkeypatch, workspace_tmp_path) -> None:
+    GALLERY.clear()
+    state_path = workspace_tmp_path / "gallery.json"
+    monkeypatch.setattr(portrait_gallery, "PORTRAIT_STORAGE_BACKEND", "json")
+    monkeypatch.setattr(portrait_gallery, "PORTRAIT_GALLERY_STATE_PATH", state_path)
+    monkeypatch.setattr(portrait_gallery, "PORTRAIT_GALLERY_WAL_ENABLED", True)
+    monkeypatch.setattr(portrait_gallery, "PORTRAIT_GALLERY_WAL_COMPACT_EVERY", 0)
+
+    person = upsert_person("p_wal_feature", "Feature WAL", tenant_id="tenant-a")
+    add_feature(
+        person,
+        modality="body",
+        embedding=[1.0, 0.0, 0.0],
+        model_id="test-model",
+        model_version="test",
+        quality_score=0.9,
+        source_id="source",
+    )
+
+    wal_entries = [
+        json.loads(line)
+        for line in state_path.with_suffix(state_path.suffix + ".wal.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
+    feature_entry = wal_entries[-1]
+    assert feature_entry["op"] == "upsert_feature"
+    assert len(feature_entry["person"]["features"]) == 0
+    assert feature_entry["feature"]["embedding"] == [1.0, 0.0, 0.0]
+
+    GALLERY.clear()
+    portrait_gallery.load_gallery_state()
+
+    restored = GALLERY[gallery_key("tenant-a", "p_wal_feature")]
+    assert restored.display_name == "Feature WAL"
+    assert [feature.embedding for feature in restored.features] == [[1.0, 0.0, 0.0]]
+
+
 def test_gallery_patch_rolls_back_memory_when_persist_fails(monkeypatch) -> None:
     GALLERY.clear()
     person = upsert_person("p_patch", "Before", metadata={"note": "old"}, tenant_id="tenant-a")
@@ -1172,6 +1208,39 @@ async def test_run_video_job_retries_and_persists_progress(monkeypatch) -> None:
     assert persisted[-1]["progress"] == 1.0
 
 
+@pytest.mark.asyncio
+async def test_run_video_job_progress_persistence_stays_lightweight(monkeypatch) -> None:
+    VIDEO_JOBS.clear()
+    job = VideoJob(job_id="job_light_progress", tenant_id="tenant-a", filename=None)
+    VIDEO_JOBS[job_key(job.tenant_id, job.job_id)] = job
+    persisted = []
+
+    async def fake_extract_video_frames_from_bytes(data, filename, frame_interval, max_frames):
+        return [
+            Image.new("RGB", (8, 8), (20, 40, 60)),
+            Image.new("RGB", (8, 8), (30, 50, 70)),
+        ], {"source_frame_indexes": [0, 1]}
+
+    def capture_persist(persisted_job, *, lightweight_result=False):
+        persisted.append(persisted_job.state_dict(lightweight_result=lightweight_result))
+
+    monkeypatch.setattr("app.portrait_jobs.VIDEO_JOB_PROGRESS_PERSIST_INTERVAL_SECONDS", 0)
+    monkeypatch.setattr("app.portrait_jobs.extract_video_frames_from_bytes", fake_extract_video_frames_from_bytes)
+    monkeypatch.setattr("app.portrait_jobs.assess_image_quality", lambda image: {"score": 0.9})
+    monkeypatch.setattr("app.portrait_jobs.appearance_record", lambda image, include_embedding=False: {"quality": {"score": 0.9}})
+    monkeypatch.setattr("app.portrait_jobs.persist_video_job", capture_persist)
+
+    await run_video_job(job.job_id, job.tenant_id, b"video", "video.mp4", 1, 2)
+
+    running_payloads = [item for item in persisted if item["status"] == "running" and item.get("result")]
+    assert running_payloads
+    assert all(item["result"]["frames"] == [] for item in running_payloads)
+    assert running_payloads[-1]["result"]["frames_available"] == 2
+    assert persisted[-1]["status"] == "completed"
+    assert len(persisted[-1]["result"]["frames"]) == 2
+    assert len(job.result["frames"]) == 2
+
+
 def test_stream_create_rolls_back_memory_when_persist_fails(monkeypatch) -> None:
     STREAMS.clear()
 
@@ -1361,10 +1430,19 @@ async def test_stream_worker_daemon_once_runs_running_streams(monkeypatch) -> No
     stream.status = "running"
     calls = []
 
+    class FakeProcessLock:
+        released = False
+
+        def release(self):
+            self.released = True
+
+    process_lock = FakeProcessLock()
+
     async def fake_run_stream_worker_session(stream, *, max_reconnects=3):
         calls.append((stream.tenant_id, stream.stream_id, max_reconnects))
         return {"tenant_id": stream.tenant_id, "stream_id": stream.stream_id, "status": "running"}
 
+    monkeypatch.setattr(portrait_stream_worker_daemon, "acquire_stream_process_lock", lambda stream, owner_id: process_lock)
     monkeypatch.setattr(portrait_stream_worker_daemon, "run_stream_worker_session", fake_run_stream_worker_session)
 
     report = await portrait_stream_worker_daemon.run_daemon_once(max_reconnects=2)
@@ -1373,6 +1451,80 @@ async def test_stream_worker_daemon_once_runs_running_streams(monkeypatch) -> No
     assert report["selected_count"] == 1
     assert report["processed_count"] == 1
     assert calls == [("tenant-a", stream.stream_id, 2)]
+    assert process_lock.released is True
+
+
+
+
+@pytest.mark.asyncio
+async def test_stream_worker_daemon_process_lock_skips_duplicate_process(monkeypatch) -> None:
+    STREAMS.clear()
+    monkeypatch.setattr(portrait_stream_worker_daemon, "load_streams_state", lambda: None)
+    stream = create_stream("http://example.com/daemon-lock", tenant_id="tenant-a")
+    stream.status = "running"
+    calls = []
+
+    def fake_acquire_process_lock(stream, owner_id):
+        calls.append((stream.tenant_id, stream.stream_id, owner_id))
+        return None
+
+    def fail_acquire_lease(*args, **kwargs):
+        raise AssertionError("state lease should not be attempted without the process lock")
+
+    monkeypatch.setattr(portrait_stream_worker_daemon, "acquire_stream_process_lock", fake_acquire_process_lock)
+    monkeypatch.setattr(portrait_stream_worker_daemon, "acquire_stream_worker_lease", fail_acquire_lease)
+
+    report = await portrait_stream_worker_daemon.run_daemon_once(max_reconnects=1)
+
+    assert report["status"] == "idle"
+    assert report["selected_count"] == 1
+    assert report["processed_count"] == 0
+    assert calls == [("tenant-a", stream.stream_id, portrait_stream_worker_daemon.STREAM_WORKER_OWNER_ID)]
+
+
+def test_stream_worker_process_lock_retries_after_stale_lock_cleanup(monkeypatch, workspace_tmp_path) -> None:
+    STREAMS.clear()
+    lock_dir = workspace_tmp_path / "stream-locks"
+    monkeypatch.setattr(portrait_stream_worker_daemon, "STREAM_WORKER_LOCK_DIR", lock_dir)
+    stream = create_stream("http://example.com/daemon-stale-lock", tenant_id="tenant-a")
+    attempts = []
+    stale_checks = []
+
+    def fake_create_lock_file(lock, owner_id):
+        attempts.append((lock.path, owner_id, lock.token))
+        if len(attempts) == 1:
+            raise FileExistsError(lock.path)
+
+    def fake_remove_stale_lock(path):
+        stale_checks.append(path)
+        return True
+
+    monkeypatch.setattr(portrait_stream_worker_daemon, "create_stream_process_lock_file", fake_create_lock_file)
+    monkeypatch.setattr(portrait_stream_worker_daemon, "remove_stale_stream_process_lock", fake_remove_stale_lock)
+
+    lock = portrait_stream_worker_daemon.acquire_stream_process_lock(stream, "owner-a")
+
+    assert lock is not None
+    assert lock.path == portrait_stream_worker_daemon.stream_process_lock_path(stream)
+    assert len(attempts) == 2
+    assert attempts[0][0] == attempts[1][0] == lock.path
+    assert stale_checks == [lock.path]
+    assert lock.token == attempts[1][2]
+
+
+def test_stream_worker_process_lock_removes_stale_malformed_file(monkeypatch, workspace_tmp_path) -> None:
+    lock_path = workspace_tmp_path / "stream-locks" / "bad.lock"
+    removed = []
+
+    monkeypatch.setattr(type(lock_path), "exists", lambda self: True)
+    monkeypatch.setattr(type(lock_path), "unlink", lambda self, missing_ok=False: removed.append(self))
+    monkeypatch.setattr(portrait_stream_worker_daemon, "read_stream_process_lock_payload", lambda path: None)
+    monkeypatch.setattr(portrait_stream_worker_daemon, "stream_process_lock_created_at", lambda path, payload: 1.0)
+    monkeypatch.setattr(portrait_stream_worker_daemon, "wall_time", lambda: 100.0)
+    monkeypatch.setattr(portrait_stream_worker_daemon, "STREAM_WORKER_PROCESS_LOCK_STALE_SECONDS", 1.0)
+
+    assert portrait_stream_worker_daemon.remove_stale_stream_process_lock(lock_path) is True
+    assert removed == [lock_path]
 
 
 @pytest.mark.asyncio

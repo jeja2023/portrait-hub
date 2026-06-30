@@ -9,7 +9,7 @@ from app.metrics import observe
 from app.observability import logger, now, trace_span, wall_time
 from app.portrait_response import exception_log_summary
 from app.runtime_sessions import primary_execution_provider, run_session
-from app.runtime_state import gpu_semaphore_for_device
+from app.runtime_state import decrement_gpu_queue_waiters, gpu_semaphore_for_device, increment_gpu_queue_waiters
 from app.schemas import ModelBundle
 from app.settings import MAX_TENSOR_ITEMS
 
@@ -38,17 +38,30 @@ def bundle_execution_provider(bundle: ModelBundle) -> str:
     return "CUDAExecutionProvider"
 
 
-async def acquire_with_timeout(semaphore: asyncio.Semaphore, timeout_seconds: float, detail: str) -> None:
+async def acquire_with_timeout(
+    semaphore: asyncio.Semaphore,
+    timeout_seconds: float,
+    detail: str,
+    *,
+    gpu_device_id: int | None = None,
+    track_gpu_waiters: bool = False,
+) -> None:
+    if track_gpu_waiters:
+        increment_gpu_queue_waiters(gpu_device_id)
     try:
-        if timeout_seconds > 0:
-            await asyncio.wait_for(semaphore.acquire(), timeout=timeout_seconds)
-        else:
-            await semaphore.acquire()
-    except asyncio.TimeoutError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=detail,
-        ) from exc
+        try:
+            if timeout_seconds > 0:
+                await asyncio.wait_for(semaphore.acquire(), timeout=timeout_seconds)
+            else:
+                await semaphore.acquire()
+        except asyncio.TimeoutError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=detail,
+            ) from exc
+    finally:
+        if track_gpu_waiters:
+            decrement_gpu_queue_waiters(gpu_device_id)
 
 
 async def run_model_bundle(bundle: ModelBundle, input_array: Array) -> tuple[list[Array], float, float]:
@@ -83,6 +96,8 @@ async def run_model_bundle(bundle: ModelBundle, input_array: Array) -> tuple[lis
                 gpu_semaphore,
                 remaining_timeout,
                 "GPU inference queue timeout",
+                gpu_device_id=gpu_device_id if isinstance(gpu_device_id, int) else None,
+                track_gpu_waiters=True,
             )
             gpu_acquired = True
 

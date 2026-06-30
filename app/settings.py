@@ -34,7 +34,7 @@ def parse_csv_env(name: str, default: str = "") -> list[str]:
     return [item.strip() for item in os.getenv(name, default).split(",") if item.strip()]
 
 
-APP_VERSION = "0.5.51"
+APP_VERSION = "0.5.52"
 MODELS_ROOT = Path(os.getenv("MODELS_ROOT", "models")).resolve()
 MODEL_CONFIG_PATH = Path(os.getenv("MODEL_CONFIG_PATH", "models.yml"))
 MODEL_CONFIG_READ_FAIL_CLOSED = parse_bool_env("MODEL_CONFIG_READ_FAIL_CLOSED", True)
@@ -57,6 +57,8 @@ MAX_STREAM_FRAMES = parse_int_env("MAX_STREAM_FRAMES", 32)
 STREAM_READ_TIMEOUT_SECONDS = parse_int_env("STREAM_READ_TIMEOUT_SECONDS", 10)
 STREAM_WORKER_POLL_INTERVAL_SECONDS = parse_float_env("STREAM_WORKER_POLL_INTERVAL_SECONDS", 5.0)
 STREAM_WORKER_MAX_RECONNECTS = parse_int_env("STREAM_WORKER_MAX_RECONNECTS", 3)
+STREAM_WORKER_LEASE_TTL_SECONDS = parse_float_env("STREAM_WORKER_LEASE_TTL_SECONDS", 30.0)
+STREAM_WORKER_PROCESS_LOCK_STALE_SECONDS = parse_float_env("STREAM_WORKER_PROCESS_LOCK_STALE_SECONDS", max(300.0, STREAM_WORKER_LEASE_TTL_SECONDS * 10.0))
 # 视频/流解码后端：auto（装了 PyAV 就用、否则 OpenCV）/ opencv / pyav。
 # PyAV 提供帧精确的单遍顺序解码；任何后端不可用或出错都会优雅回退到 OpenCV。
 VIDEO_DECODE_BACKEND = os.getenv("VIDEO_DECODE_BACKEND", "auto").strip().lower() or "auto"
@@ -110,6 +112,7 @@ PORTRAIT_AUDIT_PATH = Path(os.getenv("PORTRAIT_AUDIT_PATH", str(RUNTIME_STATE_DI
 AUDIT_WRITE_FAIL_CLOSED = parse_bool_env("AUDIT_WRITE_FAIL_CLOSED", True)
 PORTRAIT_JOBS_STATE_PATH = Path(os.getenv("PORTRAIT_JOBS_STATE_PATH", str(RUNTIME_STATE_DIR / "portrait-jobs.json")))
 PORTRAIT_STREAMS_STATE_PATH = Path(os.getenv("PORTRAIT_STREAMS_STATE_PATH", str(RUNTIME_STATE_DIR / "portrait-streams.json")))
+STREAM_WORKER_LOCK_DIR = Path(os.getenv("STREAM_WORKER_LOCK_DIR", str(PORTRAIT_STREAMS_STATE_PATH.parent / "stream-worker-locks")))
 ALLOW_PRIVATE_STREAM_HOSTS = parse_bool_env("ALLOW_PRIVATE_STREAM_HOSTS", False)
 STREAM_ALLOWED_HOSTS = [item.lower() for item in parse_csv_env("STREAM_ALLOWED_HOSTS")]
 WARMUP_MODELS = [

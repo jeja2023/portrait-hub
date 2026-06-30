@@ -109,6 +109,26 @@ def public_video_job_result(result: dict[str, Any] | None) -> dict[str, Any] | N
     return payload
 
 
+def lightweight_video_job_result(result: dict[str, Any] | None) -> dict[str, Any] | None:
+    payload = public_video_job_result(result)
+    if payload is None:
+        return None
+    if isinstance(payload.get("frames"), list):
+        payload["frames"] = []
+    return payload
+
+
+def video_job_progress_result(metadata: dict[str, Any], frame_count: int, analysis_mode: str) -> dict[str, Any]:
+    return {
+        "metadata": public_video_metadata(metadata),
+        "frame_count": frame_count,
+        "frames_available": frame_count,
+        "frames": [],
+        "analysis_mode": analysis_mode,
+        "partial": True,
+    }
+
+
 @dataclass
 class VideoJob:
     job_id: str
@@ -143,7 +163,8 @@ class VideoJob:
             payload["result"] = public_video_job_result(self.result)
         return payload
 
-    def state_dict(self) -> dict[str, Any]:
+    def state_dict(self, *, lightweight_result: bool = False) -> dict[str, Any]:
+        result = lightweight_video_job_result(self.result) if lightweight_result else public_video_job_result(self.result)
         return {
             "job_id": self.job_id,
             "tenant_id": self.tenant_id,
@@ -156,7 +177,7 @@ class VideoJob:
             "attempts": normalize_retry_count(self.attempts),
             "max_retries": normalize_retry_count(self.max_retries, VIDEO_JOB_MAX_RETRIES),
             "next_retry_at": self.next_retry_at,
-            "result": public_video_job_result(self.result),
+            "result": result,
         }
 
     @classmethod
@@ -193,16 +214,19 @@ def postgres_jobs_enabled() -> bool:
     return PORTRAIT_STORAGE_BACKEND == "postgres"
 
 
-def video_jobs_state_payload() -> dict[str, Any]:
+def video_jobs_state_payload(*, lightweight_result: bool = False) -> dict[str, Any]:
     with VIDEO_JOBS_LOCK:
         return {
             "version": 1,
-            "jobs": [job.state_dict() for job in sorted(VIDEO_JOBS.values(), key=lambda item: (item.tenant_id, item.job_id))],
+            "jobs": [
+                job.state_dict(lightweight_result=lightweight_result)
+                for job in sorted(VIDEO_JOBS.values(), key=lambda item: (item.tenant_id, item.job_id))
+            ],
         }
 
 
-def save_video_jobs_state() -> None:
-    write_json_state(PORTRAIT_JOBS_STATE_PATH, video_jobs_state_payload())
+def save_video_jobs_state(*, lightweight_result: bool = False) -> None:
+    write_json_state(PORTRAIT_JOBS_STATE_PATH, video_jobs_state_payload(lightweight_result=lightweight_result))
 
 
 def restore_video_job(job: VideoJob, previous: VideoJob) -> None:
@@ -221,13 +245,13 @@ def restore_video_job(job: VideoJob, previous: VideoJob) -> None:
     job.next_retry_at = previous.next_retry_at
 
 
-def persist_video_job(job: VideoJob) -> None:
+def persist_video_job(job: VideoJob, *, lightweight_result: bool = False) -> None:
     if postgres_jobs_enabled():
         from app.portrait_postgres import upsert_video_job
 
-        upsert_video_job(job.state_dict())
+        upsert_video_job(job.state_dict(lightweight_result=lightweight_result))
         return
-    save_video_jobs_state()
+    save_video_jobs_state(lightweight_result=lightweight_result)
 
 
 def delete_video_job(tenant_id: str, job_id: str) -> None:
@@ -438,18 +462,11 @@ async def run_video_job(
                         "embedding_dim": 64,
                     }
                 )
-                job.result = public_video_job_result(
-                    {
-                        "metadata": metadata,
-                        "frames": frame_results,
-                        "frame_count": len(frame_results),
-                        "analysis_mode": "async_media_fallback",
-                    }
-                )
+                job.result = video_job_progress_result(metadata, len(frame_results), "async_media_fallback")
                 job.progress = 0.10 + 0.85 * ((index + 1) / total)
                 job.updated_at = wall_time()
                 if persist_interval <= 0 or (job.updated_at - last_progress_persist_at) >= persist_interval:
-                    await run_blocking_io(persist_video_job, job)
+                    await run_blocking_io(persist_video_job, job, lightweight_result=True)
                     last_progress_persist_at = job.updated_at
 
             job.result = public_video_job_result(

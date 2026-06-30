@@ -53,3 +53,17 @@ def test_prometheus_metrics_include_media_pipeline_series() -> None:
     assert "gpu_worker_video_near_duplicate_drops_total" in output
     assert "gpu_worker_video_decode_backend_total" in output
     assert "gpu_worker_video_frame_quality_bucket" in output
+
+
+def test_prometheus_metrics_use_live_gpu_queue_counters(monkeypatch) -> None:
+    from app import runtime_state
+
+    monkeypatch.setattr(metrics, "PROMETHEUS_METRICS_CACHE_SECONDS", 0)
+    monkeypatch.setattr(runtime_state, "GPU_QUEUE_WAITERS", 2)
+    monkeypatch.setattr(runtime_state, "GPU_DEVICE_QUEUE_WAITERS", {0: 1, 1: 3})
+
+    text = prometheus_metrics()
+
+    assert "gpu_worker_gpu_queue_depth 6" in text
+    assert 'gpu_worker_gpu_device_queue_depth{device="0"} 1' in text
+    assert 'gpu_worker_gpu_device_queue_depth{device="1"} 3' in text

@@ -214,10 +214,15 @@ def replace_gallery_snapshot(snapshot: dict[str, Any]) -> None:
                     float(feature.get("created_at") or 0.0),
                 )
             )
+    tenant_ids = sorted({str(row[0]) for row in person_rows})
+    if not tenant_ids:
+        logger.warning("postgres gallery snapshot replacement skipped because snapshot contains no tenants")
+        return
     with _core.postgres_connection() as connection:
         with connection.cursor() as cursor:
-            cursor.execute("DELETE FROM portrait_features")
-            cursor.execute("DELETE FROM portrait_people")
+            for tenant_id in tenant_ids:
+                cursor.execute("DELETE FROM portrait_features WHERE tenant_id = %s", (tenant_id,))
+                cursor.execute("DELETE FROM portrait_people WHERE tenant_id = %s", (tenant_id,))
             if person_rows:
                 cursor.executemany(UPSERT_PERSON_SQL, person_rows)
             if feature_rows:

@@ -16,6 +16,8 @@ GPU_DEVICE_SEMAPHORES = {
     int(device_id): asyncio.Semaphore(max(1, GPU_QUEUE_LIMIT_PER_DEVICE))
     for device_id in GPU_DEVICE_IDS
 }
+GPU_QUEUE_WAITERS = 0
+GPU_DEVICE_QUEUE_WAITERS = {int(device_id): 0 for device_id in GPU_DEVICE_SEMAPHORES}
 
 
 def gpu_device_ids() -> list[int]:
@@ -28,6 +30,30 @@ def gpu_semaphore_for_device(device_id: int | None) -> asyncio.Semaphore:
     return GPU_DEVICE_SEMAPHORES.get(int(device_id), GPU_SEMAPHORE)
 
 
+def gpu_queue_depth_for_device(device_id: int | None) -> int:
+    if device_id is None or int(device_id) not in GPU_DEVICE_SEMAPHORES:
+        return max(0, GPU_QUEUE_WAITERS)
+    return max(0, GPU_DEVICE_QUEUE_WAITERS.get(int(device_id), 0))
+
+
+def increment_gpu_queue_waiters(device_id: int | None) -> None:
+    global GPU_QUEUE_WAITERS
+    if device_id is None or int(device_id) not in GPU_DEVICE_SEMAPHORES:
+        GPU_QUEUE_WAITERS += 1
+        return
+    device_key = int(device_id)
+    GPU_DEVICE_QUEUE_WAITERS[device_key] = GPU_DEVICE_QUEUE_WAITERS.get(device_key, 0) + 1
+
+
+def decrement_gpu_queue_waiters(device_id: int | None) -> None:
+    global GPU_QUEUE_WAITERS
+    if device_id is None or int(device_id) not in GPU_DEVICE_SEMAPHORES:
+        GPU_QUEUE_WAITERS = max(0, GPU_QUEUE_WAITERS - 1)
+        return
+    device_key = int(device_id)
+    GPU_DEVICE_QUEUE_WAITERS[device_key] = max(0, GPU_DEVICE_QUEUE_WAITERS.get(device_key, 0) - 1)
+
+
 __all__ = [
     "MODEL_REGISTRY",
     "MODEL_LOAD_LOCKS",
@@ -35,6 +61,11 @@ __all__ = [
     "REGISTRY_LOCK",
     "GPU_SEMAPHORE",
     "GPU_DEVICE_SEMAPHORES",
+    "GPU_QUEUE_WAITERS",
+    "GPU_DEVICE_QUEUE_WAITERS",
     "gpu_device_ids",
     "gpu_semaphore_for_device",
+    "gpu_queue_depth_for_device",
+    "increment_gpu_queue_waiters",
+    "decrement_gpu_queue_waiters",
 ]

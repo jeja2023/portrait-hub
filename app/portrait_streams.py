@@ -74,6 +74,8 @@ class StreamRecord:
     status: StreamStatus = StreamStatus.REGISTERED
     created_at: float = field(default_factory=wall_time)
     updated_at: float = field(default_factory=wall_time)
+    worker_lease_owner: str | None = None
+    worker_lease_expires_at: float | None = None
     events: list[StreamEvent] = field(default_factory=list)
 
     def add_event(self, event_type: str, message: str, payload: dict[str, Any] | None = None) -> None:
@@ -100,6 +102,8 @@ class StreamRecord:
             "created_at": self.created_at,
             "updated_at": self.updated_at,
             "event_count": len(self.events),
+            "worker_lease_active": bool(self.worker_lease_owner and (self.worker_lease_expires_at or 0.0) > wall_time()),
+            "worker_lease_expires_at": self.worker_lease_expires_at,
         }
         if include_events:
             payload["events"] = [event.public_dict() for event in self.events]
@@ -116,6 +120,8 @@ class StreamRecord:
             "status": str(normalize_stream_status(self.status)),
             "created_at": self.created_at,
             "updated_at": self.updated_at,
+            "worker_lease_owner": self.worker_lease_owner,
+            "worker_lease_expires_at": self.worker_lease_expires_at,
             "events": [event.public_dict() for event in self.events],
         }
 
@@ -131,6 +137,8 @@ class StreamRecord:
             status=normalize_stream_status(str(payload.get("status", StreamStatus.REGISTERED))),
             created_at=float(payload.get("created_at", wall_time())),
             updated_at=float(payload.get("updated_at", wall_time())),
+            worker_lease_owner=str(payload["worker_lease_owner"]) if payload.get("worker_lease_owner") else None,
+            worker_lease_expires_at=float(payload["worker_lease_expires_at"]) if payload.get("worker_lease_expires_at") is not None else None,
             events=[
                 StreamEvent.from_state(item)
                 for item in payload.get("events", [])
@@ -234,6 +242,8 @@ def restore_stream(stream: StreamRecord, previous: StreamRecord) -> None:
     stream.status = previous.status
     stream.created_at = previous.created_at
     stream.updated_at = previous.updated_at
+    stream.worker_lease_owner = previous.worker_lease_owner
+    stream.worker_lease_expires_at = previous.worker_lease_expires_at
     stream.events = deepcopy(previous.events)
 
 
@@ -344,6 +354,8 @@ def start_stream(stream: StreamRecord) -> StreamRecord:
                 raise
             return stream
         stream.status = StreamStatus.RUNNING
+        stream.worker_lease_owner = None
+        stream.worker_lease_expires_at = None
         stream.add_event("stream_started", "stream session started")
         try:
             persist_stream(stream)
@@ -358,6 +370,8 @@ def stop_stream(stream: StreamRecord) -> StreamRecord:
     with STREAMS_LOCK:
         previous_stream = deepcopy(stream)
         stream.status = StreamStatus.STOPPED
+        stream.worker_lease_owner = None
+        stream.worker_lease_expires_at = None
         stream.add_event("stream_stopped", "stream session stopped")
         try:
             persist_stream(stream)
@@ -366,6 +380,80 @@ def stop_stream(stream: StreamRecord) -> StreamRecord:
             STREAMS[stream_key(stream.tenant_id, stream.stream_id)] = stream
             raise
         return stream
+
+
+
+def stream_worker_lease_available(stream: StreamRecord, owner_id: str, *, now: float | None = None) -> bool:
+    current_time = wall_time() if now is None else float(now)
+    if normalize_stream_status(stream.status) != StreamStatus.RUNNING:
+        return False
+    if not stream.worker_lease_owner:
+        return True
+    if stream.worker_lease_owner == owner_id:
+        return True
+    return float(stream.worker_lease_expires_at or 0.0) <= current_time
+
+
+def acquire_stream_worker_lease(stream: StreamRecord, owner_id: str, ttl_seconds: float) -> StreamRecord | None:
+    with STREAMS_LOCK:
+        key = stream_key(stream.tenant_id, stream.stream_id)
+        current = STREAMS.get(key)
+        if current is None or not stream_worker_lease_available(current, owner_id):
+            return None
+        previous_stream = deepcopy(current)
+        current.worker_lease_owner = owner_id
+        current.worker_lease_expires_at = wall_time() + max(1.0, float(ttl_seconds))
+        current.updated_at = wall_time()
+        try:
+            persist_stream(current)
+        except Exception:
+            restore_stream(current, previous_stream)
+            STREAMS[key] = current
+            raise
+        return deepcopy(current)
+
+
+def renew_stream_worker_lease(stream: StreamRecord, owner_id: str, ttl_seconds: float) -> bool:
+    with STREAMS_LOCK:
+        key = stream_key(stream.tenant_id, stream.stream_id)
+        current = STREAMS.get(key)
+        if current is None or current.worker_lease_owner != owner_id:
+            return False
+        if normalize_stream_status(current.status) != StreamStatus.RUNNING:
+            return False
+        previous_stream = deepcopy(current)
+        current.worker_lease_expires_at = wall_time() + max(1.0, float(ttl_seconds))
+        current.updated_at = wall_time()
+        try:
+            persist_stream(current)
+        except Exception:
+            restore_stream(current, previous_stream)
+            STREAMS[key] = current
+            raise
+        stream.worker_lease_owner = current.worker_lease_owner
+        stream.worker_lease_expires_at = current.worker_lease_expires_at
+        return True
+
+
+def release_stream_worker_lease(stream: StreamRecord, owner_id: str) -> bool:
+    with STREAMS_LOCK:
+        key = stream_key(stream.tenant_id, stream.stream_id)
+        current = STREAMS.get(key)
+        if current is None or current.worker_lease_owner != owner_id:
+            return False
+        previous_stream = deepcopy(current)
+        current.worker_lease_owner = None
+        current.worker_lease_expires_at = None
+        current.updated_at = wall_time()
+        try:
+            persist_stream(current)
+        except Exception:
+            restore_stream(current, previous_stream)
+            STREAMS[key] = current
+            raise
+        stream.worker_lease_owner = None
+        stream.worker_lease_expires_at = None
+        return True
 
 
 def remove_stream(stream_id: str, tenant_id: str) -> bool:
