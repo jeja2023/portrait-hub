@@ -39,8 +39,13 @@ from app.runtime_state import (
     REGISTRY_LOCK,
     GPU_SEMAPHORE,
     GPU_DEVICE_SEMAPHORES,
+    GPU_QUEUE_WAITERS,
+    GPU_DEVICE_QUEUE_WAITERS,
     gpu_device_ids,
     gpu_semaphore_for_device,
+    gpu_queue_depth_for_device,
+    increment_gpu_queue_waiters,
+    decrement_gpu_queue_waiters,
 )
 
 __all__ = [
@@ -76,6 +81,11 @@ __all__ = [
     "REGISTRY_LOCK",
     "GPU_SEMAPHORE",
     "GPU_DEVICE_SEMAPHORES",
+    "GPU_QUEUE_WAITERS",
+    "GPU_DEVICE_QUEUE_WAITERS",
     "gpu_device_ids",
     "gpu_semaphore_for_device",
+    "gpu_queue_depth_for_device",
+    "increment_gpu_queue_waiters",
+    "decrement_gpu_queue_waiters",
 ]

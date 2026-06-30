@@ -44,6 +44,26 @@ def gallery_state_payload() -> dict[str, Any]:
         }
 
 
+def _apply_feature_wal_entry(person: dict[str, Any], entry: dict[str, Any]) -> None:
+    feature = entry.get("feature")
+    if not isinstance(feature, dict) or "feature_id" not in feature:
+        return
+    features = person.setdefault("features", [])
+    if not isinstance(features, list):
+        features = []
+        person["features"] = features
+    feature_id = str(feature["feature_id"])
+    features[:] = [
+        item
+        for item in features
+        if not (isinstance(item, dict) and str(item.get("feature_id", "")) == feature_id)
+    ]
+    features.append(feature)
+    updated_at = entry.get("updated_at")
+    if updated_at is not None:
+        person["updated_at"] = updated_at
+
+
 def apply_gallery_wal(payload: dict[str, Any]) -> dict[str, Any]:
     path = gallery_wal_path()
     if not PORTRAIT_GALLERY_WAL_ENABLED or not path.exists():
@@ -65,8 +85,19 @@ def apply_gallery_wal(payload: dict[str, Any]) -> dict[str, Any]:
                 if not person_id:
                     continue
                 key = (tenant_id, person_id)
-                if entry.get("op") == "delete_person":
+                op = entry.get("op")
+                if op == "delete_person":
                     people.pop(key, None)
+                elif op == "upsert_feature":
+                    person = people.get(key)
+                    if person is None:
+                        base_person = entry.get("person")
+                        if not isinstance(base_person, dict):
+                            continue
+                        person = dict(base_person)
+                        person["features"] = []
+                        people[key] = person
+                    _apply_feature_wal_entry(person, entry)
                 elif isinstance(entry.get("person"), dict):
                     people[key] = entry["person"]
     except Exception as exc:
@@ -124,7 +155,14 @@ def save_gallery_state() -> None:
             logger.warning("failed to compact gallery WAL: %s", exception_log_summary(exc))
 
 
-def append_gallery_wal(op: str, *, tenant_id: str, person_id: str, person: PersonRecord | None = None) -> None:
+def append_gallery_wal(
+    op: str,
+    *,
+    tenant_id: str,
+    person_id: str,
+    person: PersonRecord | None = None,
+    feature: FeatureRecord | None = None,
+) -> None:
     global GALLERY_WAL_COUNTER
     if not PORTRAIT_GALLERY_WAL_ENABLED:
         save_gallery_state()
@@ -137,6 +175,8 @@ def append_gallery_wal(op: str, *, tenant_id: str, person_id: str, person: Perso
     }
     if person is not None:
         payload["person"] = person.state_dict()
+    if feature is not None:
+        payload["feature"] = feature.state_dict()
     append_jsonl(gallery_wal_path(), payload, fail_closed=True)
     GALLERY_WAL_COUNTER += 1
     if PORTRAIT_GALLERY_WAL_COMPACT_EVERY > 0 and GALLERY_WAL_COUNTER >= PORTRAIT_GALLERY_WAL_COMPACT_EVERY:
@@ -158,7 +198,21 @@ def persist_feature(person: PersonRecord, feature: FeatureRecord) -> None:
 
         upsert_gallery_feature(person.tenant_id, person.person_id, feature.state_dict())
     else:
-        append_gallery_wal("upsert_person", tenant_id=person.tenant_id, person_id=person.person_id, person=person)
+        append_gallery_wal(
+            "upsert_feature",
+            tenant_id=person.tenant_id,
+            person_id=person.person_id,
+            person=PersonRecord(
+                tenant_id=person.tenant_id,
+                person_id=person.person_id,
+                display_name=person.display_name,
+                metadata=deepcopy(person.metadata),
+                features=[],
+                created_at=person.created_at,
+                updated_at=person.updated_at,
+            ),
+            feature=feature,
+        )
 
     try:
         from app.portrait_vector_store import VECTOR_STORE

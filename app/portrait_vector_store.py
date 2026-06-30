@@ -41,6 +41,22 @@ def _gallery_scan_records(modality: str, tenant_id: str) -> list[dict[str, Any]]
 FloatArray = npt.NDArray[np.float32]
 
 
+def _require_or_fallback_allowed(error: Exception, backend_name: str) -> None:
+    if PORTRAIT_REQUIRE_PRODUCTION_VECTOR_BACKEND:
+        raise RuntimeError(f"{backend_name} vector backend failed and local fallback is disabled") from error
+
+
+def _qdrant_not_found_error(error: Exception) -> bool:
+    status_code = getattr(error, "status_code", None)
+    response = getattr(error, "response", None)
+    if status_code is None and response is not None:
+        status_code = getattr(response, "status_code", None)
+    if status_code == 404:
+        return True
+    message = str(error).lower()
+    return "not found" in message or "does not exist" in message or "doesn't exist" in message
+
+
 class VectorStore(Protocol):
     backend_name: str
 
@@ -184,6 +200,7 @@ class PgvectorVectorStore(LocalVectorStore):
                     tenant_id=tenant_id,
                 )
         except Exception as exc:
+            _require_or_fallback_allowed(exc, self.backend_name)
             logger.warning("pgvector search failed, falling back to local vector scan: %s", exception_log_summary(exc))
             return super().search(
                 query_embedding,
@@ -234,7 +251,9 @@ class QdrantVectorStore(LocalVectorStore):
         try:
             client.get_collection(collection_name)
             return
-        except Exception:
+        except Exception as exc:
+            if not _qdrant_not_found_error(exc):
+                raise
             client.create_collection(
                 collection_name=collection_name,
                 vectors_config=qdrant_models.VectorParams(size=vector_size, distance=qdrant_models.Distance.COSINE),
@@ -331,6 +350,7 @@ class QdrantVectorStore(LocalVectorStore):
                     with_payload=True,
                 )
         except Exception as exc:
+            _require_or_fallback_allowed(exc, self.backend_name)
             logger.warning("qdrant search failed, falling back to local vector scan: %s", exception_log_summary(exc))
             return super().search(
                 query_embedding,

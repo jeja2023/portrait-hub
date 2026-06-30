@@ -215,18 +215,20 @@ def prometheus_metrics() -> str:
 def build_prometheus_metrics() -> str:
     from app.model_config import MODEL_CONFIGS
     from app.portrait_stream_worker import STREAM_WORKER_SESSIONS
-    from app.runtime import GPU_DEVICE_SEMAPHORES, GPU_SEMAPHORE, MODEL_REGISTRY
+    from app import runtime_state
 
-    loaded_models = len(MODEL_REGISTRY)
+    loaded_models = len(runtime_state.MODEL_REGISTRY)
     active_stream_sessions = sum(1 for item in STREAM_WORKER_SESSIONS.values() if item.get("status") == "running")
     stream_backpressure_drops = sum(int(item.get("backpressure_drops", 0)) for item in STREAM_WORKER_SESSIONS.values())
     stream_reconnects_total = sum(int(item.get("restart_count", 0)) for item in STREAM_WORKER_SESSIONS.values())
     stream_frames_processed = sum(int(item.get("frames_processed", 0)) for item in STREAM_WORKER_SESSIONS.values())
     stream_frames_sampled = sum(int(item.get("frames_sampled", 0)) for item in STREAM_WORKER_SESSIONS.values())
-    queue_depth = max(0, len(getattr(GPU_SEMAPHORE, "_waiters", []) or []))
+    queue_depth = max(0, int(runtime_state.GPU_QUEUE_WAITERS)) + sum(
+        max(0, int(depth)) for depth in runtime_state.GPU_DEVICE_QUEUE_WAITERS.values()
+    )
     device_queue_depths = {
-        device_id: max(0, len(getattr(semaphore, "_waiters", []) or []))
-        for device_id, semaphore in GPU_DEVICE_SEMAPHORES.items()
+        device_id: max(0, int(depth))
+        for device_id, depth in runtime_state.GPU_DEVICE_QUEUE_WAITERS.items()
     }
     lines = [
         "# HELP gpu_worker_requests_total 应用中间件接收到的 HTTP 请求总数。",
@@ -393,7 +395,7 @@ def build_prometheus_metrics() -> str:
             "# TYPE gpu_worker_model_last_used_at_seconds gauge",
         ]
     )
-    for model, bundle in sorted(MODEL_REGISTRY.items()):
+    for model, bundle in sorted(runtime_state.MODEL_REGISTRY.items()):
         config = MODEL_CONFIGS.get(model, {})
         labels = model_labels(
             model,

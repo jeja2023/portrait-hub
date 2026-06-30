@@ -13,6 +13,7 @@
 - `gpu_worker_http_request_duration_seconds_bucket`
 - `gpu_worker_inference_duration_seconds_bucket`
 - `gpu_worker_gpu_memory_used_bytes`
+- `gpu_worker_gpu_queue_depth`
 - `gpu_worker_gpu_device_queue_depth`
 - `gpu_worker_loaded_models`
 - `gpu_worker_stream_active_sessions`

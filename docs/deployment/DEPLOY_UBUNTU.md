@@ -205,7 +205,10 @@ MODEL_CONCURRENCY_LIMIT=1
 MODEL_QUEUE_TIMEOUT_SECONDS=0
 ENABLE_TENSORRT=false
 ALLOW_STREAM_URLS=false
+STREAM_WORKER_LEASE_TTL_SECONDS=30
+STREAM_WORKER_PROCESS_LOCK_STALE_SECONDS=300
 RUNTIME_STATE_HOST_DIR=./runtime-state
+STREAM_WORKER_LOCK_DIR=/workspace/runtime-state/stream-worker-locks
 STATE_READ_FAIL_CLOSED=true
 ROLLOUT_AUDIT_PATH=/workspace/runtime-state/rollout-audit.jsonl
 WARMUP_MODELS=
@@ -221,6 +224,7 @@ GPU_WORKER_1_DEVICE=1
 - `MODEL_CONFIG_READ_FAIL_CLOSED=true` 会让缺失、损坏或根节点格式错误的 `models.yml` 直接导致启动/重载失败，避免静默退化为空配置。
 - `RUNTIME_STATE_HOST_DIR` 默认保存审计日志等运行期文件，容器重建后不会丢失。
 - `STATE_READ_FAIL_CLOSED=true` 会让已有 JSON 状态文件损坏或根结构错误时直接失败，避免重启后静默丢失 gallery、任务、流和阈值状态。
+- `STREAM_WORKER_LOCK_DIR` 建议跟随 `RUNTIME_STATE_HOST_DIR` 持久化；多个 stream daemon 共享同一运行期状态时，应共享该 lock 目录，`STREAM_WORKER_LEASE_TTL_SECONDS` 和 `STREAM_WORKER_PROCESS_LOCK_STALE_SECONDS` 控制 lease 过期与 stale lock 回收。
 - `WARMUP_MODELS` 可写成 `portrait_hub/yolov8n.onnx,portrait_hub/osnet_ibn_x1_0.onnx`。
 - `MODEL_CONCURRENCY_LIMIT` 和 `GPU_QUEUE_LIMIT` 建议先保持 `1`，压测后再提高。
 - `ENABLE_TENSORRT=true` 只在确认容器内 ONNX Runtime 暴露 `TensorrtExecutionProvider` 后开启。
@@ -622,6 +626,8 @@ curl -X POST http://127.0.0.1:9001/infer/stream/person-tracks \
 ```
 
 视频流解析默认关闭。需要在 `.env` 中设置 `ALLOW_STREAM_URLS=true` 并重建/重启容器后才会启用。生产环境建议只允许可信内网摄像头地址。
+
+长驻视频流拉取推荐使用 `python -m app.portrait_stream_worker_daemon` 或 Compose 中的 `portrait-stream-worker` 服务。daemon 会为每条运行中的 stream 获取可过期的 state lease，并在 `STREAM_WORKER_LOCK_DIR` 下创建原子 lock 文件做进程级兜底，避免重复拉流。
 
 模型输出调试：
 

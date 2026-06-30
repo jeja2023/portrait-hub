@@ -54,6 +54,7 @@ v1 已加入的生产加固：
 
 - 底库记录按 `X-Tenant-ID` 隔离，默认持久化到 `PORTRAIT_GALLERY_STATE_PATH`，当 `PORTRAIT_STORAGE_BACKEND=postgres` 时则写入 PostgreSQL。
 - 本地 JSON 底库默认启用 WAL 增量写入，变更先追加到 `.wal.jsonl`，再按 `PORTRAIT_GALLERY_WAL_COMPACT_EVERY` compact 成主快照，降低高频入库时的全量序列化压力。
+- 底库特征写入会以 `upsert_feature` 增量 WAL 记录落盘，避免每次新增特征都重写整个人员特征列表。
 - 底库特征状态保留私有对象引用，因此删除人员时可以同时清理关联的本地/S3 载荷，而公开响应仍会脱敏对象 key、bucket 和 hash。
 - 人员删除会在不可逆清理开始前先写入失败关闭的 `gallery_delete_person_requested` 审计记录；对象清理失败会回滚并上报，不暴露存储位置。
 - 保留清理按租户范围执行，会删除过期的视频任务、流事件、底库人员及相关对象载荷，并在清理失败时失败关闭，同时回滚元数据。
@@ -102,6 +103,7 @@ v1 已加入的生产加固：
 - `tools/portrait_cutover_check.py --regression-manifest <held-out.yml> --validate-onnx --json` 是最终的真实模型门禁。它要求生产能力状态、非兜底模型 ID、匹配的产物 SHA-256、可选的 ONNXRuntime 加载检查，以及通过回归门禁。
 - 精度回归门禁可直接参考 `python tools/portrait_model_regression.py --manifest examples/portrait-model-regression.example.yml --json`；上线前把示例分数替换成留出集评估结果。
 - 长期运行的流拉取应在 API 进程外执行：`python -m app.portrait_stream_worker_daemon`；Docker Compose 已包含对应的 `portrait-stream-worker` 服务。
+- 流 daemon 会先通过每个 stream 的原子 lock 文件做进程级兜底，再写入可过期的 stream worker lease，避免多个 daemon 进程重复拉取同一条流。
 - `deploy/portrait-stream-worker.service` 和 `deploy/k8s-stream-worker.yaml` 提供流 worker 进程的 systemd 和 Kubernetes 部署模板，而 `tools/portrait_stream_worker_health.py --json` 会报告进程内 worker 心跳是否过期。
 - `.github/workflows/ci.yml` 运行 Python 测试、Node SDK 契约测试、部署检查和示例回归门禁；`.github/workflows/security-audit.yml` 会在依赖变更时以及每周运行 `pip-audit`。
 
@@ -674,6 +676,7 @@ curl -X POST http://127.0.0.1:9001/vision/infer \
 - 业务接口会额外记录 `decode_seconds`、`preprocess_seconds`、`postprocess_seconds`、`frame_count`、`person_count` 和 `inference_mode`。
 - 服务日志使用 JSON 字符串记录关键事件，包括 `http_request`、`predict_completed`、`persons_infer_completed`、`embeddings_infer_completed`、`person_tracks_infer_completed`、模型加载和模型卸载。
 - `/metrics` 受保护并需要 `metrics:read` RBAC 权限；它暴露 Prometheus 文本格式指标，包括请求量、推理失败数、模型加载数、缓存命中/未命中、已加载模型数、排队耗时总和、推理耗时总和、图片解码耗时、预处理耗时、后处理耗时、检测人数和处理帧数。
+- `gpu_worker_gpu_queue_depth` 与 `gpu_worker_gpu_device_queue_depth{device="..."}` 使用运行时等待者计数，分别反映全局和按设备的 GPU 队列深度。
 - `/metrics` 默认使用 `PROMETHEUS_METRICS_CACHE_SECONDS` 做短缓存，降低高频采集时的文本拼接开销。
 - `/metrics` 还暴露模型维度指标，例如 `gpu_worker_model_config_info`、`gpu_worker_model_loaded_info`、`gpu_worker_model_inference_count_total`，标签包含 `model`、`task`、`version` 和 `status`。
 - 设置 `OPENTELEMETRY_ENABLED=true` 且安装 optional 依赖后，服务会自动为 FastAPI 请求生成 OpenTelemetry span，并通过 OTLP HTTP exporter 输出。
@@ -736,6 +739,11 @@ http://gpu-worker-1:8000/predict
 - `STREAM_FRAME_INTERVAL`: 视频流默认抽帧间隔，默认 `15`。
 - `MAX_STREAM_FRAMES`: 视频流单次最多抽取帧数，默认 `32`。
 - `STREAM_READ_TIMEOUT_SECONDS`: 视频流单次读取软超时，默认 `10`。
+- `STREAM_WORKER_POLL_INTERVAL_SECONDS`: 长驻 stream worker 轮询运行中流的间隔秒数，默认 `5`。
+- `STREAM_WORKER_MAX_RECONNECTS`: stream worker 单次会话断线后的最大重连次数，默认 `3`。
+- `STREAM_WORKER_LEASE_TTL_SECONDS`: stream worker 状态 lease 的 TTL 秒数，默认 `30`。
+- `STREAM_WORKER_PROCESS_LOCK_STALE_SECONDS`: 进程级 lock 文件超过该秒数后可被视为 stale 并清理，默认 `300`。
+- `STREAM_WORKER_LOCK_DIR`: 每个 stream 的 daemon 进程级 lock 文件目录，容器部署建议放在 `/workspace/runtime-state/stream-worker-locks`。
 - `ALLOW_STREAM_URLS`: 是否允许服务端主动拉取视频流 URL，默认 `false`。
 - `WARMUP_MODELS`: 容器启动时自动预热的模型列表，格式为逗号分隔的 `project/model.onnx`。
 - `RATE_LIMIT_PER_MINUTE` / `RATE_LIMIT_BURST`: 本地 tenant/path token bucket 限流速率和突发容量；Compose 默认 `120`/`240`，本地直接运行默认关闭。
