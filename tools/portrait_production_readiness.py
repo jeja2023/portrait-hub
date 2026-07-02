@@ -675,8 +675,8 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
             "name": "security:trusted_host_allowlist",
             "ok": (
                 "TRUSTED_HOSTS" in settings
-                and "TrustedHostMiddleware" in server
-                and "allowed_hosts=TRUSTED_HOSTS" in server
+                and "HotReloadTrustedHostMiddleware" in server
+                and "allowed_hosts_getter=lambda: TRUSTED_HOSTS" in server
                 and "www_redirect=False" in server
                 and "TRUSTED_HOSTS: ${TRUSTED_HOSTS:-127.0.0.1,localhost,gpu-worker-0,gpu-worker-1}" in compose
                 and "TRUSTED_HOSTS=127.0.0.1,localhost,gpu-worker-0,gpu-worker-1" in env_example

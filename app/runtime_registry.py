@@ -88,7 +88,7 @@ def release_model_bundle(bundle: ModelBundle | None) -> None:
     try:
         del session
     finally:
-        gc.collect()
+        gc.collect(0)
 
 
 async def get_model_load_lock(cache_key_value: str) -> asyncio.Lock:

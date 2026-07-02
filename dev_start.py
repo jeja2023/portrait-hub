@@ -1,101 +1,34 @@
 # -*- coding: utf-8 -*-
-"""
-本地开发环境一键启动脚本
-支持自动创建虚拟环境、安装依赖、初始化配置文件并启动 FastAPI 服务。
-"""
+"""Local development bootstrap for PortraitHub."""
 
 import os
-import sys
-import subprocess
 import shutil
+import subprocess
+import sys
 from pathlib import Path
 
-
-def log_info(msg: str):
-    print(f"\033[1;32m[提示] {msg}\033[0m")
+from app.runtime_defaults import local_dev_env_overrides, parse_env_file
 
 
-def log_warn(msg: str):
-    print(f"\033[1;33m[警告] {msg}\033[0m")
+PIP_INDEX_URL = "https://pypi.tuna.tsinghua.edu.cn/simple"
 
 
-def log_error(msg: str):
-    print(f"\033[1;31m[错误] {msg}\033[0m")
+def log_info(msg: str) -> None:
+    print(f"\033[1;32m[info] {msg}\033[0m")
 
 
-LOCAL_PATH_KEYS = {
-    "MODEL_CONFIG_PATH": "models.yml",
-    "MODEL_CAPABILITIES_PATH": "model-capabilities.yml",
-}
-
-LOCAL_STATE_PATH_KEYS = {
-    "ROLLOUT_AUDIT_PATH": "rollout-audit.jsonl",
-    "PORTRAIT_GALLERY_STATE_PATH": "portrait-gallery.json",
-    "PORTRAIT_THRESHOLDS_STATE_PATH": "portrait-thresholds.json",
-    "PORTRAIT_AUDIT_PATH": "portrait-audit.jsonl",
-    "PORTRAIT_JOBS_STATE_PATH": "portrait-jobs.json",
-    "PORTRAIT_STREAMS_STATE_PATH": "portrait-streams.json",
-    "TASK_QUEUE_STATE_PATH": "portrait-task-queue.jsonl",
-    "STREAM_EVENT_STATE_PATH": "portrait-stream-events.jsonl",
-}
-
-LOCAL_DEV_DEFAULTS = {
-    "AUTH_REQUIRED": "false",
-    "RBAC_ENABLED": "false",
-    "TENANT_HEADER_REQUIRED": "false",
-    "ENABLE_API_DOCS": "true",
-    # 生产代码默认值现在是 fail-closed（开启鉴权、要求加密、限制主机）。通过显式重新选用
-    # 宽松值来保持本地开发的顺畅，同时与“默认安全”的生产姿态保持镜像对应。
-    "REQUIRE_ENCRYPTION": "false",
-    "TRUSTED_HOSTS": "127.0.0.1,localhost",
-}
+def log_warn(msg: str) -> None:
+    print(f"\033[1;33m[warn] {msg}\033[0m")
 
 
-def read_env_values(path: Path) -> dict[str, str]:
-    values: dict[str, str] = {}
-    if not path.is_file():
-        return values
-    for raw_line in path.read_text(encoding="utf-8").splitlines():
-        line = raw_line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        key, raw_value = line.split("=", 1)
-        key = key.strip()
-        if not key:
-            continue
-        value = raw_value.strip()
-        if len(value) >= 2 and value[0] == value[-1] and value[0] in {'"', "'"}:
-            value = value[1:-1]
-        values[key] = value
-    return values
-
-
-def local_dev_env_overrides(root_dir: Path) -> dict[str, str]:
-    runtime_state_dir = root_dir / "runtime-state"
-    overrides = dict(LOCAL_DEV_DEFAULTS)
-    overrides.update({
-        key: str(root_dir / relative_path)
-        for key, relative_path in LOCAL_PATH_KEYS.items()
-    })
-    overrides.update(
-        {
-            "RUNTIME_STATE_DIR": str(runtime_state_dir),
-            "OBJECT_STORAGE_DIR": str(runtime_state_dir / "objects"),
-        }
-    )
-    overrides.update(
-        {
-            key: str(runtime_state_dir / relative_path)
-            for key, relative_path in LOCAL_STATE_PATH_KEYS.items()
-        }
-    )
-    return overrides
+def log_error(msg: str) -> None:
+    print(f"\033[1;31m[error] {msg}\033[0m")
 
 
 def write_local_dev_env(root_dir: Path, env_file: Path) -> tuple[Path, dict[str, str]]:
     runtime_state_dir = root_dir / "runtime-state"
     runtime_state_dir.mkdir(parents=True, exist_ok=True)
-    values = read_env_values(env_file)
+    values = parse_env_file(env_file)
     overrides = local_dev_env_overrides(root_dir)
     values.update(overrides)
     local_env_file = runtime_state_dir / ".dev_start.env"
@@ -108,85 +41,93 @@ def write_local_dev_env(root_dir: Path, env_file: Path) -> tuple[Path, dict[str,
     return local_env_file, overrides
 
 
-def run_command(args: list[str], shell: bool = False, cwd: Path | None = None) -> bool:
+def run_command(args: list[str], cwd: Path | None = None) -> bool:
     try:
-        result = subprocess.run(args, check=True, shell=shell, cwd=str(cwd) if cwd else None)
-        return result.returncode == 0
-    except subprocess.CalledProcessError as e:
-        log_error(f"执行命令失败: {' '.join(args)}。错误信息: {e}")
+        subprocess.run(args, check=True, cwd=str(cwd) if cwd else None)
+        return True
+    except subprocess.CalledProcessError as exc:
+        log_error(f"command failed: {' '.join(args)} ({exc})")
         return False
 
 
-def main():
-    log_info("正在检查并初始化本地开发环境...")
+def install_dependencies(root_dir: Path, python_exe: Path, pip_exe: Path) -> bool:
+    log_info("installing Python dependencies")
+    if not run_command(
+        [
+            str(python_exe),
+            "-m",
+            "pip",
+            "install",
+            "--upgrade",
+            "pip",
+            "setuptools",
+            "wheel",
+            "-q",
+            "-i",
+            PIP_INDEX_URL,
+        ],
+        cwd=root_dir,
+    ):
+        return False
 
+    req_file = root_dir / "requirements.txt"
+    if req_file.exists():
+        log_info("installing requirements.txt")
+        if not run_command([str(pip_exe), "install", "-q", "-r", str(req_file), "-i", PIP_INDEX_URL], cwd=root_dir):
+            return False
+
+    req_dev_file = root_dir / "requirements" / "dev.txt"
+    if req_dev_file.exists():
+        log_info("installing requirements/dev.txt")
+        if not run_command([str(pip_exe), "install", "-q", "-r", str(req_dev_file), "-i", PIP_INDEX_URL], cwd=root_dir):
+            return False
+
+    return True
+
+
+def main() -> None:
+    log_info("checking local development environment")
     root_dir = Path(__file__).resolve().parent
 
-    # 1. 检查并复制环境变量配置文件
     env_file = root_dir / ".env"
     env_example = root_dir / ".env.example"
     if not env_file.exists():
         if env_example.exists():
-            log_info("未检测到 .env 配置文件，正在复制 .env.example 模板...")
+            log_info("creating .env from .env.example")
             shutil.copy(env_example, env_file)
         else:
-            log_warn("未检测到 .env.example 模板文件，请确保项目结构完整。")
+            log_warn(".env.example was not found; check the project layout")
     else:
-        log_info(".env 配置文件已存在。")
+        log_info(".env already exists")
 
-    # 2. 检查并创建共享模型目录
     models_dir = root_dir / "models"
     if not models_dir.exists():
-        log_info("正在创建模型共享目录 ./models ...")
+        log_info("creating ./models")
         models_dir.mkdir(parents=True, exist_ok=True)
     else:
-        log_info("模型共享目录 ./models 已存在。")
+        log_info("./models already exists")
 
-    # 3. 检查并准备虚拟环境
     venv_dir = root_dir / ".venv"
     is_windows = sys.platform.startswith("win")
-
-    # 定义虚拟环境内的 Python 和 Pip 执行路径
-    if is_windows:
-        python_exe = venv_dir / "Scripts" / "python.exe"
-        pip_exe = venv_dir / "Scripts" / "pip.exe"
-    else:
-        python_exe = venv_dir / "bin" / "python"
-        pip_exe = venv_dir / "bin" / "pip"
+    python_exe = venv_dir / ("Scripts/python.exe" if is_windows else "bin/python")
+    pip_exe = venv_dir / ("Scripts/pip.exe" if is_windows else "bin/pip")
 
     if not venv_dir.exists() or not python_exe.exists():
-        log_info("未检测到有效虚拟环境，正在创建虚拟环境 (python -m venv .venv)...")
-        # 使用当前运行本脚本的 python 解释器来创建 venv
+        log_info("creating virtual environment")
         if not run_command([sys.executable, "-m", "venv", str(venv_dir)], cwd=root_dir):
-            log_error("虚拟环境创建失败，请确保系统已正确安装 python 并加入环境变量。")
+            log_error("failed to create virtual environment")
             sys.exit(1)
-        log_info("虚拟环境创建成功。")
     else:
-        log_info("虚拟环境检测正常。")
+        log_info("virtual environment is ready")
 
-    # 4. 升级 pip 并安装依赖
-    log_info("正在检查并安装依赖包（使用清华镜像源加速）...")
-    # 升级 pip
-    run_command([str(python_exe), "-m", "pip", "install", "--upgrade", "pip", "setuptools", "wheel", "-q", "-i", "https://pypi.tuna.tsinghua.edu.cn/simple"])
-    
-    # 安装 requirements.txt
-    req_file = root_dir / "requirements.txt"
-    if req_file.exists():
-        log_info("正在安装 requirements.txt 依赖...")
-        run_command([str(pip_exe), "install", "-q", "-r", str(req_file), "-i", "https://pypi.tuna.tsinghua.edu.cn/simple"])
-    
-    # 安装 requirements/dev.txt 开发依赖
-    req_dev_file = root_dir / "requirements" / "dev.txt"
-    if req_dev_file.exists():
-        log_info("正在安装 requirements/dev.txt 开发依赖...")
-        run_command([str(pip_exe), "install", "-q", "-r", str(req_dev_file), "-i", "https://pypi.tuna.tsinghua.edu.cn/simple"])
+    if not install_dependencies(root_dir, python_exe, pip_exe):
+        log_error("dependency installation failed; aborting startup")
+        sys.exit(1)
 
-    # 5. 启动 FastAPI 服务
     local_env_file, local_overrides = write_local_dev_env(root_dir, env_file)
-    log_info(f"已生成本地开发环境配置: {local_env_file}")
-    log_info("开发环境初始化完成！正在启动 FastAPI 推理服务 (以热重载模式)...")
-    
-    # 构造 uvicorn 启动命令
+    log_info(f"generated local env file: {local_env_file}")
+    log_info("starting FastAPI service with reload")
+
     startup_args = [
         str(python_exe),
         "-m",
@@ -196,20 +137,19 @@ def main():
         "127.0.0.1",
         "--port",
         "8000",
-        "--reload"
+        "--reload",
     ]
     startup_env = os.environ.copy()
     startup_env.update(local_overrides)
     startup_env["ENV_PATH"] = str(local_env_file)
     startup_env["PYTHONPATH"] = str(root_dir)
-    
+
     try:
-        # 使用 subprocess 运行以确保能优雅处理 Ctrl+C 中断
         subprocess.run(startup_args, check=True, cwd=str(root_dir), env=startup_env)
     except KeyboardInterrupt:
-        log_info("收到退出信号，服务已停止运行。")
-    except Exception as e:
-        log_error(f"启动服务失败: {e}")
+        log_info("service stopped")
+    except Exception as exc:
+        log_error(f"failed to start service: {exc}")
         sys.exit(1)
 
 

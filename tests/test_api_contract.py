@@ -272,6 +272,40 @@ def test_trusted_host_allowlist_rejects_untrusted_hosts(monkeypatch) -> None:
     assert allowed.status_code == 200
 
 
+
+def test_trusted_host_allowlist_hot_reload_updates_existing_app(monkeypatch, workspace_tmp_path) -> None:
+    from app import server
+
+    env_path = workspace_tmp_path / ".env"
+    env_path.write_text("TRUSTED_HOSTS=trusted.local\n", encoding="utf-8")
+    original_env = os.environ.get("TRUSTED_HOSTS")
+    original_server_hosts = list(server.TRUSTED_HOSTS)
+    monkeypatch.setattr(config_hot_reload, "ENV_PATH", env_path)
+    monkeypatch.setattr(config_hot_reload, "audit_config_reload", lambda source, result: None)
+
+    server.TRUSTED_HOSTS = ["*"]
+    client = TestClient(server.create_app())
+    before_reload = client.get("/health", headers={"host": "attacker.local"})
+    assert before_reload.status_code == 200
+
+    try:
+        result = config_hot_reload.reload_runtime_config(source="test-hosts", include_env=True)
+
+        assert result["env_loaded"] is True
+        assert server.TRUSTED_HOSTS == ["trusted.local"]
+        rejected = client.get("/health", headers={"host": "attacker.local"})
+        allowed = client.get("/health", headers={"host": "trusted.local"})
+        assert rejected.status_code == 400
+        assert "Invalid host header" in rejected.text
+        assert allowed.status_code == 200
+    finally:
+        if original_env is None:
+            monkeypatch.delenv("TRUSTED_HOSTS", raising=False)
+        else:
+            monkeypatch.setenv("TRUSTED_HOSTS", original_env)
+        config_hot_reload.reload_settings_modules()
+        server.TRUSTED_HOSTS = original_server_hosts
+
 def test_request_id_is_normalized_and_reused_between_body_and_header() -> None:
     client = TestClient(app)
 

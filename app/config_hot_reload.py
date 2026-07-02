@@ -7,29 +7,10 @@ import sys
 from typing import Any
 
 from app.observability import logger
+from app.runtime_defaults import parse_env_file
 
 
 ENV_PATH = Path(os.getenv("ENV_PATH", ".env"))
-
-
-def parse_env_file(path: Path | None = None) -> dict[str, str]:
-    env_path = path or ENV_PATH
-    values: dict[str, str] = {}
-    if not env_path.is_file():
-        return values
-    for raw_line in env_path.read_text(encoding="utf-8").splitlines():
-        line = raw_line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        key, raw_value = line.split("=", 1)
-        key = key.strip()
-        if not key:
-            continue
-        value = raw_value.strip()
-        if len(value) >= 2 and value[0] == value[-1] and value[0] in {'"', "'"}:
-            value = value[1:-1]
-        values[key] = value
-    return values
 
 
 def apply_env_file(path: Path | None = None) -> dict[str, Any]:

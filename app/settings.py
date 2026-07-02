@@ -2,6 +2,20 @@ import os
 from pathlib import Path
 from typing import Any
 
+from app.runtime_defaults import (
+    DEFAULT_CONTENT_SECURITY_POLICY,
+    DEFAULT_HSTS_ENABLED,
+    DEFAULT_HSTS_INCLUDE_SUBDOMAINS,
+    DEFAULT_HSTS_MAX_AGE_SECONDS,
+    DEFAULT_HSTS_PRELOAD,
+    DEFAULT_MAX_REQUEST_BODY_BYTES,
+    DEFAULT_RATE_LIMIT_BUCKET_TTL_SECONDS,
+    DEFAULT_RATE_LIMIT_BURST,
+    DEFAULT_RATE_LIMIT_MAX_BUCKETS,
+    DEFAULT_RATE_LIMIT_PER_MINUTE,
+    DEFAULT_TRUSTED_HOSTS,
+)
+
 
 def parse_int_env(name: str, default: int) -> int:
     raw = os.getenv(name)
@@ -79,7 +93,7 @@ RUNTIME_CAPABILITY_RETRY_COOLDOWN_SECONDS = parse_float_env("RUNTIME_CAPABILITY_
 # 而不是每次都重新走昂贵的 hash + create_session；窗口过后自动重试，实现加载失败的自愈。
 # <=0 关闭冷却（保持“每次请求都重试”的旧行为）。
 MODEL_LOAD_RETRY_COOLDOWN_SECONDS = parse_float_env("MODEL_LOAD_RETRY_COOLDOWN_SECONDS", 30.0)
-MAX_REQUEST_BODY_BYTES = parse_int_env("MAX_REQUEST_BODY_BYTES", 768 * 1024 * 1024)
+MAX_REQUEST_BODY_BYTES = parse_int_env("MAX_REQUEST_BODY_BYTES", DEFAULT_MAX_REQUEST_BODY_BYTES)
 ALLOW_STREAM_URLS = parse_bool_env("ALLOW_STREAM_URLS", False)
 MAX_LOADED_MODELS = parse_int_env("MAX_LOADED_MODELS", 0)
 GPU_QUEUE_LIMIT = parse_int_env("GPU_QUEUE_LIMIT", 1)
@@ -140,7 +154,7 @@ RBAC_ENABLED = parse_bool_env("RBAC_ENABLED", False)
 AUTH_REQUIRED = parse_bool_env("AUTH_REQUIRED", True)
 DEBUG_ENDPOINTS_ENABLED = parse_bool_env("DEBUG_ENDPOINTS_ENABLED", False)
 ENABLE_API_DOCS = parse_bool_env("ENABLE_API_DOCS", False)
-TRUSTED_HOSTS = parse_csv_env("TRUSTED_HOSTS", "127.0.0.1,localhost")
+TRUSTED_HOSTS = parse_csv_env("TRUSTED_HOSTS", DEFAULT_TRUSTED_HOSTS)
 TENANT_HEADER_REQUIRED = parse_bool_env("TENANT_HEADER_REQUIRED", True)
 JWT_REQUIRE_TENANT = parse_bool_env("JWT_REQUIRE_TENANT", True)
 PORTRAIT_STORAGE_BACKEND = os.getenv("PORTRAIT_STORAGE_BACKEND", "json").strip().lower()
@@ -176,24 +190,19 @@ TASK_QUEUE_STATE_PATH = Path(os.getenv("TASK_QUEUE_STATE_PATH", str(RUNTIME_STAT
 REDIS_URL = os.getenv("REDIS_URL", "")
 STREAM_EVENT_STATE_PATH = Path(os.getenv("STREAM_EVENT_STATE_PATH", str(RUNTIME_STATE_DIR / "portrait-stream-events.jsonl")))
 MODEL_CAPABILITIES_PATH = Path(os.getenv("MODEL_CAPABILITIES_PATH", "model-capabilities.yml"))
-RATE_LIMIT_PER_MINUTE = parse_int_env("RATE_LIMIT_PER_MINUTE", 0)
-RATE_LIMIT_BURST = parse_int_env("RATE_LIMIT_BURST", 0)
-RATE_LIMIT_MAX_BUCKETS = parse_int_env("RATE_LIMIT_MAX_BUCKETS", 10_000)
-RATE_LIMIT_BUCKET_TTL_SECONDS = parse_int_env("RATE_LIMIT_BUCKET_TTL_SECONDS", 3600)
+RATE_LIMIT_PER_MINUTE = parse_int_env("RATE_LIMIT_PER_MINUTE", DEFAULT_RATE_LIMIT_PER_MINUTE)
+RATE_LIMIT_BURST = parse_int_env("RATE_LIMIT_BURST", DEFAULT_RATE_LIMIT_BURST)
+RATE_LIMIT_MAX_BUCKETS = parse_int_env("RATE_LIMIT_MAX_BUCKETS", DEFAULT_RATE_LIMIT_MAX_BUCKETS)
+RATE_LIMIT_BUCKET_TTL_SECONDS = parse_int_env("RATE_LIMIT_BUCKET_TTL_SECONDS", DEFAULT_RATE_LIMIT_BUCKET_TTL_SECONDS)
 # 当服务运行在受信任的反向代理之后时，从最左侧的 X-Forwarded-For 条目中获取客户端 IP。
 # 直接暴露时应保持禁用，以防通过伪造该请求头来为每次请求刷新限流令牌桶。
 RATE_LIMIT_TRUST_FORWARDED_FOR = parse_bool_env("RATE_LIMIT_TRUST_FORWARDED_FOR", False)
 SECURITY_HEADERS_ENABLED = parse_bool_env("SECURITY_HEADERS_ENABLED", True)
-CONTENT_SECURITY_POLICY = os.getenv(
-    "CONTENT_SECURITY_POLICY",
-    "default-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; "
-    "form-action 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
-    "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net",
-).strip()
-HSTS_ENABLED = parse_bool_env("HSTS_ENABLED", False)
-HSTS_MAX_AGE_SECONDS = parse_int_env("HSTS_MAX_AGE_SECONDS", 31_536_000)
-HSTS_INCLUDE_SUBDOMAINS = parse_bool_env("HSTS_INCLUDE_SUBDOMAINS", True)
-HSTS_PRELOAD = parse_bool_env("HSTS_PRELOAD", False)
+CONTENT_SECURITY_POLICY = os.getenv("CONTENT_SECURITY_POLICY", DEFAULT_CONTENT_SECURITY_POLICY).strip()
+HSTS_ENABLED = parse_bool_env("HSTS_ENABLED", DEFAULT_HSTS_ENABLED)
+HSTS_MAX_AGE_SECONDS = parse_int_env("HSTS_MAX_AGE_SECONDS", DEFAULT_HSTS_MAX_AGE_SECONDS)
+HSTS_INCLUDE_SUBDOMAINS = parse_bool_env("HSTS_INCLUDE_SUBDOMAINS", DEFAULT_HSTS_INCLUDE_SUBDOMAINS)
+HSTS_PRELOAD = parse_bool_env("HSTS_PRELOAD", DEFAULT_HSTS_PRELOAD)
 DATA_RETENTION_DAYS = parse_int_env("DATA_RETENTION_DAYS", 0)
 STATE_READ_FAIL_CLOSED = parse_bool_env("STATE_READ_FAIL_CLOSED", True)
 STATE_WRITE_FAIL_CLOSED = parse_bool_env("STATE_WRITE_FAIL_CLOSED", True)

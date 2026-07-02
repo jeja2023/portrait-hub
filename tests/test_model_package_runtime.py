@@ -253,10 +253,10 @@ async def test_model_unload_releases_session_reference(monkeypatch) -> None:
     MODEL_LOAD_LOCKS["portrait_hub/releasable.onnx"] = object()
     collected = []
 
-    monkeypatch.setattr(runtime_registry.gc, "collect", lambda: collected.append(True))
+    monkeypatch.setattr(runtime_registry.gc, "collect", lambda generation=0: collected.append(generation))
 
     assert await runtime_registry.unload_model_by_key("portrait_hub/releasable.onnx") is True
     assert "portrait_hub/releasable.onnx" not in MODEL_REGISTRY
     assert "portrait_hub/releasable.onnx" not in MODEL_LOAD_LOCKS
     assert "session" not in bundle
-    assert collected == [True]
+    assert collected == [0]
