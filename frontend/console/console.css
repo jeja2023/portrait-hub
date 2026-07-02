@@ -464,13 +464,12 @@ input[type="file"]::-webkit-file-upload-button:hover {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  min-height: 36px;
+  min-height: 38px;
   padding: 8px 12px 8px 16px;
-  color: var(--faint);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
   border-radius: 6px;
   cursor: pointer;
   list-style: none;
@@ -498,7 +497,7 @@ input[type="file"]::-webkit-file-upload-button:hover {
 }
 
 .nav-group > summary:hover {
-  color: var(--muted);
+  color: var(--ink);
   background: var(--surface-soft);
 }
 
@@ -508,8 +507,14 @@ input[type="file"]::-webkit-file-upload-button:hover {
   padding-left: 8px;
 }
 
+.nav-group-items .nav-item {
+  font-size: 13px;
+}
+
 .nav-item--solo {
   margin-bottom: 2px;
+  font-size: 14px;
+  font-weight: 600;
 }
 
 /* 侧边栏底部 */

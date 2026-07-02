@@ -9,7 +9,7 @@ from typing import Any, cast
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from starlette.middleware.trustedhost import TrustedHostMiddleware
+from app.trusted_host_middleware import HotReloadTrustedHostMiddleware
 
 from app.core import (
     WARMUP_MODELS,
@@ -200,7 +200,7 @@ def create_app() -> FastAPI:
         redoc_url="/redoc" if ENABLE_API_DOCS else None,
         openapi_url="/openapi.json" if ENABLE_API_DOCS else None,
     )
-    app.add_middleware(TrustedHostMiddleware, allowed_hosts=TRUSTED_HOSTS, www_redirect=False)
+    app.add_middleware(HotReloadTrustedHostMiddleware, allowed_hosts_getter=lambda: TRUSTED_HOSTS, www_redirect=False)
     configure_opentelemetry(app)
 
     @app.exception_handler(RequestValidationError)
