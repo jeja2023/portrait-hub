@@ -1,0 +1,89 @@
+﻿name: supply-chain
+
+on:
+  pull_request:
+  push:
+    branches: ["main", "master"]
+  workflow_dispatch:
+  schedule:
+    - cron: "41 18 * * 2"
+
+jobs:
+  build-sbom-scan:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build runtime image
+        run: docker build --build-arg INSTALL_PROD_OPTIONAL=true -t portrait-hub:${{ github.sha }} .
+      - name: Save runtime image
+        run: docker save portrait-hub:${{ github.sha }} -o portrait-hub-image.tar
+      - name: Generate SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          image: portrait-hub:${{ github.sha }}
+          format: cyclonedx-json
+          output-file: sbom.cdx.json
+      - name: Scan image with Trivy
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: portrait-hub:${{ github.sha }}
+          format: sarif
+          output: trivy-results.sarif
+          severity: CRITICAL,HIGH
+          exit-code: "1"
+      - name: Upload Trivy SARIF
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: trivy-results.sarif
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3.8.1
+      - name: Sign image tarball
+        run: cosign sign-blob --yes --output-signature portrait-hub-image.tar.sig portrait-hub-image.tar
+      - name: Upload SBOM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: portrait-hub-sbom
+          path: sbom.cdx.json
+          if-no-files-found: error
+
+  scorecard:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run Scorecard
+        uses: ossf/scorecard-action@v2.4.0
+        with:
+          results_file: scorecard.sarif
+          results_format: sarif
+          publish_results: false
+      - name: Upload Scorecard SARIF
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: scorecard.sarif
+
+  provenance:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+      artifact-metadata: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build runtime image
+        run: docker build --build-arg INSTALL_PROD_OPTIONAL=true -t portrait-hub:${{ github.sha }} .
+      - name: Save runtime image
+        run: docker save portrait-hub:${{ github.sha }} -o portrait-hub-image.tar
+      - name: Attest build provenance
+        uses: actions/attest@v4
+        with:
+          subject-path: portrait-hub-image.tar

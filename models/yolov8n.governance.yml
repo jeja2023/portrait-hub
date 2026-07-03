@@ -1,0 +1,61 @@
+﻿model:
+  id: portrait_hub/yolov8n.onnx
+  name: YOLOv8n person detector
+  version: 1.0.0
+  owner: platform-ml
+
+dataset_lineage:
+  sources:
+    - internal camera samples
+    - public human-detection benchmarks
+  consent_basis: tenant-approved operational footage only
+  exclusions:
+    - children
+    - restricted sites
+
+bias:
+  review_buckets:
+    - lighting
+    - occlusion
+    - distance
+    - camera angle
+  residual_gap_owner: platform-ml
+
+threshold_calibration:
+  profile: person_detection_default
+  target_far: 0.01
+  target_frr: 0.02
+  review_band: 0.05
+  calibrated_at: 2026-07-03
+
+risk_management:
+  residual_risk: crowd-scene false positives
+  mitigations:
+    - human review for ambiguous detections
+    - conservative confidence thresholding
+
+human_review:
+  required_when:
+    - score falls inside the review band
+    - scene is low light or crowded
+  reviewer_role: operations analyst
+
+drift_monitoring:
+  signals:
+    - precision_by_scene
+    - false_positive_rate
+    - latency
+    - memory
+  trigger: recalibrate thresholds when quality drifts materially
+
+privacy:
+  retention_days: 30
+  pii_removed: true
+  notes:
+    - do not persist raw stream URLs in public outputs
+
+release:
+  rollback_target: portrait_hub/yolov8n.onnx
+  approvers:
+    - ml-owner
+    - sre-owner

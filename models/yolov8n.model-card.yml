@@ -1,0 +1,25 @@
+model:
+  id: portrait_hub/yolov8n.onnx
+  name: YOLOv8n person detector
+  version: 1.0.0
+  precision: fp32
+  runtime: onnxruntime
+  artifact:
+    path: yolov8n.onnx
+    sha256: 546218e6f1ac8f4ecc5042e02cfbdc19f6dfd3ade8f7014523e4af19692196a7
+intended_use:
+  task: person detection
+  service_endpoints:
+    - /infer/persons
+    - /infer/person-tracks
+    - /infer/video/person-tracks
+    - /infer/stream/person-tracks
+limitations:
+  - This card records artifact identity and serving contract only.
+  - Production accuracy, threshold, and bias validation must be supplied by the model delivery process before external release.
+evaluation:
+  status: pending_business_dataset_validation
+  required_before_external_release:
+    - detection precision/recall by scene class
+    - false positive and false negative review set
+    - latency and memory benchmark on target GPU

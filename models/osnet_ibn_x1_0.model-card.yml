@@ -1,0 +1,25 @@
+model:
+  id: portrait_hub/osnet_ibn_x1_0.onnx
+  name: OSNet IBN x1.0 person re-identification encoder
+  version: 1.0.0
+  precision: fp32
+  runtime: onnxruntime
+  artifact:
+    path: osnet_ibn_x1_0.onnx
+    sha256: 13ad83cf00d67359f9d2ec20303b275ccae7e047ab59bd8ffc190805ba859cc6
+intended_use:
+  task: person re-identification embedding
+  service_endpoints:
+    - /infer/person-embeddings
+    - /infer/person-tracks
+    - /infer/video/person-tracks
+    - /infer/stream/person-tracks
+limitations:
+  - This card records artifact identity and serving contract only.
+  - Production retrieval quality, threshold calibration, and demographic/scene robustness must be supplied by the model delivery process before external release.
+evaluation:
+  status: pending_business_dataset_validation
+  required_before_external_release:
+    - retrieval mAP/CMC/MRR/nDCG by scene class
+    - same-person and different-person score distribution
+    - latency and memory benchmark on target GPU

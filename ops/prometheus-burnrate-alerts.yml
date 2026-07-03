@@ -1,0 +1,27 @@
+﻿groups:
+  - name: portrait-hub-burn-rate
+    rules:
+      - alert: PortraitHubFastBurnErrorBudget
+        expr: sum(rate(gpu_worker_requests_total{status=~"5.."}[5m])) / clamp_min(sum(rate(gpu_worker_requests_total[5m])), 1) > 0.02
+        for: 5m
+        labels:
+          severity: page
+        annotations:
+          summary: PortraitHub fast burn error budget is being consumed
+          runbook_url: docs/operations/RUNBOOK.md
+      - alert: PortraitHubSlowBurnErrorBudget
+        expr: sum(rate(gpu_worker_requests_total{status=~"5.."}[1h])) / clamp_min(sum(rate(gpu_worker_requests_total[1h])), 1) > 0.01
+        for: 30m
+        labels:
+          severity: ticket
+        annotations:
+          summary: PortraitHub slow burn error budget is being consumed
+          runbook_url: docs/operations/RUNBOOK.md
+      - alert: PortraitHubReadyFailures
+        expr: sum(rate(gpu_worker_requests_total{status="503"}[5m])) > 0
+        for: 10m
+        labels:
+          severity: page
+        annotations:
+          summary: PortraitHub readiness failures are observable
+          runbook_url: docs/operations/RUNBOOK.md

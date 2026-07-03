@@ -1,0 +1,60 @@
+﻿model:
+  id: portrait_hub/osnet_ibn_x1_0.onnx
+  name: OSNet IBN person ReID
+  version: 1.0.0
+  owner: platform-ml
+
+dataset_lineage:
+  sources:
+    - internal tracklet crops
+    - public re-identification benchmarks
+  consent_basis: tenant-approved operational footage only
+  exclusions:
+    - face recognition without explicit approval
+
+bias:
+  review_buckets:
+    - lighting
+    - pose
+    - occlusion
+    - camera angle
+  residual_gap_owner: platform-ml
+
+threshold_calibration:
+  profile: body_embedding_default
+  target_far: 0.01
+  target_frr: 0.02
+  review_band: 0.04
+  calibrated_at: 2026-07-03
+
+risk_management:
+  residual_risk: identity confusion across similar clothing
+  mitigations:
+    - require tenant context
+    - review close scores
+
+human_review:
+  required_when:
+    - score falls inside the review band
+    - cross-camera reidentification is ambiguous
+  reviewer_role: operations analyst
+
+drift_monitoring:
+  signals:
+    - embedding_separation
+    - false_match_rate
+    - latency
+    - memory
+  trigger: recalibrate thresholds when quality drifts materially
+
+privacy:
+  retention_days: 30
+  pii_removed: true
+  notes:
+    - do not persist raw vectors in public outputs
+
+release:
+  rollback_target: portrait_hub/osnet_ibn_x1_0.onnx
+  approvers:
+    - ml-owner
+    - sre-owner

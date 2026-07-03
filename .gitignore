@@ -24,7 +24,11 @@ venv/
 env/
 
 # Model artifacts are mounted or supplied out of band.
-models/
+models/*
+!models/*.governance.yml
+!models/*.labels.txt
+!models/*.model-card.yml
 
 # Codex temporary files
 .codex-tmp/
+temp_gov_check_probe.txt
