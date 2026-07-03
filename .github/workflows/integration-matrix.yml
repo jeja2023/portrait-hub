@@ -20,13 +20,12 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-      - name: Install integration dependencies
+      - name: 安装集成测试依赖
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt
           python -m pip install -r requirements/dev.txt
-          python -m pip install -r requirements/prod-optional.txt
-      - name: Run selected integration test
+      - name: 运行选定集成测试
         run: |
           case "${{ matrix.stack }}" in
             postgres) python -m pytest -q tests/test_production_integration_containers.py::test_postgres_container_gallery_round_trip ;;

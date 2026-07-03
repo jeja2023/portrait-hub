@@ -1,4 +1,4 @@
-# Python/runtime caches
+# 运行时缓存
 __pycache__/
 *.py[cod]
 *.pyc.*
@@ -7,28 +7,29 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 
-# Test/runtime scratch files
+# 测试和运行时临时文件
 .test_tmp/
 pytest-cache-files-*/
 .coverage
 htmlcov/
+artifacts/
 rollout-audit*.jsonl
 runtime-state/
 *.log
 
-# Local OS/env files
+# 本地系统和环境文件
 .DS_Store
 .env
 .venv
 venv/
 env/
 
-# Model artifacts are mounted or supplied out of band.
+# 模型文件通过挂载或外部渠道提供
 models/*
 !models/*.governance.yml
 !models/*.labels.txt
 !models/*.model-card.yml
 
-# Codex temporary files
+# Codex 临时文件
 .codex-tmp/
 temp_gov_check_probe.txt
