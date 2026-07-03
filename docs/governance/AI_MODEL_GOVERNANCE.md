@@ -1,4 +1,4 @@
-﻿# AI Model Governance
+# AI Model Governance
 
 Production model releases must carry a model card and a governance sidecar.
 

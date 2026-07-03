@@ -1,0 +1,36 @@
+name: production-integration-matrix
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "23 20 * * 2"
+
+jobs:
+  external-services:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        stack: [postgres, qdrant, redis, minio]
+    env:
+      PORTRAIT_RUN_CONTAINER_INTEGRATION_TESTS: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install integration dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pip install -r requirements/dev.txt
+          python -m pip install -r requirements/prod-optional.txt
+      - name: Run selected integration test
+        run: |
+          case "${{ matrix.stack }}" in
+            postgres) python -m pytest -q tests/test_production_integration_containers.py::test_postgres_container_gallery_round_trip ;;
+            qdrant) python -m pytest -q tests/test_production_integration_containers.py::test_qdrant_container_health_round_trip ;;
+            redis) python -m pytest -q tests/test_production_integration_containers.py::test_redis_container_queue_round_trip ;;
+            minio) python -m pytest -q tests/test_production_integration_containers.py::test_minio_container_s3_round_trip ;;
+          esac

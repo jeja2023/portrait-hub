@@ -1,4 +1,4 @@
-"""Production model governance checks for PortraitHub."""
+"""PortraitHub 生产模型治理检查。"""
 
 from __future__ import annotations
 
@@ -27,7 +27,12 @@ def load_yaml(path: Path) -> dict[str, Any]:
     if not path.is_file():
         return {}
     payload = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-    return payload if isinstance(payload, dict) else {}
+    return {str(key): value for key, value in payload.items()} if isinstance(payload, dict) else {}
+
+
+def mapping_value(payload: dict[str, Any], key: str) -> dict[str, Any]:
+    value = payload.get(key)
+    return {str(item_key): item_value for item_key, item_value in value.items()} if isinstance(value, dict) else {}
 
 
 def sha256_file(path: Path) -> str:
@@ -67,8 +72,11 @@ def resolve_alias_target(name: str, aliases: dict[str, Any]) -> str | None:
         targets = rollout.get("targets") or rollout.get("candidates")
         if isinstance(targets, list):
             for item in targets:
-                if isinstance(item, dict) and isinstance(item.get("target"), str) and item["target"].strip():
-                    return item["target"].strip()
+                if not isinstance(item, dict):
+                    continue
+                raw_target = item.get("target")
+                if isinstance(raw_target, str) and raw_target.strip():
+                    return raw_target.strip()
     return None
 
 
@@ -81,7 +89,7 @@ def resolve_model_ids(model_ids: list[str], aliases: dict[str, Any]) -> list[str
 
 
 def configured_model_path(model_id: str, config: dict[str, Any], models_root: Path) -> tuple[Path | None, str | None]:
-    artifact = config.get("artifact") if isinstance(config.get("artifact"), dict) else {}
+    artifact = mapping_value(config, "artifact")
     raw_path = artifact.get("path")
     if isinstance(raw_path, str) and raw_path.strip():
         candidate = Path(raw_path.strip())
@@ -133,6 +141,7 @@ def active_model_ids(models: dict[str, Any], aliases: dict[str, Any], capabiliti
         return sorted(dict.fromkeys(ids))
     return sorted(str(key) for key in models.keys())
 
+
 def validate_model(
     model_id: str,
     config: dict[str, Any],
@@ -143,7 +152,7 @@ def validate_model(
     strict_governance: bool,
     allow_missing_artifacts: bool,
 ) -> dict[str, Any]:
-    artifact = config.get("artifact") if isinstance(config.get("artifact"), dict) else {}
+    artifact = mapping_value(config, "artifact")
     model_path, error = configured_model_path(model_id, config, models_root)
     detail: dict[str, Any] = {"model_id": model_id, "path": str(model_path) if model_path else None, "error": error}
     if model_path is None or error is not None:
@@ -198,7 +207,7 @@ def validate_model(
             }
 
     task = str(config.get("task") or config.get("type") or "").lower()
-    output = config.get("output") if isinstance(config.get("output"), dict) else {}
+    output = mapping_value(config, "output")
     if task in {"detection", "classification"} and "classes" not in output and not label_file.is_file():
         if strict_sidecars or strict_governance:
             return {"name": f"model:{model_id}", "ok": False, "detail": {**detail, "error": "labels file missing"}}
@@ -216,11 +225,10 @@ def validate_config(args: argparse.Namespace) -> dict[str, Any]:
     selected_ids = [str(item) for item in getattr(args, "model_id", []) or []]
 
     payload = load_yaml(config_path)
-    models = payload.get("models", payload) if isinstance(payload.get("models", payload), dict) else {}
-    aliases = payload.get("aliases", {}) if isinstance(payload.get("aliases", {}), dict) else {}
+    models = mapping_value(payload, "models") or payload
+    aliases = mapping_value(payload, "aliases")
     capabilities_payload = load_yaml(capabilities_path)
-    capabilities = capabilities_payload.get("capabilities", capabilities_payload) if isinstance(capabilities_payload.get("capabilities", capabilities_payload), dict) else {}
-
+    capabilities = mapping_value(capabilities_payload, "capabilities") or capabilities_payload
     if selected_ids:
         selected_ids = resolve_model_ids(selected_ids, aliases)
     else:

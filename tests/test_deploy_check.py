@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from tools.deploy_check import DeployReport, check_ci_workflows, check_dependency_lock, check_docker_files, onnxruntime_version
+from tools.deploy_check import DeployReport, check_ci_workflows, check_dependency_lock, check_docker_files, check_source_encoding, onnxruntime_version
 
 
 def test_deploy_report_redacts_sensitive_details() -> None:
@@ -75,7 +75,7 @@ def test_onnxruntime_version_distinguishes_cpu_and_gpu_packages() -> None:
     cpu_text = "onnxruntime==1.20.1\nnumpy==1.26.4\n"
 
     assert onnxruntime_version(gpu_text, "onnxruntime-gpu") == "1.20.1"
-    # The bare-name lookup must NOT match the `-gpu` package (substring trap).
+    # 裸包名查找不能误匹配 `-gpu` 包，避免子串陷阱。
     assert onnxruntime_version(gpu_text, "onnxruntime") is None
     assert onnxruntime_version(cpu_text, "onnxruntime") == "1.20.1"
     assert onnxruntime_version(cpu_text, "onnxruntime-gpu") is None
@@ -87,3 +87,18 @@ def test_security_audit_script_has_clear_missing_dependency_message() -> None:
     assert "importlib.util.find_spec" in content
     assert "pip-audit is not installed" in content
     assert "TMPDIR" in content
+
+
+def test_deploy_check_reports_utf8_bom_files(workspace_tmp_path) -> None:
+    source_dir = workspace_tmp_path / "app"
+    source_dir.mkdir()
+    (source_dir / "bad.py").write_bytes(b"\xef\xbb\xbfprint('bad')\n")
+    (source_dir / "good.py").write_text("print('good')\n", encoding="utf-8")
+    report = DeployReport()
+
+    check_source_encoding(workspace_tmp_path, report)
+
+    check = report.checks[0]
+    assert check["name"] == "source_files_utf8_no_bom"
+    assert check["ok"] is False
+    assert check["detail"]["bom_files"] == ["app/bad.py"]

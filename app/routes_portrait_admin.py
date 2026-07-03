@@ -9,20 +9,22 @@ from app.portrait_async import run_blocking_io
 from app.portrait_audit import audit_event
 from app.portrait_auth import permission_dependency
 from app.portrait_gallery import (
-    GALLERY,
     PersonRecord,
     delete_person as delete_gallery_person,
     feature_object_infos,
-    gallery_key,
     list_gallery_people,
-    persist_feature,
-    persist_person,
 )
-from app.portrait_jobs import VIDEO_JOBS, VideoJob, job_key, persist_video_job, remove_video_job
+from app.portrait_jobs import VideoJob, remove_video_job
 from app.portrait_model_capabilities import MODEL_CAPABILITIES
 from app.portrait_object_storage import OBJECT_STORE, public_object_info
 from app.portrait_pagination import normalize_list_pagination, normalize_stream_event_pagination, page_items_keyset
 from app.portrait_request_context import PortraitRequestContext, portrait_request_context
+from app.portrait_runtime_store import (
+    gallery_people_snapshots,
+    restore_gallery_person,
+    restore_video_job_in_store,
+    video_jobs_snapshots,
+)
 from app.portrait_response import OBJECT_CLEANUP_FAILED, exception_log_summary, portrait_success, raise_rollback_failure
 from app.portrait_security import redact_sensitive_fields
 from app.portrait_storage import GALLERY_STORE
@@ -80,12 +82,8 @@ def rollback_retention_cleanup(
 ) -> list[str]:
     errors: list[str] = []
     for person in reversed(removed_gallery_people):
-        restored_person = deepcopy(person)
-        GALLERY[gallery_key(restored_person.tenant_id, restored_person.person_id)] = restored_person
         try:
-            persist_person(restored_person)
-            for feature in restored_person.features:
-                persist_feature(restored_person, feature)
+            restore_gallery_person(person)
         except Exception as exc:
             logger.warning("failed to persist restored gallery person during retention rollback: %s", exception_log_summary(exc))
             errors.append("restore retained gallery person failed")
@@ -93,18 +91,15 @@ def rollback_retention_cleanup(
     for stream, previous_stream in reversed(trimmed_streams):
         restore_stream(stream, previous_stream)
         restore_stream_snapshot_in_store(stream)
-    for job in reversed(removed_jobs):
-        VIDEO_JOBS[job_key(job.tenant_id, job.job_id)] = job
-
-    for stream, _ in reversed(trimmed_streams):
         try:
             persist_stream(stream)
         except Exception as exc:
             logger.warning("failed to persist restored stream during retention rollback: %s", exception_log_summary(exc))
             errors.append("restore retained stream failed")
+
     for job in reversed(removed_jobs):
         try:
-            persist_video_job(job)
+            restore_video_job_in_store(job)
         except Exception as exc:
             logger.warning("failed to persist restored video job during retention rollback: %s", exception_log_summary(exc))
             errors.append("restore retained video job failed")
@@ -157,7 +152,7 @@ def retention_cleanup_transaction(
     cutoff = time.time() - retention_days * 86400
     gallery_candidates = [
         deepcopy(person)
-        for person in sorted(GALLERY.values(), key=lambda item: item.person_id)
+        for person in gallery_people_snapshots(tenant_id)
         if person.tenant_id == tenant_id and person.updated_at < cutoff
     ]
     removed_jobs = 0
@@ -180,7 +175,7 @@ def retention_cleanup_transaction(
             candidate_gallery_object_reference_count=sum(len(feature_object_infos(person)) for person in gallery_candidates),
         )
 
-        for job in list(VIDEO_JOBS.values()):
+        for job in video_jobs_snapshots(tenant_id):
             if job.tenant_id == tenant_id and job.updated_at < cutoff:
                 previous_job = deepcopy(job)
                 if remove_video_job(job.job_id, tenant_id):
@@ -294,7 +289,7 @@ async def v1_admin_export(
     ]
     all_jobs = [
         job
-        for job in VIDEO_JOBS.values()
+        for job in video_jobs_snapshots(tenant_id)
         if job.tenant_id == tenant_id and (updated_since is None or float(job.updated_at or job.created_at) >= updated_since)
     ]
     all_streams = [

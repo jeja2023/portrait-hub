@@ -18,6 +18,7 @@ CACHE_DIR_NAMES = {
     "__pycache__",
 }
 CACHE_FILE_SUFFIXES = (".pyc", ".pyo")
+SITE_PACKAGES_RESIDUAL_PREFIXES = ("~",)
 SKIPPED_DIR_NAMES = {
     ".codex",
     ".codex-tmp",
@@ -65,10 +66,22 @@ def iter_cache_artifacts(root: Path) -> Iterable[Path]:
                 yield path
 
 
+def iter_site_packages_residuals(root: Path) -> Iterable[Path]:
+    venv_root = root / ".venv"
+    if not venv_root.exists():
+        return
+    for site_packages in venv_root.glob("**/site-packages"):
+        if not site_packages.is_dir():
+            continue
+        for child in site_packages.iterdir():
+            if child.name.startswith(SITE_PACKAGES_RESIDUAL_PREFIXES):
+                yield child
+
+
 def safe_cache_artifacts(root: Path) -> list[Path]:
     resolved_root = root.resolve()
     artifacts = []
-    for path in iter_cache_artifacts(resolved_root):
+    for path in [*iter_cache_artifacts(resolved_root), *iter_site_packages_residuals(resolved_root)]:
         try:
             resolved_path = path.resolve()
         except OSError:

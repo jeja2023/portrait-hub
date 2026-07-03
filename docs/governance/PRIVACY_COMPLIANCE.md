@@ -1,4 +1,4 @@
-﻿# Privacy And Biometric Compliance
+# Privacy And Biometric Compliance
 
 PortraitHub deployments should be treated as biometric-adjacent systems.
 

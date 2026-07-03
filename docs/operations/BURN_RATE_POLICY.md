@@ -1,4 +1,4 @@
-﻿# Burn Rate Policy
+# Burn Rate Policy
 
 PortraitHub uses two operational windows:
 

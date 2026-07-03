@@ -66,6 +66,8 @@ def test_readiness_templates_include_cutover_and_worker_artifacts() -> None:
     checks = {item["name"]: item for item in check_templates(Path("."))}
 
     for item in [
+        "frontend/console/console.config.js",
+        "package.json",
         "tools/portrait_cutover_check.py",
         "tools/portrait_model_regression.py",
         "tools/portrait_stream_worker_health.py",
@@ -76,6 +78,12 @@ def test_readiness_templates_include_cutover_and_worker_artifacts() -> None:
         ".github/workflows/ci.yml",
     ]:
         assert checks[f"template:{item}"]["ok"] is True
+
+
+def test_readiness_tracks_console_config_externalization() -> None:
+    checks = {item["name"]: item for item in check_security_controls(Path("."))}
+
+    assert checks["frontend:console_config_externalized"]["ok"] is True
 
 
 def test_runtime_error_redaction_contract_holds_in_repo() -> None:

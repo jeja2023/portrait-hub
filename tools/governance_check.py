@@ -1,4 +1,4 @@
-﻿"""Repository-level governance checks for PortraitHub."""
+"""PortraitHub 仓库级治理检查。"""
 
 from __future__ import annotations
 
@@ -47,6 +47,8 @@ def check_supply_chain(root: Path) -> dict[str, Any]:
 def check_production_profile(root: Path) -> dict[str, Any]:
     profile = load_env_file(root / "ops" / "production.env.example")
     required = {
+        "PORTRAIT_RUNTIME_PROFILE": "production",
+        "PRODUCTION_EXTERNAL_SERVICES_REQUIRED": "true",
         "AUTH_REQUIRED": "true",
         "RBAC_ENABLED": "true",
         "ENABLE_API_DOCS": "false",
@@ -59,6 +61,7 @@ def check_production_profile(root: Path) -> dict[str, Any]:
         "TASK_QUEUE_BACKEND": "redis",
         "READY_CHECK_DEPENDENCIES": "true",
         "OPENTELEMETRY_ENABLED": "true",
+        "OTEL_EXPORTER_OTLP_ENDPOINT": "http://otel-collector:4318/v1/traces",
         "REQUIRE_ENCRYPTION": "true",
         "ALLOW_PRIVATE_STREAM_HOSTS": "false",
     }
@@ -103,6 +106,28 @@ def check_model_governance_assets(root: Path) -> dict[str, Any]:
     }
 
 
+def check_data_governance_schedule(root: Path) -> dict[str, Any]:
+    scheduler = root / "tools" / "portrait_governance_scheduler.py"
+    backup_scheduler = root / "tools" / "portrait_backup_scheduler.py"
+    service = root / "deploy" / "portrait-governance-scheduler.service"
+    timer = root / "deploy" / "portrait-governance-scheduler.timer"
+    cronjob = root / "deploy" / "k8s-governance-cronjob.yaml"
+    service_text = read_text(service)
+    return {
+        "name": "data_governance_schedule",
+        "ok": scheduler.is_file()
+        and backup_scheduler.is_file()
+        and service.is_file()
+        and timer.is_file()
+        and cronjob.is_file()
+        and has_markers(read_text(backup_scheduler), ["/v1/admin/backup", "post_backup"])
+        and has_markers(read_text(scheduler), ["post_backup", "/v1/admin/retention/cleanup", "run_governance_scheduler"])
+        and has_markers(service_text, ["EnvironmentFile=", "portrait_governance_scheduler.py", "--once"])
+        and "--token" not in service_text
+        and has_markers(read_text(timer), ["OnCalendar=hourly", "Persistent=true"])
+        and has_markers(read_text(cronjob), ["kind: CronJob", "portrait_governance_scheduler.py"]),
+        "detail": {"scheduler": str(scheduler), "backup_scheduler": str(backup_scheduler), "service": str(service), "timer": str(timer), "cronjob": str(cronjob)},
+    }
 def run_checks(root: Path) -> dict[str, Any]:
     checks = [
         check_supply_chain(root),
@@ -110,6 +135,7 @@ def run_checks(root: Path) -> dict[str, Any]:
         check_governance_docs(root),
         check_alerts(root),
         check_model_governance_assets(root),
+        check_data_governance_schedule(root),
     ]
     return {"ok": all(item["ok"] for item in checks), "checks": checks}
 
@@ -131,4 +157,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

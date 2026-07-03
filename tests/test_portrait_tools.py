@@ -94,3 +94,50 @@ def test_load_test_records_unreachable_targets_as_error() -> None:
     )
 
     assert str(result["status"]).startswith("error:")
+from io import BytesIO
+
+from tools import portrait_governance_scheduler
+
+
+class _FakeResponse:
+    def __init__(self, payload: bytes) -> None:
+        self._payload = payload
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        return None
+
+    def read(self) -> bytes:
+        return self._payload
+
+
+def test_governance_scheduler_once_runs_backup_and_cleanup(monkeypatch, capsys) -> None:
+    requests = []
+
+    def fake_urlopen(request, timeout):  # noqa: ANN001, ARG001
+        requests.append(request.full_url)
+        return _FakeResponse(b'{"data":{"ok":true}}')
+
+    monkeypatch.setattr(portrait_governance_scheduler.urllib.request, "urlopen", fake_urlopen)
+
+    result = portrait_governance_scheduler.run_governance_scheduler(
+        base_url="http://portrait.local",
+        token="token",
+        tenant_id="tenant-a",
+        backup_interval_seconds=3600,
+        cleanup_interval_seconds=86400,
+        retention_days=90,
+        once=True,
+        timeout=1,
+    )
+
+    assert result == 0
+    assert requests == [
+        "http://portrait.local/v1/admin/backup",
+        "http://portrait.local/v1/admin/retention/cleanup",
+    ]
+    out = capsys.readouterr().out
+    assert '"task": "backup"' in out
+    assert '"task": "retention_cleanup"' in out

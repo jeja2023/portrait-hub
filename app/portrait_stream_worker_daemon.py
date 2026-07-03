@@ -82,8 +82,10 @@ def read_stream_process_lock_payload(path: Path) -> dict[str, Any] | None:
 
 def stream_process_lock_created_at(path: Path, payload: dict[str, Any] | None) -> float:
     if payload is not None:
+        raw_created_at = payload.get("created_at")
         try:
-            return float(payload.get("created_at"))
+            if raw_created_at is not None:
+                return float(raw_created_at)
         except (TypeError, ValueError):
             pass
     try:

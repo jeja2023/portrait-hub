@@ -1,4 +1,4 @@
-﻿groups:
+groups:
   - name: portrait-hub-burn-rate
     rules:
       - alert: PortraitHubFastBurnErrorBudget

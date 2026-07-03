@@ -29,6 +29,9 @@ def text_between(text: str, start: str, end: str) -> str:
 def check_templates(root: Path) -> list[dict[str, Any]]:
     required = [
         "app/portrait_errors.py",
+        "app/portrait_runtime_store.py",
+        "app/portrait_gallery_orchestration.py",
+        "app/production_gates.py",
         "app/tracking_state.py",
         "app/tracking_association.py",
         "app/runtime_face.py",
@@ -39,26 +42,44 @@ def check_templates(root: Path) -> list[dict[str, Any]]:
         "app/runtime_common.py",
         "frontend/console/console.html",
         "frontend/console/console.css",
+        "frontend/console/console.config.js",
         "frontend/console/console.js",
+        "frontend/console/api/client.js",
+        "frontend/console/state/store.js",
+        "frontend/console/views/analysis.js",
+        "frontend/console/views/gallery.js",
+        "frontend/console/views/operations.js",
+        "frontend/console/views/app.js",
+        "frontend/console/renderers/data-viewer.js",
+        "frontend/console/visuals/previews.js",
         "tools/portrait_algorithm_eval.py",
         "tools/portrait_model_regression.py",
         "tools/portrait_cutover_check.py",
         "tools/portrait_stream_worker_health.py",
         "tools/portrait_migrate.py",
         "tools/portrait_backup_scheduler.py",
+        "tools/portrait_governance_scheduler.py",
+        "tools/console_screenshot_acceptance.py",
         "tools/load_test.py",
         "tools/type_check.py",
         "tools/workspace_hygiene.py",
         "tools/portrait_postgres_schema.sql",
         "tools/qdrant_collections.json",
         "examples/portrait-model-regression.example.yml",
+        "examples/portrait-model-ab-shadow.example.yml",
         "examples/production-models.example.yml",
         "examples/production-model-capabilities.example.yml",
         "deploy/portrait-stream-worker.service",
         "deploy/k8s-stream-worker.yaml",
+        "deploy/portrait-governance-scheduler.service",
+        "deploy/portrait-governance-scheduler.timer",
+        "deploy/k8s-governance-cronjob.yaml",
         ".github/workflows/ci.yml",
+        ".github/workflows/integration-matrix.yml",
+        ".github/workflows/console-acceptance.yml",
         ".github/workflows/security-audit.yml",
         "requirements/prod-optional.txt",
+        "package.json",
         "sdk/python/portrait_hub_client.py",
         "sdk/node/portraitHubClient.js",
     ]
@@ -151,6 +172,7 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
     gallery_search = (root / "app" / "gallery_search.py").read_text(encoding="utf-8") if (root / "app" / "gallery_search.py").is_file() else ""
     portrait_gallery_records = (root / "app" / "portrait_gallery_records.py").read_text(encoding="utf-8") if (root / "app" / "portrait_gallery_records.py").is_file() else ""
     portrait_gallery_routes = (root / "app" / "routes_portrait_gallery.py").read_text(encoding="utf-8") if (root / "app" / "routes_portrait_gallery.py").is_file() else ""
+    portrait_gallery_mutations = (root / "app" / "portrait_gallery_mutations.py").read_text(encoding="utf-8") if (root / "app" / "portrait_gallery_mutations.py").is_file() else ""
     portrait_jobs = (root / "app" / "portrait_jobs.py").read_text(encoding="utf-8") if (root / "app" / "portrait_jobs.py").is_file() else ""
     portrait_request_validation = (root / "app" / "portrait_request_validation.py").read_text(encoding="utf-8") if (root / "app" / "portrait_request_validation.py").is_file() else ""
     portrait_model_routes = (root / "app" / "routes_portrait_models.py").read_text(encoding="utf-8") if (root / "app" / "routes_portrait_models.py").is_file() else ""
@@ -176,6 +198,9 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
     stream_decode = (root / "app" / "media" / "stream_decode.py").read_text(encoding="utf-8") if (root / "app" / "media" / "stream_decode.py").is_file() else ""
     portrait_job_routes = (root / "app" / "routes_portrait_jobs.py").read_text(encoding="utf-8") if (root / "app" / "routes_portrait_jobs.py").is_file() else ""
     portrait_task_queue = (root / "app" / "portrait_task_queue.py").read_text(encoding="utf-8") if (root / "app" / "portrait_task_queue.py").is_file() else ""
+    portrait_runtime_store = (root / "app" / "portrait_runtime_store.py").read_text(encoding="utf-8") if (root / "app" / "portrait_runtime_store.py").is_file() else ""
+    portrait_gallery_orchestration = (root / "app" / "portrait_gallery_orchestration.py").read_text(encoding="utf-8") if (root / "app" / "portrait_gallery_orchestration.py").is_file() else ""
+    production_gates = (root / "app" / "production_gates.py").read_text(encoding="utf-8") if (root / "app" / "production_gates.py").is_file() else ""
     portrait_vector_store = (root / "app" / "portrait_vector_store.py").read_text(encoding="utf-8") if (root / "app" / "portrait_vector_store.py").is_file() else ""
     portrait_tracking = (root / "app" / "portrait_tracking.py").read_text(encoding="utf-8") if (root / "app" / "portrait_tracking.py").is_file() else ""
     tracking_state = (root / "app" / "tracking_state.py").read_text(encoding="utf-8") if (root / "app" / "tracking_state.py").is_file() else ""
@@ -212,12 +237,19 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
     base_lock = (root / "requirements" / "base.lock").read_text(encoding="utf-8") if (root / "requirements" / "base.lock").is_file() else ""
     requirements_lock = (root / "requirements.lock").read_text(encoding="utf-8") if (root / "requirements.lock").is_file() else ""
     base_in = (root / "requirements" / "base.in").read_text(encoding="utf-8") if (root / "requirements" / "base.in").is_file() else ""
+    console_html = (root / "frontend" / "console" / "console.html").read_text(encoding="utf-8") if (root / "frontend" / "console" / "console.html").is_file() else ""
     console_js = (root / "frontend" / "console" / "console.js").read_text(encoding="utf-8") if (root / "frontend" / "console" / "console.js").is_file() else ""
+    console_config_js = (root / "frontend" / "console" / "console.config.js").read_text(encoding="utf-8") if (root / "frontend" / "console" / "console.config.js").is_file() else ""
+    console_runtime_js = (root / "frontend" / "console" / "views" / "app.js").read_text(encoding="utf-8") if (root / "frontend" / "console" / "views" / "app.js").is_file() else ""
+    console_module_sources = "\n".join((root / "frontend" / "console" / item).read_text(encoding="utf-8") for item in ["api/client.js", "state/store.js", "views/analysis.js", "views/gallery.js", "views/operations.js", "views/app.js", "renderers/data-viewer.js", "visuals/previews.js"] if (root / "frontend" / "console" / item).is_file())
     regression_open_case_files = ""
     if "def open_case_files" in regression_check:
         regression_open_case_files = regression_check.split("def open_case_files", 1)[1].split("def run_case", 1)[0]
     ready_deep_section = text_between(health_routes, '@router.get("/ready/deep"', '@router.get("/metrics"')
     portrait_gallery_impl = "\n".join([portrait_gallery, gallery_state, gallery_search])
+    portrait_gallery_mutation_text = "\n".join([portrait_gallery_routes, portrait_gallery_mutations])
+    portrait_gallery_route_orchestration = "\n".join([portrait_gallery_routes, portrait_gallery_orchestration])
+    portrait_admin_runtime_text = "\n".join([portrait_admin_routes, portrait_runtime_store])
     portrait_postgres_impl = "\n".join([portrait_postgres, postgres_core, postgres_gallery, postgres_streams, postgres_audit, postgres_jobs, postgres_thresholds])
     postgres_health_section = text_between(postgres_core, "def postgres_health", "def jsonb")
     redis_health_section = text_between(portrait_task_queue, "class RedisTaskQueue", "def configured_task_queue")
@@ -231,6 +263,7 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
     rollback_route_text = "\n".join(
         [
             portrait_gallery_routes,
+            portrait_gallery_mutations,
             portrait_job_routes,
             portrait_stream_routes,
             portrait_admin_routes,
@@ -316,13 +349,95 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
             ),
         },
         {
+            "name": "frontend:console_config_externalized",
+            "ok": (
+                "window.PortraitConsoleConfig" in console_config_js
+                and "endpointMap" in console_config_js
+                and "alertDefaults" in console_config_js
+                and "window.PortraitConsoleConfig" in console_runtime_js
+                and "const endpointMap = consoleConfig.endpointMap" in console_runtime_js
+            ),
+        },
+        {
+            "name": "frontend:console_modules_split",
+            "ok": (
+                "/assets/console/api/client.js" in console_html
+                and "/assets/console/state/store.js" in console_html
+                and "/assets/console/views/gallery.js" in console_html
+                and "/assets/console/views/app.js" in console_html
+                and console_html.index("/assets/console/views/app.js") < console_html.index("/assets/console.js")
+                and "PortraitConsoleRuntime" in console_js
+                and "runtime.init" in console_js
+                and len(console_js) < 2000
+                and "function init()" in console_runtime_js
+                and "window.PortraitConsoleRuntime = { init }" in console_runtime_js
+                and "PortraitConsoleModules" in console_module_sources
+                and "modules.api" in console_module_sources
+                and "modules.state" in console_module_sources
+                and "modules.views" in console_module_sources
+                and "modules.renderers" in console_module_sources
+                and "modules.visuals" in console_module_sources
+                and "def console_asset_path" in portrait_console_routes
+                and '\"/assets/console/{asset_path:path}\"' in portrait_console_routes
+            ),
+        },
+        {
+            "name": "backend:gallery_orchestration_split",
+            "ok": (
+                "def enroll_gallery_person" in portrait_gallery_orchestration
+                and "def search_gallery_image" in portrait_gallery_orchestration
+                and "def create_async_gallery_search_batch" in portrait_gallery_orchestration
+                and "decode_upload_images" in portrait_gallery_orchestration
+                and "rollback_gallery_mutation" in portrait_gallery_orchestration
+                and "enroll_gallery_person" in portrait_gallery_routes
+                and "search_gallery_batch" in portrait_gallery_routes
+                and "decode_upload_image" not in portrait_gallery_routes
+                and "create_batch_job" not in portrait_gallery_routes
+            ),
+        },
+        {
+            "name": "backend:runtime_store_lifecycle",
+            "ok": (
+                "class RuntimeStateStore" in portrait_runtime_store
+                and "gallery_people_snapshots" in portrait_runtime_store
+                and "video_jobs_snapshots" in portrait_runtime_store
+                and "task_message_snapshots" in portrait_runtime_store
+                and "video_jobs_snapshots(tenant_id)" in portrait_admin_routes
+                and "video_jobs_snapshots(tenant_id)" in portrait_job_routes
+                and "restore_video_job_in_store(job)" in portrait_job_routes
+                and "TASK_MESSAGE_STORE" in portrait_task_queue
+                and "TASK_MESSAGE_STORE.remove(message)" in portrait_task_queue
+            ),
+        },
+        {
+            "name": "runtime:production_externalization_gate",
+            "ok": (
+                "PORTRAIT_RUNTIME_PROFILE" in settings
+                and "PRODUCTION_EXTERNAL_SERVICES_REQUIRED" in settings
+                and "OTEL_EXPORTER_OTLP_ENDPOINT" in settings
+                and "def production_externalization_failures" in production_gates
+                and "def validate_production_externalization" in production_gates
+                and "validate_production_externalization()" in server
+                and "PORTRAIT_RUNTIME_PROFILE: ${PORTRAIT_RUNTIME_PROFILE:-development}" in compose
+                and "PRODUCTION_EXTERNAL_SERVICES_REQUIRED: ${PRODUCTION_EXTERNAL_SERVICES_REQUIRED:-true}" in compose
+                and "PORTRAIT_STORAGE_BACKEND: ${PORTRAIT_STORAGE_BACKEND:-json}" in compose
+                and "PORTRAIT_VECTOR_BACKEND: ${PORTRAIT_VECTOR_BACKEND:-local}" in compose
+                and "PORTRAIT_OBJECT_STORAGE_BACKEND: ${PORTRAIT_OBJECT_STORAGE_BACKEND:-local}" in compose
+                and "TASK_QUEUE_BACKEND: ${TASK_QUEUE_BACKEND:-local}" in compose
+                and "OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}" in compose
+                and "PORTRAIT_RUNTIME_PROFILE=development" in env_example
+                and "PRODUCTION_EXTERNAL_SERVICES_REQUIRED=true" in env_example
+                and "PORTRAIT_RUNTIME_PROFILE=production" in (root / "ops" / "production.env.example").read_text(encoding="utf-8")
+                and "OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318/v1/traces" in (root / "ops" / "production.env.example").read_text(encoding="utf-8")
+            ),
+        },        {
             "name": "frontend:websocket_console_subscription",
             "ok": (
-                "new WebSocket" in console_js
-                and "/ws/jobs/" in console_js
-                and "/ws/streams/" in console_js
-                and "access_token" in console_js
-                and "token" in console_js
+                "new WebSocket" in console_runtime_js
+                and "/ws/jobs/" in console_runtime_js
+                and "/ws/streams/" in console_runtime_js
+                and "access_token" in console_runtime_js
+                and "token" in console_runtime_js
             ),
         },
         {
@@ -1074,7 +1189,7 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
                 and '"rollback_errors": rollback_errors' not in rollback_route_text
                 and "getattr(exc, 'detail', exc)" not in rollback_route_text
                 and rollback_route_text.count("exception_log_summary(exc)") >= 7
-                and "raise_rollback_failure(\"gallery mutation failed and rollback persistence failed\"" in portrait_gallery_routes
+                and "raise_rollback_failure(\"gallery mutation failed and rollback persistence failed\"" in portrait_gallery_mutations
                 and "raise_rollback_failure(\"video job mutation failed and rollback persistence failed\"" in portrait_job_routes
                 and "raise_rollback_failure(\"stream mutation failed and rollback persistence failed\"" in portrait_stream_routes
                 and "raise_rollback_failure(\"retention cleanup failed and rollback persistence failed\"" in portrait_admin_routes
@@ -1427,14 +1542,14 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
                 and 'filenames = [f"{file.filename or' not in person_video_routes
                 and "filename=file.filename" not in person_video_routes
                 and 'meta["filename"] = file.filename' not in video_io
-                and '"filename": item.frame.filename' not in portrait_gallery_routes
+                and '"filename": item.frame.filename' not in portrait_gallery_route_orchestration
                 and 'object_record_metadata(object_type, filename)' in portrait_object_storage
                 and "def public_object_info" in portrait_object_storage
                 and '"object_key"' not in text_between(portrait_object_storage, "def public_object_info", "def write_local_object_payload")
                 and '"bucket"' not in text_between(portrait_object_storage, "def public_object_info", "def write_local_object_payload")
                 and '"sha256"' not in text_between(portrait_object_storage, "def public_object_info", "def write_local_object_payload")
-                and 'feature_payload["object"] = public_object_info(object_info)' in portrait_gallery_routes
-                and 'feature_payload["object"] = object_info' not in portrait_gallery_routes
+                and 'feature_payload["object"] = public_object_info(object_info)' in portrait_gallery_route_orchestration
+                and 'feature_payload["object"] = object_info' not in portrait_gallery_route_orchestration
                 and '"filename": filename' not in portrait_object_storage
                 and "def public_video_job_result" in portrait_jobs
                 and 'payload["metadata"] = public_video_metadata(metadata)' in portrait_jobs
@@ -1500,7 +1615,7 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
                 and "MAX_PUBLIC_METADATA_BYTES" in settings
                 and "MAX_PUBLIC_METADATA_BYTES" in compose
                 and "MAX_PUBLIC_METADATA_BYTES=16384" in env_example
-                and "normalize_public_metadata(parsed" in portrait_gallery_routes
+                and "normalize_public_metadata(parsed" in portrait_gallery_route_orchestration
                 and "normalize_public_metadata(payload.settings" in portrait_stream_routes
             ),
         },
@@ -1512,11 +1627,11 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
                 and 'detail="unsupported threshold profile"' in portrait_thresholds
                 and "unsupported threshold profile: {profile}" not in portrait_thresholds
                 and "validate_threshold_profile(threshold_profile)" in portrait_compare_routes
-                and "validate_threshold_profile(threshold_profile)" in portrait_gallery_routes
-                and "SUPPORTED_GALLERY_MODALITIES" in portrait_gallery_routes
-                and "def validate_gallery_modality" in portrait_gallery_routes
-                and "modality = validate_gallery_modality(modality)" in portrait_gallery_routes
-                and 'detail="unsupported modality"' in portrait_gallery_routes
+                and "validate_threshold_profile(threshold_profile)" in portrait_gallery_route_orchestration
+                and "SUPPORTED_GALLERY_MODALITIES" in portrait_gallery_route_orchestration
+                and "def validate_gallery_modality" in portrait_gallery_route_orchestration
+                and ("modality = validate_gallery_modality(modality)" in portrait_gallery_route_orchestration or "modality_key = validate_gallery_modality(modality)" in portrait_gallery_route_orchestration)
+                and 'detail="unsupported modality"' in portrait_gallery_route_orchestration
                 and 'profile=result["profile"]' in portrait_model_routes
                 and "def validate_threshold_modality" in portrait_thresholds
                 and 'detail="unsupported modality"' in portrait_thresholds
@@ -1675,7 +1790,7 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
             "ok": (
                 "def append_task_queue_state" in portrait_task_queue
                 and "fail_closed=required" in portrait_task_queue
-                and "TASK_MESSAGES.remove(message)" in portrait_task_queue
+                and "TASK_MESSAGE_STORE.remove(message)" in portrait_task_queue
                 and (
                     "remove_video_job(job.job_id, tenant_id)" in portrait_job_routes
                     or "run_blocking_io(remove_video_job, job.job_id, tenant_id)" in portrait_job_routes
@@ -1693,7 +1808,7 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
                     or "run_blocking_io(remove_video_job, job.job_id, tenant_id)" in portrait_job_routes
                 )
                 and "restore_video_job(job, previous_job)" in portrait_job_routes
-                and "persist_video_job(job)" in portrait_job_routes
+                and "restore_video_job_in_store(job)" in portrait_job_routes
                 and "video job mutation failed and rollback persistence failed" in portrait_job_routes
             ),
         },
@@ -1756,15 +1871,15 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
         {
             "name": "security:gallery_audit_compensation",
             "ok": (
-                "def rollback_gallery_mutation" in portrait_gallery_routes
-                and "def restore_gallery_person_snapshot" in portrait_gallery_routes
-                and "created_object_infos: list[dict[str, Any]]" in portrait_gallery_routes
-                and "cleanup_object_after_failed_feature(object_info)" in portrait_gallery_routes
-                and "persist_person_delete(tenant_id, person_id)" in portrait_gallery_routes
-                and 'errors.append("delete mutated gallery person before restore failed")' in portrait_gallery_routes
-                and "persist_person(restored_person)" in portrait_gallery_routes
-                and "persist_feature(restored_person, feature)" in portrait_gallery_routes
-                and "gallery mutation failed and rollback persistence failed" in portrait_gallery_routes
+                "def rollback_gallery_mutation" in portrait_gallery_mutations
+                and "def restore_gallery_person_snapshot" in portrait_gallery_mutations
+                and "created_object_infos: list[dict[str, Any]]" in portrait_gallery_mutations
+                and "cleanup_object_after_failed_feature(object_info, object_store=object_store)" in portrait_gallery_mutations
+                and "persist_delete_hook(tenant_id, person_id)" in portrait_gallery_mutations
+                and 'errors.append("delete mutated gallery person before restore failed")' in portrait_gallery_mutations
+                and "persist_person_hook(restored_person)" in portrait_gallery_mutations
+                and "persist_feature_hook(restored_person, feature)" in portrait_gallery_mutations
+                and "gallery mutation failed and rollback persistence failed" in portrait_gallery_mutations
             ),
         },
         {
@@ -1804,9 +1919,9 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
                 and "removed_gallery_people" in portrait_admin_routes
                 and "deleted_gallery_objects" in portrait_admin_routes
                 and "restore_stream(stream, previous_stream)" in portrait_admin_routes
-                and "persist_person(restored_person)" in portrait_admin_routes
-                and "persist_feature(restored_person, feature)" in portrait_admin_routes
-                and "persist_video_job(job)" in portrait_admin_routes
+                and "restore_gallery_person(person)" in portrait_admin_routes
+                and "persist_feature(restored_person, feature)" in portrait_admin_runtime_text
+                and "restore_video_job_in_store(job)" in portrait_admin_routes
                 and "persist_stream(stream)" in portrait_admin_routes
                 and "OBJECT_CLEANUP_FAILED" in portrait_admin_routes
                 and "retention cleanup failed and rollback persistence failed" in portrait_admin_routes
@@ -1817,7 +1932,7 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
             "ok": (
                 "def delete_object" in portrait_object_storage
                 and "OBJECT_DELETE_FAILED" in portrait_object_storage
-                and "OBJECT_CLEANUP_FAILED" in portrait_gallery_routes
+                and "OBJECT_CLEANUP_FAILED" in portrait_gallery_mutation_text
                 and "def object_key_fingerprint" in portrait_object_storage
                 and "target.unlink(missing_ok=True)" in portrait_object_storage
                 and "delete_object(Bucket=S3_BUCKET, Key=object_key)" in portrait_object_storage
@@ -1825,9 +1940,9 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
                 and '"object_key": object_key' not in object_delete_sections
                 and '"bucket": S3_BUCKET' not in object_delete_sections
                 and '"error": str(exc)' not in object_delete_sections
-                and "return str(exc)" not in portrait_gallery_routes
-                and "def cleanup_object_after_failed_feature" in portrait_gallery_routes
-                and "cleanup_object_after_failed_feature(object_info)" in portrait_gallery_routes
+                and "return str(exc)" not in portrait_gallery_mutation_text
+                and "def cleanup_object_after_failed_feature" in portrait_gallery_mutations
+                and "cleanup_object_after_failed_feature(object_info, object_store=object_store)" in portrait_gallery_mutations
             ),
         },
         {
@@ -1837,20 +1952,18 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
                 and "def feature_object_infos" in (portrait_gallery + portrait_gallery_records)
                 and 'payload["object_info"] = deepcopy(self.object_info)' in (portrait_gallery + portrait_gallery_records)
                 and "object_info=deepcopy(object_info) if object_info else None" in (portrait_gallery + portrait_gallery_records)
-                and "object_info=object_info" in portrait_gallery_routes
-                and "def cleanup_gallery_feature_objects" in portrait_gallery_routes
+                and "object_info=object_info" in portrait_gallery_route_orchestration
+                and "def cleanup_gallery_feature_objects" in portrait_gallery_mutations
                 and '"gallery_delete_person_requested"' in portrait_gallery_routes
                 and 'outcome="started"' in portrait_gallery_routes
                 and "object_reference_count=len(feature_object_infos(previous_person))" in portrait_gallery_routes
-                and (
-                    "cleanup_gallery_feature_objects(previous_person)" in portrait_gallery_routes
-                    or "run_blocking_io(cleanup_gallery_feature_objects, previous_person)" in portrait_gallery_routes
-                )
-                and (
-                    "restore_gallery_person_snapshot(tenant_id, previous_person.person_id, previous_person)" in portrait_gallery_routes
-                    or "run_blocking_io(restore_gallery_person_snapshot, tenant_id, previous_person.person_id, previous_person)" in portrait_gallery_routes
-                )
-                and "OBJECT_CLEANUP_FAILED" in portrait_gallery_routes
+                and "cleanup_gallery_feature_objects," in portrait_gallery_routes
+                and "object_store=OBJECT_STORE" in portrait_gallery_routes
+                and "restore_gallery_person_snapshot," in portrait_gallery_routes
+                and "persist_delete_hook=persist_person_delete" in portrait_gallery_routes
+                and "persist_person_hook=persist_person" in portrait_gallery_routes
+                and "persist_feature_hook=persist_feature" in portrait_gallery_routes
+                and "OBJECT_CLEANUP_FAILED" in portrait_gallery_mutation_text
                 and "deleted_object_count" in portrait_gallery_routes
                 and "object_info JSONB NOT NULL DEFAULT '{}'::jsonb" in portrait_postgres_schema
                 and "f.object_info" in portrait_postgres_impl

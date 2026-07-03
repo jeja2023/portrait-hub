@@ -48,7 +48,9 @@ def parse_csv_env(name: str, default: str = "") -> list[str]:
     return [item.strip() for item in os.getenv(name, default).split(",") if item.strip()]
 
 
-APP_VERSION = "0.5.53"
+APP_VERSION = "0.5.54"
+PORTRAIT_RUNTIME_PROFILE = os.getenv("PORTRAIT_RUNTIME_PROFILE", os.getenv("APP_ENV", "development")).strip().lower() or "development"
+PRODUCTION_EXTERNAL_SERVICES_REQUIRED = parse_bool_env("PRODUCTION_EXTERNAL_SERVICES_REQUIRED", True)
 MODELS_ROOT = Path(os.getenv("MODELS_ROOT", "models")).resolve()
 MODEL_CONFIG_PATH = Path(os.getenv("MODEL_CONFIG_PATH", "models.yml"))
 MODEL_CONFIG_READ_FAIL_CLOSED = parse_bool_env("MODEL_CONFIG_READ_FAIL_CLOSED", True)
@@ -228,6 +230,7 @@ JWT_PUBLIC_KEY_PATH = os.getenv("JWT_PUBLIC_KEY_PATH", "")
 JWT_PUBLIC_KEYRING = os.getenv("JWT_PUBLIC_KEYRING", "")
 OPENTELEMETRY_ENABLED = parse_bool_env("OPENTELEMETRY_ENABLED", False)
 OTEL_SERVICE_NAME = os.getenv("OTEL_SERVICE_NAME", "portrait-hub")
+OTEL_EXPORTER_OTLP_ENDPOINT = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "")
 CONFIG_HOT_RELOAD_ENABLED = parse_bool_env("CONFIG_HOT_RELOAD_ENABLED", True)
 READY_CHECK_DEPENDENCIES = parse_bool_env("READY_CHECK_DEPENDENCIES", False)
 

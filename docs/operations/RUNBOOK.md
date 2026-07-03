@@ -1,4 +1,4 @@
-﻿# PortraitHub Runbook
+# PortraitHub Runbook
 
 When alerts fire:
 

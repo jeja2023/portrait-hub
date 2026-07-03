@@ -1,0 +1,35 @@
+experiments:
+  - name: face-threshold-shadow
+    baseline:
+      pairs:
+        - score: 0.90
+          same: true
+        - score: 0.20
+          same: false
+      gates:
+        - path: metrics.compare.roc_auc
+          min: 0.99
+    candidate:
+      pairs:
+        - score: 0.94
+          same: true
+        - score: 0.16
+          same: false
+      gates:
+        - path: metrics.compare.roc_auc
+          min: 0.99
+    shadow:
+      pairs:
+        - score: 0.93
+          same: true
+        - score: 0.17
+          same: false
+      gates:
+        - path: metrics.compare.roc_auc
+          min: 0.99
+    delta_gates:
+      - path: metrics.compare.roc_auc
+        min_delta: 0.0
+    shadow_delta_gates:
+      - path: metrics.compare.roc_auc
+        min_delta: -0.02

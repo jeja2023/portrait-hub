@@ -47,12 +47,98 @@ def evaluate_gates(report: dict[str, Any], gates: list[dict[str, Any]]) -> list[
     return failures
 
 
-def run_model_regression(manifest: dict[str, Any]) -> dict[str, Any]:
-    report = run_evaluation(manifest)
-    gates = manifest.get("gates", [])
+def evaluate_delta_gates(
+    baseline_report: dict[str, Any],
+    candidate_report: dict[str, Any],
+    gates: list[dict[str, Any]],
+    *,
+    label: str,
+) -> list[dict[str, Any]]:
+    failures: list[dict[str, Any]] = []
+    for gate in gates:
+        if not isinstance(gate, dict):
+            continue
+        metric_path = str(gate.get("path") or "").strip()
+        if not metric_path:
+            continue
+        baseline_value = value_at_path(baseline_report, metric_path)
+        candidate_value = value_at_path(candidate_report, metric_path)
+        if baseline_value is None or candidate_value is None:
+            failures.append({"path": metric_path, "reason": "metric_missing", "label": label})
+            continue
+        try:
+            baseline_float = float(baseline_value)
+            candidate_float = float(candidate_value)
+        except (TypeError, ValueError):
+            failures.append({"path": metric_path, "reason": "metric_not_numeric", "label": label})
+            continue
+        delta = candidate_float - baseline_float
+        if gate.get("min_delta") is not None and delta < float(gate["min_delta"]):
+            failures.append({"path": metric_path, "reason": "delta_below_min", "label": label, "delta": round(delta, 6), "min_delta": float(gate["min_delta"])})
+        if gate.get("max_delta") is not None and delta > float(gate["max_delta"]):
+            failures.append({"path": metric_path, "reason": "delta_above_max", "label": label, "delta": round(delta, 6), "max_delta": float(gate["max_delta"])})
+    return failures
+
+
+def run_manifest_section(section: dict[str, Any]) -> dict[str, Any]:
+    report = run_evaluation(section)
+    gates = section.get("gates", [])
     gate_failures = evaluate_gates(report, gates if isinstance(gates, list) else [])
     report["gate_failures"] = gate_failures
     report["ok"] = bool(report.get("ok")) and not gate_failures
+    return report
+
+
+def run_experiment(experiment: dict[str, Any]) -> dict[str, Any]:
+    baseline = experiment.get("baseline") if isinstance(experiment.get("baseline"), dict) else {}
+    candidate = experiment.get("candidate") if isinstance(experiment.get("candidate"), dict) else {}
+    shadow = experiment.get("shadow") if isinstance(experiment.get("shadow"), dict) else None
+    baseline_report = run_manifest_section(baseline)
+    candidate_report = run_manifest_section(candidate)
+    gates = experiment.get("delta_gates", experiment.get("gates", []))
+    delta_failures = evaluate_delta_gates(
+        baseline_report,
+        candidate_report,
+        gates if isinstance(gates, list) else [],
+        label="candidate_vs_baseline",
+    )
+    shadow_report = run_manifest_section(shadow) if isinstance(shadow, dict) else None
+    shadow_failures: list[dict[str, Any]] = []
+    shadow_gates = experiment.get("shadow_delta_gates", [])
+    if shadow_report is not None:
+        shadow_failures = evaluate_delta_gates(
+            candidate_report,
+            shadow_report,
+            shadow_gates if isinstance(shadow_gates, list) else [],
+            label="shadow_vs_candidate",
+        )
+    ok = baseline_report["ok"] and candidate_report["ok"] and not delta_failures and not shadow_failures
+    if shadow_report is not None:
+        ok = ok and shadow_report["ok"]
+    return {
+        "name": str(experiment.get("name") or "experiment"),
+        "ok": ok,
+        "baseline": baseline_report,
+        "candidate": candidate_report,
+        "shadow": shadow_report,
+        "delta_failures": delta_failures,
+        "shadow_delta_failures": shadow_failures,
+    }
+
+
+def run_experiments(manifest: dict[str, Any]) -> list[dict[str, Any]]:
+    experiments = manifest.get("experiments", [])
+    if not isinstance(experiments, list):
+        return []
+    return [run_experiment(experiment) for experiment in experiments if isinstance(experiment, dict)]
+
+
+def run_model_regression(manifest: dict[str, Any]) -> dict[str, Any]:
+    report = run_manifest_section(manifest)
+    experiments = run_experiments(manifest)
+    if experiments:
+        report["experiments"] = experiments
+        report["ok"] = (bool(report.get("ok")) or not report.get("metrics")) and all(item["ok"] for item in experiments)
     return report
 
 

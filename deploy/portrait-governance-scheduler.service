@@ -1,0 +1,11 @@
+[Unit]
+Description=PortraitHub data governance scheduler
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/portrait-hub
+EnvironmentFile=/etc/portrait-hub/production.env
+ExecStart=/opt/portrait-hub/.venv/bin/python tools/portrait_governance_scheduler.py --once
+

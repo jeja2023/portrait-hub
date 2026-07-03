@@ -1,0 +1,14 @@
+{
+  "name": "portrait-hub",
+  "version": "0.5.54",
+  "private": true,
+  "type": "commonjs",
+  "description": "PortraitHub GPU inference and portrait intelligence service",
+  "scripts": {
+    "check": "node --check frontend/console/console.js && node --check frontend/console/api/client.js && node --check frontend/console/state/store.js && node --check frontend/console/renderers/data-viewer.js && node --check frontend/console/visuals/previews.js && node --check frontend/console/views/analysis.js && node --check frontend/console/views/gallery.js && node --check frontend/console/views/operations.js && node --check frontend/console/views/app.js && node tests/test_node_sdk.js",
+    "test:node": "node tests/test_node_sdk.js"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

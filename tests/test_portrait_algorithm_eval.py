@@ -144,3 +144,41 @@ def test_model_regression_applies_metric_gates() -> None:
 
     assert report["ok"] is True
     assert report["gate_failures"] == []
+
+def test_model_regression_runs_ab_shadow_experiments() -> None:
+    report = run_model_regression(
+        {
+            "experiments": [
+                {
+                    "name": "ab-shadow",
+                    "baseline": {"pairs": [{"score": 0.8, "same": True}, {"score": 0.2, "same": False}]},
+                    "candidate": {"pairs": [{"score": 0.9, "same": True}, {"score": 0.1, "same": False}]},
+                    "shadow": {"pairs": [{"score": 0.88, "same": True}, {"score": 0.12, "same": False}]},
+                    "delta_gates": [{"path": "metrics.compare.roc_auc", "min_delta": 0.0}],
+                    "shadow_delta_gates": [{"path": "metrics.compare.roc_auc", "min_delta": -0.01}],
+                }
+            ]
+        }
+    )
+
+    assert report["ok"] is True
+    assert report["experiments"][0]["ok"] is True
+    assert report["experiments"][0]["delta_failures"] == []
+    assert report["experiments"][0]["shadow_delta_failures"] == []
+
+
+def test_model_regression_fails_ab_delta_gate() -> None:
+    report = run_model_regression(
+        {
+            "experiments": [
+                {
+                    "baseline": {"pairs": [{"score": 0.9, "same": True}, {"score": 0.1, "same": False}]},
+                    "candidate": {"pairs": [{"score": 0.4, "same": True}, {"score": 0.6, "same": False}]},
+                    "delta_gates": [{"path": "metrics.compare.roc_auc", "min_delta": 0.0}],
+                }
+            ]
+        }
+    )
+
+    assert report["ok"] is False
+    assert report["experiments"][0]["delta_failures"][0]["reason"] == "delta_below_min"

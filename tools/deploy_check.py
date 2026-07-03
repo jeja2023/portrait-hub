@@ -34,7 +34,40 @@ class DeployReport:
 
 
 def read_text(path: Path) -> str:
-    return path.read_text(encoding="utf-8")
+    return path.read_text(encoding="utf-8-sig")
+
+SOURCE_ENCODING_ROOTS = ("app", "tools", "sdk", "tests", "frontend", ".github", "deploy", "docs", "ops", "requirements", "package.json")
+SOURCE_ENCODING_SUFFIXES = (".bat", ".css", ".html", ".in", ".js", ".json", ".lock", ".md", ".py", ".sql", ".txt", ".yaml", ".yml", ".example")
+
+
+def source_files_for_encoding(root: Path) -> list[Path]:
+    files: list[Path] = []
+    for root_name in SOURCE_ENCODING_ROOTS:
+        path = root / root_name
+        if path.is_file():
+            candidates = [path]
+        elif path.is_dir():
+            candidates = list(path.rglob("*"))
+        else:
+            continue
+        for candidate in candidates:
+            if candidate.is_file() and candidate.suffix.lower() in SOURCE_ENCODING_SUFFIXES:
+                files.append(candidate)
+    return sorted(dict.fromkeys(files))
+
+
+def check_source_encoding(root: Path, report: DeployReport) -> None:
+    bom_files: list[str] = []
+    source_files = source_files_for_encoding(root)
+    for path in source_files:
+        try:
+            prefix = path.read_bytes()[:3]
+        except OSError as exc:
+            bom_files.append(f"{path.relative_to(root)}: read failed: {exc.__class__.__name__}")
+            continue
+        if prefix == b"\xef\xbb\xbf":
+            bom_files.append(str(path.relative_to(root)).replace("\\", "/"))
+    report.add("source_files_utf8_no_bom", not bom_files, {"bom_files": bom_files, "file_count": len(source_files)})
 
 
 def check_required_files(root: Path, report: DeployReport) -> None:
@@ -45,6 +78,7 @@ def check_required_files(root: Path, report: DeployReport) -> None:
         "docker-compose.yml",
         "docker-compose.cpu.yml",
         "requirements.txt",
+        "package.json",
         "requirements/prod-optional.txt",
         "requirements/dev.txt",
         "requirements/base.in",
@@ -70,9 +104,21 @@ def check_required_files(root: Path, report: DeployReport) -> None:
         "app/tracking_state.py",
         "app/tracking_association.py",
         "app/portrait_errors.py",
+        "app/portrait_runtime_store.py",
+        "app/portrait_gallery_orchestration.py",
+        "app/production_gates.py",
         "frontend/console/console.html",
         "frontend/console/console.css",
+        "frontend/console/console.config.js",
         "frontend/console/console.js",
+        "frontend/console/api/client.js",
+        "frontend/console/state/store.js",
+        "frontend/console/views/analysis.js",
+        "frontend/console/views/gallery.js",
+        "frontend/console/views/operations.js",
+        "frontend/console/views/app.js",
+        "frontend/console/renderers/data-viewer.js",
+        "frontend/console/visuals/previews.js",
         "tools/validate_model_package.py",
         "tools/service_smoke_test.py",
         "tools/regression_check.py",
@@ -84,17 +130,25 @@ def check_required_files(root: Path, report: DeployReport) -> None:
         "tools/portrait_stream_worker_health.py",
         "tools/portrait_migrate.py",
         "tools/portrait_backup_scheduler.py",
+        "tools/portrait_governance_scheduler.py",
+        "tools/console_screenshot_acceptance.py",
         "tools/load_test.py",
         "tools/type_check.py",
         "tools/workspace_hygiene.py",
         "tools/portrait_postgres_schema.sql",
         "tools/qdrant_collections.json",
         "examples/portrait-model-regression.example.yml",
+        "examples/portrait-model-ab-shadow.example.yml",
         "examples/production-models.example.yml",
         "examples/production-model-capabilities.example.yml",
         "deploy/portrait-stream-worker.service",
         "deploy/k8s-stream-worker.yaml",
+        "deploy/portrait-governance-scheduler.service",
+        "deploy/portrait-governance-scheduler.timer",
+        "deploy/k8s-governance-cronjob.yaml",
         ".github/workflows/ci.yml",
+        ".github/workflows/integration-matrix.yml",
+        ".github/workflows/console-acceptance.yml",
         ".github/workflows/security-audit.yml",
     ]
     missing = [item for item in required if not (root / item).is_file()]
@@ -133,7 +187,24 @@ def check_code_quality(root: Path, report: DeployReport) -> None:
     postgres_core = read_text(root / "app" / "postgres_core.py")
     config_hot_reload = read_text(root / "app" / "config_hot_reload.py")
     websocket_routes = read_text(root / "app" / "routes_portrait_ws.py")
+    console_html = read_text(root / "frontend" / "console" / "console.html")
     console_js = read_text(root / "frontend" / "console" / "console.js")
+    console_config_js = read_text(root / "frontend" / "console" / "console.config.js")
+    console_runtime_js = read_text(root / "frontend" / "console" / "views" / "app.js")
+    console_module_sources = "\n".join(
+        read_text(root / "frontend" / "console" / item)
+        for item in [
+            "api/client.js",
+            "state/store.js",
+            "views/analysis.js",
+            "views/gallery.js",
+            "views/operations.js",
+            "views/app.js",
+            "renderers/data-viewer.js",
+            "visuals/previews.js",
+        ]
+    )
+    production_gates = read_text(root / "app" / "production_gates.py")
     report.add(
         "core_explicit_imports",
         "import *" not in core and "__all__" in core,
@@ -213,9 +284,16 @@ def check_code_quality(root: Path, report: DeployReport) -> None:
         and "except HTTPException" in websocket_routes
         and '"jobs:read"' in websocket_routes
         and '"streams:read"' in websocket_routes
-        and "new WebSocket" in console_js
-        and "/ws/jobs/" in console_js
-        and "/ws/streams/" in console_js,
+        and "new WebSocket" in console_runtime_js
+        and "/ws/jobs/" in console_runtime_js
+        and "/ws/streams/" in console_runtime_js
+        and "window.PortraitConsoleConfig" in console_config_js
+        and "endpointMap" in console_config_js
+        and "const endpointMap = consoleConfig.endpointMap" in console_runtime_js
+        and "PortraitConsoleRuntime" in console_js
+        and "runtime.init" in console_js
+        and len(console_js) < 2000
+        and "window.PortraitConsoleRuntime = { init }" in console_runtime_js,
         None,
     )
 
@@ -624,11 +702,11 @@ def check_ci_workflows(root: Path, report: DeployReport) -> None:
             for item in [
                 'python-version: "3.12"',
                 "python -m pytest -q",
-                "node tests/test_node_sdk.js",
                 "python tools/deploy_check.py --json",
                 "python tools/portrait_model_regression.py",
             ]
-        ),
+        )
+        and ("node tests/test_node_sdk.js" in ci or "npm run check" in ci),
         {"path": str(ci_path)},
     )
     report.add(
@@ -719,6 +797,7 @@ def run_checks(args: argparse.Namespace) -> DeployReport:
     report = DeployReport()
     check_required_files(root, report)
     check_python_syntax(root, report)
+    check_source_encoding(root, report)
     check_code_quality(root, report)
     check_dependency_lock(root, report)
     check_models_config(root, report)

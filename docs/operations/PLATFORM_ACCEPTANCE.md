@@ -18,6 +18,8 @@
 
 ```powershell
 python -m pytest -q
+python tools\type_check.py
+npm run check
 python tools\deploy_check.py --import-app --json
 python tools\portrait_production_readiness.py --scope platform --strict
 git diff --check

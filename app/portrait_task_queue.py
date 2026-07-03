@@ -34,6 +34,25 @@ class QueueMessage:
 
 TASK_MESSAGES: list[QueueMessage] = []
 
+class TaskMessageStore:
+    def __init__(self, messages: list[QueueMessage]) -> None:
+        self._messages = messages
+
+    def append(self, message: QueueMessage) -> None:
+        self._messages.append(message)
+
+    def remove(self, message: QueueMessage) -> None:
+        self._messages.remove(message)
+
+    def count(self) -> int:
+        return len(self._messages)
+
+    def snapshot(self) -> list[QueueMessage]:
+        return list(self._messages)
+
+
+TASK_MESSAGE_STORE = TaskMessageStore(TASK_MESSAGES)
+
 
 def append_task_queue_state(payload: dict[str, Any], *, required: bool = True) -> None:
     append_jsonl(TASK_QUEUE_STATE_PATH, payload, fail_closed=required)
@@ -44,16 +63,16 @@ class LocalTaskQueue:
 
     def enqueue(self, queue: str, payload: dict[str, Any]) -> QueueMessage:
         message = QueueMessage(message_id=f"msg_{uuid4().hex[:16]}", queue=queue, payload=payload)
-        TASK_MESSAGES.append(message)
+        TASK_MESSAGE_STORE.append(message)
         try:
             append_task_queue_state({**message.public_dict(), "event": "task_enqueued"}, required=True)
         except Exception:
-            TASK_MESSAGES.remove(message)
+            TASK_MESSAGE_STORE.remove(message)
             raise
         return message
 
     def health(self) -> dict[str, Any]:
-        return {"backend": self.backend_name, "queued_messages": len(TASK_MESSAGES), "status": "ready"}
+        return {"backend": self.backend_name, "queued_messages": TASK_MESSAGE_STORE.count(), "status": "ready"}
 
 
 class ExternalTaskQueue(LocalTaskQueue):
@@ -91,7 +110,7 @@ class RedisTaskQueue(LocalTaskQueue):
         body = json.dumps({**message.public_dict(), "event": "task_enqueued"}, ensure_ascii=False, sort_keys=True)
         try:
             self._client().lpush(f"portrait:{queue}", body)
-            TASK_MESSAGES.append(message)
+            TASK_MESSAGE_STORE.append(message)
             append_task_queue_state({**message.public_dict(), "event": "task_enqueued"}, required=False)
             return message
         except Exception as exc:
@@ -103,7 +122,7 @@ class RedisTaskQueue(LocalTaskQueue):
                 status="queued_local_fallback",
                 created_at=message.created_at,
             )
-            TASK_MESSAGES.append(fallback_message)
+            TASK_MESSAGE_STORE.append(fallback_message)
             try:
                 append_task_queue_state(
                     {**fallback_message.public_dict(), "event": "task_enqueued_local_fallback"},
@@ -118,7 +137,7 @@ class RedisTaskQueue(LocalTaskQueue):
             "backend": self.backend_name,
             "configured": bool(REDIS_URL),
             "driver_available": redis is not None,
-            "queued_messages": len(TASK_MESSAGES),
+            "queued_messages": TASK_MESSAGE_STORE.count(),
         }
         if not REDIS_URL or redis is None:
             return {**payload, "status": "not_ready"}

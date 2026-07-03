@@ -52,3 +52,16 @@ def test_workspace_hygiene_skips_heavy_runtime_directories(workspace_tmp_path) -
     artifacts = list(iter_cache_artifacts(workspace_tmp_path))
 
     assert skipped_pycache.resolve() not in artifacts
+
+def test_workspace_hygiene_reports_site_packages_residuals(workspace_tmp_path) -> None:
+    residual = workspace_tmp_path / ".venv" / "Lib" / "site-packages" / "~json-stubs"
+    residual.mkdir(parents=True)
+    (residual / "__init__.pyi").write_text("", encoding="utf-8")
+    skipped_pycache = workspace_tmp_path / ".venv" / "Lib" / "site-packages" / "pkg" / "__pycache__"
+    skipped_pycache.mkdir(parents=True)
+    (skipped_pycache / "module.pyc").write_bytes(b"cache")
+
+    artifacts = workspace_hygiene.safe_cache_artifacts(workspace_tmp_path)
+
+    assert residual.resolve() in {path.resolve() for path in artifacts}
+    assert skipped_pycache.resolve() not in {path.resolve() for path in artifacts}

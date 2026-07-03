@@ -9,15 +9,11 @@ from app.portrait_audit import audit_event
 from app.portrait_auth import permission_dependency
 from app.portrait_pagination import normalize_list_pagination, page_items_keyset
 from app.portrait_jobs import (
-    VIDEO_JOBS,
-    VIDEO_JOBS_LOCK,
     JobStatus,
     VideoJob,
     create_video_job,
     get_video_job,
-    job_key,
     normalize_job_status,
-    persist_video_job,
     public_video_job_result,
     remove_video_job,
     request_cancel_video_job,
@@ -26,6 +22,7 @@ from app.portrait_jobs import (
 )
 from app.portrait_response import exception_log_summary, portrait_success, raise_rollback_failure
 from app.portrait_request_context import PortraitRequestContext, portrait_request_context
+from app.portrait_runtime_store import restore_video_job_in_store, video_jobs_snapshots
 from app.portrait_request_validation import validate_int_range
 from app.portrait_security import validate_job_id
 from app.portrait_task_queue import TASK_QUEUE
@@ -39,9 +36,8 @@ router = APIRouter(dependencies=[Depends(require_api_token)])
 
 def rollback_video_job_snapshot(job: VideoJob, previous_job: VideoJob) -> list[str]:
     restore_video_job(job, previous_job)
-    VIDEO_JOBS[job_key(job.tenant_id, job.job_id)] = job
     try:
-        persist_video_job(job)
+        restore_video_job_in_store(job)
     except Exception as exc:
         logger.warning("failed to persist restored video job snapshot: %s", exception_log_summary(exc))
         return ["restore video job failed"]
@@ -98,26 +94,23 @@ async def v1_list_video_job_results(
     request_id = ctx.request_id
     tenant_id = ctx.tenant_id
     pagination_request = normalize_list_pagination(limit, offset, cursor)
-    with VIDEO_JOBS_LOCK:
-        items: list[dict[str, Any]] = []
-        for job in VIDEO_JOBS.values():
-            if job.tenant_id != tenant_id:
-                continue
-            if normalize_job_status(job.status) != JobStatus.COMPLETED:
-                continue
-            result = job.result if isinstance(job.result, dict) else None
-            frames = result.get("frames") if isinstance(result, dict) else None
-            if not isinstance(frames, list) or not frames:
-                continue
-            items.append({"sort_key": -float(job.updated_at or job.created_at or 0.0), "job_id": job.job_id, "job": job})
-        items.sort(key=lambda item: (item["sort_key"], item["job_id"]))
-        page, pagination = page_items_keyset(
-            items,
-            limit=pagination_request.limit,
-            offset=pagination_request.offset,
-            cursor=pagination_request.cursor,
-            key_fields=["sort_key", "job_id"],
-        )
+    items: list[dict[str, Any]] = []
+    for job in video_jobs_snapshots(tenant_id):
+        if normalize_job_status(job.status) != JobStatus.COMPLETED:
+            continue
+        result = job.result if isinstance(job.result, dict) else None
+        frames = result.get("frames") if isinstance(result, dict) else None
+        if not isinstance(frames, list) or not frames:
+            continue
+        items.append({"sort_key": -float(job.updated_at or job.created_at or 0.0), "job_id": job.job_id, "job": job})
+    items.sort(key=lambda item: (item["sort_key"], item["job_id"]))
+    page, pagination = page_items_keyset(
+        items,
+        limit=pagination_request.limit,
+        offset=pagination_request.offset,
+        cursor=pagination_request.cursor,
+        key_fields=["sort_key", "job_id"],
+    )
     results = [
         {"job": item["job"].public_dict(include_result=False), "result": public_video_job_result(item["job"].result)}
         for item in page

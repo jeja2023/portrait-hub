@@ -1,0 +1,33 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: portrait-governance-scheduler
+spec:
+  schedule: "17 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 5
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: governance-scheduler
+              image: portrait-hub:latest
+              command:
+                - python
+                - tools/portrait_governance_scheduler.py
+                - --once
+              env:
+                - name: PORTRAIT_BASE_URL
+                  value: http://portrait-hub:8000
+                - name: PORTRAIT_GOVERNANCE_TENANT
+                  value: default
+                - name: PORTRAIT_GOVERNANCE_TOKEN
+                  valueFrom:
+                    secretKeyRef:
+                      name: portrait-governance-token
+                      key: token
+                - name: DATA_RETENTION_DAYS
+                  value: "90"

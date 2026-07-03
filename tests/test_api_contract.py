@@ -191,13 +191,19 @@ def test_console_is_product_admin_shell_with_strict_inline_policy() -> None:
 def test_console_assets_use_light_structured_response_panels() -> None:
     client = TestClient(app)
 
+    config_js = client.get("/assets/console.config.js")
     js = client.get("/assets/console.js")
     css = client.get("/assets/console.css")
 
+    assert config_js.status_code == 200
     assert js.status_code == 200
     assert css.status_code == 200
+    config_body = config_js.text
     js_body = js.text
     css_body = css.text
+    assert "PortraitConsoleConfig" in config_body
+    assert "/v1/infer/faces" in config_body
+    assert "const endpointMap = consoleConfig.endpointMap" in js_body
     assert "data-viewer" in js_body
     assert "查看完整数据（JSON）" in js_body
     assert "复制数据" in js_body
@@ -852,3 +858,31 @@ def test_legacy_reload_config_rolls_back_when_audit_fails(monkeypatch) -> None:
         routes_model_query.MODEL_CONFIGS.update(config_snapshot)
         routes_model_query.MODEL_ALIASES.clear()
         routes_model_query.MODEL_ALIASES.update(alias_snapshot)
+
+def test_console_module_assets_are_served() -> None:
+    client = TestClient(app)
+
+    modules = [
+        "/assets/console/api/client.js",
+        "/assets/console/state/store.js",
+        "/assets/console/renderers/data-viewer.js",
+        "/assets/console/visuals/previews.js",
+        "/assets/console/views/analysis.js",
+        "/assets/console/views/gallery.js",
+        "/assets/console/views/operations.js",
+    ]
+    for path in modules:
+        response = client.get(path)
+        assert response.status_code == 200
+        assert "PortraitConsoleModules" in response.text
+
+    runtime = client.get("/assets/console/views/app.js")
+    assert runtime.status_code == 200
+    assert "PortraitConsoleRuntime" in runtime.text
+
+    bootstrap = client.get("/assets/console.js")
+    assert bootstrap.status_code == 200
+    assert "runtime.init" in bootstrap.text
+    assert len(bootstrap.text) < 2000
+
+    assert client.get("/assets/console/../console.html").status_code == 404

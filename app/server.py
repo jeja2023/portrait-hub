@@ -35,6 +35,7 @@ from app.settings import APP_VERSION, CONFIG_HOT_RELOAD_ENABLED, ENABLE_API_DOCS
 from app.metrics import observe_request_status
 from app.portrait_bootstrap import ensure_portrait_runtime_state_loaded
 from app.portrait_response import exception_log_summary
+from app.production_gates import validate_production_externalization
 
 
 def request_body_too_large_detail() -> str:
@@ -116,6 +117,7 @@ def install_config_reload_signal_handler() -> bool:
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     if CONFIG_HOT_RELOAD_ENABLED:
         reload_runtime_config(source="startup", include_env=True)
+    validate_production_externalization()
     await ensure_portrait_runtime_state_loaded()
     await warmup_models()
     if CONFIG_HOT_RELOAD_ENABLED:

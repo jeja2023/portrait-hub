@@ -1,4 +1,4 @@
-﻿# Supply Chain Security
+# Supply Chain Security
 
 PortraitHub release evidence should cover source, dependencies, container image, and model artifacts.
 

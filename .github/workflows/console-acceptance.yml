@@ -1,0 +1,48 @@
+name: console-screenshot-acceptance
+
+on:
+  workflow_dispatch:
+
+jobs:
+  console-screenshot:
+    runs-on: ubuntu-latest
+    env:
+      AUTH_REQUIRED: "false"
+      RBAC_ENABLED: "false"
+      TENANT_HEADER_REQUIRED: "false"
+      ENABLE_API_DOCS: "true"
+      TRUSTED_HOSTS: "*"
+      REQUIRE_ENCRYPTION: "false"
+      HSTS_ENABLED: "false"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install service and browser dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pip install playwright==1.46.0
+          python -m playwright install --with-deps chromium
+      - name: Start PortraitHub service
+        run: |
+          python -m uvicorn main:app --host 127.0.0.1 --port 8000 > server.log 2>&1 &
+          for i in {1..30}; do
+            if python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2).read()"; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat server.log
+          exit 1
+      - name: Capture console screenshot
+        run: python tools/console_screenshot_acceptance.py --base-url http://127.0.0.1:8000 --output artifacts/console-acceptance.png --json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: console-acceptance
+          path: |
+            artifacts/console-acceptance.png
+            server.log
+
