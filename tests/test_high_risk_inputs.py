@@ -37,14 +37,14 @@ def test_stream_validation_rejects_lookalike_suffix_hosts(monkeypatch) -> None:
     assert "STREAM_ALLOWED_HOSTS" in str(exc_info.value.detail)
 
 
-def test_decode_image_rejects_decompression_bomb(monkeypatch) -> None:
+def test_decode_image_rejects_too_many_pixels_before_full_decode(monkeypatch) -> None:
     monkeypatch.setattr("app.media.image_decode.MAX_IMAGE_PIXELS", 1)
 
     with pytest.raises(HTTPException) as exc_info:
         decode_image_bytes(_png_bytes(), filename="sample.png")
 
-    assert exc_info.value.status_code == 400
-    assert "uploaded file is not a valid image" in str(exc_info.value.detail)
+    assert exc_info.value.status_code == 413
+    assert "image has too many pixels" in str(exc_info.value.detail)
 
 
 @pytest.mark.asyncio

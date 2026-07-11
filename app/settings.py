@@ -48,7 +48,7 @@ def parse_csv_env(name: str, default: str = "") -> list[str]:
     return [item.strip() for item in os.getenv(name, default).split(",") if item.strip()]
 
 
-APP_VERSION = "0.5.55"
+APP_VERSION = "0.5.56"
 PORTRAIT_RUNTIME_PROFILE = os.getenv("PORTRAIT_RUNTIME_PROFILE", os.getenv("APP_ENV", "development")).strip().lower() or "development"
 PRODUCTION_EXTERNAL_SERVICES_REQUIRED = parse_bool_env("PRODUCTION_EXTERNAL_SERVICES_REQUIRED", True)
 MODELS_ROOT = Path(os.getenv("MODELS_ROOT", "models")).resolve()
@@ -80,6 +80,9 @@ STREAM_WORKER_PROCESS_LOCK_STALE_SECONDS = parse_float_env("STREAM_WORKER_PROCES
 VIDEO_DECODE_BACKEND = os.getenv("VIDEO_DECODE_BACKEND", "auto").strip().lower() or "auto"
 MAX_VISION_IMAGES = parse_int_env("MAX_VISION_IMAGES", 16)
 MAX_COMPARE_BATCH_PAIRS = parse_int_env("MAX_COMPARE_BATCH_PAIRS", 64)
+MAX_IMAGE_DECODE_CONCURRENCY = parse_int_env("MAX_IMAGE_DECODE_CONCURRENCY", 4)
+MAX_GALLERY_SEARCH_BATCH_CONCURRENCY = parse_int_env("MAX_GALLERY_SEARCH_BATCH_CONCURRENCY", 4)
+MAX_COMPARE_BATCH_CONCURRENCY = parse_int_env("MAX_COMPARE_BATCH_CONCURRENCY", 2)
 # 共享的推理请求边界 / 默认值，此前散落硬编码在 person 与 vision 路由处理器中。
 MAX_DETECTIONS = parse_int_env("MAX_DETECTIONS", 1000)
 MAX_TOP_K = parse_int_env("MAX_TOP_K", 100)

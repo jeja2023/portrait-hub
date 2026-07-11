@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from io import BytesIO
 import json
 from collections.abc import Callable
@@ -9,7 +10,7 @@ from fastapi import BackgroundTasks, HTTPException, UploadFile, status
 from starlette.datastructures import Headers
 
 from app.media.image_decode import decode_upload_image, decode_upload_images, read_limited_upload
-from app.portrait_async import run_blocking_io
+from app.portrait_async import gather_limited, run_blocking_io
 from app.portrait_audit import audit_event
 from app.portrait_gallery import (
     GALLERY,
@@ -35,7 +36,7 @@ from app.portrait_runtime_store import gallery_person_snapshot
 from app.portrait_security import normalize_public_metadata
 from app.portrait_storage import store_backend_name
 from app.portrait_thresholds import normalize_modality, validate_threshold_profile
-from app.settings import MAX_EMBEDDING_IMAGES
+from app.settings import MAX_EMBEDDING_IMAGES, MAX_GALLERY_SEARCH_BATCH_CONCURRENCY
 
 
 SUPPORTED_GALLERY_MODALITIES = {"face", "body", "appearance"}
@@ -258,9 +259,12 @@ async def gallery_search_batch_results(
     tenant_id: str,
     progress_callback: Any | None = None,
 ) -> list[dict[str, Any]]:
-    results = []
     total = max(1, len(files))
-    for index, file in enumerate(files):
+    completed = 0
+    progress_lock = asyncio.Lock()
+
+    async def process_file(index: int, file: UploadFile) -> dict[str, Any]:
+        nonlocal completed
         decoded = await decode_upload_image(file)
         embedding, quality_score, _, _ = await extract_gallery_embedding(decoded.image, modality)
         combined_quality_score = combined_query_quality(decoded.frame.quality, float(quality_score))
@@ -273,22 +277,25 @@ async def gallery_search_batch_results(
             tenant_id=tenant_id,
             query_quality=combined_quality_score,
         )
-        results.append(
-            {
-                "index": index,
-                "candidate_count": len(candidates),
-                "candidates": candidates,
-                "query": {
-                    "modality": modality,
-                    "quality_score": round(float(quality_score), 6),
-                    "combined_quality_score": combined_quality_score,
-                    "threshold_profile": threshold_profile,
-                    "top_k": top_k,
-                },
-            }
-        )
-        if progress_callback is not None:
-            await progress_callback(0.05 + 0.9 * ((index + 1) / total))
+        async with progress_lock:
+            completed += 1
+            if progress_callback is not None:
+                await progress_callback(0.05 + 0.9 * (completed / total))
+        return {
+            "index": index,
+            "candidate_count": len(candidates),
+            "candidates": candidates,
+            "query": {
+                "modality": modality,
+                "quality_score": round(float(quality_score), 6),
+                "combined_quality_score": combined_quality_score,
+                "threshold_profile": threshold_profile,
+                "top_k": top_k,
+            },
+        }
+
+    results = await gather_limited(files, process_file, limit=MAX_GALLERY_SEARCH_BATCH_CONCURRENCY)
+    results.sort(key=lambda x: x["index"])
     return results
 
 

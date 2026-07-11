@@ -1,3 +1,4 @@
+import asyncio
 from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Request, UploadFile, status
@@ -5,7 +6,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPExcepti
 from app.media.image_decode import decode_upload_image, decode_upload_images, duplicate_distance, read_limited_upload
 from app.media.media_schema import DecodedImage
 from app.observability import request_id_from_headers
-from app.portrait_async import run_blocking_io
+from app.portrait_async import gather_limited, run_blocking_io
 from app.portrait_auth import permission_dependency
 from app.portrait_compare import apply_input_independence_to_decision, fuse_modalities, quality_aware_compare
 from app.portrait_jobs import VideoJob, create_batch_job, persist_video_job, run_batch_job
@@ -19,7 +20,7 @@ from app.portrait_response import portrait_success
 from app.portrait_request_context import PortraitRequestContext, portrait_request_context
 from app.portrait_thresholds import validate_threshold_profile
 from app.security import require_api_token
-from app.settings import MAX_COMPARE_BATCH_PAIRS, MAX_VIDEO_FRAMES
+from app.settings import MAX_COMPARE_BATCH_CONCURRENCY, MAX_COMPARE_BATCH_PAIRS, MAX_VIDEO_FRAMES
 
 
 router = APIRouter(dependencies=[Depends(require_api_token)])
@@ -91,9 +92,14 @@ async def compare_batch_results(
     include_vectors: bool,
     progress_callback: Any | None = None,
 ) -> list[dict[str, Any]]:
-    results = []
-    total = max(1, len(image_a))
-    for index, (file_a, file_b) in enumerate(zip(image_a, image_b)):
+    pairs = list(zip(image_a, image_b))
+    total = max(1, len(pairs))
+    completed = 0
+    progress_lock = asyncio.Lock()
+
+    async def process_pair(index: int, pair: tuple[UploadFile, UploadFile]) -> dict[str, Any]:
+        nonlocal completed
+        file_a, file_b = pair
         decoded_a = await decode_upload_image(file_a)
         decoded_b = await decode_upload_image(file_b)
         if modality_key == "face":
@@ -123,9 +129,14 @@ async def compare_batch_results(
         if not include_vectors:
             comparison["subjects"]["a"].pop("embedding", None)
             comparison["subjects"]["b"].pop("embedding", None)
-        results.append({"index": index, "modality": modality_key, "comparison": comparison})
-        if progress_callback is not None:
-            await progress_callback(0.05 + 0.9 * ((index + 1) / total))
+        async with progress_lock:
+            completed += 1
+            if progress_callback is not None:
+                await progress_callback(0.05 + 0.9 * (completed / total))
+        return {"index": index, "modality": modality_key, "comparison": comparison}
+
+    results = await gather_limited(pairs, process_pair, limit=MAX_COMPARE_BATCH_CONCURRENCY)
+    results.sort(key=lambda x: x["index"])
     return results
 
 

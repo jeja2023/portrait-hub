@@ -9,7 +9,8 @@ from PIL import Image, ImageOps, UnidentifiedImageError
 from app.media.fingerprint import hamming_hex, perceptual_hash_payload
 from app.media.media_schema import DecodedImage, MediaFrame
 from app.media.quality import assess_image_quality
-from app.settings import MAX_IMAGE_BYTES, MAX_IMAGE_PIXELS
+from app.portrait_async import gather_limited
+from app.settings import MAX_IMAGE_BYTES, MAX_IMAGE_DECODE_CONCURRENCY, MAX_IMAGE_PIXELS
 
 
 SUPPORTED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".bmp"}
@@ -87,8 +88,6 @@ async def read_limited_upload(file: UploadFile, max_bytes: int = MAX_IMAGE_BYTES
 
 def decode_image_bytes(data: bytes, filename: str | None = None, source_id: str | None = None) -> DecodedImage:
     detected_format = validate_image_content(data, filename)
-    previous_max_pixels = Image.MAX_IMAGE_PIXELS
-    Image.MAX_IMAGE_PIXELS = MAX_IMAGE_PIXELS
     try:
         with Image.open(BytesIO(data)) as opened:
             image_format = opened.format or "UNKNOWN"
@@ -102,6 +101,12 @@ def decode_image_bytes(data: bytes, filename: str | None = None, source_id: str 
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="image content did not match decoded image format",
                 )
+            opened_width, opened_height = opened.size
+            if opened_width * opened_height > MAX_IMAGE_PIXELS:
+                raise HTTPException(
+                    status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                    detail=f"image has too many pixels: max {MAX_IMAGE_PIXELS}",
+                )
             transposed = ImageOps.exif_transpose(opened)
             if transposed is None:
                 transposed = opened
@@ -113,8 +118,6 @@ def decode_image_bytes(data: bytes, filename: str | None = None, source_id: str 
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="uploaded file is not a valid image",
         ) from exc
-    finally:
-        Image.MAX_IMAGE_PIXELS = previous_max_pixels
 
     width, height = image.size
     if width * height > MAX_IMAGE_PIXELS:
@@ -145,7 +148,11 @@ async def decode_upload_image(file: UploadFile, source_id: str | None = None) ->
 
 
 async def decode_upload_images(files: list[UploadFile]) -> list[DecodedImage]:
-    decoded = [await decode_upload_image(file) for file in files]
+    decoded = await gather_limited(
+        files,
+        lambda _index, file: decode_upload_image(file),
+        limit=MAX_IMAGE_DECODE_CONCURRENCY,
+    )
     mark_near_duplicates(decoded)
     return decoded
 
