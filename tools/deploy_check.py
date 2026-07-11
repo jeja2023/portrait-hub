@@ -334,9 +334,9 @@ def check_dependency_lock(root: Path, report: DeployReport) -> None:
         not lock_ranges
         and not root_lock_ranges
         and not runtime_ranges
-        and "cryptography==45.0.6" in base_lock
-        and "cryptography==45.0.6" in requirements_lock
-        and "cryptography==45.0.6" in requirements,
+        and "cryptography==48.0.1" in base_lock
+        and "cryptography==48.0.1" in requirements_lock
+        and "cryptography==48.0.1" in requirements,
         {
             "base_lock_ranges": lock_ranges,
             "requirements_lock_ranges": root_lock_ranges,
@@ -345,7 +345,7 @@ def check_dependency_lock(root: Path, report: DeployReport) -> None:
     )
     report.add(
         "dependency_input_keeps_compatibility_range",
-        "cryptography>=42.0.0,<46.0.0" in base_in,
+        "cryptography>=48.0.1,<49.0.0" in base_in,
         None,
     )
     # CPU-only 部署清单与其锁文件同样必须全量精确钉版（无任何版本范围）。
@@ -353,8 +353,8 @@ def check_dependency_lock(root: Path, report: DeployReport) -> None:
         "cpu_dependency_lock_exact",
         not cpu_ranges
         and not cpu_lock_ranges
-        and "cryptography==45.0.6" in requirements_cpu
-        and "cryptography==45.0.6" in requirements_cpu_lock,
+        and "cryptography==48.0.1" in requirements_cpu
+        and "cryptography==48.0.1" in requirements_cpu_lock,
         {
             "requirements_cpu_ranges": cpu_ranges,
             "requirements_cpu_lock_ranges": cpu_lock_ranges,

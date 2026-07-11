@@ -453,10 +453,10 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
         {
             "name": "dependencies:runtime_lock_exact",
             "ok": (
-                "cryptography>=42.0.0,<46.0.0" in base_in
-                and "cryptography==45.0.6" in base_lock
-                and "cryptography==45.0.6" in requirements_lock
-                and "cryptography==45.0.6" in requirements
+                "cryptography>=48.0.1,<49.0.0" in base_in
+                and "cryptography==48.0.1" in base_lock
+                and "cryptography==48.0.1" in requirements_lock
+                and "cryptography==48.0.1" in requirements
                 and ">=" not in base_lock
                 and ">=" not in requirements_lock
                 and "<" not in base_lock
