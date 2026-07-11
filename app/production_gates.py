@@ -2,10 +2,18 @@ from __future__ import annotations
 
 import importlib.util
 
+try:  # pragma: no cover - optional production dependency
+    import boto3
+except Exception:  # pragma: no cover - dependency may be intentionally absent locally
+    boto3 = None
+
+try:  # pragma: no cover - optional production dependency
+    import redis
+except Exception:  # pragma: no cover - dependency may be intentionally absent locally
+    redis = None
+
 from app import settings
 from app.postgres_core import postgres_driver_available, postgres_pool_available
-from app.portrait_object_storage import boto3
-from app.portrait_task_queue import redis
 
 
 PRODUCTION_PROFILES = {"prod", "production"}
@@ -26,6 +34,11 @@ def optional_module_available(module_name: str) -> bool:
         return importlib.util.find_spec(module_name) is not None
     except (ImportError, AttributeError, ValueError):
         return False
+
+
+def optional_dependency_available(module_name: str, loaded_module: object | None) -> bool:
+    return loaded_module is not None or optional_module_available(module_name)
+
 
 def production_externalization_failures() -> list[str]:
     if not production_profile_enabled() or not settings.PRODUCTION_EXTERNAL_SERVICES_REQUIRED:
@@ -59,14 +72,14 @@ def production_externalization_failures() -> list[str]:
         failures.append("S3_BUCKET must be configured in production")
     if not settings.S3_REGION.strip():
         failures.append("S3_REGION must be configured in production")
-    if boto3 is None:
+    if not optional_dependency_available("boto3", boto3):
         failures.append("boto3 must be installed in production")
 
     if settings.TASK_QUEUE_BACKEND != "redis":
         failures.append("TASK_QUEUE_BACKEND must be redis in production")
     if not settings.REDIS_URL.strip():
         failures.append("REDIS_URL must be configured in production")
-    if redis is None:
+    if not optional_dependency_available("redis", redis):
         failures.append("redis must be installed in production")
 
     if not settings.OPENTELEMETRY_ENABLED:

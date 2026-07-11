@@ -2,7 +2,7 @@ from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Request, UploadFile, status
 
-from app.media.image_decode import decode_upload_image, decode_upload_images, duplicate_distance
+from app.media.image_decode import decode_upload_image, decode_upload_images, duplicate_distance, read_limited_upload
 from app.media.media_schema import DecodedImage
 from app.observability import request_id_from_headers
 from app.portrait_async import run_blocking_io
@@ -364,8 +364,8 @@ async def v1_compare_batch(
             detail=f"too many pairs: {len(image_a)}, max {MAX_COMPARE_BATCH_PAIRS}",
         )
     if async_mode:
-        left_payloads = [(file.filename, file.content_type, await file.read()) for file in image_a]
-        right_payloads = [(file.filename, file.content_type, await file.read()) for file in image_b]
+        left_payloads = [(file.filename, file.content_type, await read_limited_upload(file)) for file in image_a]
+        right_payloads = [(file.filename, file.content_type, await read_limited_upload(file)) for file in image_b]
         job = await run_blocking_io(
             create_batch_job,
             "compare_batch",

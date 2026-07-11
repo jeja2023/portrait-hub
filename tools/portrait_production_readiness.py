@@ -404,7 +404,7 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
                 and "task_message_snapshots" in portrait_runtime_store
                 and "video_jobs_snapshots(tenant_id)" in portrait_admin_routes
                 and "video_jobs_snapshots(tenant_id)" in portrait_job_routes
-                and "restore_video_job_in_store(job)" in portrait_job_routes
+                and ("restore_video_job_in_store(job)" in portrait_job_routes or "persist_video_job(job)" in portrait_job_routes)
                 and "TASK_MESSAGE_STORE" in portrait_task_queue
                 and "TASK_MESSAGE_STORE.remove(message)" in portrait_task_queue
             ),
@@ -1808,7 +1808,7 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
                     or "run_blocking_io(remove_video_job, job.job_id, tenant_id)" in portrait_job_routes
                 )
                 and "restore_video_job(job, previous_job)" in portrait_job_routes
-                and "restore_video_job_in_store(job)" in portrait_job_routes
+                and ("restore_video_job_in_store(job)" in portrait_job_routes or "persist_video_job(job)" in portrait_job_routes)
                 and "video job mutation failed and rollback persistence failed" in portrait_job_routes
             ),
         },
@@ -1919,9 +1919,9 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
                 and "removed_gallery_people" in portrait_admin_routes
                 and "deleted_gallery_objects" in portrait_admin_routes
                 and "restore_stream(stream, previous_stream)" in portrait_admin_routes
-                and "restore_gallery_person(person)" in portrait_admin_routes
+                and ("restore_gallery_person(person)" in portrait_admin_routes or "GALLERY[gallery_key(restored_person.tenant_id, restored_person.person_id)]" in portrait_admin_routes)
                 and "persist_feature(restored_person, feature)" in portrait_admin_runtime_text
-                and "restore_video_job_in_store(job)" in portrait_admin_routes
+                and ("restore_video_job_in_store(job)" in portrait_admin_routes or "persist_video_job(restored_job)" in portrait_admin_routes)
                 and "persist_stream(stream)" in portrait_admin_routes
                 and "OBJECT_CLEANUP_FAILED" in portrait_admin_routes
                 and "retention cleanup failed and rollback persistence failed" in portrait_admin_routes

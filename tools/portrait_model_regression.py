@@ -80,6 +80,12 @@ def evaluate_delta_gates(
     return failures
 
 
+def manifest_section(value: Any) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        return {}
+    return {str(key): item for key, item in value.items()}
+
+
 def run_manifest_section(section: dict[str, Any]) -> dict[str, Any]:
     report = run_evaluation(section)
     gates = section.get("gates", [])
@@ -90,9 +96,10 @@ def run_manifest_section(section: dict[str, Any]) -> dict[str, Any]:
 
 
 def run_experiment(experiment: dict[str, Any]) -> dict[str, Any]:
-    baseline = experiment.get("baseline") if isinstance(experiment.get("baseline"), dict) else {}
-    candidate = experiment.get("candidate") if isinstance(experiment.get("candidate"), dict) else {}
-    shadow = experiment.get("shadow") if isinstance(experiment.get("shadow"), dict) else None
+    baseline = manifest_section(experiment.get("baseline"))
+    candidate = manifest_section(experiment.get("candidate"))
+    shadow_value = experiment.get("shadow")
+    shadow = manifest_section(shadow_value) if isinstance(shadow_value, dict) else None
     baseline_report = run_manifest_section(baseline)
     candidate_report = run_manifest_section(candidate)
     gates = experiment.get("delta_gates", experiment.get("gates", []))

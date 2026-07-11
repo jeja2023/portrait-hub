@@ -1,8 +1,8 @@
 # 后审计优化升级记录
 
-版本：`0.5.54`
+版本：`0.5.55`
 
-日期：2026-07-03
+日期：2026-07-11
 
 本文记录本轮全面检查后的已落地优化，以及仍需要真实生产依赖或业务数据配合的扩展验收项。它补充 `影鉴优化方案.md` 和 `PLATFORM_ACCEPTANCE.md`，作为后续升级的执行清单。
 
@@ -14,6 +14,18 @@
 - 收口图库变更回滚边界：新增 `app/portrait_gallery_mutations.py`，将对象清理、图库快照恢复和回滚失败脱敏从路由中抽出，路由只保留 HTTP 编排和依赖注入。
 - 扩充生产就绪门禁：`tools/portrait_production_readiness.py` 已将控制台配置资产和外置配置契约纳入平台级检查。
 - 标准化 Node 检查入口：新增根目录 `package.json`，`npm run check` 统一执行 Node SDK 契约测试，并同步 CI、部署检查和生产就绪模板。
+
+## 2026-07-11 / v0.5.55 维护收口
+
+本轮在 0.5.54 后审计升级的基础上，完成测试安全网和补偿路径的二次收口：
+
+- 恢复完整测试与 strict mypy 门禁：修复生产可选依赖导出、模型回归 manifest 类型收窄和控制台模块化后的契约测试观察点。
+- 加固图库 enroll、视频任务取消和 retention cleanup 的回滚补偿：route-level hook 重新贯穿对象存储、audit、特征持久化、任务持久化和图库/stream 恢复路径。
+- 将批量异步图片读取统一接入 `read_limited_upload()`，避免超大图片先完整读入内存后才被拒绝。
+- 同步 `tools/portrait_production_readiness.py` 的静态模板规则，识别新的补偿实现形态，默认生产就绪检查保持 `ok=true`。
+- 清理本地缓存产物，减少约 553 MB 工作区缓存噪声。
+
+固定验收结果：`pytest -q` 为 `443 passed, 4 skipped`，`tools/type_check.py`、`tools/deploy_check.py`、`npm run check` 和默认 `portrait_production_readiness.py` 均通过。完整 strict 生产就绪仍保留 5 个真实模型资产接入项：appearance、face detection、face embedding、gait、pose。
 
 ## 下一阶段扩展矩阵
 

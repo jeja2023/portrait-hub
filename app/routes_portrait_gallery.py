@@ -9,6 +9,7 @@ from app.portrait_audit import audit_event
 from app.portrait_auth import permission_dependency
 from app.portrait_gallery import (
     GALLERY,
+    add_feature,
     delete_person,
     feature_object_infos,
     get_person_or_404,
@@ -70,6 +71,12 @@ async def v1_gallery_enroll(
         metadata=metadata,
         request_id=request_id,
         tenant_id=ctx.tenant_id,
+        object_store=OBJECT_STORE,
+        audit_hook=audit_event,
+        add_feature_hook=add_feature,
+        persist_delete_hook=persist_person_delete,
+        persist_person_hook=persist_person,
+        persist_feature_hook=persist_feature,
     )
     return portrait_success(request_id, payload)
 

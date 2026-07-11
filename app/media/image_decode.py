@@ -70,7 +70,8 @@ def validate_image_content(data: bytes, filename: str | None = None) -> str:
 
 
 async def read_limited_upload(file: UploadFile, max_bytes: int = MAX_IMAGE_BYTES) -> bytes:
-    data = await file.read()
+    read_size = max(0, max_bytes) + 1
+    data = await file.read(read_size)
     if not data:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

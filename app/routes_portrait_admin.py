@@ -9,20 +9,22 @@ from app.portrait_async import run_blocking_io
 from app.portrait_audit import audit_event
 from app.portrait_auth import permission_dependency
 from app.portrait_gallery import (
+    GALLERY,
     PersonRecord,
     delete_person as delete_gallery_person,
+    gallery_key,
+    persist_feature,
+    persist_person,
     feature_object_infos,
     list_gallery_people,
 )
-from app.portrait_jobs import VideoJob, remove_video_job
+from app.portrait_jobs import VIDEO_JOBS, VideoJob, job_key, persist_video_job, remove_video_job
 from app.portrait_model_capabilities import MODEL_CAPABILITIES
 from app.portrait_object_storage import OBJECT_STORE, public_object_info
 from app.portrait_pagination import normalize_list_pagination, normalize_stream_event_pagination, page_items_keyset
 from app.portrait_request_context import PortraitRequestContext, portrait_request_context
 from app.portrait_runtime_store import (
     gallery_people_snapshots,
-    restore_gallery_person,
-    restore_video_job_in_store,
     video_jobs_snapshots,
 )
 from app.portrait_response import OBJECT_CLEANUP_FAILED, exception_log_summary, portrait_success, raise_rollback_failure
@@ -83,7 +85,11 @@ def rollback_retention_cleanup(
     errors: list[str] = []
     for person in reversed(removed_gallery_people):
         try:
-            restore_gallery_person(person)
+            restored_person = deepcopy(person)
+            GALLERY[gallery_key(restored_person.tenant_id, restored_person.person_id)] = restored_person
+            persist_person(restored_person)
+            for feature in restored_person.features:
+                persist_feature(restored_person, feature)
         except Exception as exc:
             logger.warning("failed to persist restored gallery person during retention rollback: %s", exception_log_summary(exc))
             errors.append("restore retained gallery person failed")
@@ -99,7 +105,9 @@ def rollback_retention_cleanup(
 
     for job in reversed(removed_jobs):
         try:
-            restore_video_job_in_store(job)
+            restored_job = deepcopy(job)
+            VIDEO_JOBS[job_key(restored_job.tenant_id, restored_job.job_id)] = restored_job
+            persist_video_job(restored_job)
         except Exception as exc:
             logger.warning("failed to persist restored video job during retention rollback: %s", exception_log_summary(exc))
             errors.append("restore retained video job failed")

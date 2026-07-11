@@ -193,33 +193,41 @@ def test_console_assets_use_light_structured_response_panels() -> None:
 
     config_js = client.get("/assets/console.config.js")
     js = client.get("/assets/console.js")
+    runtime_js = client.get("/assets/console/views/app.js")
+    data_viewer_js = client.get("/assets/console/renderers/data-viewer.js")
     css = client.get("/assets/console.css")
 
     assert config_js.status_code == 200
     assert js.status_code == 200
+    assert runtime_js.status_code == 200
+    assert data_viewer_js.status_code == 200
     assert css.status_code == 200
     config_body = config_js.text
     js_body = js.text
+    runtime_body = runtime_js.text
+    data_viewer_body = data_viewer_js.text
     css_body = css.text
     assert "PortraitConsoleConfig" in config_body
     assert "/v1/infer/faces" in config_body
-    assert "const endpointMap = consoleConfig.endpointMap" in js_body
-    assert "data-viewer" in js_body
-    assert "查看完整数据（JSON）" in js_body
-    assert "复制数据" in js_body
-    assert 'class="json-view data-viewer"' in js_body
-    assert '<pre id="dashboard-json"' not in js_body
-    assert '<pre id="models-json"' not in js_body
+    assert "PortraitConsoleRuntime" in js_body
+    assert "const endpointMap = consoleConfig.endpointMap" in runtime_body
+    assert "data-viewer" in runtime_body
+    assert "查看完整数据（JSON）" in runtime_body
+    assert "复制数据" in runtime_body
+    assert 'class="json-view data-viewer"' in runtime_body
+    assert "PortraitConsoleModules" in data_viewer_body
+    assert '<pre id="dashboard-json"' not in runtime_body
+    assert '<pre id="models-json"' not in runtime_body
     assert "--code" not in css_body
     assert "#111827" not in css_body
     assert "background: #fbfdff" in css_body
-    assert "解析处理" in js_body
-    assert "比对检索" in js_body
-    assert "视频解析结果" in js_body
-    assert "视频流解析" in js_body
-    assert "人员库查询" not in js_body
-    assert "智能解析" not in js_body
-    assert "视频分析" not in js_body
+    assert "解析处理" in runtime_body
+    assert "比对检索" in runtime_body
+    assert "视频解析结果" in runtime_body
+    assert "视频流解析" in runtime_body
+    assert "人员库查询" not in runtime_body
+    assert "智能解析" not in runtime_body
+    assert "视频分析" not in runtime_body
 
 
 def test_api_docs_can_be_disabled_in_production(monkeypatch) -> None:

@@ -15,6 +15,7 @@ from app.portrait_jobs import (
     get_video_job,
     normalize_job_status,
     public_video_job_result,
+    persist_video_job,
     remove_video_job,
     request_cancel_video_job,
     restore_video_job,
@@ -22,7 +23,7 @@ from app.portrait_jobs import (
 )
 from app.portrait_response import exception_log_summary, portrait_success, raise_rollback_failure
 from app.portrait_request_context import PortraitRequestContext, portrait_request_context
-from app.portrait_runtime_store import restore_video_job_in_store, video_jobs_snapshots
+from app.portrait_runtime_store import video_jobs_snapshots
 from app.portrait_request_validation import validate_int_range
 from app.portrait_security import validate_job_id
 from app.portrait_task_queue import TASK_QUEUE
@@ -37,7 +38,7 @@ router = APIRouter(dependencies=[Depends(require_api_token)])
 def rollback_video_job_snapshot(job: VideoJob, previous_job: VideoJob) -> list[str]:
     restore_video_job(job, previous_job)
     try:
-        restore_video_job_in_store(job)
+        persist_video_job(job)
     except Exception as exc:
         logger.warning("failed to persist restored video job snapshot: %s", exception_log_summary(exc))
         return ["restore video job failed"]

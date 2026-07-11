@@ -1,6 +1,6 @@
 {
   "name": "portrait-hub",
-  "version": "0.5.54",
+  "version": "0.5.55",
   "private": true,
   "type": "commonjs",
   "description": "PortraitHub GPU inference and portrait intelligence service",

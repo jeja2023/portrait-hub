@@ -48,7 +48,7 @@ def parse_csv_env(name: str, default: str = "") -> list[str]:
     return [item.strip() for item in os.getenv(name, default).split(",") if item.strip()]
 
 
-APP_VERSION = "0.5.54"
+APP_VERSION = "0.5.55"
 PORTRAIT_RUNTIME_PROFILE = os.getenv("PORTRAIT_RUNTIME_PROFILE", os.getenv("APP_ENV", "development")).strip().lower() or "development"
 PRODUCTION_EXTERNAL_SERVICES_REQUIRED = parse_bool_env("PRODUCTION_EXTERNAL_SERVICES_REQUIRED", True)
 MODELS_ROOT = Path(os.getenv("MODELS_ROOT", "models")).resolve()

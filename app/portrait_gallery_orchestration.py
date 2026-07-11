@@ -2,16 +2,19 @@ from __future__ import annotations
 
 from io import BytesIO
 import json
+from collections.abc import Callable
 from typing import Any
 
 from fastapi import BackgroundTasks, HTTPException, UploadFile, status
 from starlette.datastructures import Headers
 
-from app.media.image_decode import decode_upload_image, decode_upload_images
+from app.media.image_decode import decode_upload_image, decode_upload_images, read_limited_upload
 from app.portrait_async import run_blocking_io
 from app.portrait_audit import audit_event
 from app.portrait_gallery import (
     GALLERY,
+    FeatureRecord,
+    PersonRecord,
     add_feature,
     persist_feature,
     persist_person,
@@ -36,6 +39,13 @@ from app.settings import MAX_EMBEDDING_IMAGES
 
 
 SUPPORTED_GALLERY_MODALITIES = {"face", "body", "appearance"}
+
+
+AuditHook = Callable[..., None]
+AddFeatureHook = Callable[..., FeatureRecord]
+PersistPersonHook = Callable[[PersonRecord], None]
+PersistFeatureHook = Callable[[PersonRecord, FeatureRecord], None]
+PersistDeleteHook = Callable[[str, str], None]
 
 
 def parse_gallery_metadata(raw: str | None) -> dict[str, Any]:
@@ -96,6 +106,12 @@ async def enroll_gallery_person(
     metadata: str | None,
     request_id: str,
     tenant_id: str,
+    object_store: Any = OBJECT_STORE,
+    audit_hook: AuditHook = audit_event,
+    add_feature_hook: AddFeatureHook = add_feature,
+    persist_delete_hook: PersistDeleteHook = persist_person_delete,
+    persist_person_hook: PersistPersonHook = persist_person,
+    persist_feature_hook: PersistFeatureHook = persist_feature,
 ) -> dict[str, Any]:
     modality_key = validate_gallery_modality(modality)
     validate_gallery_image_count(files)
@@ -123,7 +139,7 @@ async def enroll_gallery_person(
                 )
                 continue
             object_info = await run_blocking_io(
-                OBJECT_STORE.put_bytes,
+                object_store.put_bytes,
                 tenant_id,
                 "gallery-image",
                 item.frame.filename,
@@ -135,7 +151,7 @@ async def enroll_gallery_person(
             created_object_infos.append(object_info)
             embedding, quality_score, model_id, model_version = await extract_gallery_embedding(item.image, modality_key)
             feature = await run_blocking_io(
-                add_feature,
+                add_feature_hook,
                 person,
                 modality=modality_key,
                 embedding=embedding,
@@ -149,7 +165,7 @@ async def enroll_gallery_person(
             feature_payload["object"] = public_object_info(object_info)
             created.append(feature_payload)
         await run_blocking_io(
-            audit_event,
+            audit_hook,
             "gallery_enroll",
             request_id=request_id,
             tenant_id=tenant_id,
@@ -166,11 +182,11 @@ async def enroll_gallery_person(
             previous_person=previous_person,
             created_object_infos=created_object_infos,
             original_error=exc,
-            object_store=OBJECT_STORE,
+            object_store=object_store,
             gallery=GALLERY,
-            persist_delete_hook=persist_person_delete,
-            persist_person_hook=persist_person,
-            persist_feature_hook=persist_feature,
+            persist_delete_hook=persist_delete_hook,
+            persist_person_hook=persist_person_hook,
+            persist_feature_hook=persist_feature_hook,
         )
         raise
     return {
@@ -323,7 +339,7 @@ async def create_async_gallery_search_batch(
     validate_gallery_image_count(files)
     profile_key = validate_threshold_profile(threshold_profile)
     modality_key = validate_gallery_modality(modality)
-    file_payloads = [(file.filename, file.content_type, await file.read()) for file in files]
+    file_payloads = [(file.filename, file.content_type, await read_limited_upload(file)) for file in files]
     job = await run_blocking_io(
         create_batch_job,
         "gallery_search_batch",
