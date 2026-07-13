@@ -32,7 +32,43 @@ const state = {
 };
 
 const endpointMap = consoleConfig.endpointMap || {};
+const consoleModules = window.PortraitConsoleModules || {};
+const consoleNavigation = consoleModules.navigation || {};
 
+function navigationSections() {
+  return Array.isArray(consoleNavigation.sections) && consoleNavigation.sections.length
+    ? consoleNavigation.sections
+    : [{ id: "overview", label: "总览", standalone: true }];
+}
+
+function overviewShortcuts() {
+  return Array.isArray(consoleNavigation.overviewShortcuts) ? consoleNavigation.overviewShortcuts : [];
+}
+
+function renderNavigation() {
+  const items = navigationSections().map((section) => {
+    if (section.standalone) {
+      return `<button type="button" class="nav-item nav-item--solo" data-nav="${section.id}">${section.label}</button>`;
+    }
+    const buttons = (section.items || [])
+      .map((item) => `<button type="button" class="nav-item" data-nav="${item.view}">${item.label}</button>`)
+      .join("");
+    return `
+        <details class="nav-group" data-nav-group="${section.id}">
+          <summary>${section.label}</summary>
+          <div class="nav-group-items">
+            ${buttons}
+          </div>
+        </details>`;
+  });
+  return `<nav class="sidebar-nav" aria-label="控制台视图">${items.join("")}</nav>`;
+}
+
+function renderOverviewShortcuts() {
+  return overviewShortcuts()
+    .map((item) => `<button type="button" class="product-tile" data-nav-shortcut="${item.view}"><strong>${item.title}</strong><span>${item.description}</span></button>`)
+    .join("");
+}
 function defaultAlertConfig() {
   return {
     maxErrorRate: Number(consoleConfig.alertDefaults?.maxErrorRate ?? 0.05),
@@ -151,69 +187,7 @@ const template = `
           <a href="/openapi.json" target="_blank" rel="noreferrer">接口定义</a>
         </div>
       </div>
-      <nav class="sidebar-nav" aria-label="控制台视图">
-        <button type="button" class="nav-item nav-item--solo" data-nav="overview">总览</button>
-        <details class="nav-group" data-nav-group="analysis">
-          <summary>解析处理</summary>
-          <div class="nav-group-items">
-            <button type="button" class="nav-item" data-nav="vision">图片解析</button>
-            <button type="button" class="nav-item" data-nav="video">视频解析</button>
-            <button type="button" class="nav-item" data-nav="streams">视频流解析</button>
-            <button type="button" class="nav-item" data-nav="video-results">解析结果</button>
-          </div>
-        </details>
-        <details class="nav-group" data-nav-group="retrieval">
-          <summary>比对检索</summary>
-          <div class="nav-group-items">
-            <button type="button" class="nav-item" data-nav="compare">人像比对</button>
-            <button type="button" class="nav-item" data-nav="gallery-search">以图搜人</button>
-          </div>
-        </details>
-        <details class="nav-group" data-nav-group="gallery">
-          <summary>人员库</summary>
-          <div class="nav-group-items">
-            <button type="button" class="nav-item" data-nav="gallery-enroll">人员注册</button>
-            <button type="button" class="nav-item" data-nav="gallery-manage">人员管理</button>
-          </div>
-        </details>
-        <details class="nav-group" data-nav-group="access">
-          <summary>接入中心</summary>
-          <div class="nav-group-items">
-            <button type="button" class="nav-item" data-nav="access-credentials">应用凭证</button>
-            <button type="button" class="nav-item" data-nav="sdk-examples">开发工具包示例</button>
-            <button type="button" class="nav-item" data-nav="openapi-docs">开放接口定义</button>
-            <button type="button" class="nav-item" data-nav="api-playground">接口调试台</button>
-            <button type="button" class="nav-item" data-nav="call-logs">调用日志</button>
-            <button type="button" class="nav-item" data-nav="error-codes">错误码</button>
-            <button type="button" class="nav-item" data-nav="webhooks">事件回调</button>
-            <button type="button" class="nav-item" data-nav="slo-panel">服务等级目标面板</button>
-          </div>
-        </details>
-        <details class="nav-group" data-nav-group="multimodal">
-          <summary>多模态分析</summary>
-          <div class="nav-group-items">
-            <button type="button" class="nav-item" data-nav="multimodal-compare">融合比对</button>
-            <button type="button" class="nav-item" data-nav="track-review">轨迹审阅</button>
-          </div>
-        </details>
-        <details class="nav-group" data-nav-group="evaluation">
-          <summary>评估中心</summary>
-          <div class="nav-group-items">
-            <button type="button" class="nav-item" data-nav="evaluation-center">回归评估</button>
-            <button type="button" class="nav-item" data-nav="release-center">模型发布</button>
-          </div>
-        </details>
-        <details class="nav-group" data-nav-group="ops">
-          <summary>运维治理</summary>
-          <div class="nav-group-items">
-            <button type="button" class="nav-item" data-nav="models">模型管理</button>
-            <button type="button" class="nav-item" data-nav="admin-threshold">比对阈值</button>
-            <button type="button" class="nav-item" data-nav="admin-data">数据保留与备份</button>
-            <button type="button" class="nav-item" data-nav="audit-compliance">合规审计</button>
-            <button type="button" class="nav-item" data-nav="alerts">告警评估</button>
-          </div>
-        </details>
-      </nav>
+      ${renderNavigation()}
       <div class="sidebar-footer">
         <div class="tenant-info">
           <span>当前租户</span>
@@ -221,7 +195,7 @@ const template = `
         </div>
         <div id="status-strip" class="status-strip">就绪</div>
         <div class="sidebar-actions">
-          <button type="button" id="refresh-button" class="small">刷新全部</button>
+          <button type="button" id="refresh-button" class="small">刷新当前</button>
           <button type="button" id="logout-button" class="danger small">退出登录</button>
         </div>
       </div>
@@ -241,11 +215,7 @@ const template = `
           <div class="metric"><span>错误率</span><strong id="metric-error-rate">0%</strong></div>
           <div class="metric"><span>P95 推理耗时</span><strong id="metric-p95">0s</strong></div>
           <div class="metric"><span>GPU 空闲显存</span><strong id="metric-gpu-free">--</strong></div>
-          <button type="button" class="product-tile" data-nav-shortcut="vision"><strong>图片解析</strong><span>人脸、人体、姿态、衣着、步态、检测和 重识别向量。</span></button>
-          <button type="button" class="product-tile" data-nav-shortcut="video"><strong>视频解析</strong><span>离线视频任务创建、状态跟踪和结果回收。</span></button>
-          <button type="button" class="product-tile" data-nav-shortcut="streams"><strong>视频流解析</strong><span>RTSP/HTTP 注册、启动、事件查询和实时订阅。</span></button>
-          <button type="button" class="product-tile" data-nav-shortcut="video-results"><strong>解析结果</strong><span>按图片、视频和视频流集中查看解析输出与关键快照。</span></button>
-          <button type="button" class="product-tile" data-nav-shortcut="gallery-search"><strong>比对检索</strong><span>以图搜人、候选排序和检索结果查看。</span></button>
+          ${renderOverviewShortcuts()}
         </div>
         <div class="split-grid">
           <div class="card">
@@ -432,7 +402,7 @@ const template = `
         <div class="view-header">
           <div class="section-title">
             <h2>人员管理</h2>
-            <p>浏览人员列表、查改删人员记录，并按模态重建向量索引。</p>
+            <p>浏览人员列表，查改删人员记录，并核验已入库特征。</p>
           </div>
           <button type="button" id="gallery-refresh-button">刷新人员库</button>
         </div>
@@ -464,7 +434,7 @@ const template = `
         <div class="card">
           <div class="section-title">
             <h3>人员维护</h3>
-            <p>查询、更新、删除人员记录，或按模态重建向量索引。</p>
+            <p>查询、更新或删除人员记录。</p>
           </div>
           <div class="form-grid">
             <label>人员 ID <input id="person-id-input" placeholder="人员 ID" /></label>
@@ -474,24 +444,41 @@ const template = `
             <button type="button" id="person-patch-button">更新人员</button>
             <button type="button" id="person-delete-button" class="danger">删除人员</button>
           </div>
+
+          <div id="gallery-summary" class="result-summary"></div>
+          <div id="gallery-json" class="json-view data-viewer" role="region" aria-label="人员库响应数据"></div>
+        </div>
+      </section>
+
+      <section class="view" data-view="gallery-rebuild">
+        <div class="view-header">
+          <div class="section-title">
+            <h2>特征重建</h2>
+            <p>按模态和模型重建人员库向量索引，用于模型切换、阈值校准或索引修复后的批量更新。</p>
+          </div>
+        </div>
+        <div class="card">
+          <div class="section-title">
+            <h3>重建配置</h3>
+            <p>预演模式会返回影响范围，不写入新的索引结果。</p>
+          </div>
           <div class="form-grid compact">
             <label>重建模态
-              <select id="reindex-modality-input">
+              <select id="feature-rebuild-modality-input">
                 <option value="">全部</option>
                 <option value="body">人体</option>
                 <option value="face">人脸</option>
                 <option value="appearance">衣着外观</option>
               </select>
             </label>
-            <label>模型 ID <input id="reindex-model-id-input" placeholder="可选" /></label>
-            <label class="field-inline"><input id="reindex-dry-run-input" type="checkbox" /> 仅预演</label>
-            <button type="button" id="gallery-reindex-button">重建索引</button>
+            <label>模型 ID <input id="feature-rebuild-model-id-input" placeholder="可选" /></label>
+            <label class="field-inline"><input id="feature-rebuild-dry-run-input" type="checkbox" checked /> 仅预演</label>
+            <button type="button" id="feature-rebuild-button" class="primary">开始重建</button>
           </div>
-          <div id="gallery-summary" class="result-summary"></div>
-          <div id="gallery-json" class="json-view data-viewer" role="region" aria-label="人员库响应数据"></div>
+          <div id="feature-rebuild-summary" class="result-summary"></div>
+          <div id="feature-rebuild-json" class="json-view data-viewer" role="region" aria-label="特征重建响应数据"></div>
         </div>
       </section>
-
       <section class="view" data-view="video">
         <div class="view-header">
           <div class="section-title">
@@ -1567,6 +1554,7 @@ function payloadLabel(name) {
     vision: "图片解析响应",
     compare: "人像比对响应",
     gallery: "人员库响应",
+    "gallery-rebuild": "特征重建响应",
     "image-results": "图片解析结果",
     "video-results": "视频解析结果",
     "stream-results": "视频流解析结果",
@@ -3830,6 +3818,47 @@ async function refreshAll() {
   await Promise.allSettled([refreshDashboard(), refreshModels(), refreshGallery(), refreshStreams(), refreshAdmin(), refreshAdminData(), refreshAnalysisResults(), refreshTrackReview(), refreshEvaluationCenter(), refreshReleaseCenter(), refreshAuditCompliance()]);
 }
 
+const viewRefreshHandlers = {
+  overview: refreshDashboard,
+  "video-results": refreshActiveAnalysisResults,
+  streams: refreshStreams,
+  "gallery-manage": refreshGallery,
+  "gallery-rebuild": async () => setStatus("特征重建配置已就绪"),
+  "access-credentials": refreshAccessApplications,
+  "sdk-examples": async () => {
+    renderSdkExamples();
+    setStatus("已刷新当前页面");
+  },
+  "openapi-docs": refreshOpenApiDocs,
+  "api-playground": async () => {
+    renderPlaygroundRequestPreview();
+    setStatus("已刷新当前页面");
+  },
+  "call-logs": refreshCallLogs,
+  "error-codes": refreshErrorCodes,
+  webhooks: refreshWebhooks,
+  "slo-panel": refreshSloPanel,
+  "track-review": refreshTrackReview,
+  "evaluation-center": refreshEvaluationCenter,
+  "release-center": refreshReleaseCenter,
+  models: refreshModels,
+  "admin-threshold": refreshAdmin,
+  "admin-data": refreshAdminData,
+  "audit-compliance": refreshAuditCompliance,
+  alerts: async () => {
+    await refreshDashboard();
+    renderAlerts();
+  },
+};
+
+async function refreshCurrentView() {
+  const handler = viewRefreshHandlers[state.view];
+  if (handler) {
+    await handler();
+    return;
+  }
+  setStatus("当前页面没有远端列表需要刷新");
+}
 function renderGallerySummary(payload) {
   const people = Array.isArray(payload.people) ? payload.people : [];
   const featureCount = people.reduce((total, person) => total + Number(person.feature_count || (person.features || []).length || 0), 0);
@@ -4378,7 +4407,7 @@ function updateAuthView() {
     qs("#login-view").classList.add("hidden");
     qs("#console-view").classList.remove("hidden");
     qs("#current-tenant-display").textContent = state.tenantId;
-    wrapHandler(refreshAll)();
+    wrapHandler(refreshCurrentView)();
   } else {
     qs("#login-view").classList.remove("hidden");
     qs("#console-view").classList.add("hidden");
@@ -4393,7 +4422,7 @@ function setupEvents() {
   qsa("[data-nav-shortcut]").forEach((button) => button.addEventListener("click", () => setView(button.dataset.navShortcut)));
   qs("#login-form").addEventListener("submit", handleLogin);
   qs("#logout-button").addEventListener("click", handleLogout);
-  qs("#refresh-button").addEventListener("click", wrapHandler(refreshAll));
+  qs("#refresh-button").addEventListener("click", wrapHandler(refreshCurrentView));
   qs("#dashboard-refresh-button").addEventListener("click", wrapHandler(refreshDashboard));
   qs("#models-refresh-button").addEventListener("click", wrapHandler(refreshModels));
   qs("#gallery-refresh-button").addEventListener("click", wrapHandler(refreshGallery));
@@ -4547,14 +4576,22 @@ function setupEvents() {
     renderPayload("gallery", "#gallery-json", await api(`/v1/gallery/${id}`, { method: "DELETE" }));
     await refreshGallery();
   }));
-  qs("#gallery-reindex-button").addEventListener("click", wrapHandler(async () => {
+  qs("#feature-rebuild-button").addEventListener("click", wrapHandler(async () => {
     const params = new URLSearchParams();
-    const modality = qs("#reindex-modality-input").value;
-    const modelId = qs("#reindex-model-id-input").value.trim();
+    const modality = qs("#feature-rebuild-modality-input").value;
+    const modelId = qs("#feature-rebuild-model-id-input").value.trim();
+    const dryRun = qs("#feature-rebuild-dry-run-input").checked;
     if (modality) params.set("modality", modality);
     if (modelId) params.set("model_id", modelId);
-    params.set("dry_run", qs("#reindex-dry-run-input").checked ? "true" : "false");
-    renderPayload("gallery", "#gallery-json", await api(`/v1/gallery/reindex?${params.toString()}`, { method: "POST" }));
+    params.set("dry_run", dryRun ? "true" : "false");
+    const payload = await api(`/v1/gallery/reindex?${params.toString()}`, { method: "POST" });
+    renderSummary("#feature-rebuild-summary", [
+      { label: "重建模态", value: modality || "全部" },
+      { label: "模型 ID", value: modelId || "默认" },
+      { label: "预演", value: dryRun ? "是" : "否" },
+      { label: "租户", value: payload.tenant_id || state.tenantId },
+    ]);
+    renderPayload("gallery-rebuild", "#feature-rebuild-json", payload);
   }));
 
   qs("#job-get-button").addEventListener("click", wrapHandler(async () => {

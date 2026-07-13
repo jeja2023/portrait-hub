@@ -5,8 +5,8 @@
     ...(modules.views || {}),
     gallery: {
       navGroup: "gallery",
-      views: ["gallery-enroll", "gallery-search", "gallery-manage"],
-      resultTargets: ["enroll-json", "search-json", "gallery-json"],
+      views: ["gallery-enroll", "gallery-manage", "gallery-rebuild"],
+      resultTargets: ["enroll-json", "gallery-json", "feature-rebuild-json"],
     },
   };
 })(window);

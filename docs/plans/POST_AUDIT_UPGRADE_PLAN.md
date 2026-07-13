@@ -1,10 +1,22 @@
 # 后审计优化升级记录
 
-版本：`0.6.0`
+版本：`0.6.2`
 
 日期：2026-07-13
 
 本文记录本轮全面检查后的已落地优化，以及仍需要真实生产依赖或业务数据配合的扩展验收项。它补充 `影鉴优化方案.md` 和 `PLATFORM_ACCEPTANCE.md`，作为后续升级的执行清单。
+
+## 2026-07-13 / v0.6.2 控制台信息架构与导航模块化
+
+本轮延续“控制台模块化”扩展方向，在不改变后端 API 契约的前提下完成前端信息架构和导航维护边界收口：
+
+- 侧栏按「总览 / 智能分析 / 比对检索 / 人员库 / 接入中心 / 模型与评估 / 运维合规」重组，减少业务操作、接入开发、模型治理和运维审计入口混排。
+- 新增 `frontend/console/views/navigation.js`，集中维护导航分组与总览快捷入口；`console.html` 加载该资源，`npm run check` 纳入语法检查。
+- `frontend/console/views/app.js` 改为消费 `PortraitConsoleModules.navigation`，并将“刷新当前”逻辑收敛为 `viewRefreshHandlers` 映射表。
+- 人员库新增独立“特征重建”页面，复用 `/v1/gallery/reindex` 按模态和模型重建向量索引，默认 dry-run 预演；人员管理页回归查询、更新、删除和特征核验职责。
+- `frontend/console/views/gallery.js` 与 `frontend/console/views/operations.js` 同步新的视图注册分组，避免产品侧导航和代码层注册再次漂移。
+
+验收：`npm run check` 与 `git diff --check` 均通过。
 
 ## 本轮已落地
 

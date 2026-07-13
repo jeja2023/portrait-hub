@@ -1,11 +1,11 @@
 {
   "name": "portrait-hub",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "private": true,
   "type": "commonjs",
   "description": "PortraitHub GPU 推理与人像智能服务",
   "scripts": {
-    "check": "node --check frontend/console/console.js && node --check frontend/console/api/client.js && node --check frontend/console/state/store.js && node --check frontend/console/renderers/data-viewer.js && node --check frontend/console/visuals/previews.js && node --check frontend/console/views/analysis.js && node --check frontend/console/views/gallery.js && node --check frontend/console/views/operations.js && node --check frontend/console/views/app.js && node --check examples/demo-clients/node_demo_client.js && node tests/test_node_sdk.js",
+    "check": "node --check frontend/console/console.js && node --check frontend/console/api/client.js && node --check frontend/console/state/store.js && node --check frontend/console/renderers/data-viewer.js && node --check frontend/console/visuals/previews.js && node --check frontend/console/views/navigation.js && node --check frontend/console/views/analysis.js && node --check frontend/console/views/gallery.js && node --check frontend/console/views/operations.js && node --check frontend/console/views/app.js && node --check examples/demo-clients/node_demo_client.js && node tests/test_node_sdk.js",
     "test:node": "node tests/test_node_sdk.js"
   },
   "engines": {
