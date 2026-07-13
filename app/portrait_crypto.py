@@ -40,7 +40,7 @@ def encryption_required() -> bool:
 def normalize_encryption_key_id(value: str | None) -> str:
     cleaned = str(value or "").strip() or DEFAULT_ENCRYPTION_KEY_ID
     if len(cleaned) > MAX_ENCRYPTION_KEY_ID_LENGTH or any(char not in ENCRYPTION_KEY_ID_CHARS for char in cleaned):
-        raise ValueError("invalid encryption key id")
+        raise ValueError("加密密钥 ID 无效")
     return cleaned
 
 
@@ -60,7 +60,7 @@ def derive_key(
     if kdf_name == RAW_BASE64_KDF:
         raw = base64.b64decode(key_material.encode("ascii"))
         if len(raw) != 32:
-            raise ValueError("raw-base64 ENCRYPTION_KEY must decode to 32 bytes")
+            raise ValueError("raw-base64 ENCRYPTION_KEY 必须解码为 32 字节")
         return raw
     if kdf_name == PBKDF2_SHA256_KDF:
         if salt is None:
@@ -69,7 +69,7 @@ def derive_key(
         return hashlib.pbkdf2_hmac("sha256", key_material.encode("utf-8"), salt, rounds, dklen=32)
     if kdf_name == LEGACY_SHA256_KDF:
         return hashlib.sha256(key_material.encode("utf-8")).digest()
-    raise ValueError("unsupported encryption KDF")
+    raise ValueError("不支持的加密 KDF")
 
 
 def parse_encryption_keyring() -> dict[str, str]:
@@ -79,14 +79,14 @@ def parse_encryption_keyring() -> dict[str, str]:
         if not entry:
             continue
         if "=" not in entry:
-            raise ValueError("ENCRYPTION_KEYRING entries must use key_id=secret")
+            raise ValueError("ENCRYPTION_KEYRING 条目必须使用 key_id=secret")
         raw_key_id, raw_secret = entry.split("=", 1)
         key_id = normalize_encryption_key_id(raw_key_id)
         secret = raw_secret.strip()
         if not secret:
-            raise ValueError("ENCRYPTION_KEYRING entries must include non-empty secrets")
+            raise ValueError("ENCRYPTION_KEYRING 条目必须包含非空密钥")
         if key_id in keyring:
-            raise ValueError("duplicate encryption key id in ENCRYPTION_KEYRING")
+            raise ValueError("ENCRYPTION_KEYRING 中存在重复的加密密钥 ID")
         keyring[key_id] = secret
     return keyring
 
@@ -97,7 +97,7 @@ def encryption_key_materials() -> dict[str, str]:
         active_key_id = current_encryption_key_id()
         previous = materials.get(active_key_id)
         if previous is not None and previous != ENCRYPTION_KEY:
-            raise ValueError("active encryption key id conflicts with ENCRYPTION_KEYRING")
+            raise ValueError("活动加密密钥 ID 与 ENCRYPTION_KEYRING 冲突")
         materials[active_key_id] = ENCRYPTION_KEY
     return materials
 
@@ -113,7 +113,7 @@ def candidate_decryption_keys(
     if key_id:
         normalized = normalize_encryption_key_id(key_id)
         if normalized not in materials:
-            raise ValueError("encrypted payload key id is not configured")
+            raise ValueError("加密载荷的密钥 ID 未配置")
         return [(normalized, derive_key(materials[normalized], kdf=kdf, salt=salt, iterations=iterations))]
     return [
         (item_key_id, derive_key(secret, kdf=kdf, salt=salt, iterations=iterations))
@@ -133,7 +133,7 @@ def xor_stream(data: bytes, key: bytes) -> bytes:
 def encrypt_bytes(data: bytes) -> dict[str, Any]:
     if not encryption_enabled():
         if encryption_required():
-            raise RuntimeError("ENCRYPTION_KEY is required when REQUIRE_ENCRYPTION=true")
+            raise RuntimeError("当 REQUIRE_ENCRYPTION=true 时，ENCRYPTION_KEY 为必填项")
         return {"encrypted": False, "data": base64.b64encode(data).decode("ascii")}
     key_id = current_encryption_key_id()
     kdf_name = str(ENCRYPTION_KDF or PBKDF2_SHA256_KDF).strip().lower()
@@ -172,14 +172,14 @@ def decrypt_bytes(payload: dict[str, Any]) -> bytes:
                 return AESGCM(key).decrypt(nonce, data, None)
             except InvalidTag as exc:
                 last_error = exc
-        raise ValueError("encrypted payload authentication failed") from last_error
+        raise ValueError("加密载荷认证失败") from last_error
     if algorithm != LEGACY_XOR_ALGORITHM:
-        raise ValueError(f"unsupported encrypted payload algorithm: {algorithm}")
+        raise ValueError(f"不支持的加密载荷算法：{algorithm}")
     for _, key in candidate_decryption_keys(key_id, kdf=LEGACY_SHA256_KDF):
         expected = hmac.new(key, data, hashlib.sha256).hexdigest()
         if hmac.compare_digest(expected, str(payload.get("digest", ""))):
             return xor_stream(data, key)
-    raise ValueError("encrypted payload digest mismatch")
+    raise ValueError("加密载荷摘要不匹配")
 
 
 def protect_embedding(embedding: list[float]) -> dict[str, Any]:

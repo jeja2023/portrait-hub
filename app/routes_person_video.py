@@ -61,7 +61,7 @@ async def infer_video_person_tracks(
         request_id,
         errors_metric="tracks_errors_total",
         log_label="video person track inference failed",
-        internal_message="video person track inference runtime error",
+        internal_message="视频人员轨迹推理运行时错误",
     ):
         images, video_meta = await extract_video_frames_from_upload(file, frame_interval, max_frames)
         if not images:

@@ -40,13 +40,13 @@ def rollback_video_job_snapshot(job: VideoJob, previous_job: VideoJob) -> list[s
     try:
         persist_video_job(job)
     except Exception as exc:
-        logger.warning("failed to persist restored video job snapshot: %s", exception_log_summary(exc))
-        return ["restore video job failed"]
+        logger.warning("持久化恢复后的视频任务快照失败: %s", exception_log_summary(exc))
+        return ["restore 视频任务失败"]
     return []
 
 
 def raise_job_rollback_failure(original_error: Exception, rollback_errors: list[str]) -> None:
-    raise_rollback_failure("video job mutation failed and rollback persistence failed", original_error, rollback_errors)
+    raise_rollback_failure("视频任务变更失败，且回滚持久化失败", original_error, rollback_errors)
 
 
 @router.post("/v1/jobs/video", dependencies=[Depends(permission_dependency("jobs"))])
@@ -126,7 +126,7 @@ async def v1_get_video_job(job_id: str, ctx: PortraitRequestContext = Depends(po
     job_id = validate_job_id(job_id)
     job = get_video_job(job_id, tenant_id=tenant_id)
     if job is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="job not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="任务不存在")
     return portrait_success(request_id, {"job": job.public_dict(include_result=False)})
 
 
@@ -137,7 +137,7 @@ async def v1_get_video_job_result(job_id: str, ctx: PortraitRequestContext = Dep
     job_id = validate_job_id(job_id)
     job = get_video_job(job_id, tenant_id=tenant_id)
     if job is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="job not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="任务不存在")
     if job.status != "completed":
         return portrait_success(request_id, {"job": job.public_dict(include_result=False), "result": None})
     return portrait_success(request_id, {"job": job.public_dict(include_result=False), "result": public_video_job_result(job.result)})
@@ -151,7 +151,7 @@ async def v1_cancel_video_job(job_id: str, ctx: PortraitRequestContext = Depends
     previous_job = deepcopy(get_video_job(job_id, tenant_id=tenant_id))
     cancelled = await run_blocking_io(request_cancel_video_job, job_id, tenant_id=tenant_id)
     if not cancelled:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="job not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="任务不存在")
     job = get_video_job(job_id, tenant_id=tenant_id)
     try:
         await run_blocking_io(audit_event, "video_job_cancelled", request_id=request_id, tenant_id=tenant_id, job_id=job_id)

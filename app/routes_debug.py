@@ -48,7 +48,7 @@ async def debug_model_output(
 
     project_name, model_name = validate_model_reference_parts(project_name, artifact_name)
     if sample_values < 0 or sample_values > 100:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="sample_values must be between 0 and 100")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="sample_values 必须介于 0 到 100 之间")
 
     key = cache_key(project_name, model_name)
     try:
@@ -103,7 +103,7 @@ async def debug_model_output(
         raise
     except Exception as exc:
         logger.warning("debug model output failed: request_id=%s error=%s", request_id, exception_log_summary(exc))
-        raise_internal_error(request_id, "debug model output runtime error")
+        raise_internal_error(request_id, "调试模型输出运行时错误")
 
     return {
         "status": "success",

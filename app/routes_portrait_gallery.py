@@ -196,10 +196,10 @@ async def v1_gallery_patch_person(
     tenant_id = ctx.tenant_id
     update_payload = payload.model_dump(exclude_unset=True)
     if not update_payload:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="patch payload must not be empty")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="补丁请求体不能为空")
     if "metadata" in update_payload:
         if update_payload["metadata"] is None:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="metadata must be a JSON object")
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="元数据必须是 JSON 对象")
         update_payload["metadata"] = normalize_public_metadata(update_payload["metadata"], field_name="metadata")
     previous_person = deepcopy(get_person_or_404(person_id, tenant_id=tenant_id))
     person = await run_blocking_io(patch_person, person_id, update_payload, tenant_id=tenant_id)
@@ -243,7 +243,7 @@ async def v1_gallery_delete_person(
     )
     deleted = await run_blocking_io(delete_person, person_id, tenant_id=tenant_id)
     if not deleted:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="person not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="人员不存在")
     deleted_object_count, object_cleanup_errors = await run_blocking_io(
         cleanup_gallery_feature_objects,
         previous_person,

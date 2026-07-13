@@ -44,7 +44,7 @@ async def infer_persons(
         request_id,
         errors_metric="persons_errors_total",
         log_label="person inference failed",
-        internal_message="person inference runtime error",
+        internal_message="人员推理运行时错误",
     ):
         bundle, cold_loaded, load_seconds = await get_or_load_model(key, model_path)
         images, filenames, decode_seconds = await load_images(files)

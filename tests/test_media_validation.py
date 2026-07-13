@@ -26,7 +26,7 @@ def test_video_validation_rejects_extension_container_mismatch() -> None:
         validate_video_content(avi_bytes, "secret-token.mp4")
 
     assert exc_info.value.status_code == 400
-    assert exc_info.value.detail == "video extension does not match detected content"
+    assert exc_info.value.detail == "视频扩展名与检测到的内容不匹配"
     assert "secret-token" not in exc_info.value.detail
     assert "avi" not in exc_info.value.detail
 
@@ -40,11 +40,11 @@ def test_image_validation_redacts_extension_and_detected_format() -> None:
         validate_image_content(png_bytes, "secret-token.jpg")
 
     assert unsupported.value.status_code == 400
-    assert unsupported.value.detail == "unsupported image extension"
+    assert unsupported.value.detail == "不支持的图片扩展名"
     assert "secret-token" not in unsupported.value.detail
     assert ".evil" not in unsupported.value.detail
     assert mismatch.value.status_code == 400
-    assert mismatch.value.detail == "image extension does not match detected content"
+    assert mismatch.value.detail == "图片扩展名与检测到的内容不匹配"
     assert "secret-token" not in mismatch.value.detail
     assert "png" not in mismatch.value.detail.lower()
     assert "jpg" not in mismatch.value.detail.lower()
@@ -57,7 +57,7 @@ def test_video_validation_redacts_extension_and_detected_container() -> None:
         validate_video_content(mp4_bytes, "secret-token.evil")
 
     assert unsupported.value.status_code == 400
-    assert unsupported.value.detail == "unsupported video extension"
+    assert unsupported.value.detail == "不支持的视频扩展名"
     assert "secret-token" not in unsupported.value.detail
     assert ".evil" not in unsupported.value.detail
 
@@ -85,7 +85,7 @@ async def test_upload_too_large_errors_do_not_echo_actual_size() -> None:
         await read_limited_upload(upload, max_bytes=4)
 
     assert exc_info.value.status_code == 413
-    assert exc_info.value.detail == "uploaded file is too large: max 4 bytes"
+    assert exc_info.value.detail == "上传文件过大：最大 4 字节"
     assert "12" not in exc_info.value.detail
     assert "secret-token" not in exc_info.value.detail
 

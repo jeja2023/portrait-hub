@@ -29,7 +29,7 @@ class SmokeReport:
 def normalize_auth_scheme(value: str) -> str:
     normalized = value.strip().lower().replace("_", "-")
     if normalized not in {"bearer", "api-key"}:
-        raise ValueError("auth_scheme must be 'bearer' or 'api-key'")
+        raise ValueError("auth_scheme 必须是 'bearer' 或 'api-key'")
     return normalized
 
 
@@ -87,7 +87,7 @@ def check_json_endpoint(
     try:
         status, payload = request_json(base_url, path, token, timeout, tenant_id, auth_scheme)
     except (TimeoutError, URLError) as exc:
-        report.add(name, False, f"request failed: {exc}")
+        report.add(name, False, f"请求失败: {exc}")
         return None
     ok = status in expected_status
     report.add(name, ok, {"status": status, "payload": payload})
@@ -111,7 +111,7 @@ def check_openapi(
         missing = sorted(REQUIRED_OPENAPI_PATHS - paths)
         report.add("openapi_required_paths", not missing, {"missing": missing})
     elif required:
-        report.add("openapi_required_paths", False, "openapi.json did not return an OpenAPI document")
+        report.add("openapi_required_paths", False, "openapi.json 未返回开放接口定义文档")
     else:
         report.add("openapi_optional", True, "openapi.json is disabled or not a JSON document")
 
@@ -153,32 +153,32 @@ def run_smoke(args: argparse.Namespace) -> SmokeReport:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Run a smoke test against a running gpu-services endpoint.")
-    parser.add_argument("--base-url", default="http://127.0.0.1:9001", help="Service base URL.")
-    parser.add_argument("--token", default=None, help="API token for protected endpoints.")
-    parser.add_argument("--auth-scheme", choices=["bearer", "api-key"], default="bearer", help="How --token is sent.")
-    parser.add_argument("--tenant-id", default="default", help="Tenant id sent as X-Tenant-ID for tenant-scoped endpoints.")
-    parser.add_argument("--timeout", type=float, default=10.0, help="Request timeout in seconds.")
-    parser.add_argument("--require-ready", action="store_true", help="Fail if /ready is not runtime-ready.")
-    parser.add_argument("--check-openapi", action="store_true", help="Require /openapi.json to be enabled and contain core paths.")
-    parser.add_argument("--deep-ready", action="store_true", help="Call /ready/deep.")
-    parser.add_argument("--load-models", action="store_true", help="Ask /ready/deep to load configured models.")
-    parser.add_argument("--dummy-inference", action="store_true", help="Ask /ready/deep to run dummy inference.")
-    parser.add_argument("--model-id", action="append", help="Check /model-package for this model id or alias.")
-    parser.add_argument("--traffic-key", default=None, help="Traffic key to resolve weighted aliases in /model-package checks.")
-    parser.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
+    parser = argparse.ArgumentParser(description="针对运行中的 gpu-services 端点执行冒烟测试。")
+    parser.add_argument("--base-url", default="http://127.0.0.1:9001", help="服务基础 URL。")
+    parser.add_argument("--token", default=None, help="受保护端点的 API 令牌。")
+    parser.add_argument("--auth-scheme", choices=["bearer", "api-key"], default="bearer", help="--token 的发送方式。")
+    parser.add_argument("--tenant-id", default="default", help="租户范围端点中作为 X-Tenant-ID 发送的租户 ID。")
+    parser.add_argument("--timeout", type=float, default=10.0, help="请求超时时间（秒）。")
+    parser.add_argument("--require-ready", action="store_true", help="/ready 未达到运行时就绪时失败。")
+    parser.add_argument("--check-openapi", action="store_true", help="要求 /openapi.json 已启用且包含核心路径。")
+    parser.add_argument("--deep-ready", action="store_true", help="调用 /ready/deep。")
+    parser.add_argument("--load-models", action="store_true", help="要求 /ready/deep 加载已配置模型。")
+    parser.add_argument("--dummy-inference", action="store_true", help="要求 /ready/deep 执行模拟推理。")
+    parser.add_argument("--model-id", action="append", help="检查此模型 ID 或别名的 /model-package。")
+    parser.add_argument("--traffic-key", default=None, help="/model-package 检查中解析加权别名使用的流量键。")
+    parser.add_argument("--json", action="store_true", help="输出机器可读 JSON。")
     args = parser.parse_args()
 
     report = run_smoke(args)
     if args.json:
         print(json.dumps({"ok": report.ok, "checks": report.checks}, ensure_ascii=False, indent=2))
     else:
-        print(f"service smoke test: {'OK' if report.ok else 'FAILED'}")
+        print(f"服务冒烟测试：{'通过' if report.ok else '失败'}")
         for item in report.checks:
-            marker = "ok" if item["ok"] else "fail"
+            marker = "通过" if item["ok"] else "失败"
             print(f"{marker}: {item['name']}")
             if not item["ok"]:
-                print(f"  detail: {item['detail']}")
+                print(f"  详情: {item['detail']}")
     return 0 if report.ok else 1
 
 

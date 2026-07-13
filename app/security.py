@@ -80,7 +80,7 @@ async def require_api_token(
         token = authorization.removeprefix("Bearer ").strip()
         claims = verify_hs256_jwt(token)
         if not jwt_tenant_matches(claims, optional_header_value(x_tenant_id)):
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="JWT is not valid for tenant")
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="JWT 与租户不匹配")
         return
 
     if API_TOKEN:
@@ -95,9 +95,9 @@ async def require_api_token(
         raise unauthorized("missing bearer JWT or API key")
 
     if AUTH_REQUIRED and not API_TOKEN:
-        raise unauthorized("authentication is required but no credential backend is configured")
+        raise unauthorized("authentication 为必填项 but no credential backend is configured")
 
     if not API_TOKEN:
         return
 
-    raise unauthorized("invalid or missing API token")
+    raise unauthorized("API 令牌无效或缺失")

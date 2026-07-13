@@ -13,7 +13,7 @@ from tools.report_redaction import redact_for_report
 def normalize_auth_scheme(value: str) -> str:
     normalized = value.strip().lower().replace("_", "-")
     if normalized not in {"bearer", "api-key"}:
-        raise ValueError("auth_scheme must be 'bearer' or 'api-key'")
+        raise ValueError("auth_scheme 必须是 'bearer' 或 'api-key'")
     return normalized
 
 
@@ -30,13 +30,13 @@ def auth_headers(token: str | None, tenant_id: str = "default", auth_scheme: str
 
 def split_model_id(model_id: str) -> dict[str, str]:
     if "/" not in model_id:
-        raise ValueError(f"model must use project/model.onnx format: {model_id}")
+        raise ValueError(f"模型必须使用 project/model.onnx 格式：{model_id}")
     project_name, model_name = model_id.split("/", 1)
     if not project_name or not model_name:
-        raise ValueError(f"model must use project/model.onnx format: {model_id}")
+        raise ValueError(f"模型必须使用 project/model.onnx 格式：{model_id}")
     for part in (project_name, model_name):
         if part.strip() != part or part in {".", ".."} or "/" in part or "\\" in part:
-            raise ValueError("model project and model name must not contain path separators, whitespace padding, or relative path segments")
+            raise ValueError("模型项目和模型名称不能包含路径分隔符、首尾空白或相对路径片段")
     return {"project_name": project_name, "model_name": model_name}
 
 
@@ -44,7 +44,7 @@ def request_worker(base_url: str, args: argparse.Namespace) -> dict[str, Any]:
     try:
         import httpx
     except ImportError as exc:
-        raise RuntimeError("httpx is required. Install requirements/dev.txt before running worker control.") from exc
+        raise RuntimeError("httpx 为必填项。运行 worker 控制前请安装 requirements/dev.txt。") from exc
 
     base_url = base_url.rstrip("/")
     headers = auth_headers(args.token, args.tenant_id, args.auth_scheme)
@@ -64,10 +64,10 @@ def request_worker(base_url: str, args: argparse.Namespace) -> dict[str, Any]:
             response = client.post(f"{base_url}/warmup", headers=headers, json={"models": models})
         elif action in {"reload", "unload"}:
             if len(args.model) != 1:
-                raise ValueError(f"{action} requires exactly one --model")
+                raise ValueError(f"{action} 需要且只能提供一个 --model")
             response = client.post(f"{base_url}/{action}", headers=headers, json=split_model_id(args.model[0]))
         else:
-            raise ValueError(f"unsupported action: {action}")
+            raise ValueError(f"不支持的操作：{action}")
 
     try:
         payload = response.json()
@@ -83,25 +83,25 @@ def request_worker(base_url: str, args: argparse.Namespace) -> dict[str, Any]:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Run an operational action across multiple gpu-services workers.")
+    parser = argparse.ArgumentParser(description="在多个 gpu-services worker 上执行运维操作。")
     parser.add_argument(
         "--base-url",
         action="append",
         default=[],
-        help="Worker base URL. Can be repeated. Defaults to 9001 and 9002.",
+        help="worker 基础 URL。可重复传入，默认 9001 和 9002。",
     )
-    parser.add_argument("--token", default=None, help="API token for protected endpoints.")
-    parser.add_argument("--auth-scheme", choices=["bearer", "api-key"], default="bearer", help="How --token is sent.")
-    parser.add_argument("--tenant-id", default="default", help="Tenant id sent as X-Tenant-ID.")
-    parser.add_argument("--timeout", type=float, default=30.0, help="Request timeout in seconds.")
+    parser.add_argument("--token", default=None, help="受保护端点的 API 令牌。")
+    parser.add_argument("--auth-scheme", choices=["bearer", "api-key"], default="bearer", help="--token 的发送方式。")
+    parser.add_argument("--tenant-id", default="default", help="作为 X-Tenant-ID 发送的租户 ID。")
+    parser.add_argument("--timeout", type=float, default=30.0, help="请求超时时间（秒）。")
     parser.add_argument(
         "--action",
         choices=["health", "ready", "reload-config", "aliases", "warmup", "reload", "unload"],
         required=True,
-        help="Action to run on each worker.",
+        help="要在每个 worker 上执行的操作。",
     )
-    parser.add_argument("--model", action="append", default=[], help="Model id project/model.onnx for warmup/reload/unload.")
-    parser.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
+    parser.add_argument("--model", action="append", default=[], help="用于 warmup/reload/unload 的模型 ID，格式为 project/model.onnx。")
+    parser.add_argument("--json", action="store_true", help="输出机器可读 JSON。")
     args = parser.parse_args()
 
     base_urls = args.base_url or ["http://127.0.0.1:9001", "http://127.0.0.1:9002"]
@@ -120,12 +120,12 @@ def main() -> int:
     if args.json:
         print(json.dumps(report, ensure_ascii=False, indent=2))
     else:
-        print(f"worker control: {'OK' if ok else 'FAILED'}")
+        print(f"worker 控制：{'通过' if ok else '失败'}")
         for item in sorted_results:
-            marker = "ok" if item["ok"] else "fail"
-            print(f"{marker}: {item['base_url']} action={item['action']}")
+            marker = "通过" if item["ok"] else "失败"
+            print(f"{marker}: {item['base_url']} 操作={item['action']}")
             if not item["ok"]:
-                print(f"  detail: {item.get('error') or item.get('payload')}")
+                print(f"  详情: {item.get('error') or item.get('payload')}")
     return 0 if ok else 1
 
 

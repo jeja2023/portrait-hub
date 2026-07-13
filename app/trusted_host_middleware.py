@@ -57,5 +57,5 @@ class HotReloadTrustedHostMiddleware:
             redirect_url = url.replace(netloc="www." + url.netloc)
             response = RedirectResponse(url=str(redirect_url))
         else:
-            response = PlainTextResponse("Invalid host header", status_code=400)
+            response = PlainTextResponse("Host 头无效", status_code=400)
         await response(scope, receive, send)

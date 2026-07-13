@@ -132,25 +132,25 @@ def clean_artifacts(paths: list[Path]) -> None:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Report or remove ignored Python/test cache artifacts.")
-    parser.add_argument("--root", default=".", help="Workspace root.")
-    parser.add_argument("--apply", action="store_true", help="Remove the reported artifacts.")
+    parser = argparse.ArgumentParser(description="报告或移除被忽略的 Python/测试缓存产物。")
+    parser.add_argument("--root", default=".", help="工作区根目录。")
+    parser.add_argument("--apply", action="store_true", help="移除报告出的产物。")
     args = parser.parse_args()
 
     root = Path(args.root).resolve()
     artifacts = safe_cache_artifacts(root)
     total_bytes = sum(artifact_size(path) for path in artifacts)
-    print(f"cache_artifact_count={len(artifacts)}")
-    print(f"cache_artifact_bytes={total_bytes}")
+    print(f"缓存产物数量={len(artifacts)}")
+    print(f"缓存产物字节数={total_bytes}")
     for path in artifacts[:200]:
         print(path.relative_to(root))
     if len(artifacts) > 200:
-        print(f"... {len(artifacts) - 200} more")
+        print(f"... 还有 {len(artifacts) - 200} 项")
     if args.apply:
         clean_artifacts(artifacts)
-        print("removed=true")
+        print("已移除=true")
     else:
-        print("removed=false")
+        print("已移除=false")
     return 0
 
 

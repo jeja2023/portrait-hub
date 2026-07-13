@@ -18,7 +18,7 @@ def test_redact_for_report_masks_nested_sensitive_fields() -> None:
 
 
 def test_redact_for_report_masks_secret_like_text() -> None:
-    text = 'request failed Authorization: Bearer bearer-secret token=plain-secret "api_key":"json-secret"'
+    text = '请求失败 Authorization: Bearer bearer-secret token=plain-secret "api_key":"json-secret"'
 
     redacted = redact_for_report(text)
 

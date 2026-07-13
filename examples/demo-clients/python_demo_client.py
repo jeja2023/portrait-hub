@@ -74,10 +74,10 @@ def run_demo(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Run the Python PortraitHub demo client.")
-    parser.add_argument("--image", help="Body image used for enroll/search and optionally compare A.")
-    parser.add_argument("--image-b", help="Second image for compare_persons.")
-    parser.add_argument("--video", help="Video file for create_video_job.")
+    parser = argparse.ArgumentParser(description="运行 Python PortraitHub 演示客户端。")
+    parser.add_argument("--image", help="用于注册/检索的身体图片，也可作为比对 A 图。")
+    parser.add_argument("--image-b", help="compare_persons 使用的第二张图片。")
+    parser.add_argument("--video", help="create_video_job 使用的视频文件。")
     parser.add_argument("--person-id", default="demo-python-person")
     parser.add_argument("--top-k", type=int, default=5)
     parser.add_argument("--threshold-profile", default="normal")

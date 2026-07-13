@@ -178,14 +178,14 @@ def test_track_review_rejects_unknown_labels() -> None:
     )
 
     assert response.status_code == 422
-    assert response.json()["detail"] == "unsupported review label"
+    assert response.json()["detail"] == "不支持的审阅标签"
 
 
 def test_track_review_annotation_rolls_back_when_audit_fails(monkeypatch: pytest.MonkeyPatch) -> None:
     client = TestClient(app)
 
     def fail_audit(*args: object, **kwargs: object) -> None:
-        raise HTTPException(status_code=503, detail="audit unavailable")
+        raise HTTPException(status_code=503, detail="审计不可用")
 
     monkeypatch.setattr(routes_portrait_review, "audit_event", fail_audit)
 

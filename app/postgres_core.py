@@ -109,7 +109,7 @@ def postgres_health() -> dict[str, Any]:
                     cursor.fetchone()
         return {**payload, "status": "ready"}
     except Exception as exc:  # pragma: no cover - 需要外部数据库支持
-        logger.warning("postgres health check failed: %s", exception_log_summary(exc))
+        logger.warning("postgres 健康检查失败: %s", exception_log_summary(exc))
         return {**payload, "status": "error", "error": HEALTH_CHECK_FAILED}
 
 

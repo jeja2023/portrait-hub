@@ -62,7 +62,7 @@ def local_object_path(object_key: str) -> Path:
     try:
         target.relative_to(root)
     except ValueError as exc:
-        raise RuntimeError("object key escapes object storage directory") from exc
+        raise RuntimeError("对象键逃逸出对象存储目录") from exc
     return target
 
 
@@ -146,7 +146,7 @@ class LocalObjectStore:
             target.unlink(missing_ok=True)
         except Exception as exc:
             logger.warning(
-                "local object delete failed: key_hash=%s error=%s",
+                "local 对象删除失败: key_hash=%s error=%s",
                 object_key_fingerprint(object_key),
                 exception_log_summary(exc),
             )
@@ -173,9 +173,9 @@ class S3ObjectStore(LocalObjectStore):
 
     def _client(self) -> Any:
         if boto3 is None:
-            raise RuntimeError("boto3 is not installed; install requirements-prod-optional.txt")
+            raise RuntimeError("未安装 boto3；请安装 requirements-prod-optional.txt")
         if not S3_BUCKET:
-            raise RuntimeError("S3_BUCKET is not configured")
+            raise RuntimeError("未配置 S3_BUCKET")
         # boto3 客户端的创建非常昂贵（包含会话和签名器设置）；在请求之间复用同一个
         # 客户端，而不是在每次上传/删除（put/delete）时都重新构建。
         if self._cached_client is None:
@@ -225,7 +225,7 @@ class S3ObjectStore(LocalObjectStore):
             self._client().delete_object(Bucket=S3_BUCKET, Key=object_key)
         except Exception as exc:
             logger.warning(
-                "s3 object delete failed: key_hash=%s error=%s",
+                "s3 对象删除失败: key_hash=%s error=%s",
                 object_key_fingerprint(object_key),
                 exception_log_summary(exc),
             )

@@ -66,24 +66,24 @@ def secret_preview(secret: str) -> str:
 def validate_access_id(value: str, *, field_name: str = "id") -> str:
     cleaned = str(value or "").strip()
     if not _ACCESS_ID_PATTERN.fullmatch(cleaned):
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"invalid {field_name}")
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"{field_name} 无效")
     return cleaned
 
 
 def normalize_status(value: str | None) -> str:
     status_value = str(value or "active").strip().lower()
     if status_value not in _ACCESS_STATUS_VALUES:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="unsupported access status")
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="不支持的接入状态")
     return status_value
 
 
 def normalize_scopes(scopes: list[str] | None) -> list[str]:
     values = sorted({str(item).strip() for item in (scopes or []) if str(item).strip()})
     if not values:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="at least one scope is required")
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="至少需要一个权限范围")
     unsupported = [item for item in values if item not in _APPLICATION_SCOPES]
     if unsupported:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="unsupported scope")
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="不支持的权限范围")
     return values
 
 def normalize_optional_limit(value: Any, *, field_name: str) -> int | None:
@@ -92,9 +92,9 @@ def normalize_optional_limit(value: Any, *, field_name: str) -> int | None:
     try:
         limit = int(value)
     except (TypeError, ValueError) as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"invalid {field_name}") from exc
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"{field_name} 无效") from exc
     if limit < 0 or limit > 1_000_000_000:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"invalid {field_name}")
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"{field_name} 无效")
     return limit
 
 
@@ -118,10 +118,10 @@ def seconds_until_next_quota_day(timestamp: float) -> int:
 def normalize_events(events: list[str] | None) -> list[str]:
     values = sorted({str(item).strip() for item in (events or []) if str(item).strip()})
     if not values:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="at least one event is required")
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="至少需要一个事件")
     unsupported = [item for item in values if item not in _WEBHOOK_EVENTS]
     if unsupported:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="unsupported webhook event")
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="不支持的事件回调类型")
     return values
 
 
@@ -129,15 +129,15 @@ def validate_webhook_url(value: str | None, *, required: bool) -> str:
     url = str(value or "").strip()
     if not url:
         if required:
-            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="webhook url is required")
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="事件回调 URL 为必填项")
         return ""
     parsed = urlparse(url)
     if parsed.scheme not in {"http", "https"} or not parsed.hostname:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="invalid webhook url")
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="事件回调 URL 无效")
     if parsed.username or parsed.password:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="webhook url must not contain credentials")
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="事件回调 URL 不能包含凭证")
     if len(url) > 2048:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="webhook url is too long")
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="事件回调 URL 过长")
     return url
 
 
@@ -162,7 +162,7 @@ def load_access_state() -> None:
     with _ACCESS_LOCK:
         payload = read_json_state(PORTRAIT_ACCESS_STATE_PATH, {"applications": [], "webhooks": []})
         if not isinstance(payload, dict):
-            handle_state_read_error("access state root must be a mapping")
+            handle_state_read_error("access state 根节点必须是映射")
             return
         applications = payload.get("applications", [])
         webhooks = payload.get("webhooks", [])
@@ -197,7 +197,7 @@ def find_application(tenant_id: str, app_id: str) -> dict[str, Any] | None:
 def require_application(tenant_id: str, app_id: str) -> dict[str, Any]:
     app = find_application(tenant_id, app_id)
     if app is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="access application not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="接入应用不存在")
     return app
 
 
@@ -224,7 +224,7 @@ def create_application(
     with _ACCESS_LOCK:
         normalized_id = validate_access_id(app_id, field_name="app_id")
         if find_application(tenant_id, normalized_id) is not None:
-            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="access application already exists")
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="接入应用已存在")
         secret = new_secret("phk")
         timestamp = now_seconds()
         record = {
@@ -359,7 +359,7 @@ def application_request_policy(tenant_id: str, api_key: str, timestamp: float | 
                 save_access_state()
                 raise HTTPException(
                     status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                    detail="daily quota exceeded",
+                    detail="每日配额已耗尽",
                     headers={"Retry-After": str(seconds_until_next_quota_day(current_time))},
                 )
             record["daily_quota_used"] = used + 1
@@ -421,7 +421,7 @@ def find_webhook(tenant_id: str, webhook_id: str) -> dict[str, Any] | None:
 def require_webhook(tenant_id: str, webhook_id: str) -> dict[str, Any]:
     webhook = find_webhook(tenant_id, webhook_id)
     if webhook is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="webhook not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="事件回调不存在")
     return webhook
 
 
@@ -446,9 +446,9 @@ def create_webhook(
     with _ACCESS_LOCK:
         normalized_id = validate_access_id(webhook_id, field_name="webhook_id")
         if find_webhook(tenant_id, normalized_id) is not None:
-            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="webhook already exists")
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="事件回调已存在")
         if find_application(tenant_id, application_id) is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="access application not found")
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="接入应用不存在")
         status_text = normalize_status(status_value)
         secret = new_secret("whsec")
         timestamp = now_seconds()
@@ -481,7 +481,7 @@ def update_webhook(tenant_id: str, webhook_id: str, updates: dict[str, Any]) -> 
         next_status = normalize_status(updates["status"]) if "status" in updates and updates["status"] is not None else str(record.get("status") or "disabled")
         if "application_id" in updates and updates["application_id"] is not None:
             if find_application(tenant_id, updates["application_id"]) is None:
-                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="access application not found")
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="接入应用不存在")
             record["application_id"] = validate_access_id(updates["application_id"], field_name="app_id")
         if "name" in updates and updates["name"] is not None:
             record["name"] = str(updates["name"]).strip()[:256] or record["webhook_id"]

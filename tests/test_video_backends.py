@@ -22,7 +22,7 @@ def synthetic_video() -> Path:
 
 
 def test_resolve_decode_backend_auto_fallback() -> None:
-    # auto -> pyav if available, else opencv
+    # 自动模式：可用时使用 pyav，否则使用 opencv
     resolved = resolve_decode_backend("auto")
     assert resolved in {"opencv", "pyav"}
     if pyav_available():
@@ -39,7 +39,7 @@ def test_opencv_backend_decodes_sorted_indexes(synthetic_video: Path) -> None:
     frames, backend = decode_frames_at_indexes(str(synthetic_video), [0, 3, 7, 11], backend="opencv")
     assert backend == "opencv"
     assert len(frames) == 4
-    # frame 0 -> gray 0; frame 3 -> gray 60; frame 7 -> gray 140; frame 11 -> gray 220
+    # 第 0 帧对应灰度 0；第 3 帧对应灰度 60；第 7 帧对应灰度 140；第 11 帧对应灰度 220
     assert frames[0] is not None and np.mean(frames[0]) < 10
     assert frames[1] is not None and 55 < np.mean(frames[1]) < 65
     assert frames[2] is not None and 135 < np.mean(frames[2]) < 145
@@ -53,12 +53,12 @@ def test_opencv_backend_handles_nonexistent_file() -> None:
 
 
 def test_pyav_backend_graceful_fallback_when_unavailable(synthetic_video: Path) -> None:
-    # Even if we request pyav but it's unavailable (or the file/decode fails), we get opencv fallback.
+    # 即使请求 pyav 但它不可用（或文件/解码失败），也会回退到 opencv。
     frames, backend = decode_frames_at_indexes(str(synthetic_video), [0, 5], backend="pyav")
     assert backend in {"opencv", "pyav"}
     assert len(frames) == 2
-    # If pyav worked, backend="pyav"; if it didn't, backend="opencv" (fallback).
-    # Both should decode the frames correctly.
+    # 如果 pyav 可用，backend="pyav"；否则 backend="opencv"（回退）。
+    # 两者都应正确解码帧。
     if backend == "pyav":
         assert frames[0] is not None
         assert frames[1] is not None

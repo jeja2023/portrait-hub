@@ -20,8 +20,8 @@
       const response = await fetch(path, init);
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
-        if (onStatus) onStatus(payload.detail || response.statusText || "request failed", true);
-        throw new Error(payload.detail || response.statusText || "request failed");
+        if (onStatus) onStatus(payload.detail || response.statusText || "请求失败", true);
+        throw new Error(payload.detail || response.statusText || "请求失败");
       }
       if (onStatus) onStatus("ready", false);
       return payload.data || payload;

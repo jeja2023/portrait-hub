@@ -37,7 +37,7 @@ def cosine_similarity(vector_a: EmbeddingInput, vector_b: EmbeddingInput) -> flo
     a = l2_normalize_vector(vector_a)
     b = l2_normalize_vector(vector_b)
     if a.shape != b.shape:
-        raise ValueError(f"embedding dimensions do not match: {a.shape[0]} != {b.shape[0]}")
+        raise ValueError(f"向量维度不一致：{a.shape[0]} != {b.shape[0]}")
     return float(np.dot(a, b))
 
 
@@ -45,7 +45,7 @@ def euclidean_distance(vector_a: EmbeddingInput, vector_b: EmbeddingInput) -> fl
     a = l2_normalize_vector(vector_a)
     b = l2_normalize_vector(vector_b)
     if a.shape != b.shape:
-        raise ValueError(f"embedding dimensions do not match: {a.shape[0]} != {b.shape[0]}")
+        raise ValueError(f"向量维度不一致：{a.shape[0]} != {b.shape[0]}")
     return float(np.linalg.norm(a - b))
 
 

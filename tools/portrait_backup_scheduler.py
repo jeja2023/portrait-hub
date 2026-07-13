@@ -55,7 +55,7 @@ def run_scheduler(
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Run periodic PortraitHub admin backups.")
+    parser = argparse.ArgumentParser(description="周期性运行 PortraitHub 管理备份。")
     parser.add_argument("--base-url", default="http://127.0.0.1:8000")
     parser.add_argument("--token", default=None)
     parser.add_argument("--tenant-id", default="default")

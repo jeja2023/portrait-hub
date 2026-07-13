@@ -81,7 +81,7 @@ def run_governance_scheduler(
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Run periodic PortraitHub data governance tasks.")
+    parser = argparse.ArgumentParser(description="周期性运行 PortraitHub 数据治理任务。")
     parser.add_argument("--base-url", default=os.getenv("PORTRAIT_BASE_URL", "http://127.0.0.1:8000"))
     parser.add_argument("--token", default=os.getenv("PORTRAIT_GOVERNANCE_TOKEN"))
     parser.add_argument("--tenant-id", default=os.getenv("PORTRAIT_GOVERNANCE_TENANT", "default"))

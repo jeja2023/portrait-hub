@@ -42,7 +42,7 @@ def test_gpu_semaphore_for_device_known_device_is_isolated(monkeypatch) -> None:
 def test_gpu_semaphore_for_unknown_device_falls_back_to_global(monkeypatch) -> None:
     patch_devices(monkeypatch, [0])
 
-    # A device id outside the configured set must not raise KeyError.
+    # 配置集合外的设备 ID 不应触发 KeyError。
     assert runtime_state.gpu_semaphore_for_device(7) is runtime_state.GPU_SEMAPHORE
 
 
@@ -63,7 +63,7 @@ def test_model_gpu_device_id_clamps_out_of_range_device(monkeypatch) -> None:
     patch_devices(monkeypatch, [0, 1])
     monkeypatch.setattr(runtime_registry, "model_config", lambda key: {"device_id": 9})
 
-    # Out-of-range explicit device falls back to the first configured device.
+    # 显式指定越界设备时回退到第一个已配置设备。
     assert runtime_registry.model_gpu_device_id("project/model.onnx") == 0
 
 
@@ -73,7 +73,7 @@ def test_model_gpu_device_id_hashes_when_unset(monkeypatch) -> None:
 
     device = runtime_registry.model_gpu_device_id("project/model.onnx")
 
-    # Hash-based assignment must land on a configured device and be deterministic.
+    # 基于哈希的分配必须落在已配置设备上，并保持确定性。
     assert device in {0, 1, 2, 3}
     assert device == runtime_registry.model_gpu_device_id("project/model.onnx")
 
@@ -95,7 +95,7 @@ def test_cuda_providers_for_device_sets_device_id() -> None:
 
     cuda = next(item for item in providers if isinstance(item, tuple) and item[0] == "CUDAExecutionProvider")
     assert cuda[1]["device_id"] == 2
-    # The CPU fallback provider must be preserved untouched.
+    # CPU 回退提供程序必须保持不变。
     assert "CPUExecutionProvider" in providers
 
 

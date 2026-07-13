@@ -1,8 +1,8 @@
 from fastapi import HTTPException, status
 
 
-INVALID_MODEL_REFERENCE_DETAIL = "invalid model reference"
-INVALID_ALIAS_NAME_DETAIL = "invalid alias name"
+INVALID_MODEL_REFERENCE_DETAIL = "模型引用无效"
+INVALID_ALIAS_NAME_DETAIL = "别名名称无效"
 
 
 def cache_key(project_name: str, model_name: str) -> str:
@@ -11,9 +11,9 @@ def cache_key(project_name: str, model_name: str) -> str:
 
 def validate_path_name(value: str) -> str:
     if not isinstance(value, str) or not value or value.strip() != value:
-        raise ValueError("path names must not be empty or contain leading/trailing whitespace")
+        raise ValueError("路径名称不能为空，且不能包含首尾空白")
     if value in {".", ".."} or "/" in value or "\\" in value:
-        raise ValueError("path separators and relative path segments are not allowed")
+        raise ValueError("不允许使用路径分隔符或相对路径片段")
     return value
 
 
@@ -21,13 +21,13 @@ def split_cache_key(value: str) -> tuple[str, str]:
     if not isinstance(value, str) or value.strip() != value:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="model must use 'project_name/model_name' format without leading/trailing whitespace",
+            detail="模型必须使用 'project_name/model_name' 格式，且不能包含首尾空白",
         )
     parts = value.split("/", 1)
     if len(parts) != 2 or not parts[0] or not parts[1]:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="model must use 'project_name/model_name' format",
+            detail="模型必须使用 'project_name/model_name' 格式",
         )
     try:
         return validate_path_name(parts[0]), validate_path_name(parts[1])

@@ -1,19 +1,19 @@
-# PortraitHub Runbook
+# PortraitHub 运维手册
 
-When alerts fire:
+告警触发时：
 
-1. Check `/ready` and `/ready/deep`.
-2. Review fast-burn and slow-burn error budget alerts.
-3. Inspect the latest rollout audit entry.
-4. Roll back the active model alias if the regression is tied to a model change.
-5. Reduce traffic or add capacity if latency and queue depth are growing without a bad model release.
+1. 检查 `/ready` 和 `/ready/deep`。
+2. 复核快速燃烧和慢速燃烧的错误预算告警。
+3. 查看最新模型发布审计记录。
+4. 如果回归与模型变更相关，回滚活跃模型别名。
+5. 如果不存在异常模型发布但延迟和队列深度持续增长，降低流量或扩容。
 
-Synthetic probe:
+合成探测：
 
-- Run a small authenticated request through the API.
-- Confirm the request ID and the probe latency are logged.
+- 通过 API 运行一次小型认证请求。
+- 确认请求 ID 和探测延迟已记录到日志。
 
-Capacity test:
+容量测试：
 
-- Run the load test before traffic jumps.
-- Track p95 latency, queue depth, and GPU memory.
+- 流量跃升前运行压测。
+- 跟踪 p95 延迟、队列深度和 GPU 显存。

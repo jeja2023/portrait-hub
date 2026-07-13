@@ -22,7 +22,7 @@ def _letterbox_batch(
     input_width: int,
 ) -> tuple[Array, list[LetterboxMeta]]:
     # 在单个工作线程里对整批做 letterbox（一次 asyncio.to_thread 跳转），而不是每张图
-    # await 一次跳转——后者会把 resize 串行化。
+    # 每张图都 await 一次跳转——后者会把 resize 串行化。
     tensors: list[Array] = []
     metas: list[LetterboxMeta] = []
     for image in images:

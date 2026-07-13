@@ -81,7 +81,7 @@ def test_model_governance_check_rejects_missing_governance_sidecar(workspace_tmp
     )
 
     assert report["ok"] is False
-    assert any("governance sidecar missing" in error for error in report["errors"])
+    assert any("治理 sidecar 不存在" in error for error in report["errors"])
 
 
 def test_model_governance_check_allows_missing_artifact_with_complete_metadata(workspace_tmp_path: Path) -> None:
@@ -148,4 +148,4 @@ def test_model_governance_check_allows_missing_artifact_with_complete_metadata(w
 
     assert report["ok"] is True
     assert report["errors"] == []
-    assert any("metadata only" in warning for warning in report["warnings"])
+    assert any("仅校验元数据" in warning for warning in report["warnings"])

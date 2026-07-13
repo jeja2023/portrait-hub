@@ -85,6 +85,6 @@ def load_video_jobs_snapshot() -> list[dict[str, Any]]:
                         }
                     )
     except Exception as exc:  # pragma: no cover - 需要外部数据库支持
-        logger.warning("postgres video job load failed: %s", exception_log_summary(exc))
+        logger.warning("postgres video job 加载失败ed: %s", exception_log_summary(exc))
         return []
     return jobs

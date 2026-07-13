@@ -16,7 +16,7 @@ from app.security import require_api_token
 
 router = APIRouter()
 
-ALIAS_RESOLUTION_FAILED = "alias resolution failed"
+ALIAS_RESOLUTION_FAILED = "别名解析失败"
 
 
 def alias_view(alias_name: str, alias_config: Any) -> dict[str, Any]:
@@ -26,7 +26,7 @@ def alias_view(alias_name: str, alias_config: Any) -> dict[str, Any]:
         ok = True
         error = None
     except Exception as exc:
-        logger.warning("alias resolution failed for %s: %s", alias_name, exception_log_summary(exc))
+        logger.warning("别名解析失败 for %s: %s", alias_name, exception_log_summary(exc))
         resolution = None
         target = None
         ok = False
@@ -58,7 +58,7 @@ async def rollout_audit_entries(limit: int = Query(100, ge=1, le=MAX_ROLLOUT_AUD
     try:
         records, malformed_count = read_rollout_audit(limit)
     except Exception as exc:
-        logger.warning("failed to read rollout audit: %s", exception_log_summary(exc))
+        logger.warning("读取发布审计失败: %s", exception_log_summary(exc))
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="rollout audit unavailable") from exc
     return {
         "status": "success",
@@ -77,7 +77,7 @@ async def rollout_alias_preview(
     validate_alias_name(alias_name)
     alias_config = MODEL_ALIASES.get(alias_name)
     if alias_config is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="alias not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="别名不存在")
     resolution = alias_resolution(alias_name, alias_config, traffic_key=traffic_key)
     project, model = split_cache_key(str(resolution["target"]))
     return {

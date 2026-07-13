@@ -200,10 +200,10 @@ async def get_or_load_model(
         except Exception as exc:
             observe("model_load_errors_total")
             mark_model_load_failed(cache_key_value)
-            logger.warning("failed to load model: %s error=%s", cache_key_value, exception_log_summary(exc))
+            logger.warning("加载模型失败: %s error=%s", cache_key_value, exception_log_summary(exc))
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="failed to load model runtime",
+                detail="加载模型运行时失败",
             ) from exc
 
         # 加载成功，清除任何残留的冷却标记，使该模型恢复正常服务。

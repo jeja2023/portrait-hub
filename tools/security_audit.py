@@ -55,27 +55,24 @@ def run_audit_command(command: list[str], env: dict[str, str]) -> tuple[int, str
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Run pip-audit against PortraitHub dependency manifests.")
-    parser.add_argument("-r", "--requirement", action="append", dest="requirements", help="Requirement file to audit.")
+    parser = argparse.ArgumentParser(description="针对 PortraitHub 依赖清单运行 pip-audit。")
+    parser.add_argument("-r", "--requirement", action="append", dest="requirements", help="要审计的依赖文件。")
     parser.add_argument("-f", "--format", choices=["columns", "json", "cyclonedx-json", "cyclonedx-xml"], default=None)
     parser.add_argument(
         "--mode",
         choices=["auto", "requirements", "local"],
         default="auto",
-        help=(
-            "Audit mode. 'auto' audits requirement files first and falls back to the current environment only "
-            "when pip-audit cannot create its temporary resolver venv."
-        ),
+        help="审计模式。auto 会先审计依赖文件；只有当 pip-audit 无法创建临时解析虚拟环境时，才会回退到当前 Python 环境。",
     )
     parser.add_argument(
         "--cache-dir",
         default=str(DEFAULT_CACHE_DIR),
-        help="pip-audit cache directory. Defaults inside the workspace to avoid OS cache permission issues.",
+        help="pip-audit 缓存目录。默认位于工作区内，以避免操作系统缓存权限问题。",
     )
     parser.add_argument(
         "--tmp-dir",
         default=str(DEFAULT_TMP_DIR),
-        help="Temporary directory for pip-audit resolver environments.",
+        help="pip-audit 解析环境的临时目录。",
     )
     args = parser.parse_args()
 
@@ -83,10 +80,10 @@ def main() -> int:
     if args.mode != "local":
         missing = [item for item in requirements if not Path(item).exists()]
         if missing:
-            print(f"missing requirement files: {', '.join(missing)}", file=sys.stderr)
+            print(f"缺少依赖文件: {', '.join(missing)}", file=sys.stderr)
             return 2
     if importlib.util.find_spec("pip_audit") is None:
-        print("pip-audit is not installed; run `python -m pip install pip-audit`.", file=sys.stderr)
+        print("未安装 pip-audit；请运行 `python -m pip install pip-audit`。", file=sys.stderr)
         return 2
     cache_dir = Path(args.cache_dir)
     cache_dir.mkdir(parents=True, exist_ok=True)
@@ -99,15 +96,11 @@ def main() -> int:
             return run_audit_command(build_local_command(args.format, str(cache_dir)), env)[0]
         code, output = run_audit_command(build_command(requirements, args.format, str(cache_dir)), env)
         if args.mode == "auto" and code != 0 and is_temp_env_failure(output):
-            print(
-                "pip-audit could not create a temporary resolver environment; "
-                "falling back to --local audit for the current Python environment.",
-                file=sys.stderr,
-            )
+            print("pip-audit 无法创建临时解析环境；将回退到当前 Python 环境的 --local 审计。", file=sys.stderr)
             return run_audit_command(build_local_command(args.format, str(cache_dir)), env)[0]
         return code
     except FileNotFoundError:
-        print("pip-audit is not installed; install requirements/prod-optional.txt or run `python -m pip install pip-audit`.", file=sys.stderr)
+        print("未安装 pip-audit；请安装 requirements/prod-optional.txt 或运行 `python -m pip install pip-audit`。", file=sys.stderr)
         return 2
 
 

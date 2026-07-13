@@ -31,16 +31,16 @@ class CheckResult:
 
 def load_yaml(path: Path, result: CheckResult) -> dict[str, Any]:
     if not path.is_file():
-        result.error(f"config file not found: {path}")
+        result.error(f"配置文件不存在：{path}")
         return {}
     try:
         with path.open("r", encoding="utf-8") as file:
             raw = yaml.safe_load(file) or {}
     except Exception as exc:
-        result.error(f"failed to read yaml {path}: {exc}")
+        result.error(f"读取 YAML 失败 {path}：{exc}")
         return {}
     if not isinstance(raw, dict):
-        result.error(f"yaml root must be a mapping: {path}")
+        result.error(f"yaml 根节点必须是映射: {path}")
         return {}
     return raw
 
@@ -55,18 +55,18 @@ def sha256_file(path: Path) -> str:
 
 def validate_model_key_part(value: str, key: str, field: str, result: CheckResult) -> bool:
     if value.strip() != value or value in {".", ".."} or "/" in value or "\\" in value:
-        result.error(f"model key {field} must not contain path separators, whitespace padding, or relative path segments: {key}")
+        result.error(f"模型键 {field} 不能包含路径分隔符、首尾空白或相对路径片段：{key}")
         return False
     return True
 
 
 def split_model_key(key: str, result: CheckResult) -> tuple[str, str] | None:
     if "/" not in key:
-        result.error(f"model key must be project/model.onnx: {key}")
+        result.error(f"模型键必须是 project/model.onnx：{key}")
         return None
     project, model = key.split("/", 1)
     if not project or not model:
-        result.error(f"model key must include project and model name: {key}")
+        result.error(f"模型键必须包含项目和模型名称：{key}")
         return None
     if not validate_model_key_part(project, key, "project", result):
         return None
@@ -80,7 +80,7 @@ def safe_sidecar(model_path: Path, relative_path: str, result: CheckResult) -> P
     try:
         sidecar.relative_to(model_path.parent.resolve())
     except ValueError:
-        result.error(f"sidecar path escapes model directory: {relative_path}")
+        result.error(f"sidecar 路径逃逸模型目录: {relative_path}")
         return None
     return sidecar
 
@@ -91,7 +91,7 @@ def model_artifact_path(key: str, config: dict[str, Any], models_root: Path, pro
     if isinstance(raw_path, str) and raw_path.strip():
         configured_path = Path(raw_path.strip())
         if configured_path.is_absolute():
-            result.error(f"{key}: artifact.path must be relative to models root")
+            result.error(f"{key}: artifact.path 必须相对于模型根目录")
             return None
         model_path = (models_root / configured_path).resolve()
     else:
@@ -99,7 +99,7 @@ def model_artifact_path(key: str, config: dict[str, Any], models_root: Path, pro
     try:
         model_path.relative_to(models_root.resolve())
     except ValueError:
-        result.error(f"{key}: model path escapes models root")
+        result.error(f"{key}: 模型路径逃逸模型根目录")
         return None
     return model_path
 
@@ -108,10 +108,10 @@ def alias_weight(alias_name: str, raw_weight: Any, result: CheckResult) -> int |
     try:
         weight = int(raw_weight or 0)
     except (TypeError, ValueError):
-        result.error(f"alias rollout weight must be an integer: {alias_name}")
+        result.error(f"别名灰度权重必须是整数: {alias_name}")
         return None
     if weight < 0:
-        result.error(f"alias rollout weight must be >= 0: {alias_name}")
+        result.error(f"别名灰度权重必须大于等于 0: {alias_name}")
         return None
     return weight
 
@@ -126,7 +126,7 @@ def alias_targets(alias_name: str, alias_config: Any, result: CheckResult) -> li
         target = validated_target(alias_config)
         return [target] if target else []
     if not isinstance(alias_config, dict):
-        result.error(f"alias config must be string or mapping: {alias_name}")
+        result.error(f"别名配置必须是字符串或映射：{alias_name}")
         return []
 
     target = alias_config.get("target")
@@ -158,7 +158,7 @@ def alias_targets(alias_name: str, alias_config: Any, result: CheckResult) -> li
             candidates.sort(key=lambda item: item[0], reverse=True)
             return [target for _, target in candidates]
 
-    result.error(f"alias has no target: {alias_name}")
+    result.error(f"别名没有目标模型: {alias_name}")
     return []
 
 
@@ -194,13 +194,13 @@ def validate_sidecars(
         sidecar_info["model_card"] = str(card_path)
         card = load_yaml(card_path, result)
         if not section(card, "model").get("version") and not config.get("version"):
-            result.warn(f"{key}: model card/config should include model.version")
+            result.warn(f"{key}: 模型卡或配置应包含 model.version")
         if not section(card, "evaluation") and not section(card, "metrics"):
-            result.warn(f"{key}: model card should include evaluation or metrics")
+            result.warn(f"{key}: 模型卡应包含 evaluation 或 metrics")
     elif strict_sidecars:
-        result.error(f"{key}: model card not found: {card_path}")
+        result.error(f"{key}: 模型卡不存在：{card_path}")
     else:
-        result.warn(f"{key}: model card not found: {card_path}")
+        result.warn(f"{key}: 模型卡不存在：{card_path}")
 
     labels_name = artifact.get("labels")
     labels_path = safe_sidecar(model_path, labels_name.strip(), result) if isinstance(labels_name, str) and labels_name.strip() else model_path.with_suffix(".labels.txt")
@@ -210,12 +210,12 @@ def validate_sidecars(
         labels = list_labels(labels_path)
         sidecar_info["labels"] = {"path": str(labels_path), "count": len(labels)}
         if not labels:
-            result.error(f"{key}: labels file is empty: {labels_path}")
+            result.error(f"{key}: 标签文件为空: {labels_path}")
     elif not has_inline_labels and config.get("task") in {"detection", "classification"}:
         if strict_sidecars:
-            result.error(f"{key}: labels file not found and output.classes is not provided: {labels_path}")
+            result.error(f"{key}: 标签文件不存在且未提供 output.classes：{labels_path}")
         else:
-            result.warn(f"{key}: labels file not found and output.classes is not provided: {labels_path}")
+            result.warn(f"{key}: 标签文件不存在且未提供 output.classes：{labels_path}")
 
     return sidecar_info
 
@@ -240,7 +240,7 @@ def validate_model(
 
     model_info["path"] = str(model_path)
     if not model_path.is_file():
-        result.error(f"{key}: model file not found: {model_path}")
+        result.error(f"{key}: 模型文件不存在：{model_path}")
         return model_info
 
     model_info["exists"] = True
@@ -248,14 +248,14 @@ def validate_model(
 
     task = str(config.get("task") or config.get("type") or "").lower()
     if task not in {"detection", "classification", "reid", "yolo"}:
-        result.warn(f"{key}: task/type is not a known first-stage task: {task or '<missing>'}")
+        result.warn(f"{key}: task/type 不是已知的一阶段任务: {task or '<missing>'}")
 
     input_config = section(config, "input")
     output_config = section(config, "output")
     if not input_config.get("size") and not config.get("input_size"):
-        result.warn(f"{key}: input.size is missing; service will infer from ONNX shape")
+        result.warn(f"{key}: 缺少 input.size；服务将从 ONNX shape 推断")
     if not output_config and task in {"detection", "classification", "reid", "yolo"}:
-        result.warn(f"{key}: output section is missing")
+        result.warn(f"{key}: 缺少 output 章节")
 
     expected_sha = str(section(config, "artifact").get("sha256") or config.get("sha256") or "").strip().lower()
     digest = sha256_file(model_path)
@@ -263,11 +263,11 @@ def validate_model(
     if expected_sha:
         model_info["expected_sha256"] = expected_sha
         if expected_sha != digest:
-            result.error(f"{key}: sha256 mismatch: expected {expected_sha}, actual {digest}")
+            result.error(f"{key}: sha256 不匹配：期望 {expected_sha}，实际 {digest}")
     elif strict_hash:
-        result.error(f"{key}: artifact.sha256 is required in strict mode")
+        result.error(f"{key}: 严格模式下 artifact.sha256 为必填项")
     else:
-        result.warn(f"{key}: artifact.sha256 is empty")
+        result.warn(f"{key}: artifact.sha256 为空")
 
     model_info["sidecars"] = validate_sidecars(key, config, model_path, result, strict_sidecars)
     return model_info
@@ -281,10 +281,10 @@ def validate_config(args: argparse.Namespace) -> dict[str, Any]:
     models = raw.get("models", raw)
     aliases = raw.get("aliases", {})
     if not isinstance(models, dict):
-        result.error("models must be a mapping")
+        result.error("models 必须是映射")
         models = {}
     if not isinstance(aliases, dict):
-        result.error("aliases must be a mapping")
+        result.error("aliases 必须是映射")
         aliases = {}
 
     selected = set(args.model_id or [])
@@ -301,7 +301,7 @@ def validate_config(args: argparse.Namespace) -> dict[str, Any]:
         model_items = {key: value for key, value in model_items.items() if key in resolved}
         missing = sorted(resolved - set(model_items))
         for key in missing:
-            result.error(f"selected model is not configured: {key}")
+            result.error(f"所选模型未配置: {key}")
 
     alias_info = {}
     for name, config in aliases.items():
@@ -310,7 +310,7 @@ def validate_config(args: argparse.Namespace) -> dict[str, Any]:
         alias_info[str(name)] = target
         for item in targets:
             if item not in models:
-                result.error(f"alias target is not in models mapping: {name} -> {item}")
+                result.error(f"别名目标不在 models 映射中: {name} -> {item}")
 
     checked_models = [
         validate_model(
@@ -337,28 +337,28 @@ def validate_config(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Validate model package files referenced by models.yml.")
-    parser.add_argument("--config", default="models.yml", help="Path to models.yml.")
-    parser.add_argument("--models-root", default=None, help="Model root. Defaults to MODELS_ROOT or models.")
-    parser.add_argument("--model-id", action="append", help="Only validate this model key or alias. Can be repeated.")
-    parser.add_argument("--strict-hash", action="store_true", help="Require artifact.sha256 and verify it.")
-    parser.add_argument("--strict-sidecars", action="store_true", help="Require model cards and labels where applicable.")
-    parser.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
+    parser = argparse.ArgumentParser(description="校验 models.yml 引用的模型包文件。")
+    parser.add_argument("--config", default="models.yml", help="models.yml 路径。")
+    parser.add_argument("--models-root", default=None, help="模型根目录。默认使用 MODELS_ROOT 或 models。")
+    parser.add_argument("--model-id", action="append", help="只校验此模型键或别名。可重复传入。")
+    parser.add_argument("--strict-hash", action="store_true", help="要求 artifact.sha256 并进行校验。")
+    parser.add_argument("--strict-sidecars", action="store_true", help="在适用位置要求模型卡和标签。")
+    parser.add_argument("--json", action="store_true", help="输出机器可读 JSON。")
     args = parser.parse_args()
 
     report = validate_config(args)
     if args.json:
         print(json.dumps(report, ensure_ascii=False, indent=2))
     else:
-        status = "OK" if report["ok"] else "FAILED"
-        print(f"model package validation: {status}")
-        print(f"config: {report['config_path']}")
-        print(f"models_root: {report['models_root']}")
-        print(f"models_checked: {report['model_count']}")
+        status = "通过" if report["ok"] else "失败"
+        print(f"模型包校验：{status}")
+        print(f"配置: {report['config_path']}")
+        print(f"模型根目录: {report['models_root']}")
+        print(f"已检查模型数: {report['model_count']}")
         for warning in report["warnings"]:
-            print(f"warning: {warning}")
+            print(f"警告: {warning}")
         for error in report["errors"]:
-            print(f"error: {error}")
+            print(f"错误: {error}")
     return 0 if report["ok"] else 1
 
 

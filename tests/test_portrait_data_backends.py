@@ -131,8 +131,8 @@ def test_object_store_delete_failures_are_redacted(monkeypatch, caplog) -> None:
     local = LocalObjectStore().delete_object({"object_key": "tenant-a/gallery-image/secret-face.png"})
     s3 = S3ObjectStore().delete_object({"object_key": "tenant-a/gallery-image/secret-face.png"})
 
-    assert local == {"backend": "local_file", "deleted": False, "reason": "object delete failed"}
-    assert s3 == {"backend": "s3", "deleted": False, "reason": "object delete failed"}
+    assert local == {"backend": "local_file", "deleted": False, "reason": "对象删除失败"}
+    assert s3 == {"backend": "s3", "deleted": False, "reason": "对象删除失败"}
     encoded = json.dumps({"local": local, "s3": s3}, ensure_ascii=False)
     assert "secret-face" not in encoded
     assert "secret-bucket" not in encoded
@@ -212,9 +212,9 @@ def test_backend_health_errors_are_redacted(monkeypatch, caplog) -> None:
     redis = portrait_task_queue.RedisTaskQueue().health()
 
     assert postgres["status"] == "error"
-    assert postgres["error"] == "health check failed"
+    assert postgres["error"] == "健康检查失败"
     assert redis["status"] == "error"
-    assert redis["error"] == "health check failed"
+    assert redis["error"] == "健康检查失败"
     encoded = json.dumps({"postgres": postgres, "redis": redis}, ensure_ascii=False)
     assert "secret-password" not in encoded
     assert "secret-token" not in encoded
@@ -326,7 +326,7 @@ def test_audit_event_fails_closed_when_existing_jsonl_chain_is_unreadable(monkey
         portrait_audit.audit_event("gallery_update", request_id="req-1", tenant_id="tenant-a")
 
     assert exc_info.value.status_code == 503
-    assert exc_info.value.detail == "audit chain unavailable"
+    assert exc_info.value.detail == "审计链不可用"
     assert audit_path.read_text(encoding="utf-8") == "{not-json}\n"
 
 
@@ -334,7 +334,7 @@ def test_audit_event_fails_closed_when_jsonl_write_fails(monkeypatch) -> None:
     monkeypatch.setattr(portrait_audit, "AUDIT_WRITE_FAIL_CLOSED", True)
 
     def fail_append(path, payload, *, fail_closed=False):
-        raise HTTPException(status_code=503, detail="state write failed")
+        raise HTTPException(status_code=503, detail="状态写入失败")
 
     monkeypatch.setattr(portrait_audit, "append_jsonl", fail_append)
 
@@ -494,7 +494,7 @@ def test_local_object_store_delete_removes_object(monkeypatch, workspace_tmp_pat
     if result["deleted"]:
         assert not stored_path.exists()
     else:
-        assert result["reason"] == "object delete failed"
+        assert result["reason"] == "对象删除失败"
         assert stored_path.is_file()
 
 
@@ -518,7 +518,7 @@ def test_local_object_store_falls_back_when_atomic_replace_is_unavailable(monkey
     monkeypatch.setattr(portrait_object_storage, "OBJECT_STORAGE_DIR", object_root)
 
     def fail_replace(source, target):
-        raise OSError("replace failed")
+        raise OSError("替换失败")
 
     monkeypatch.setattr(portrait_object_storage.os, "replace", fail_replace)
 
@@ -568,7 +568,7 @@ def test_json_state_write_fails_closed_by_default(monkeypatch, workspace_tmp_pat
         portrait_state.write_json_state(target, {"ok": True})
 
     assert exc_info.value.status_code == 503
-    assert "state write failed" in str(exc_info.value.detail)
+    assert "状态写入失败" in str(exc_info.value.detail)
 
 
 def test_json_state_write_can_remain_best_effort(monkeypatch, workspace_tmp_path) -> None:
@@ -592,7 +592,7 @@ def test_json_state_read_fails_closed_when_existing_state_is_malformed(monkeypat
         portrait_state.read_json_state(target, {"ok": False})
 
     assert exc_info.value.status_code == 503
-    assert exc_info.value.detail == "state read failed"
+    assert exc_info.value.detail == "状态读取失败"
 
 
 def test_json_state_read_can_remain_best_effort(monkeypatch, workspace_tmp_path) -> None:
@@ -817,7 +817,7 @@ def test_gallery_upsert_rolls_back_memory_when_persist_fails(monkeypatch) -> Non
     GALLERY.clear()
 
     def fail_persist(person):
-        raise HTTPException(status_code=503, detail="state write failed")
+        raise HTTPException(status_code=503, detail="状态写入失败")
 
     monkeypatch.setattr("app.portrait_gallery.persist_person", fail_persist)
 
@@ -895,7 +895,7 @@ def test_gallery_patch_rolls_back_memory_when_persist_fails(monkeypatch) -> None
     person = upsert_person("p_patch", "Before", metadata={"note": "old"}, tenant_id="tenant-a")
 
     def fail_persist(updated_person):
-        raise HTTPException(status_code=503, detail="state write failed")
+        raise HTTPException(status_code=503, detail="状态写入失败")
 
     monkeypatch.setattr("app.portrait_gallery.persist_person", fail_persist)
 
@@ -913,7 +913,7 @@ def test_gallery_feature_rolls_back_memory_when_persist_fails(monkeypatch) -> No
     person = upsert_person("p_feature", "Feature", tenant_id="tenant-a")
 
     def fail_persist_feature(updated_person, feature):
-        raise HTTPException(status_code=503, detail="state write failed")
+        raise HTTPException(status_code=503, detail="状态写入失败")
 
     monkeypatch.setattr("app.portrait_gallery.persist_feature", fail_persist_feature)
 
@@ -984,7 +984,7 @@ def test_gallery_reindex_vectors_counts_partial_failures(monkeypatch) -> None:
 
         def upsert_feature(self, person_payload, feature_payload):
             if feature_payload["feature_id"] == "f_reindex_fail":
-                raise RuntimeError("vector write failed")
+                raise RuntimeError("向量写入失败")
             upserted.append((person_payload["person_id"], feature_payload["feature_id"]))
             return {"backend": self.backend_name, "status": "upserted"}
 
@@ -1009,7 +1009,7 @@ def test_threshold_update_rolls_back_memory_when_persist_fails(monkeypatch) -> N
     snapshot = portrait_thresholds.threshold_snapshot()
 
     def fail_save():
-        raise HTTPException(status_code=503, detail="state write failed")
+        raise HTTPException(status_code=503, detail="状态写入失败")
 
     monkeypatch.setattr(portrait_thresholds, "save_threshold_state", fail_save)
 
@@ -1023,7 +1023,7 @@ def test_video_job_create_rolls_back_memory_when_persist_fails(monkeypatch) -> N
     VIDEO_JOBS.clear()
 
     def fail_persist(job):
-        raise HTTPException(status_code=503, detail="state write failed")
+        raise HTTPException(status_code=503, detail="状态写入失败")
 
     monkeypatch.setattr(portrait_jobs, "persist_video_job", fail_persist)
 
@@ -1039,7 +1039,7 @@ def test_video_job_cancel_rolls_back_memory_when_persist_fails(monkeypatch) -> N
     VIDEO_JOBS[job_key("tenant-a", "job_cancel")] = job
 
     def fail_persist(updated_job):
-        raise HTTPException(status_code=503, detail="state write failed")
+        raise HTTPException(status_code=503, detail="状态写入失败")
 
     monkeypatch.setattr(portrait_jobs, "persist_video_job", fail_persist)
 
@@ -1076,12 +1076,12 @@ def test_video_job_public_error_redacts_legacy_state() -> None:
         error="secret-token leaked from old exception",
     )
 
-    assert job.public_dict()["error"] == "video job failed"
-    assert job.state_dict()["error"] == "video job failed"
+    assert job.public_dict()["error"] == "视频任务失败"
+    assert job.state_dict()["error"] == "视频任务失败"
 
     restored = VideoJob.from_state(job.state_dict() | {"error": "secret-token from old state"})
-    assert restored.error == "video job failed"
-    assert restored.public_dict()["error"] == "video job failed"
+    assert restored.error == "视频任务失败"
+    assert restored.public_dict()["error"] == "视频任务失败"
 
 
 def test_video_job_public_and_state_payloads_do_not_include_filename() -> None:
@@ -1167,9 +1167,9 @@ async def test_run_video_job_failure_error_is_redacted(monkeypatch, caplog) -> N
     await run_video_job(job.job_id, job.tenant_id, b"video", "secret-video.mp4", 1, 1)
 
     assert job.status == "failed"
-    assert job.error == "video job failed"
+    assert job.error == "视频任务失败"
     assert persisted[-1]["status"] == "failed"
-    assert persisted[-1]["error"] == "video job failed"
+    assert persisted[-1]["error"] == "视频任务失败"
     assert "filename" not in persisted[-1]
     assert "secret-video" not in json.dumps(persisted[-1], ensure_ascii=False)
     assert "RuntimeError" in caplog.text
@@ -1190,7 +1190,7 @@ async def test_run_video_job_retries_and_persists_progress(monkeypatch) -> None:
     async def flaky_extract_video_frames_from_bytes(data, filename, frame_interval, max_frames):
         calls["count"] += 1
         if calls["count"] == 1:
-            raise RuntimeError("temporary decoder failure")
+            raise RuntimeError("临时解码失败")
         return [Image.new("RGB", (8, 8), (20, 40, 60))], {"source_frame_indexes": [0]}
 
     monkeypatch.setattr("app.portrait_jobs.VIDEO_JOB_RETRY_BACKOFF_SECONDS", 0)
@@ -1245,7 +1245,7 @@ def test_stream_create_rolls_back_memory_when_persist_fails(monkeypatch) -> None
     STREAMS.clear()
 
     def fail_persist(stream):
-        raise HTTPException(status_code=503, detail="state write failed")
+        raise HTTPException(status_code=503, detail="状态写入失败")
 
     monkeypatch.setattr(portrait_streams, "persist_stream", fail_persist)
 
@@ -1261,7 +1261,7 @@ def test_stream_start_and_stop_roll_back_memory_when_persist_fails(monkeypatch) 
     initial_event_count = len(stream.events)
 
     def fail_persist(updated_stream):
-        raise HTTPException(status_code=503, detail="state write failed")
+        raise HTTPException(status_code=503, detail="状态写入失败")
 
     monkeypatch.setattr(portrait_streams, "ALLOW_STREAM_URLS", True)
     monkeypatch.setattr(portrait_streams, "persist_stream", fail_persist)
@@ -1536,7 +1536,7 @@ async def test_stream_worker_revalidates_url_before_pull(monkeypatch) -> None:
 
     def fail_validation(stream_url):
         calls.append(stream_url)
-        raise HTTPException(status_code=400, detail="stream_url host is not allowed by SSRF protection")
+        raise HTTPException(status_code=400, detail="stream_url 主机被 SSRF 防护策略拒绝")
 
     def fail_if_pulled(*args, **kwargs):
         raise AssertionError("stream pull should not run after validation failure")
@@ -1572,7 +1572,7 @@ def test_local_task_queue_rolls_back_message_when_state_write_fails(monkeypatch,
     monkeypatch.setattr("app.portrait_task_queue.TASK_QUEUE_STATE_PATH", workspace_tmp_path / "queue.jsonl")
 
     def fail_append(path, payload, *, fail_closed=False):
-        raise HTTPException(status_code=503, detail="state write failed")
+        raise HTTPException(status_code=503, detail="状态写入失败")
 
     monkeypatch.setattr("app.portrait_task_queue.append_jsonl", fail_append)
 

@@ -25,14 +25,14 @@ def configured_model_path(model_id: str, config: Any, models_root: Path) -> tupl
     if isinstance(artifact_path, str) and artifact_path.strip():
         candidate = Path(artifact_path.strip())
         if candidate.is_absolute():
-            return None, "artifact.path must be relative to models root"
+            return None, "artifact.path 必须相对于模型根目录"
         path = (models_root / candidate).resolve()
     else:
         path = (models_root / model_id).resolve()
     try:
         path.relative_to(models_root.resolve())
     except ValueError:
-        return None, "model artifact path escapes models root"
+        return None, "模型构件路径逃逸模型根目录"
     return path, None
 
 
@@ -48,7 +48,7 @@ def model_config_entries(root: Path) -> tuple[dict[str, Any], dict[str, Any]]:
 
 def resolve_configured_model_id(model_id: Any, models: dict[str, Any], aliases: dict[str, Any]) -> tuple[str | None, str | None]:
     if not isinstance(model_id, str) or not model_id.strip():
-        return None, "model_id is required"
+        return None, "model_id 为必填项"
     candidate = model_id.strip()
     if candidate in models:
         return candidate, None
@@ -59,7 +59,7 @@ def resolve_configured_model_id(model_id: Any, models: dict[str, Any], aliases: 
         target = alias.get("target")
         if isinstance(target, str) and target in models:
             return target, None
-    return None, "model_id is not configured in models.yml or aliases"
+    return None, "model_id 未在 models.yml 或 aliases 中配置"
 
 
 def check_capabilities(root: Path) -> list[dict[str, Any]]:
@@ -68,7 +68,7 @@ def check_capabilities(root: Path) -> list[dict[str, Any]]:
     models, aliases = model_config_entries(root)
     checks = []
     if not isinstance(capabilities, dict):
-        return [{"name": "capability:config", "ok": False, "status": "invalid", "detail": "capabilities root must be a mapping"}]
+        return [{"name": "capability:config", "ok": False, "status": "invalid", "detail": "capabilities 根节点必须是映射"}]
     for name, item in sorted(capabilities.items()):
         status = item.get("status") if isinstance(item, dict) else None
         model_id = item.get("model_id") if isinstance(item, dict) else None

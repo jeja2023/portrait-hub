@@ -29,11 +29,11 @@ def validate_file_count(files: list[UploadFile], limit: int) -> None:
     from fastapi import HTTPException, status
 
     if not files:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="at least one image file is required")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="至少需要一个图片文件")
     if len(files) > limit:
         raise HTTPException(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail=f"too many image files: {len(files)}, max {limit}",
+            detail=f"图片文件过多：{len(files)}，最大 {limit}",
         )
 
 

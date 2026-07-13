@@ -82,7 +82,7 @@ def _decode_pyav(source: str, sorted_indexes: list[int]) -> list[Array | None] |
             container.close()
         return [collected.get(target) for target in sorted_indexes]
     except Exception as exc:
-        logger.warning("pyav decode failed, falling back to opencv: %s", exception_log_summary(exc))
+        logger.warning("PyAV 解码失败，回退到 OpenCV: %s", exception_log_summary(exc))
         return None
 
 

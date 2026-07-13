@@ -56,11 +56,11 @@ X-API-Key: <api-token>
 
 - 错误码目录可通过 `/v1/access/error-codes` 读取，返回 `code`、`http_status`、`retryable`、`category`、`description` 和 `operator_action`。接入方应把 `retryable=true` 视为可预算内退避重试，而不是无限重放。
 
-## API Playground 受控调试
+## 接口调试台 受控调试
 
-控制台“API Playground”用于开发或受控内网环境的最小联调，不应替代业务侧自动化测试。它覆盖单图检索、批量检索、单图比对、批量比对、融合比对、图片解析、离线视频、实时流创建、实时流事件查询、模型状态和阈值查询。
+控制台“接口调试台”用于开发或受控内网环境的最小联调，不应替代业务侧自动化测试。它覆盖单图检索、批量检索、单图比对、批量比对、融合比对、图片解析、离线视频、实时流创建、实时流事件查询、模型状态和阈值查询。
 
-Playground 会保留统一响应外层的 `request_id`、HTTP 状态和 `detail.code`，并把接口模板、解析后的路径、耗时、文件数量、`async_mode` 和受控调试标记写入页面响应数据，方便和 `/v1/access/call-logs` 按 `request_id` 交叉定位。
+接口调试台会保留统一响应外层的 `request_id`、HTTP 状态和 `detail.code`，并把接口模板、解析后的路径、耗时、文件数量、`async_mode` 和受控调试标记写入页面响应数据，方便和 `/v1/access/call-logs` 按 `request_id` 交叉定位。
 ## Python SDK 最小示例
 
 ```python

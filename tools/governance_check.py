@@ -39,7 +39,7 @@ def check_supply_chain(root: Path) -> dict[str, Any]:
         and governance.is_file()
         and has_markers(read_text(workflow), ["anchore/sbom-action", "aquasecurity/trivy-action", "ossf/scorecard-action", "sigstore/cosign-installer", "actions/attest@v4"])
         and has_markers(read_text(governance), ["python tools/governance_check.py", "python tools/model_governance_check.py"])
-        and has_markers(read_text(docs), ["SBOM", "SLSA provenance", "cosign", "Trivy", "Scorecard", "Dependabot", "model artifact"]),
+        and has_markers(read_text(docs), ["SBOM", "SLSA provenance", "cosign", "Trivy", "Scorecard", "Dependabot", "模型构件"]),
         "detail": {"supply_chain_workflow": str(workflow), "governance_workflow": str(governance), "docs": str(docs)},
     }
 
@@ -141,17 +141,17 @@ def run_checks(root: Path) -> dict[str, Any]:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Run repository governance checks.")
-    parser.add_argument("--root", default=".", help="Project root.")
-    parser.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
+    parser = argparse.ArgumentParser(description="运行仓库治理检查。")
+    parser.add_argument("--root", default=".", help="项目根目录。")
+    parser.add_argument("--json", action="store_true", help="输出机器可读 JSON。")
     args = parser.parse_args()
     report = run_checks(Path(args.root).resolve())
     if args.json:
         print(json.dumps(report, ensure_ascii=False, indent=2))
     else:
-        print(f"governance check: {'OK' if report['ok'] else 'FAILED'}")
+        print(f"治理检查：{'通过' if report['ok'] else '失败'}")
         for item in report["checks"]:
-            print(f"{'ok' if item['ok'] else 'fail'}: {item['name']}")
+            print(f"{'通过' if item['ok'] else '失败'}: {item['name']}")
     return 0 if report["ok"] else 1
 
 

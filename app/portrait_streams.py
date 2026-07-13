@@ -273,11 +273,11 @@ def load_streams_state() -> None:
     else:
         payload = read_json_state(PORTRAIT_STREAMS_STATE_PATH, {"streams": []})
     if not isinstance(payload, dict):
-        handle_state_read_error(f"streams state root must be a mapping: {PORTRAIT_STREAMS_STATE_PATH}")
+        handle_state_read_error(f"streams state 根节点必须是映射: {PORTRAIT_STREAMS_STATE_PATH}")
         return
     streams = payload.get("streams", [])
     if not isinstance(streams, list):
-        handle_state_read_error(f"streams state streams must be a list: {PORTRAIT_STREAMS_STATE_PATH}")
+        handle_state_read_error(f"streams state streams 必须是列表: {PORTRAIT_STREAMS_STATE_PATH}")
         return
     with STREAMS_LOCK:
         STREAMS.clear()
@@ -294,7 +294,7 @@ def load_streams_state() -> None:
             try:
                 stream = StreamRecord.from_state(item)
             except Exception as exc:
-                logger.warning("skipping invalid stream state: %s", exception_log_summary(exc))
+                logger.warning("已跳过无效视频流状态: %s", exception_log_summary(exc))
                 continue
             STREAMS[stream_key(stream.tenant_id, stream.stream_id)] = stream
 

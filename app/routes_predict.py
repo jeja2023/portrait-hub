@@ -55,7 +55,7 @@ async def predict(req: InferenceRequest, request: Request) -> dict[str, Any]:
     except Exception as exc:
         observe("predict_errors_total")
         logger.warning("inference failed: request_id=%s error=%s", request_id, exception_log_summary(exc))
-        raise_internal_error(request_id, "inference runtime error")
+        raise_internal_error(request_id, "推理运行时错误")
 
     return {
         "status": "success",

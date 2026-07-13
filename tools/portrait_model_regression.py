@@ -150,18 +150,18 @@ def run_model_regression(manifest: dict[str, Any]) -> dict[str, Any]:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Run PortraitHub model regression metrics and threshold gates.")
-    parser.add_argument("--manifest", required=True, help="Regression manifest YAML/JSON.")
-    parser.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
+    parser = argparse.ArgumentParser(description="运行 PortraitHub 模型回归指标与阈值门禁。")
+    parser.add_argument("--manifest", required=True, help="回归清单 YAML/JSON。")
+    parser.add_argument("--json", action="store_true", help="输出机器可读 JSON。")
     args = parser.parse_args()
 
     report = run_model_regression(load_manifest(Path(args.manifest).resolve()))
     if args.json:
         print(json.dumps(report, ensure_ascii=False, indent=2))
     else:
-        print(f"portrait model regression: {'OK' if report['ok'] else 'FAILED'}")
+        print(f"人像模型回归检查：{'通过' if report['ok'] else '失败'}")
         for failure in report.get("gate_failures", []):
-            print(f"gate failure: {json.dumps(failure, ensure_ascii=False, sort_keys=True)}")
+            print(f"门禁失败：{json.dumps(failure, ensure_ascii=False, sort_keys=True)}")
     return 0 if report["ok"] else 1
 
 

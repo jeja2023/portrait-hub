@@ -48,7 +48,7 @@ class ThresholdUpdateRequest(BaseModel):
     @classmethod
     def reject_boolean_thresholds(cls, value: Any) -> Any:
         if isinstance(value, bool):
-            raise ValueError("threshold must be numeric")
+            raise ValueError("阈值必须是数值")
         return value
 
 
@@ -76,13 +76,13 @@ def restore_threshold_snapshot(previous_thresholds: dict[str, Any]) -> list[str]
     try:
         save_threshold_state()
     except Exception as exc:
-        logger.warning("failed to persist restored threshold snapshot: %s", exception_log_summary(exc))
+        logger.warning("持久化恢复后的阈值快照失败: %s", exception_log_summary(exc))
         return ["restore thresholds failed"]
     return []
 
 
 def raise_model_management_rollback_failure(original_error: Exception, rollback_errors: list[str]) -> None:
-    raise_rollback_failure("model management mutation failed and rollback persistence failed", original_error, rollback_errors)
+    raise_rollback_failure("模型管理变更失败，且回滚持久化失败", original_error, rollback_errors)
 
 
 @router.get("/v1/models", dependencies=[Depends(permission_dependency("models:read"))])
@@ -190,7 +190,7 @@ async def v1_update_thresholds(request: Request, profile: str, payload: Threshol
     tenant_id = tenant_id_from_request(request)
     update_payload = payload.model_dump(exclude_none=True)
     if not update_payload:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="threshold payload must not be empty")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="阈值请求体不能为空")
     previous_thresholds = threshold_snapshot()
     result = update_threshold_profile(profile, update_payload)
     try:

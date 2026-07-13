@@ -102,7 +102,7 @@ def apply_gallery_wal(payload: dict[str, Any]) -> dict[str, Any]:
                     people[key] = entry["person"]
     except Exception as exc:
         logger.warning(
-            "failed to replay gallery WAL: path_hash=%s error=%s",
+            "重放人员库 WAL 失败: path_hash=%s error=%s",
             state_path_fingerprint(path),
             exception_log_summary(exc),
         )
@@ -119,11 +119,11 @@ def load_gallery_state() -> None:
         payload = read_json_state(PORTRAIT_GALLERY_STATE_PATH, {"people": []})
         payload = apply_gallery_wal(payload)
     if not isinstance(payload, dict):
-        handle_state_read_error(f"gallery state root must be a mapping: {PORTRAIT_GALLERY_STATE_PATH}")
+        handle_state_read_error(f"gallery state 根节点必须是映射: {PORTRAIT_GALLERY_STATE_PATH}")
         return
     people = payload.get("people", [])
     if not isinstance(people, list):
-        handle_state_read_error(f"gallery state people must be a list: {PORTRAIT_GALLERY_STATE_PATH}")
+        handle_state_read_error(f"gallery state people 必须是列表: {PORTRAIT_GALLERY_STATE_PATH}")
         return
     with GALLERY_LOCK:
         GALLERY.clear()
@@ -134,7 +134,7 @@ def load_gallery_state() -> None:
                 person = PersonRecord.from_state(item)
                 validate_person_id(person.person_id)
             except Exception as exc:
-                logger.warning("skipping invalid gallery person state: %s", exception_log_summary(exc))
+                logger.warning("已跳过无效人员库人员状态: %s", exception_log_summary(exc))
                 continue
             GALLERY[gallery_key(person.tenant_id, person.person_id)] = person
 
@@ -152,7 +152,7 @@ def save_gallery_state() -> None:
             gallery_wal_path().unlink(missing_ok=True)
             GALLERY_WAL_COUNTER = 0
         except Exception as exc:
-            logger.warning("failed to compact gallery WAL: %s", exception_log_summary(exc))
+            logger.warning("压缩人员库 WAL 失败: %s", exception_log_summary(exc))
 
 
 def append_gallery_wal(
@@ -219,7 +219,7 @@ def persist_feature(person: PersonRecord, feature: FeatureRecord) -> None:
 
         VECTOR_STORE.upsert_feature(person.public_dict(include_embeddings=False), feature.state_dict())
     except Exception as exc:
-        logger.warning("vector upsert failed: %s", exception_log_summary(exc))
+        logger.warning("向量写入失败: %s", exception_log_summary(exc))
 
 
 def persist_person_delete(tenant_id: str, person_id: str) -> None:
@@ -235,7 +235,7 @@ def persist_person_delete(tenant_id: str, person_id: str) -> None:
 
         VECTOR_STORE.delete_person(tenant_id, person_id)
     except Exception as exc:
-        logger.warning("vector delete failed: %s", exception_log_summary(exc))
+        logger.warning("向量删除失败: %s", exception_log_summary(exc))
 
 
 def list_gallery_people(tenant_id: str = "default") -> list[dict[str, Any]]:
@@ -328,7 +328,7 @@ def get_person_or_404(person_id: str, tenant_id: str = "default") -> PersonRecor
     with GALLERY_LOCK:
         person = GALLERY.get(gallery_key(tenant_id, resolved_id))
     if person is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="person not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="人员不存在")
     return person
 
 

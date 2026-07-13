@@ -52,7 +52,7 @@ def weighted_rollout_target(
 ) -> tuple[str, int, int]:
     total_weight = sum(int(item["weight"]) for item in candidates if int(item["weight"]) > 0)
     if total_weight <= 0:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="alias rollout has no positive weights")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="别名灰度发布没有正权重")
     digest = hashlib.sha256(f"{alias_name}:{traffic_key}".encode("utf-8")).hexdigest()
     bucket = int(digest[:16], 16) % total_weight
     cursor = 0
@@ -70,7 +70,7 @@ def alias_resolution(alias_name: str, alias_config: Any, traffic_key: str | None
     if isinstance(alias_config, str):
         return {"alias": alias_name, "target": validate_model_target(alias_config), "strategy": "static", "traffic_key": traffic_key}
     if not isinstance(alias_config, dict):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid alias config")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="别名配置无效")
 
     target = alias_config.get("target")
     if isinstance(target, str) and target.strip():
@@ -105,7 +105,7 @@ def alias_resolution(alias_name: str, alias_config: Any, traffic_key: str | None
             "candidates": candidates,
         }
 
-    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="alias has no target")
+    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="别名没有目标模型")
 
 
 def alias_target(alias_name: str, alias_config: Any, traffic_key: str | None = None) -> str:
@@ -125,7 +125,7 @@ def resolve_model_reference(
     if not model_id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="provide model_id or both project_name and model_name",
+            detail="请提供 model_id，或同时提供 project_name 与 model_name",
         )
 
     model_ref = model_id

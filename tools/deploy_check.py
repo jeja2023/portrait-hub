@@ -63,7 +63,7 @@ def check_source_encoding(root: Path, report: DeployReport) -> None:
         try:
             prefix = path.read_bytes()[:3]
         except OSError as exc:
-            bom_files.append(f"{path.relative_to(root)}: read failed: {exc.__class__.__name__}")
+            bom_files.append(f"{path.relative_to(root)}: 读取失败：{exc.__class__.__name__}")
             continue
         if prefix == b"\xef\xbb\xbf":
             bom_files.append(str(path.relative_to(root)).replace("\\", "/"))
@@ -230,7 +230,7 @@ def check_code_quality(root: Path, report: DeployReport) -> None:
         and "discover_default_targets" in type_check
         and "DEFAULT_TARGET_ROOTS" in type_check
         and "--fallback-ok" in type_check
-        and "mypy is not installed; install requirements/dev.txt" in type_check,
+        and "未安装 mypy；请安装 requirements/dev.txt" in type_check,
         None,
     )
     report.add(
@@ -396,7 +396,7 @@ def check_models_config(root: Path, report: DeployReport) -> None:
         report.add("models_yml_parse", False, str(exc))
         return
     if not isinstance(raw, dict):
-        report.add("models_yml_parse", False, "root must be a mapping")
+        report.add("models_yml_parse", False, "根节点必须是映射")
         return
     models = raw.get("models", raw)
     aliases = raw.get("aliases", {})
@@ -783,7 +783,7 @@ def check_node_sdk_tests(root: Path, report: DeployReport) -> None:
         return
     node = shutil.which("node")
     if not node:
-        report.add("node_sdk_contract_tests", True, {"skipped": "node executable not found"})
+        report.add("node_sdk_contract_tests", True, {"skipped": "未找到 node 可执行文件"})
         return
     completed = subprocess.run(
         [node, str(test_path)],
@@ -824,11 +824,11 @@ def run_checks(args: argparse.Namespace) -> DeployReport:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Run static deployment checks for gpu-services.")
-    parser.add_argument("--root", default=".", help="Project root.")
-    parser.add_argument("--import-app", action="store_true", help="Import main.app and verify key routes.")
-    parser.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
-    parser.add_argument("--skip-node", action="store_true", help="Skip Node.js contract checks.")
+    parser = argparse.ArgumentParser(description="运行 gpu-services 静态部署检查。")
+    parser.add_argument("--root", default=".", help="项目根目录。")
+    parser.add_argument("--import-app", action="store_true", help="导入 main.app 并校验关键路由。")
+    parser.add_argument("--json", action="store_true", help="输出机器可读 JSON。")
+    parser.add_argument("--skip-node", action="store_true", help="跳过 Node.js 契约检查。")
     args = parser.parse_args()
 
     report = run_checks(args)
@@ -836,12 +836,12 @@ def main() -> int:
     if args.json:
         print(json.dumps(output, ensure_ascii=False, indent=2))
     else:
-        print(f"deploy check: {'OK' if report.ok else 'FAILED'}")
+        print(f"部署检查：{'通过' if report.ok else '失败'}")
         for item in report.checks:
-            marker = "ok" if item["ok"] else "fail"
+            marker = "通过" if item["ok"] else "失败"
             print(f"{marker}: {item['name']}")
             if not item["ok"]:
-                print(f"  detail: {item['detail']}")
+                print(f"  详情: {item['detail']}")
     return 0 if report.ok else 1
 
 

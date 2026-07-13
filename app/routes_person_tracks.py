@@ -55,7 +55,7 @@ async def infer_person_tracks(
         request_id,
         errors_metric="tracks_errors_total",
         log_label="person track inference failed",
-        internal_message="person track inference runtime error",
+        internal_message="人员轨迹推理运行时错误",
     ):
         images, filenames, decode_seconds = await load_images(files)
         result = await infer_tracks_for_images(

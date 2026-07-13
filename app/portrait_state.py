@@ -27,14 +27,14 @@ def read_json_state(path: Path, default: Any) -> Any:
             return json.load(file)
     except Exception as exc:
         logger.warning(
-            "failed to read state file: path_hash=%s error=%s",
+            "读取状态文件失败: path_hash=%s error=%s",
             state_path_fingerprint(path),
             exception_log_summary(exc),
         )
         if STATE_READ_FAIL_CLOSED:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="state read failed",
+                detail="状态读取失败",
             ) from exc
         return default
 
@@ -44,20 +44,20 @@ def handle_state_read_error(message: str) -> None:
     if STATE_READ_FAIL_CLOSED:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="state read failed",
+            detail="状态读取失败",
         )
 
 
 def handle_state_write_error(path: Path, exc: Exception) -> None:
     logger.warning(
-        "failed to write state file: path_hash=%s error=%s",
+        "写入状态文件失败: path_hash=%s error=%s",
         state_path_fingerprint(path),
         exception_log_summary(exc),
     )
     if STATE_WRITE_FAIL_CLOSED:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="state write failed",
+            detail="状态写入失败",
         ) from exc
 
 
@@ -79,7 +79,7 @@ def write_json_state(path: Path, payload: Any) -> None:
             os.replace(temp_path, path)
         except OSError as replace_exc:
             logger.warning(
-                "atomic state replace failed: path_hash=%s error=%s; falling back to direct write",
+                "原子状态替换失败: path_hash=%s error=%s；回退到直接写入",
                 state_path_fingerprint(path),
                 exception_log_summary(replace_exc),
             )
@@ -103,7 +103,7 @@ def append_jsonl(path: Path, payload: dict[str, Any], *, fail_closed: bool = Fal
             file.write("\n")
     except Exception as exc:
         logger.warning(
-            "failed to append audit file: path_hash=%s error=%s",
+            "追加审计文件失败: path_hash=%s error=%s",
             state_path_fingerprint(path),
             exception_log_summary(exc),
         )

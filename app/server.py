@@ -40,7 +40,7 @@ from app.production_gates import validate_production_externalization
 
 
 def request_body_too_large_detail() -> str:
-    return f"request body too large: max {MAX_REQUEST_BODY_BYTES} bytes"
+    return f"请求体过大：最大 {MAX_REQUEST_BODY_BYTES} 字节"
 
 
 async def warmup_models() -> None:
@@ -91,7 +91,7 @@ async def config_hot_reload_loop() -> None:
         except asyncio.CancelledError:
             raise
         except Exception as exc:
-            logger.warning("configuration hot reload failed: %s", exc)
+            logger.warning("configuration hot re加载失败ed: %s", exc)
             await asyncio.sleep(2.0)
 
 
@@ -144,7 +144,7 @@ def limit_request_body(request: Request) -> Request:
         try:
             content_length = int(raw_content_length)
         except ValueError as exc:
-            raise HTTPException(status_code=400, detail="invalid content-length header") from exc
+            raise HTTPException(status_code=400, detail="content-length 请求头无效") from exc
         if content_length > MAX_REQUEST_BODY_BYTES:
             raise HTTPException(status_code=413, detail=request_body_too_large_detail())
 
@@ -189,7 +189,7 @@ def validation_error_loc(error: dict[str, Any]) -> list[Any]:
 
 def internal_error_payload(request_id: str) -> dict[str, Any]:
     return {
-        "detail": "internal server error",
+        "detail": "内部服务器错误",
         "request_id": request_id,
     }
 

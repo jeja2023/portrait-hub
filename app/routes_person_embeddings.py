@@ -41,7 +41,7 @@ async def infer_person_embeddings(
         request_id,
         errors_metric="embeddings_errors_total",
         log_label="embedding inference failed",
-        internal_message="embedding inference runtime error",
+        internal_message="特征向量推理运行时错误",
     ):
         bundle, cold_loaded, load_seconds = await get_or_load_model(key, model_path)
         images, filenames, decode_seconds = await load_images(files)

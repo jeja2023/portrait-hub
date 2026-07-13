@@ -15,11 +15,11 @@ from app.settings import MAX_DETECTIONS
 def validate_image_files(files: Sized, *, max_images: int) -> None:
     """校验上传的图像批次非空且不超过单请求上限。"""
     if not files:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="at least one image file is required")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="至少需要一个图片文件")
     if len(files) > max_images:
         raise HTTPException(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail=f"too many image files: {len(files)}, max {max_images}",
+            detail=f"图片文件过多：{len(files)}，最大 {max_images}",
         )
 
 
@@ -36,9 +36,9 @@ def validate_detection_parameters(
     vision 路由（这些字段可选）。max_detections 复用 validate_int_range 以保持单一事实来源。
     """
     if confidence is not None and not 0 <= confidence <= 1:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="confidence must be between 0 and 1")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="confidence 必须介于 0 到 1 之间")
     if iou is not None and not 0 <= iou <= 1:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="iou must be between 0 and 1")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="iou 必须介于 0 到 1 之间")
     if max_detections is not None:
         validate_int_range("max_detections", max_detections, minimum=1, maximum=max_detections_cap)
 

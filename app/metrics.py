@@ -332,13 +332,13 @@ def build_prometheus_metrics() -> str:
         "# HELP gpu_worker_postprocess_seconds_sum 后处理时间累计秒数。",
         "# TYPE gpu_worker_postprocess_seconds_sum counter",
         f"gpu_worker_postprocess_seconds_sum {METRICS.get('postprocess_seconds_sum', 0)}",
-        "# HELP gpu_worker_video_frames_considered_total Total candidate frames considered during video/stream sampling.",
+        "# HELP gpu_worker_video_frames_considered_total 视频/视频流采样时评估过的候选帧总数。",
         "# TYPE gpu_worker_video_frames_considered_total counter",
         f"gpu_worker_video_frames_considered_total {METRICS.get('video_frames_considered_total', 0)}",
-        "# HELP gpu_worker_video_frames_selected_total Total frames selected after quality/scene/dedup sampling.",
+        "# HELP gpu_worker_video_frames_selected_total 经过质量、场景和去重采样后选中的帧总数。",
         "# TYPE gpu_worker_video_frames_selected_total counter",
         f"gpu_worker_video_frames_selected_total {METRICS.get('video_frames_selected_total', 0)}",
-        "# HELP gpu_worker_video_near_duplicate_drops_total Total candidate frames dropped as near-duplicates.",
+        "# HELP gpu_worker_video_near_duplicate_drops_total 因近重复被丢弃的候选帧总数。",
         "# TYPE gpu_worker_video_near_duplicate_drops_total counter",
         f"gpu_worker_video_near_duplicate_drops_total {METRICS.get('video_near_duplicate_drops_total', 0)}",
         "# HELP gpu_worker_model_config_info 已配置的模型元数据。值始终为 1。",
@@ -374,7 +374,7 @@ def build_prometheus_metrics() -> str:
 
     lines.extend(
         [
-            "# HELP gpu_worker_video_decode_backend_total Frame-index decode operations per backend (opencv/pyav).",
+            "# HELP gpu_worker_video_decode_backend_total 按后端（opencv/pyav）分类的帧索引解码操作次数。",
             "# TYPE gpu_worker_video_decode_backend_total counter",
         ]
     )

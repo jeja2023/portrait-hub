@@ -31,13 +31,13 @@ def bounded_limit(value: int | None, *, default: int, max_limit: int, field_name
     try:
         limit = int(raw)
     except (TypeError, ValueError) as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"{field_name} must be an integer") from exc
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"{field_name} 必须是整数") from exc
     if limit < 0:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"{field_name} must be >= 0")
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"{field_name} 必须大于等于 0")
     if limit > max_limit:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"{field_name} must be <= {max_limit}",
+            detail=f"{field_name} 必须小于等于 {max_limit}",
         )
     return limit
 
@@ -47,9 +47,9 @@ def bounded_offset(value: int | None, *, field_name: str = "offset") -> int:
     try:
         offset = int(raw)
     except (TypeError, ValueError) as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"{field_name} must be an integer") from exc
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"{field_name} 必须是整数") from exc
     if offset < 0:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"{field_name} must be >= 0")
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"{field_name} 必须大于等于 0")
     return offset
 
 
@@ -66,9 +66,9 @@ def decode_cursor(value: str | None) -> list[Any] | None:
         decoded = base64.urlsafe_b64decode(padded.encode("ascii"))
         payload = json.loads(decoded.decode("utf-8"))
     except Exception as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="cursor is invalid") from exc
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="游标无效") from exc
     if not isinstance(payload, list):
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="cursor is invalid")
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="游标无效")
     return payload
 
 

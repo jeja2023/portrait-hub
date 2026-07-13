@@ -94,14 +94,14 @@ def configured_model_path(model_id: str, config: dict[str, Any], models_root: Pa
     if isinstance(raw_path, str) and raw_path.strip():
         candidate = Path(raw_path.strip())
         if candidate.is_absolute():
-            return None, "artifact.path must be relative to models root"
+            return None, "artifact.path 必须相对于模型根目录"
         path = (models_root / candidate).resolve()
     else:
         path = (models_root / model_id.split("/", 1)[-1]).resolve()
     try:
         path.relative_to(models_root.resolve())
     except ValueError:
-        return None, "model artifact path escapes models root"
+        return None, "模型构件路径逃逸模型根目录"
     return path, None
 
 
@@ -164,15 +164,15 @@ def validate_model(
     if expected_sha:
         detail["expected_sha256"] = expected_sha
     elif strict_hash or strict_governance:
-        return {"name": f"model:{model_id}", "ok": False, "detail": {**detail, "error": "artifact.sha256 is required"}}
+        return {"name": f"model:{model_id}", "ok": False, "detail": {**detail, "error": "artifact.sha256 为必填项"}}
 
     if artifact_present:
         actual_sha = sha256_file(model_path)
         detail["sha256"] = actual_sha
         if expected_sha and expected_sha != actual_sha:
-            return {"name": f"model:{model_id}", "ok": False, "detail": {**detail, "error": "sha256 mismatch"}}
+            return {"name": f"model:{model_id}", "ok": False, "detail": {**detail, "error": "sha256 不匹配"}}
     elif not allow_missing_artifacts:
-        return {"name": f"model:{model_id}", "ok": False, "detail": {**detail, "error": "model artifact missing"}}
+        return {"name": f"model:{model_id}", "ok": False, "detail": {**detail, "error": "模型构件不存在"}}
 
     card_path = model_card_path(model_path, artifact)
     sidecar_path = governance_sidecar_path(model_path, artifact)
@@ -182,7 +182,7 @@ def validate_model(
 
     if not card_path.is_file():
         if strict_sidecars or strict_governance:
-            return {"name": f"model:{model_id}", "ok": False, "detail": {**detail, "error": "model card missing"}}
+            return {"name": f"model:{model_id}", "ok": False, "detail": {**detail, "error": "模型卡不存在"}}
     else:
         card = load_yaml(card_path)
         missing = []
@@ -191,11 +191,11 @@ def validate_model(
         if not section_has_content(card, "evaluation") and not section_has_content(card, "metrics"):
             missing.append("evaluation_or_metrics")
         if missing and (strict_sidecars or strict_governance):
-            return {"name": f"model:{model_id}", "ok": False, "detail": {**detail, "error": f"model card missing sections: {', '.join(missing)}"}}
+            return {"name": f"model:{model_id}", "ok": False, "detail": {**detail, "error": f"模型卡缺少章节: {', '.join(missing)}"}}
 
     if strict_governance:
         if not sidecar_path.is_file():
-            return {"name": f"model:{model_id}", "ok": False, "detail": {**detail, "error": "governance sidecar missing"}}
+            return {"name": f"model:{model_id}", "ok": False, "detail": {**detail, "error": "治理 sidecar 不存在"}}
         governance = load_yaml(sidecar_path)
         missing_sections = [item for item in REQUIRED_GOVERNANCE_SECTIONS if not section_has_content(governance, item)]
         detail["governance_missing"] = missing_sections
@@ -203,14 +203,14 @@ def validate_model(
             return {
                 "name": f"model:{model_id}",
                 "ok": False,
-                "detail": {**detail, "error": f"governance sidecar missing sections: {', '.join(missing_sections)}"},
+                "detail": {**detail, "error": f"治理 sidecar 缺少章节: {', '.join(missing_sections)}"},
             }
 
     task = str(config.get("task") or config.get("type") or "").lower()
     output = mapping_value(config, "output")
     if task in {"detection", "classification"} and "classes" not in output and not label_file.is_file():
         if strict_sidecars or strict_governance:
-            return {"name": f"model:{model_id}", "ok": False, "detail": {**detail, "error": "labels file missing"}}
+            return {"name": f"model:{model_id}", "ok": False, "detail": {**detail, "error": "标签文件不存在"}}
 
     return {"name": f"model:{model_id}", "ok": True, "detail": detail}
 
@@ -250,7 +250,7 @@ def validate_config(args: argparse.Namespace) -> dict[str, Any]:
                 )
             )
         else:
-            checks.append({"name": f"model:{model_id}", "ok": False, "detail": {"model_id": model_id, "error": "model config missing"}})
+            checks.append({"name": f"model:{model_id}", "ok": False, "detail": {"model_id": model_id, "error": "模型配置不存在"}})
 
     errors: list[str] = []
     warnings: list[str] = []
@@ -258,9 +258,9 @@ def validate_config(args: argparse.Namespace) -> dict[str, Any]:
         detail = item.get("detail", {})
         if not item["ok"]:
             error = detail.get("error") if isinstance(detail, dict) else None
-            errors.append(f"{item['name']}: {error or 'validation failed'}")
+            errors.append(f"{item['name']}: {error or '校验失败'}")
         elif isinstance(detail, dict) and detail.get("artifact_present") is False:
-            warnings.append(f"{item['name']}: model artifact missing; validated metadata only")
+            warnings.append(f"{item['name']}: 模型构件不存在；仅校验元数据")
 
     return {
         "ok": not errors,
@@ -275,27 +275,27 @@ def validate_config(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Validate production model governance sidecars.")
-    parser.add_argument("--config", default="models.yml", help="Path to models.yml.")
-    parser.add_argument("--models-root", default="models", help="Model artifact root.")
-    parser.add_argument("--capabilities", default="model-capabilities.yml", help="Optional capabilities file.")
-    parser.add_argument("--model-id", action="append", help="Only validate these model keys or aliases.")
-    parser.add_argument("--strict-hash", action="store_true", help="Require artifact sha256.")
-    parser.add_argument("--strict-sidecars", action="store_true", help="Require model cards and labels where applicable.")
-    parser.add_argument("--strict-governance", action="store_true", help="Require governance sidecars and sections.")
-    parser.add_argument("--allow-missing-artifacts", action="store_true", help="Validate metadata even when model binaries are distributed out of band.")
-    parser.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
+    parser = argparse.ArgumentParser(description="校验生产模型治理附属文件。")
+    parser.add_argument("--config", default="models.yml", help="models.yml 路径。")
+    parser.add_argument("--models-root", default="models", help="模型构件根目录。")
+    parser.add_argument("--capabilities", default="model-capabilities.yml", help="可选能力文件。")
+    parser.add_argument("--model-id", action="append", help="只校验这些模型键或别名。")
+    parser.add_argument("--strict-hash", action="store_true", help="要求 artifact.sha256。")
+    parser.add_argument("--strict-sidecars", action="store_true", help="在适用位置要求模型卡和标签。")
+    parser.add_argument("--strict-governance", action="store_true", help="要求治理附属文件和章节。")
+    parser.add_argument("--allow-missing-artifacts", action="store_true", help="即使模型二进制通过带外分发，也校验元数据。")
+    parser.add_argument("--json", action="store_true", help="输出机器可读 JSON。")
     args = parser.parse_args()
 
     report = validate_config(args)
     if args.json:
         print(json.dumps(report, ensure_ascii=False, indent=2))
     else:
-        print(f"model governance check: {'OK' if report['ok'] else 'FAILED'}")
+        print(f"模型治理检查：{'通过' if report['ok'] else '失败'}")
         for item in report["models"]:
-            print(f"{'ok' if item['ok'] else 'fail'}: {item['name']}")
+            print(f"{'通过' if item['ok'] else '失败'}: {item['name']}")
             if not item["ok"]:
-                print(f"  detail: {item['detail']}")
+                print(f"  详情: {item['detail']}")
     return 0 if report["ok"] else 1
 
 

@@ -52,7 +52,7 @@ def evaluate_stream_worker_health(*, max_heartbeat_age_seconds: float = 30.0) ->
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Check in-process PortraitHub stream worker session health.")
+    parser = argparse.ArgumentParser(description="检查进程内 PortraitHub 视频流工作会话健康状态。")
     parser.add_argument("--max-heartbeat-age-seconds", type=float, default=30.0)
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args()
@@ -61,8 +61,8 @@ def main() -> int:
     if args.json:
         print(json.dumps(report, ensure_ascii=False, indent=2))
     else:
-        print(f"portrait stream worker health: {'OK' if report['ok'] else 'FAILED'}")
-        print(f"active={report['active_sessions']} stale={report['stale_session_count']}")
+        print(f"视频流 worker 健康检查：{'通过' if report['ok'] else '失败'}")
+        print(f"活跃会话={report['active_sessions']} 过期会话={report['stale_session_count']}")
     return 0 if report["ok"] else 1
 
 

@@ -31,7 +31,7 @@ def validate_image_filename(filename: str | None) -> None:
     if suffix and suffix not in SUPPORTED_IMAGE_EXTENSIONS:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="unsupported image extension",
+            detail="不支持的图片扩展名",
         )
 
 
@@ -59,13 +59,13 @@ def validate_image_content(data: bytes, filename: str | None = None) -> str:
     if detected is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="uploaded file has unsupported image content",
+            detail="上传文件包含不支持的图片内容",
         )
     expected = expected_format_from_filename(filename)
     if expected is not None and expected != detected:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="image extension does not match detected content",
+            detail="图片扩展名与检测到的内容不匹配",
         )
     return detected
 
@@ -76,12 +76,12 @@ async def read_limited_upload(file: UploadFile, max_bytes: int = MAX_IMAGE_BYTES
     if not data:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="uploaded file is empty",
+            detail="上传文件为空",
         )
     if len(data) > max_bytes:
         raise HTTPException(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail=f"uploaded file is too large: max {max_bytes} bytes",
+            detail=f"上传文件过大：最大 {max_bytes} 字节",
         )
     return data
 
@@ -94,18 +94,18 @@ def decode_image_bytes(data: bytes, filename: str | None = None, source_id: str 
             if image_format not in SUPPORTED_IMAGE_FORMATS:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="unsupported image format",
+                    detail="不支持的图片格式",
                 )
             if image_format != detected_format:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="image content did not match decoded image format",
+                    detail="图片内容与解码出的图片格式不匹配",
                 )
             opened_width, opened_height = opened.size
             if opened_width * opened_height > MAX_IMAGE_PIXELS:
                 raise HTTPException(
                     status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-                    detail=f"image has too many pixels: max {MAX_IMAGE_PIXELS}",
+                    detail=f"图片像素过多：最大 {MAX_IMAGE_PIXELS}",
                 )
             transposed = ImageOps.exif_transpose(opened)
             if transposed is None:
@@ -116,14 +116,14 @@ def decode_image_bytes(data: bytes, filename: str | None = None, source_id: str 
     except (Image.DecompressionBombError, UnidentifiedImageError, OSError, ValueError) as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="uploaded file is not a valid image",
+            detail="上传文件不是有效图片",
         ) from exc
 
     width, height = image.size
     if width * height > MAX_IMAGE_PIXELS:
         raise HTTPException(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail=f"image has too many pixels: max {MAX_IMAGE_PIXELS}",
+            detail=f"图片像素过多：最大 {MAX_IMAGE_PIXELS}",
         )
 
     quality = assess_image_quality(image)

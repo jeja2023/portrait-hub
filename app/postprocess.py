@@ -26,13 +26,13 @@ def yolo_detections(
     if output.ndim == 3 and output.shape[0] == 1:
         output = output[0]
     if output.ndim != 2:
-        raise ValueError(f"unsupported YOLO output shape: {list(raw_outputs[0].shape)}")
+        raise ValueError(f"不支持的 YOLO 输出形状： {list(raw_outputs[0].shape)}")
 
     if output.shape[0] < output.shape[1] and output.shape[0] in {5, 6, 84, 85}:
         output = output.T
 
     if output.shape[1] < 5:
-        raise ValueError(f"unsupported YOLO output shape: {list(raw_outputs[0].shape)}")
+        raise ValueError(f"不支持的 YOLO 输出形状： {list(raw_outputs[0].shape)}")
 
     boxes_xywh = output[:, :4].astype(np.float32)
     if output.shape[1] == 6:

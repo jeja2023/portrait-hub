@@ -57,16 +57,16 @@ def clear_review_state() -> None:
 def bounded_text(value: Any, field_name: str, *, required: bool = False, max_length: int = MAX_REVIEW_TEXT_LENGTH) -> str:
     text = str(value or "").strip()
     if required and not text:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"{field_name} is required")
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"{field_name} 为必填项")
     if len(text) > max_length:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"{field_name} is too long")
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"{field_name} 过长")
     return text
 
 
 def normalize_review_label(value: Any) -> str:
     label = bounded_text(value, "label", required=True, max_length=64)
     if label not in _REVIEW_LABELS:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="unsupported review label")
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="不支持的审阅标签")
     return label
 
 
@@ -298,7 +298,7 @@ def review_threshold_recommendations(
     recommendations: list[dict[str, Any]] = []
     if total < 3:
         action = "collect_more_samples"
-        reason = "fewer than 3 reviewed samples; keep thresholds unchanged until more evidence is available"
+        reason = "已复核样本少于 3 个；保持阈值不变，等待更多证据"
         confidence = "low"
         body_target = body_normal
         fusion_target = fusion_normal
@@ -316,7 +316,7 @@ def review_threshold_recommendations(
         fusion_target = fusion_normal
     else:
         action = "hold_threshold"
-        reason = "review evidence is mixed; keep thresholds unchanged and collect more samples"
+        reason = "复核证据不一致；保持阈值不变并继续收集样本"
         confidence = "low"
         body_target = body_normal
         fusion_target = fusion_normal
@@ -394,7 +394,7 @@ def create_review_annotation(
         "source": bounded_text(source, "source", max_length=64) or "console",
     }
     if frame_index is not None and frame_index < 0:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="frame_index must be >= 0")
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="frame_index 必须大于等于 0")
     with _REVIEW_LOCK:
         _REVIEW_STATE["annotations"].append(record)
         if len(_REVIEW_STATE["annotations"]) > MAX_REVIEW_ANNOTATIONS:

@@ -35,7 +35,7 @@ def _gallery_scan_records(modality: str, tenant_id: str) -> list[dict[str, Any]]
 
         return gallery_records_snapshot(tenant_id, normalize_modality(modality))
     except Exception as exc:  # pragma: no cover - 防御性：绝不让回退本身失败
-        logger.warning("failed to build local-scan fallback records: %s", exception_log_summary(exc))
+        logger.warning("构建本地扫描回退记录失败: %s", exception_log_summary(exc))
         return []
 
 FloatArray = npt.NDArray[np.float32]
@@ -43,7 +43,7 @@ FloatArray = npt.NDArray[np.float32]
 
 def _require_or_fallback_allowed(error: Exception, backend_name: str) -> None:
     if PORTRAIT_REQUIRE_PRODUCTION_VECTOR_BACKEND:
-        raise RuntimeError(f"{backend_name} vector backend failed and local fallback is disabled") from error
+        raise RuntimeError(f"{backend_name} 向量后端失败，且本地回退已禁用") from error
 
 
 def _qdrant_not_found_error(error: Exception) -> bool:
@@ -201,7 +201,7 @@ class PgvectorVectorStore(LocalVectorStore):
                 )
         except Exception as exc:
             _require_or_fallback_allowed(exc, self.backend_name)
-            logger.warning("pgvector search failed, falling back to local vector scan: %s", exception_log_summary(exc))
+            logger.warning("pgvector 检索失败，回退到本地向量扫描: %s", exception_log_summary(exc))
             return super().search(
                 query_embedding,
                 records or _gallery_scan_records(modality, tenant_id),
@@ -230,9 +230,9 @@ class QdrantVectorStore(LocalVectorStore):
 
     def _client(self) -> Any:
         if QdrantClient is None:
-            raise RuntimeError("qdrant-client is not installed; install requirements-prod-optional.txt")
+            raise RuntimeError("未安装 qdrant-client；请安装 requirements-prod-optional.txt")
         if not QDRANT_URL:
-            raise RuntimeError("QDRANT_URL is not configured")
+            raise RuntimeError("未配置 QDRANT_URL")
         if self._cached_client is None:
             self._cached_client = QdrantClient(url=QDRANT_URL, api_key=QDRANT_API_KEY or None, prefer_grpc=QDRANT_PREFER_GRPC)
         return self._cached_client
@@ -247,7 +247,7 @@ class QdrantVectorStore(LocalVectorStore):
 
     def _ensure_collection(self, client: Any, collection_name: str, vector_size: int) -> None:
         if qdrant_models is None:
-            raise RuntimeError("qdrant-client models are unavailable")
+            raise RuntimeError("qdrant-client 模型不可用")
         try:
             client.get_collection(collection_name)
             return
@@ -351,7 +351,7 @@ class QdrantVectorStore(LocalVectorStore):
                 )
         except Exception as exc:
             _require_or_fallback_allowed(exc, self.backend_name)
-            logger.warning("qdrant search failed, falling back to local vector scan: %s", exception_log_summary(exc))
+            logger.warning("Qdrant 检索失败，回退到本地向量扫描: %s", exception_log_summary(exc))
             return super().search(
                 query_embedding,
                 records or _gallery_scan_records(modality, tenant_id),
@@ -396,7 +396,7 @@ def configured_vector_store() -> VectorStore:
     if PORTRAIT_VECTOR_BACKEND == "qdrant":
         return QdrantVectorStore()
     if PORTRAIT_REQUIRE_PRODUCTION_VECTOR_BACKEND:
-        raise RuntimeError("local vector backend is disabled by PORTRAIT_REQUIRE_PRODUCTION_VECTOR_BACKEND")
+        raise RuntimeError("PORTRAIT_REQUIRE_PRODUCTION_VECTOR_BACKEND 已禁用本地向量后端")
     return LocalVectorStore()
 
 

@@ -75,7 +75,7 @@ def load_gallery_snapshot() -> dict[str, Any]:
                             }
                         )
     except Exception as exc:  # pragma: no cover - 需要外部数据库支持
-        logger.warning("postgres gallery load failed: %s", exception_log_summary(exc))
+        logger.warning("postgres gallery 加载失败ed: %s", exception_log_summary(exc))
         return {"people": []}
     return {"version": 1, "people": list(people.values())}
 

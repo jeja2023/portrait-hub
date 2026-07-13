@@ -98,7 +98,7 @@ def rollback_retention_cleanup(
             for feature in restored_person.features:
                 persist_feature(restored_person, feature)
         except Exception as exc:
-            logger.warning("failed to persist restored gallery person during retention rollback: %s", exception_log_summary(exc))
+            logger.warning("保留回滚期间持久化恢复人员失败: %s", exception_log_summary(exc))
             errors.append("restore retained gallery person failed")
 
     for stream, previous_stream in reversed(trimmed_streams):
@@ -107,7 +107,7 @@ def rollback_retention_cleanup(
         try:
             persist_stream(stream)
         except Exception as exc:
-            logger.warning("failed to persist restored stream during retention rollback: %s", exception_log_summary(exc))
+            logger.warning("保留回滚期间持久化恢复视频流失败: %s", exception_log_summary(exc))
             errors.append("restore retained stream failed")
 
     for job in reversed(removed_jobs):
@@ -116,13 +116,13 @@ def rollback_retention_cleanup(
             VIDEO_JOBS[job_key(restored_job.tenant_id, restored_job.job_id)] = restored_job
             persist_video_job(restored_job)
         except Exception as exc:
-            logger.warning("failed to persist restored video job during retention rollback: %s", exception_log_summary(exc))
-            errors.append("restore retained video job failed")
+            logger.warning("保留回滚期间持久化恢复视频任务失败: %s", exception_log_summary(exc))
+            errors.append("restore retained 视频任务失败")
     return errors
 
 
 def raise_retention_cleanup_rollback_failure(original_error: Exception, rollback_errors: list[str]) -> None:
-    raise_rollback_failure("retention cleanup failed and rollback persistence failed", original_error, rollback_errors)
+    raise_rollback_failure("保留清理失败，且回滚持久化失败", original_error, rollback_errors)
 
 
 def cleanup_retained_gallery_feature_objects(person: PersonRecord) -> tuple[int, list[str]]:
@@ -141,7 +141,7 @@ def cleanup_retained_gallery_feature_objects(person: PersonRecord) -> tuple[int,
             )
             errors.append(OBJECT_CLEANUP_FAILED)
         except Exception as exc:
-            logger.warning("failed to cleanup gallery object during retention: %s", exception_log_summary(exc))
+            logger.warning("保留清理期间清理人员库对象失败: %s", exception_log_summary(exc))
             errors.append(OBJECT_CLEANUP_FAILED)
     return deleted_count, errors
 
@@ -280,8 +280,8 @@ async def v1_admin_audit_verify(ctx: PortraitRequestContext = Depends(portrait_r
     try:
         audit_chain = await run_blocking_io(public_audit_chain_verification)
     except Exception as exc:
-        logger.warning("failed to verify audit chain: %s", exception_log_summary(exc))
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="audit chain verification unavailable") from exc
+        logger.warning("校验审计链失败: %s", exception_log_summary(exc))
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="审计链校验不可用") from exc
     return portrait_success(request_id, {"tenant_id": tenant_id, "audit_chain": audit_chain})
 
 
@@ -299,9 +299,9 @@ async def v1_admin_audit_events(
     request_id_header = ctx.request_id
     tenant_id = ctx.tenant_id
     if category is not None and category not in {"delete_requests", "exports", "model_versions", "retention", "other"}:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="unsupported audit event category")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="不支持的审计事件类别")
     if created_since is not None and created_until is not None and created_until < created_since:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="created_until must be >= created_since")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="created_until 必须大于等于 created_since")
     try:
         audit_events = await run_blocking_io(
             read_public_audit_events,
@@ -315,8 +315,8 @@ async def v1_admin_audit_events(
             created_until=created_until,
         )
     except Exception as exc:
-        logger.warning("failed to read audit events: %s", exception_log_summary(exc))
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="audit events unavailable") from exc
+        logger.warning("读取审计事件失败: %s", exception_log_summary(exc))
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="审计事件不可用") from exc
     return portrait_success(request_id_header, {"tenant_id": tenant_id, **audit_events})
 
 @router.get("/v1/admin/export", dependencies=[Depends(permission_dependency("admin:export"))])
@@ -451,8 +451,8 @@ async def v1_admin_backups(
     try:
         backups = await run_blocking_io(read_public_backup_snapshots, limit, tenant_id)
     except Exception as exc:
-        logger.warning("failed to read backup snapshots: %s", exception_log_summary(exc))
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="backup snapshots unavailable") from exc
+        logger.warning("读取备份快照失败: %s", exception_log_summary(exc))
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="备份快照不可用") from exc
     return portrait_success(request_id, {"tenant_id": tenant_id, **backups})
 
 @router.post("/v1/admin/backup", dependencies=[Depends(permission_dependency("admin:export"))])
@@ -463,7 +463,7 @@ async def v1_admin_backup(
     request_id = ctx.request_id
     tenant_id = ctx.tenant_id
     if payload.confirm is not None and payload.confirm != "backup":
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='enter "backup" in confirm to run backup')
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='请在 confirm 中输入 "backup" 后执行备份')
     export_response = await v1_admin_export(
         people_limit=None,
         people_offset=None,
@@ -519,7 +519,7 @@ async def v1_admin_retention_cleanup(
     if payload.confirm is not None and payload.confirm != "cleanup":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail='enter "cleanup" in confirm to run retention cleanup',
+            detail='请在 confirm 中输入 "cleanup" 后执行保留清理',
         )
 
     result = await run_blocking_io(

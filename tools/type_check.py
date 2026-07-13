@@ -43,16 +43,16 @@ def annotation_errors(targets: list[str]) -> list[str]:
             if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 continue
             if node.returns is None:
-                errors.append(f"{target}:{node.lineno} {node.name} missing return annotation")
+                errors.append(f"{target}:{node.lineno} {node.name} 缺少返回类型注解")
             for arg in [*node.args.posonlyargs, *node.args.args, *node.args.kwonlyargs]:
                 if arg.arg in {"self", "cls"}:
                     continue
                 if arg.annotation is None:
-                    errors.append(f"{target}:{node.lineno} {node.name}.{arg.arg} missing annotation")
+                    errors.append(f"{target}:{node.lineno} {node.name}.{arg.arg} 缺少类型注解")
             if node.args.vararg is not None and node.args.vararg.annotation is None:
-                errors.append(f"{target}:{node.lineno} {node.name}.{node.args.vararg.arg} missing annotation")
+                errors.append(f"{target}:{node.lineno} {node.name}.{node.args.vararg.arg} 缺少类型注解")
             if node.args.kwarg is not None and node.args.kwarg.annotation is None:
-                errors.append(f"{target}:{node.lineno} {node.name}.{node.args.kwarg.arg} missing annotation")
+                errors.append(f"{target}:{node.lineno} {node.name}.{node.args.kwarg.arg} 缺少类型注解")
     return errors
 
 
@@ -69,7 +69,7 @@ def main() -> int:
 
     missing = [target for target in targets if not Path(target).is_file()]
     if missing:
-        print(f"missing type-check targets: {', '.join(missing)}", file=sys.stderr)
+        print(f"缺少类型检查目标: {', '.join(missing)}", file=sys.stderr)
         return 2
 
     if not mypy_strict_enabled():

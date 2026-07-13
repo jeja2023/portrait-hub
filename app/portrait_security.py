@@ -80,14 +80,14 @@ def tenant_id_from_request(request: Request) -> str:
         if TENANT_HEADER_REQUIRED and request.url.path.startswith("/v1/"):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="x-tenant-id header is required",
+                detail="缺少 x-tenant-id 请求头",
             )
         raw_tenant_id = "default"
     tenant_id = raw_tenant_id.strip()
     if not TENANT_PATTERN.fullmatch(tenant_id):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="x-tenant-id must be 1-64 chars and contain only letters, digits, '_', '.', ':', '-'",
+            detail="x-tenant-id 必须为 1-64 个字符，且只能包含字母、数字、'_'、'.'、':'、'-'",
         )
     return tenant_id
 
@@ -97,7 +97,7 @@ def validate_person_id(person_id: str, field_name: str = "person_id") -> str:
     if not PERSON_ID_PATTERN.fullmatch(value):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"{field_name} must be 1-128 chars and contain only letters, digits, '_', '.', ':', '-'",
+            detail=f"{field_name} 必须为 1-128 个字符，且只能包含字母、数字、'_'、'.'、':'、'-'",
         )
     return value
 
@@ -107,7 +107,7 @@ def validate_resource_id(resource_id: str, field_name: str) -> str:
     if not RESOURCE_ID_PATTERN.fullmatch(value):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"{field_name} must be 1-128 chars and contain only letters, digits, '_', '.', ':', '-'",
+            detail=f"{field_name} 必须为 1-128 个字符，且只能包含字母、数字、'_'、'.'、':'、'-'",
         )
     return value
 
@@ -132,25 +132,25 @@ def normalize_public_metadata(
     if value is None:
         return {}
     if not isinstance(value, dict):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"{field_name} must be a JSON object")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"{field_name} 必须是 JSON 对象")
 
     key_count = 0
 
     def normalize(item: Any, depth: int, path: str) -> Any:
         nonlocal key_count
         if depth > max_depth:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"{field_name} exceeds max depth {max_depth}")
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"{field_name} 超过最大深度 {max_depth}")
         if isinstance(item, dict):
             output: dict[str, Any] = {}
             for raw_key, raw_value in item.items():
                 key = str(raw_key).strip()
                 if not key:
-                    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"{field_name} contains an empty key")
+                    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"{field_name} 包含空键")
                 if len(key) > 128:
-                    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"{field_name} key is too long")
+                    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"{field_name} 键过长")
                 key_count += 1
                 if key_count > max_keys:
-                    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"{field_name} exceeds max key count {max_keys}")
+                    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"{field_name} 超过最大键数量 {max_keys}")
                 output[key] = normalize(raw_value, depth + 1, f"{path}.{key}" if path else key)
             return output
         if isinstance(item, list):
@@ -159,21 +159,21 @@ def normalize_public_metadata(
             if len(item) > max_string_length:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"{field_name} string value is too long at {path or '<root>'}",
+                    detail=f"{field_name} 字符串值过长，位置：{path or '<root>'}",
                 )
             return item
         if isinstance(item, bool) or item is None:
             return item
         if isinstance(item, (int, float)):
             if not math.isfinite(float(item)):
-                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"{field_name} contains a non-finite number")
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"{field_name} 包含非有限数值")
             return item
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"{field_name} contains unsupported value type")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"{field_name} 包含不支持的值类型")
 
     normalized = normalize(value, 1, "")
     if not isinstance(normalized, dict):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"{field_name} must be a JSON object")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"{field_name} 必须是 JSON 对象")
     encoded = json.dumps(normalized, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
     if len(encoded) > max_bytes:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"{field_name} exceeds max size {max_bytes} bytes")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"{field_name} 超过最大大小 {max_bytes} 字节")
     return normalized

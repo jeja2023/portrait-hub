@@ -66,7 +66,7 @@ def test_python_sdk_raises_structured_http_error(monkeypatch) -> None:
             429,
             "Too Many Requests",
             DummyHeaders(),
-            BytesIO(json.dumps({"detail": "rate limit exceeded"}).encode("utf-8")),
+            BytesIO(json.dumps({"detail": "已超过限流阈值"}).encode("utf-8")),
         )
 
     monkeypatch.setattr("sdk.python.portrait_hub_client.urllib_request.urlopen", fake_urlopen)
@@ -76,7 +76,7 @@ def test_python_sdk_raises_structured_http_error(monkeypatch) -> None:
         client.health()
 
     assert exc_info.value.status_code == 429
-    assert exc_info.value.detail == {"detail": "rate limit exceeded"}
+    assert exc_info.value.detail == {"detail": "已超过限流阈值"}
     assert exc_info.value.headers["Retry-After"] == "2"
 
 

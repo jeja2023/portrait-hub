@@ -101,19 +101,19 @@ def session_providers(
     if runtime not in {"tensorrt", "onnxruntime-tensorrt", "trt"}:
         return cuda_providers
     if not ENABLE_TENSORRT:
-        raise RuntimeError("model requested TensorRT runtime but ENABLE_TENSORRT is false")
+        raise RuntimeError("模型请求 TensorRT 运行时，但 ENABLE_TENSORRT 为 false")
 
     available = set(ort.get_available_providers())
     if "TensorrtExecutionProvider" not in available:
         if "CUDAExecutionProvider" in available:
             logger.warning(
-                "TensorRT provider is unavailable; falling back to CUDA for model: %s",
+                "TensorRT provider 不可用；模型回退到 CUDA: %s",
                 cache_key_value,
             )
             return cuda_providers
         if allow_cpu_fallback and CPU_FALLBACK_ENABLED and "CPUExecutionProvider" in available:
             logger.warning(
-                "TensorRT provider is unavailable; falling back to CPU for model: %s",
+                "TensorRT provider 不可用；模型回退到 CPU: %s",
                 cache_key_value,
             )
             return CPU_PROVIDERS
@@ -157,21 +157,21 @@ def create_session(model_path: Path, cache_key_value: str | None = None, device_
     if "CUDAExecutionProvider" not in available:
         if CPU_FALLBACK_ENABLED and "CPUExecutionProvider" in available:
             logger.warning(
-                "CUDAExecutionProvider is not available; falling back to CPU. available providers: %s",
+                "CUDAExecutionProvider 不可用；回退到 CPU。可用 providers: %s",
                 sorted(available),
             )
             return _finalize_session(
                 ort.InferenceSession(str(model_path), providers=CPU_PROVIDERS),
                 fallback_reason="cuda_provider_unavailable",
             )
-        raise RuntimeError(f"CUDAExecutionProvider is not available. available providers: {sorted(available)}")
+        raise RuntimeError(f"CUDAExecutionProvider 不可用。可用提供程序： {sorted(available)}")
 
     requested_providers = session_providers(cache_key_value, device_id=device_id)
     try:
         session = ort.InferenceSession(str(model_path), providers=requested_providers)
     except Exception as exc:
         if CPU_FALLBACK_ENABLED and "CPUExecutionProvider" in available:
-            logger.warning("CUDA session creation failed; falling back to CPU: %s", exception_log_summary(exc))
+            logger.warning("CUDA session 创建失败；回退到 CPU: %s", exception_log_summary(exc))
             return _finalize_session(
                 ort.InferenceSession(str(model_path), providers=CPU_PROVIDERS),
                 fallback_reason="session_init_failed",
@@ -180,25 +180,25 @@ def create_session(model_path: Path, cache_key_value: str | None = None, device_
     active = session.get_providers()
     if uses_cpu_provider_only(requested_providers):
         if "CPUExecutionProvider" not in active:
-            raise RuntimeError(f"model session did not enable CPU. active providers: {active}")
+            raise RuntimeError(f"模型会话未启用 CPU。活动提供程序： {active}")
         return _finalize_session(session)
     if requested_providers and isinstance(requested_providers[0], tuple) and requested_providers[0][0] == "TensorrtExecutionProvider":
         if "TensorrtExecutionProvider" not in active:
             if CPU_FALLBACK_ENABLED and "CPUExecutionProvider" in available:
-                logger.warning("model session did not enable TensorRT; falling back to CPU. active providers: %s", active)
+                logger.warning("模型 session 未启用 TensorRT；回退到 CPU。活跃 providers: %s", active)
                 return _finalize_session(
                     ort.InferenceSession(str(model_path), providers=CPU_PROVIDERS),
                     fallback_reason="tensorrt_not_active",
                 )
-            raise RuntimeError(f"model session did not enable TensorRT. active providers: {active}")
+            raise RuntimeError(f"模型会话未启用 TensorRT。活动提供程序： {active}")
     if "CUDAExecutionProvider" not in active:
         if CPU_FALLBACK_ENABLED and "CPUExecutionProvider" in available:
-            logger.warning("model session did not enable CUDA; falling back to CPU. active providers: %s", active)
+            logger.warning("模型 session 未启用 CUDA；回退到 CPU。活跃 providers: %s", active)
             return _finalize_session(
                 ort.InferenceSession(str(model_path), providers=CPU_PROVIDERS),
                 fallback_reason="cuda_not_active",
             )
-        raise RuntimeError(f"model session did not enable CUDA. active providers: {active}")
+        raise RuntimeError(f"模型会话未启用 CUDA。活动提供程序： {active}")
     return _finalize_session(session)
 def input_dtype(input_type: str) -> Any:
     if "double" in input_type:

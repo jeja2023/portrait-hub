@@ -75,11 +75,11 @@ def distinct_sequence(decoded: list[DecodedImage]) -> tuple[list[DecodedImage], 
 
 def validate_sequence(files: list[UploadFile], name: str) -> None:
     if not files:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"{name} requires at least one frame")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"{name} 至少需要一帧")
     if len(files) > MAX_VIDEO_FRAMES:
         raise HTTPException(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail=f"too many frames in {name}: {len(files)}, max {MAX_VIDEO_FRAMES}",
+            detail=f"{name} 的帧数过多：{len(files)}，最大 {MAX_VIDEO_FRAMES}",
         )
 
 
@@ -366,13 +366,13 @@ async def v1_compare_batch(
     if modality_key in {"person", "persons"}:
         modality_key = "body"
     if modality_key not in {"face", "body", "appearance"}:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="unsupported modality")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="不支持的模态")
     if not image_a or len(image_a) != len(image_b):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="image_a and image_b must contain the same number of files")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="image_a 与 image_b 必须包含相同数量的文件")
     if len(image_a) > MAX_COMPARE_BATCH_PAIRS:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"too many pairs: {len(image_a)}, max {MAX_COMPARE_BATCH_PAIRS}",
+            detail=f"配对数量过多：{len(image_a)}，最大 {MAX_COMPARE_BATCH_PAIRS}",
         )
     if async_mode:
         left_payloads = [(file.filename, file.content_type, await read_limited_upload(file)) for file in image_a]

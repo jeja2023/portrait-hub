@@ -49,7 +49,7 @@ async def test_gather_limited_cancels_pending_work_on_failure() -> None:
         nonlocal cancelled
         started.append(value)
         if value == 1:
-            raise RuntimeError("boom")
+            raise RuntimeError("模拟异常")
         try:
             await asyncio.sleep(10)
         except asyncio.CancelledError:
@@ -57,7 +57,7 @@ async def test_gather_limited_cancels_pending_work_on_failure() -> None:
             raise
         return value
 
-    with pytest.raises(RuntimeError, match="boom"):
+    with pytest.raises(RuntimeError, match="模拟异常"):
         await gather_limited([0, 1, 2], worker, limit=2)
 
     assert started == [0, 1]
@@ -145,7 +145,7 @@ async def test_compare_batch_cancels_other_pairs_after_failure(monkeypatch) -> N
         nonlocal calls
         calls += 1
         if file.filename == "bad.png":
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="bad image")
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="图片无效")
         await asyncio.sleep(10)
         return None
 

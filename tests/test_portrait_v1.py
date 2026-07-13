@@ -314,9 +314,9 @@ def test_v1_gallery_search_rejects_out_of_range_top_k() -> None:
     )
 
     assert too_small.status_code == 400
-    assert "top_k must be >= 1" in too_small.json()["detail"]
+    assert "top_k 必须大于等于 1" in too_small.json()["detail"]
     assert too_large.status_code == 400
-    assert "top_k must be between 1 and 100" in too_large.json()["detail"]
+    assert "top_k 必须介于 1 到 100 之间" in too_large.json()["detail"]
 
 
 def test_v1_gallery_enroll_skips_duplicate_inputs() -> None:
@@ -357,7 +357,7 @@ def test_v1_gallery_enroll_cleans_object_when_feature_persist_fails(monkeypatch)
             return {"backend": self.backend_name, "status": "ready"}
 
     def fail_add_feature(*args, **kwargs):
-        raise HTTPException(status_code=503, detail="state write failed")
+        raise HTTPException(status_code=503, detail="状态写入失败")
 
     monkeypatch.setattr(routes_portrait_gallery, "OBJECT_STORE", FailingObjectStore())
     monkeypatch.setattr(routes_portrait_gallery, "add_feature", fail_add_feature)
@@ -391,7 +391,7 @@ def test_gallery_enroll_rolls_back_when_audit_fails(monkeypatch) -> None:
             return {"backend": self.backend_name, "status": "ready"}
 
     def fail_audit(*args, **kwargs):
-        raise HTTPException(status_code=503, detail="state write failed")
+        raise HTTPException(status_code=503, detail="状态写入失败")
 
     monkeypatch.setattr(routes_portrait_gallery, "OBJECT_STORE", TrackingObjectStore())
     monkeypatch.setattr(routes_portrait_gallery, "audit_event", fail_audit)
@@ -404,7 +404,7 @@ def test_gallery_enroll_rolls_back_when_audit_fails(monkeypatch) -> None:
     )
 
     assert response.status_code == 503
-    assert "state write failed" in response.json()["detail"]
+    assert "状态写入失败" in response.json()["detail"]
     assert deleted == ["default/gallery-image/files.png"]
     assert "p_audit_rollback" not in {person.person_id for person in GALLERY.values()}
 
@@ -437,7 +437,7 @@ def test_gallery_enroll_existing_person_rolls_back_added_feature_when_audit_fail
             return {"backend": self.backend_name, "status": "ready"}
 
     def fail_audit(*args, **kwargs):
-        raise HTTPException(status_code=503, detail="state write failed")
+        raise HTTPException(status_code=503, detail="状态写入失败")
 
     monkeypatch.setattr(routes_portrait_gallery, "OBJECT_STORE", TrackingObjectStore())
     monkeypatch.setattr(routes_portrait_gallery, "audit_event", fail_audit)
@@ -478,14 +478,14 @@ def test_gallery_enroll_rollback_failure_redacts_object_cleanup_details(monkeypa
                 "backend": self.backend_name,
                 "deleted": False,
                 "object_key": info["object_key"],
-                "error": "delete secret-token failed",
+                "error": "删除 secret-token 失败",
             }
 
         def health(self):
             return {"backend": self.backend_name, "status": "ready"}
 
     def fail_audit(*args, **kwargs):
-        raise HTTPException(status_code=503, detail="audit secret-token")
+        raise HTTPException(status_code=503, detail="审计 secret-token")
 
     monkeypatch.setattr(routes_portrait_gallery, "OBJECT_STORE", LeakyFailingObjectStore())
     monkeypatch.setattr(routes_portrait_gallery, "audit_event", fail_audit)
@@ -499,7 +499,7 @@ def test_gallery_enroll_rollback_failure_redacts_object_cleanup_details(monkeypa
 
     assert response.status_code == 500
     assert response.json()["detail"] == {
-        "message": "gallery mutation failed and rollback persistence failed",
+        "message": "人员库变更失败，且回滚持久化失败",
         "rollback_failed": True,
         "rollback_error_count": 1,
     }
@@ -597,7 +597,7 @@ def test_gallery_delete_person_rolls_back_when_object_cleanup_fails(monkeypatch)
             return {
                 "backend": "local_file",
                 "deleted": False,
-                "reason": "secret object delete failed",
+                "reason": "secret 对象删除失败",
                 "object_key": info["object_key"],
             }
 
@@ -614,7 +614,7 @@ def test_gallery_delete_person_rolls_back_when_object_cleanup_fails(monkeypatch)
     response = client.delete("/v1/gallery/p_delete_cleanup_fails")
 
     assert response.status_code == 503
-    assert response.json()["detail"] == "object cleanup failed"
+    assert response.json()["detail"] == "对象清理失败"
     assert gallery_key("default", "p_delete_cleanup_fails") in GALLERY
     assert GALLERY[gallery_key("default", "p_delete_cleanup_fails")].features[0].object_info["object_key"].endswith("secret-object.json")
     assert "secret-object" not in response.text
@@ -633,7 +633,7 @@ def test_gallery_patch_rolls_back_when_audit_fails(monkeypatch) -> None:
     assert enroll.status_code == 200
 
     def fail_audit(*args, **kwargs):
-        raise HTTPException(status_code=503, detail="state write failed")
+        raise HTTPException(status_code=503, detail="状态写入失败")
 
     monkeypatch.setattr(routes_portrait_gallery, "audit_event", fail_audit)
     monkeypatch.setattr(routes_portrait_gallery, "persist_person", lambda person: None)
@@ -661,7 +661,7 @@ def test_gallery_delete_rolls_back_when_audit_fails(monkeypatch) -> None:
     assert enroll.status_code == 200
 
     def fail_audit(*args, **kwargs):
-        raise HTTPException(status_code=503, detail="state write failed")
+        raise HTTPException(status_code=503, detail="状态写入失败")
 
     monkeypatch.setattr(routes_portrait_gallery, "audit_event", fail_audit)
     monkeypatch.setattr(routes_portrait_gallery, "persist_person", lambda person: None)
@@ -681,7 +681,7 @@ def test_v1_video_job_create_rolls_back_job_when_queue_fails(monkeypatch) -> Non
 
     class FailingTaskQueue:
         def enqueue(self, queue, payload):
-            raise HTTPException(status_code=503, detail="task queue write failed")
+            raise HTTPException(status_code=503, detail="任务队列写入失败")
 
     async def fake_read_video_file(file):
         return b"video"
@@ -714,7 +714,7 @@ def test_v1_video_job_create_rolls_back_job_when_audit_fails(monkeypatch) -> Non
         return b"video"
 
     def fail_audit(*args, **kwargs):
-        raise HTTPException(status_code=503, detail="state write failed")
+        raise HTTPException(status_code=503, detail="状态写入失败")
 
     monkeypatch.setattr(routes_portrait_jobs, "TASK_QUEUE", CapturingTaskQueue())
     monkeypatch.setattr(routes_portrait_jobs, "read_video_file", fake_read_video_file)
@@ -777,7 +777,7 @@ def test_v1_video_job_cancel_rolls_back_when_audit_fails(monkeypatch) -> None:
     VIDEO_JOBS[job_key("default", job.job_id)] = job
 
     def fail_audit(*args, **kwargs):
-        raise HTTPException(status_code=503, detail="state write failed")
+        raise HTTPException(status_code=503, detail="状态写入失败")
 
     monkeypatch.setattr(routes_portrait_jobs, "audit_event", fail_audit)
     monkeypatch.setattr(routes_portrait_jobs, "persist_video_job", lambda restored_job: None)
@@ -835,7 +835,7 @@ def test_v1_video_job_not_found_does_not_echo_job_id() -> None:
 
     for response in responses:
         assert response.status_code == 404
-        assert response.json()["detail"] == "job not found"
+        assert response.json()["detail"] == "任务不存在"
         assert secret_job_id not in response.text
 
 
@@ -847,13 +847,13 @@ def test_v1_gallery_and_stream_not_found_do_not_echo_resource_ids() -> None:
     secret_stream_id = "stream_secret_token"
 
     responses = [
-        (client.get(f"/v1/gallery/{secret_person_id}"), "person not found", secret_person_id),
-        (client.delete(f"/v1/gallery/{secret_person_id}"), "person not found", secret_person_id),
-        (client.get(f"/v1/streams/{secret_stream_id}"), "stream not found", secret_stream_id),
-        (client.post(f"/v1/streams/{secret_stream_id}/start"), "stream not found", secret_stream_id),
-        (client.post(f"/v1/streams/{secret_stream_id}/stop"), "stream not found", secret_stream_id),
-        (client.get(f"/v1/streams/{secret_stream_id}/status"), "stream not found", secret_stream_id),
-        (client.get(f"/v1/streams/{secret_stream_id}/events"), "stream not found", secret_stream_id),
+        (client.get(f"/v1/gallery/{secret_person_id}"), "人员不存在", secret_person_id),
+        (client.delete(f"/v1/gallery/{secret_person_id}"), "人员不存在", secret_person_id),
+        (client.get(f"/v1/streams/{secret_stream_id}"), "视频流不存在", secret_stream_id),
+        (client.post(f"/v1/streams/{secret_stream_id}/start"), "视频流不存在", secret_stream_id),
+        (client.post(f"/v1/streams/{secret_stream_id}/stop"), "视频流不存在", secret_stream_id),
+        (client.get(f"/v1/streams/{secret_stream_id}/status"), "视频流不存在", secret_stream_id),
+        (client.get(f"/v1/streams/{secret_stream_id}/events"), "视频流不存在", secret_stream_id),
     ]
 
     for response, detail, secret in responses:
@@ -907,9 +907,9 @@ def test_v1_video_job_rejects_out_of_range_numeric_controls(monkeypatch) -> None
     )
 
     assert bad_interval.status_code == 400
-    assert "frame_interval must be >= 1" in bad_interval.json()["detail"]
+    assert "frame_interval 必须大于等于 1" in bad_interval.json()["detail"]
     assert too_many_frames.status_code == 400
-    assert "max_frames must be between 1" in too_many_frames.json()["detail"]
+    assert "max_frames 必须介于 1" in too_many_frames.json()["detail"]
     assert VIDEO_JOBS == {}
 
 
@@ -963,7 +963,7 @@ def test_v1_gallery_rejects_invalid_person_id() -> None:
     )
 
     assert response.status_code == 400
-    assert "person_id must be" in response.json()["detail"]
+    assert "person_id 必须" in response.json()["detail"]
 
 
 def test_v1_gallery_public_response_redacts_metadata() -> None:
@@ -1001,7 +1001,7 @@ def test_v1_gallery_rejects_oversized_metadata() -> None:
     )
 
     assert response.status_code == 400
-    assert "metadata string value is too long" in response.json()["detail"]
+    assert "metadata 字符串值过长" in response.json()["detail"]
 
 
 def test_v1_gallery_patch_has_strict_schema() -> None:
@@ -1059,7 +1059,7 @@ def test_stream_create_rolls_back_when_audit_fails(monkeypatch) -> None:
     STREAMS.clear()
 
     def fail_audit(*args, **kwargs):
-        raise HTTPException(status_code=503, detail="state write failed")
+        raise HTTPException(status_code=503, detail="状态写入失败")
 
     monkeypatch.setattr(routes_portrait_streams, "audit_event", fail_audit)
     monkeypatch.setattr(routes_portrait_streams, "remove_stream", lambda stream_id, tenant_id: STREAMS.pop(stream_key(tenant_id, stream_id), None) is not None)
@@ -1085,7 +1085,7 @@ def test_stream_start_rolls_back_when_audit_fails(monkeypatch) -> None:
     monkeypatch.setattr("app.portrait_stream_worker.persist_stream", lambda stream: None)
 
     def fail_audit(*args, **kwargs):
-        raise HTTPException(status_code=503, detail="state write failed")
+        raise HTTPException(status_code=503, detail="状态写入失败")
 
     monkeypatch.setattr(routes_portrait_streams, "audit_event", fail_audit)
     try:
@@ -1113,7 +1113,7 @@ def test_stream_stop_rolls_back_when_audit_fails(monkeypatch) -> None:
     monkeypatch.setattr("app.portrait_stream_worker.persist_stream", lambda stream: None)
 
     def fail_audit(*args, **kwargs):
-        raise HTTPException(status_code=503, detail="state write failed")
+        raise HTTPException(status_code=503, detail="状态写入失败")
 
     monkeypatch.setattr(routes_portrait_streams, "audit_event", fail_audit)
     try:
@@ -1184,7 +1184,7 @@ def test_v1_threshold_profile_rejects_invalid_value_without_echo() -> None:
 
     for response in [update, compare, search]:
         assert response.status_code == 400
-        assert response.json()["detail"] == "unsupported threshold profile"
+        assert response.json()["detail"] == "不支持的阈值方案"
         assert secret_profile not in response.text
 
 
@@ -1207,7 +1207,7 @@ def test_threshold_modality_validator_rejects_invalid_value_without_echo() -> No
         validate_threshold_modality(secret_modality)
 
     assert exc_info.value.status_code == 400
-    assert exc_info.value.detail == "unsupported modality"
+    assert exc_info.value.detail == "不支持的模态"
     assert secret_modality not in str(exc_info.value.detail)
 
 
@@ -1222,7 +1222,7 @@ def test_v1_gallery_rejects_invalid_modality_before_decoding_without_echo() -> N
     )
 
     assert response.status_code == 400
-    assert response.json()["detail"] == "unsupported modality"
+    assert response.json()["detail"] == "不支持的模态"
     assert secret_modality not in response.text
     assert "valid image" not in response.text
 
@@ -1237,7 +1237,7 @@ def test_v1_stream_rejects_deep_settings() -> None:
     )
 
     assert response.status_code == 400
-    assert "settings exceeds max depth" in response.json()["detail"]
+    assert "settings 超过最大深度" in response.json()["detail"]
 
 
 def test_v1_stream_and_retention_requests_reject_extra_fields() -> None:
@@ -1416,7 +1416,7 @@ def test_v1_model_load_fails_when_audit_fails(monkeypatch) -> None:
         return bundle, True, 0.01
 
     def fail_audit(*args, **kwargs):
-        raise HTTPException(status_code=503, detail="state write failed")
+        raise HTTPException(status_code=503, detail="状态写入失败")
 
     monkeypatch.setattr(routes_portrait_models, "resolve_model_reference", lambda model_id, project_name, model_name: ("portrait_hub", "yolov8n.onnx", "portrait_hub/yolov8n.onnx", None))
     monkeypatch.setattr(routes_portrait_models, "get_model_path", lambda project, model: "models/yolov8n.onnx")
@@ -1428,7 +1428,7 @@ def test_v1_model_load_fails_when_audit_fails(monkeypatch) -> None:
         response = client.post("/v1/models/portrait_hub/yolov8n.onnx/load")
 
         assert response.status_code == 503
-        assert "state write failed" in response.json()["detail"]
+        assert "状态写入失败" in response.json()["detail"]
         assert "portrait_hub/yolov8n.onnx" not in MODEL_REGISTRY
     finally:
         MODEL_REGISTRY.clear()
@@ -1445,7 +1445,7 @@ def test_v1_model_unload_rolls_back_when_audit_fails(monkeypatch) -> None:
         return MODEL_REGISTRY.pop(key, None) is not None
 
     def fail_audit(*args, **kwargs):
-        raise HTTPException(status_code=503, detail="state write failed")
+        raise HTTPException(status_code=503, detail="状态写入失败")
 
     monkeypatch.setattr(routes_portrait_models, "resolve_model_reference", lambda model_id, project_name, model_name: ("portrait_hub", "yolov8n.onnx", "portrait_hub/yolov8n.onnx", None))
     monkeypatch.setattr(routes_portrait_models, "unload_model_by_key", fake_unload_model_by_key)
@@ -1466,7 +1466,7 @@ def test_v1_threshold_update_rolls_back_when_audit_fails(monkeypatch) -> None:
     before = threshold_snapshot()
 
     def fail_audit(*args, **kwargs):
-        raise HTTPException(status_code=503, detail="state write failed")
+        raise HTTPException(status_code=503, detail="状态写入失败")
 
     monkeypatch.setattr(routes_portrait_models, "audit_event", fail_audit)
     monkeypatch.setattr(routes_portrait_models, "save_threshold_state", lambda: None)
@@ -1482,10 +1482,10 @@ def test_v1_threshold_update_rollback_failure_is_redacted(monkeypatch) -> None:
     before = threshold_snapshot()
 
     def fail_audit(*args, **kwargs):
-        raise HTTPException(status_code=503, detail="audit secret-token")
+        raise HTTPException(status_code=503, detail="审计 secret-token")
 
     def fail_restore_state():
-        raise HTTPException(status_code=503, detail="restore secret-token")
+        raise HTTPException(status_code=503, detail="恢复 secret-token")
 
     monkeypatch.setattr(routes_portrait_models, "audit_event", fail_audit)
     monkeypatch.setattr(routes_portrait_models, "save_threshold_state", fail_restore_state)
@@ -1494,7 +1494,7 @@ def test_v1_threshold_update_rollback_failure_is_redacted(monkeypatch) -> None:
 
     assert response.status_code == 500
     assert response.json()["detail"] == {
-        "message": "model management mutation failed and rollback persistence failed",
+        "message": "模型管理变更失败，且回滚持久化失败",
         "rollback_failed": True,
         "rollback_error_count": 1,
     }
@@ -1618,14 +1618,14 @@ def test_admin_export_fails_closed_when_audit_fails(monkeypatch) -> None:
     client = TestClient(app)
 
     def fail_audit(*args, **kwargs):
-        raise HTTPException(status_code=503, detail="state write failed")
+        raise HTTPException(status_code=503, detail="状态写入失败")
 
     monkeypatch.setattr(routes_portrait_admin, "audit_event", fail_audit)
 
     response = client.get("/v1/admin/export")
 
     assert response.status_code == 503
-    assert "state write failed" in response.json()["detail"]
+    assert "状态写入失败" in response.json()["detail"]
 
 
 def test_stream_lists_and_admin_export_are_paginated() -> None:
@@ -1803,7 +1803,7 @@ def test_retention_cleanup_rolls_back_gallery_person_when_object_cleanup_fails(m
             return {
                 "backend": "local_file",
                 "deleted": False,
-                "reason": "secret object delete failed",
+                "reason": "secret 对象删除失败",
                 "object_key": info["object_key"],
             }
 
@@ -1819,7 +1819,7 @@ def test_retention_cleanup_rolls_back_gallery_person_when_object_cleanup_fails(m
         response = client.post("/v1/admin/retention/cleanup", json={"retention_days": 0})
 
         assert response.status_code == 503
-        assert response.json()["detail"] == "object cleanup failed"
+        assert response.json()["detail"] == "对象清理失败"
         assert gallery_key("default", "p_retention_object_fail") in GALLERY
         restored = GALLERY[gallery_key("default", "p_retention_object_fail")]
         assert restored.display_name == "Retain Me"
@@ -1842,7 +1842,7 @@ def test_retention_cleanup_rolls_back_when_audit_fails(monkeypatch) -> None:
     monkeypatch.setattr(routes_portrait_admin, "persist_video_job", lambda job: None)
 
     def fail_audit(*args, **kwargs):
-        raise HTTPException(status_code=503, detail="state write failed")
+        raise HTTPException(status_code=503, detail="状态写入失败")
 
     monkeypatch.setattr(routes_portrait_admin, "audit_event", fail_audit)
     try:
@@ -1879,7 +1879,7 @@ def test_retention_cleanup_rolls_back_when_stream_persist_fails(monkeypatch) -> 
     monkeypatch.setattr(routes_portrait_admin, "persist_video_job", lambda job: None)
 
     def fail_persist_stream(stream):
-        raise HTTPException(status_code=503, detail="state write failed")
+        raise HTTPException(status_code=503, detail="状态写入失败")
 
     monkeypatch.setattr(routes_portrait_admin, "persist_stream", fail_persist_stream)
     try:
@@ -1895,11 +1895,11 @@ def test_retention_cleanup_rolls_back_when_stream_persist_fails(monkeypatch) -> 
 
         assert response.status_code == 500
         assert response.json()["detail"] == {
-            "message": "retention cleanup failed and rollback persistence failed",
+            "message": "保留清理失败，且回滚持久化失败",
             "rollback_failed": True,
             "rollback_error_count": 1,
         }
-        assert "state write failed" not in response.text
+        assert "状态写入失败" not in response.text
         assert VIDEO_JOBS[job_key("default", job.job_id)].filename == "old.mp4"
         assert [event.event_id for event in STREAMS[stream_key("default", stream.stream_id)].events] == [
             "evt_old",

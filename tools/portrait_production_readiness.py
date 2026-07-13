@@ -311,7 +311,7 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
                 and "discover_default_targets" in type_check_tool
                 and "DEFAULT_TARGET_ROOTS" in type_check_tool
                 and "--fallback-ok" in type_check_tool
-                and "mypy is not installed; install requirements/dev.txt" in type_check_tool
+                and "未安装 mypy；请安装 requirements/dev.txt" in type_check_tool
                 and '"app"' in type_check_tool
                 and '"tools"' in type_check_tool
                 and '"sdk"' in type_check_tool
@@ -552,18 +552,18 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
                 and "split_model_key(target, result)" in validate_model_package
                 and "normalized = target.strip()" not in validate_model_package
                 and "def alias_weight" in validate_model_package
-                and "alias rollout weight must be an integer" in validate_model_package
-                and "alias rollout weight must be >= 0" in validate_model_package
+                and "别名灰度权重必须是整数" in validate_model_package
+                and "别名灰度权重必须大于等于 0" in validate_model_package
                 and 'rollout = rollout.get("targets") or rollout.get("candidates")' in validate_model_package
                 and "return [target for _, target in candidates]" in validate_model_package
                 and "def alias_target" in validate_model_package
                 and "targets = alias_targets(alias_name, alias_config, result)" in validate_model_package
                 and "for item in targets:" in validate_model_package
-                and "result.error(f\"alias target is not in models mapping" in validate_model_package
-                and "result.warn(f\"alias target is not in models mapping" not in validate_model_package
+                and "result.error(f\"别名目标不在 models 映射中" in validate_model_package
+                and "result.warn(f\"别名目标不在 models 映射中" not in validate_model_package
                 and "def validate_model_target" in model_refs
-                and 'INVALID_MODEL_REFERENCE_DETAIL = "invalid model reference"' in model_refs
-                and 'INVALID_ALIAS_NAME_DETAIL = "invalid alias name"' in model_refs
+                and 'INVALID_MODEL_REFERENCE_DETAIL = "模型引用无效"' in model_refs
+                and 'INVALID_ALIAS_NAME_DETAIL = "别名名称无效"' in model_refs
                 and "def validate_model_reference_parts" in model_refs
                 and "def validate_alias_name" in model_refs
                 and "detail=INVALID_MODEL_REFERENCE_DETAIL" in model_refs
@@ -576,12 +576,12 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
                 and "validate_model_target(target)" in model_config_resolver
                 and "target_value = validate_model_target(target)" in model_config_resolver
                 and "detail=str(exc)" not in model_config_resolver
-                and 'detail="alias rollout has no positive weights"' in model_config_resolver
-                and 'detail="invalid alias config"' in model_config_resolver
-                and 'detail="alias has no target"' in model_config_resolver
-                and 'detail=f"alias rollout has no positive weights: {alias_name}"' not in model_config_resolver
-                and 'detail=f"invalid alias config: {alias_name}"' not in model_config_resolver
-                and 'detail=f"alias has no target: {alias_name}"' not in model_config_resolver
+                and 'detail="别名灰度发布没有正权重"' in model_config_resolver
+                and 'detail="别名配置无效"' in model_config_resolver
+                and 'detail="别名没有目标模型"' in model_config_resolver
+                and 'detail=f"别名灰度发布没有正权重: {alias_name}"' not in model_config_resolver
+                and 'detail=f"别名配置无效: {alias_name}"' not in model_config_resolver
+                and 'detail=f"别名没有目标模型: {alias_name}"' not in model_config_resolver
             ),
         },
         {
@@ -592,19 +592,19 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
                 and "def config_value_fingerprint" in model_config_loader
                 and "def configured_model_entries" in model_config_loader
                 and "key = validate_model_target(raw_key)" in model_config_loader
-                and "model config key must be a string and was skipped" in model_config_loader
-                and "model config entry must be a mapping and was skipped" in model_config_loader
+                and "模型配置键必须是字符串，已跳过" in model_config_loader
+                and "模型配置条目必须是映射，已跳过" in model_config_loader
                 and "def configured_alias_targets" in model_config_loader
                 and "return [target for _, target in candidates]" in model_config_loader
                 and "def configured_alias_target" in model_config_loader
                 and "def configured_alias_weight" in model_config_loader
                 and "except (HTTPException, TypeError, ValueError) as exc" in model_config_loader
-                and "alias rollout weight must be an integer" in model_config_loader
-                and "model alias target is not configured and was skipped" in model_config_loader
+                and "别名灰度权重必须是整数" in model_config_loader
+                and "模型别名目标未配置，已跳过" in model_config_loader
                 and "missing_targets = [target for target in targets if target not in models]" in model_config_loader
                 and "def configured_alias_entries" in model_config_loader
                 and "alias_name = validate_path_name(raw_key)" in model_config_loader
-                and "model alias key must be a string and was skipped" in model_config_loader
+                and "模型别名键必须是字符串，已跳过" in model_config_loader
                 and "return model_entries, configured_alias_entries(aliases, model_entries)" in model_config_loader
             ),
         },
@@ -617,9 +617,9 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
                 and "def empty_model_config_or_raise" in model_config_loader
                 and "if MODEL_CONFIG_READ_FAIL_CLOSED:" in model_config_loader
                 and "raise RuntimeError(message) from None" in model_config_loader
-                and "model config file not found" in model_config_loader
-                and "failed to read model config file" in model_config_loader
-                and "model config file root must be a mapping" in model_config_loader
+                and "模型配置文件不存在" in model_config_loader
+                and "读取模型配置文件失败" in model_config_loader
+                and "模型配置文件根节点必须是映射" in model_config_loader
                 and "MODEL_CONFIG_READ_FAIL_CLOSED: ${MODEL_CONFIG_READ_FAIL_CLOSED:-true}" in compose
                 and "MODEL_CONFIG_READ_FAIL_CLOSED=true" in env_example
                 and "using built-in defaults" not in model_config_loader
@@ -639,23 +639,23 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
                 and "alias_hash=%s" in model_config_loader
                 and "unconfigured_target_count=%s" in model_config_loader
                 and "logger.exception(message)" not in model_config_loader
-                and "model config key must be a string and was skipped: %r" not in model_config_loader
-                and "invalid model config key skipped: %r (%s)" not in model_config_loader
-                and "model config entry must be a mapping and was skipped: %s" not in model_config_loader
-                and "model alias key must be a string and was skipped: %r" not in model_config_loader
-                and "invalid model alias key skipped: %r (%s)" not in model_config_loader
-                and "invalid model alias config skipped: %s (%s)" not in model_config_loader
-                and "model alias target is not configured and was skipped: %s -> %s" not in model_config_loader
-                and "model config has no task/type and will need explicit task routing: %s" not in model_config_loader
-                and "logger.exception(\"failed to read model config file: %s\", MODEL_CONFIG_PATH)" not in model_config_writer
-                and "logger.exception(\"failed to write model config file: %s\", MODEL_CONFIG_PATH)" not in model_config_writer
-                and "logger.exception(\"failed to write rollout audit; rolling back model config\")" not in model_config_writer
-                and "logger.exception(\"failed to rollback model config after rollout audit failure\")" not in model_config_writer
-                and "model config file not found: {MODEL_CONFIG_PATH}" not in model_config_loader
-                and "failed to read model config file: {MODEL_CONFIG_PATH}" not in model_config_loader
-                and "model config file root must be a mapping: {MODEL_CONFIG_PATH}" not in model_config_loader
-                and "model config file has no models mapping: %s\", MODEL_CONFIG_PATH" not in model_config_loader
-                and "model config aliases must be a mapping: %s\", MODEL_CONFIG_PATH" not in model_config_loader
+                and "模型配置键必须是字符串，已跳过: %r" not in model_config_loader
+                and "已跳过无效模型配置键: %r (%s)" not in model_config_loader
+                and "模型配置条目必须是映射，已跳过: %s" not in model_config_loader
+                and "模型别名键必须是字符串，已跳过: %r" not in model_config_loader
+                and "已跳过无效模型别名键: %r (%s)" not in model_config_loader
+                and "已跳过无效模型别名配置: %s (%s)" not in model_config_loader
+                and "模型别名目标未配置，已跳过: %s -> %s" not in model_config_loader
+                and "模型配置缺少 task/type，需要显式任务路由: %s" not in model_config_loader
+                and "logger.exception(\"读取模型配置文件失败: %s\", MODEL_CONFIG_PATH)" not in model_config_writer
+                and "logger.exception(\"写入模型配置文件失败: %s\", MODEL_CONFIG_PATH)" not in model_config_writer
+                and "logger.exception(\"写入发布审计失败，正在回滚模型配置\")" not in model_config_writer
+                and "logger.exception(\"发布审计失败后回滚模型配置失败\")" not in model_config_writer
+                and "模型配置文件不存在: {MODEL_CONFIG_PATH}" not in model_config_loader
+                and "读取模型配置文件失败: {MODEL_CONFIG_PATH}" not in model_config_loader
+                and "模型配置文件根节点必须是映射: {MODEL_CONFIG_PATH}" not in model_config_loader
+                and "模型配置文件缺少 models 映射: %s\", MODEL_CONFIG_PATH" not in model_config_loader
+                and "model config aliases 必须是映射: %s\", MODEL_CONFIG_PATH" not in model_config_loader
             ),
         },
         {
@@ -673,15 +673,15 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
                 and "target_model_id = validate_configured_target(target_model_id, models)" in model_config_writer
                 and "rollback_target = validate_configured_target(alias_config[\"previous_target\"], models)" in model_config_writer
                 and "def rollout_weight" in model_config_writer
-                and "targets must be mappings" in model_config_writer
-                and 'detail="target model is not configured in models.yml"' in model_config_writer
-                and 'detail="failed to resolve alias"' in model_config_writer
-                and 'detail="alias not found"' in model_config_writer
-                and 'detail="alias has no previous_target"' in model_config_writer
-                and 'detail=f"target model is not configured in models.yml: {target}"' not in model_config_writer
-                and 'detail=f"failed to resolve alias {alias_name}: {exc}"' not in model_config_writer
-                and 'detail=f"alias not found: {alias_name}"' not in model_config_writer
-                and 'detail=f"alias has no previous_target: {alias_name}"' not in model_config_writer
+                and "targets 必须是映射" in model_config_writer
+                and 'detail="目标模型未在 models.yml 中配置"' in model_config_writer
+                and 'detail="解析别名失败"' in model_config_writer
+                and 'detail="别名不存在"' in model_config_writer
+                and 'detail="别名没有 previous_target"' in model_config_writer
+                and 'detail=f"目标模型未在 models.yml 中配置: {target}"' not in model_config_writer
+                and 'detail=f"解析别名失败 {alias_name}: {exc}"' not in model_config_writer
+                and 'detail=f"别名不存在: {alias_name}"' not in model_config_writer
+                and 'detail=f"别名没有 previous_target: {alias_name}"' not in model_config_writer
                 and '"expected_current_target": expected_current_target' not in model_config_writer
                 and '"actual_current_target": old_target' not in model_config_writer
             ),
@@ -691,25 +691,25 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
             "ok": (
                 "def load_yaml_sidecar(path: Path, *, required: bool = False)" in model_package
                 and "def load_text_labels(path: Path, *, required: bool = False)" in model_package
-                and "model sidecar yaml not found" in model_package
-                and "model sidecar yaml root must be a mapping" in model_package
-                and "model labels file not found" in model_package
-                and "model labels file is empty" in model_package
+                and "模型附属 YAML 不存在" in model_package
+                and "模型附属 YAML 根节点必须是映射" in model_package
+                and "模型标签文件不存在" in model_package
+                and "模型标签文件为空" in model_package
                 and "def sidecar_path_fingerprint" in model_package
                 and "sidecar_path_hash=%s" in model_package
                 and "exception_log_summary(exc)" in model_package
-                and "logger.error(\"required model sidecar yaml not found: %s\", path)" not in model_package
-                and "logger.error(\"required model labels file not found: %s\", path)" not in model_package
-                and "logger.exception(\"failed to read model sidecar yaml: %s\", path)" not in model_package
-                and "logger.exception(\"failed to read model labels: %s\", path)" not in model_package
-                and "logger.error(\"model sidecar yaml root must be a mapping: %s\", path)" not in model_package
-                and "logger.error(\"model labels file is empty: %s\", path)" not in model_package
-                and 'detail=f"model sidecar yaml not found: {path.name}"' not in model_package
-                and 'detail=f"failed to read model sidecar yaml: {path.name}"' not in model_package
-                and 'detail=f"model sidecar yaml root must be a mapping: {path.name}"' not in model_package
-                and 'detail=f"model labels file not found: {path.name}"' not in model_package
-                and 'detail=f"failed to read model labels: {path.name}"' not in model_package
-                and 'detail=f"model labels file is empty: {path.name}"' not in model_package
+                and "logger.error(\"必需的模型附属 YAML 不存在: %s\", path)" not in model_package
+                and "logger.error(\"必需的模型标签文件不存在: %s\", path)" not in model_package
+                and "logger.exception(\"读取模型附属 YAML 失败: %s\", path)" not in model_package
+                and "logger.exception(\"读取模型标签失败: %s\", path)" not in model_package
+                and "logger.error(\"模型附属 YAML 根节点必须是映射: %s\", path)" not in model_package
+                and "logger.error(\"模型标签文件为空: %s\", path)" not in model_package
+                and 'detail=f"模型附属 YAML 不存在: {path.name}"' not in model_package
+                and 'detail=f"读取模型附属 YAML 失败: {path.name}"' not in model_package
+                and 'detail=f"模型附属 YAML 根节点必须是映射: {path.name}"' not in model_package
+                and 'detail=f"模型标签文件不存在: {path.name}"' not in model_package
+                and 'detail=f"读取模型标签失败: {path.name}"' not in model_package
+                and 'detail=f"模型标签文件为空: {path.name}"' not in model_package
                 and "load_text_labels(safe_sidecar_path(model_path, labels_path.strip()), required=True)" in model_package
                 and "load_yaml_sidecar(safe_sidecar_path(model_path, card_path.strip()), required=True)" in model_package
             ),
@@ -1019,7 +1019,7 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
                 and "review_annotation_heuristic" in portrait_review
                 and "\"auto_apply\": False" in portrait_review
                 and 'record.get("tenant_id") != tenant_id' in portrait_review
-                and "unsupported review label" in portrait_review
+                and "不支持的审阅标签" in portrait_review
                 and "restore_review_state" in portrait_review_routes
                 and 'permission_dependency("jobs:read")' in portrait_review_routes
                 and 'permission_dependency("jobs")' in portrait_review_routes
@@ -1082,14 +1082,14 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
                 and "exception_log_summary(exc)" in portrait_task_queue
                 and portrait_vector_store.count("exception_log_summary(exc)") >= 2
                 and 'logger.warning("postgres audit write failed: %s", exc)' not in portrait_audit
-                and 'logger.warning("postgres health check failed: %s", exc)' not in portrait_postgres_impl
-                and 'logger.warning("postgres gallery load failed: %s", exc)' not in portrait_postgres_impl
-                and 'logger.warning("postgres threshold load failed: %s", exc)' not in portrait_postgres_impl
-                and 'logger.warning("postgres video job load failed: %s", exc)' not in portrait_postgres_impl
-                and 'logger.warning("postgres stream load failed: %s", exc)' not in portrait_postgres_impl
-                and 'logger.warning("redis task queue health check failed: %s", exc)' not in portrait_task_queue
-                and 'logger.warning("pgvector search failed, falling back to local vector scan: %s", exc)' not in portrait_vector_store
-                and 'logger.warning("qdrant search failed, falling back to local vector scan: %s", exc)' not in portrait_vector_store
+                and 'logger.warning("postgres 健康检查失败: %s", exc)' not in portrait_postgres_impl
+                and 'logger.warning("postgres gallery 加载失败ed: %s", exc)' not in portrait_postgres_impl
+                and 'logger.warning("postgres threshold 加载失败ed: %s", exc)' not in portrait_postgres_impl
+                and 'logger.warning("postgres video job 加载失败ed: %s", exc)' not in portrait_postgres_impl
+                and 'logger.warning("postgres stream 加载失败ed: %s", exc)' not in portrait_postgres_impl
+                and 'logger.warning("redis task queue 健康检查失败: %s", exc)' not in portrait_task_queue
+                and 'logger.warning("pgvector 检索失败，回退到本地向量扫描: %s", exc)' not in portrait_vector_store
+                and 'logger.warning("Qdrant 检索失败，回退到本地向量扫描: %s", exc)' not in portrait_vector_store
             ),
         },
         {
@@ -1119,20 +1119,20 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
                 and "def model_path_fingerprint" in runtime_registry
                 and "model_path_fingerprint(model_path)" in runtime_registry
                 and "exception_log_summary(exc)" in runtime_registry
-                and 'logger.warning("failed to remove temp video file")' in video_io
-                and 'logger.warning("failed to remove temp video file")' in media_video_decode
-                and 'logger.warning("skipping invalid gallery person state: %s", exc)' not in portrait_gallery_impl
-                and 'logger.warning("vector upsert failed: %s", exc)' not in portrait_gallery_impl
-                and 'logger.warning("vector delete failed: %s", exc)' not in portrait_gallery_impl
-                and 'logger.warning("skipping invalid video job state: %s", exc)' not in portrait_jobs
+                and 'logger.warning("删除临时视频文件失败")' in video_io
+                and 'logger.warning("删除临时视频文件失败")' in media_video_decode
+                and 'logger.warning("已跳过无效人员库人员状态: %s", exc)' not in portrait_gallery_impl
+                and 'logger.warning("向量写入失败: %s", exc)' not in portrait_gallery_impl
+                and 'logger.warning("向量删除失败: %s", exc)' not in portrait_gallery_impl
+                and 'logger.warning("已跳过无效视频任务状态: %s", exc)' not in portrait_jobs
                 and 'logger.warning("skipping stream with unreadable protected URL: %s", exc)' not in portrait_streams
-                and 'logger.warning("skipping invalid stream state: %s", exc)' not in portrait_streams
-                and 'logger.warning("deep readiness model check failed for %s: %s", key, exc)' not in health_routes
-                and 'logger.warning("batch inference failed, falling back to per-frame inference: %s", exc)' not in runtime_execution
+                and 'logger.warning("已跳过无效视频流状态: %s", exc)' not in portrait_streams
+                and 'logger.warning("深度就绪模型检查失败 %s: %s", key, exc)' not in health_routes
+                and 'logger.warning("批量推理失败，回退到逐帧推理: %s", exc)' not in runtime_execution
                 and 'logger.info("loading model: %s from %s", cache_key_value, model_path)' not in runtime_registry
-                and 'logger.exception("failed to load model: %s", cache_key_value)' not in runtime_registry
-                and 'logger.warning("failed to remove temp video file: %s", temp_path)' not in video_io
-                and 'logger.warning("failed to remove temp video file: %s", temp_path)' not in media_video_decode
+                and 'logger.exception("加载模型失败: %s", cache_key_value)' not in runtime_registry
+                and 'logger.warning("删除临时视频文件失败: %s", temp_path)' not in video_io
+                and 'logger.warning("删除临时视频文件失败: %s", temp_path)' not in media_video_decode
             ),
         },
         {
@@ -1150,9 +1150,9 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
                 and '"model_card": artifact.get("model_card")' not in model_package
                 and '"labels": artifact.get("labels")' not in model_package
                 and '"path_configured": bool(artifact.get("path"))' in model_package
-                and 'detail="model config file not found"' in model_config_writer
-                and 'detail="model artifact not found"' in model_package
-                and 'detail=f"model config file not found: {MODEL_CONFIG_PATH}"' not in model_config_writer
+                and 'detail="模型配置文件不存在"' in model_config_writer
+                and 'detail="模型构件不存在"' in model_package
+                and 'detail=f"模型配置文件不存在: {MODEL_CONFIG_PATH}"' not in model_config_writer
                 and 'detail=f"model \'{model_name}\' was not found under project \'{project_name}\'"' not in model_package
             ),
         },
@@ -1178,36 +1178,36 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
                 and '"input"' not in server.split("def validation_error_payload", 1)[1].split("def create_app", 1)[0]
                 and '"ctx"' not in server.split("def validation_error_payload", 1)[1].split("def create_app", 1)[0]
                 and '"url"' not in server.split("def validation_error_payload", 1)[1].split("def create_app", 1)[0]
-                and 'detail="unsupported vision task"' in vision_routes
-                and "unsupported vision task: {task_name}" not in vision_routes
+                and 'detail="不支持的视觉任务"' in vision_routes
+                and "不支持的视觉任务: {task_name}" not in vision_routes
             ),
         },
         {
             "name": "security:upload_validation_error_minimal_disclosure",
             "ok": (
-                'detail="uploaded file is empty"' in image_io
-                and 'detail=f"uploaded file is too large: max {MAX_IMAGE_BYTES} bytes"' in image_io
-                and 'detail="unsupported image extension"' in media_image_decode
-                and 'detail="uploaded file has unsupported image content"' in media_image_decode
-                and 'detail="image extension does not match detected content"' in media_image_decode
-                and 'detail="unsupported image format"' in media_image_decode
-                and 'detail="image content did not match decoded image format"' in media_image_decode
-                and 'detail="uploaded file is not a valid image"' in media_image_decode
-                and 'detail=f"uploaded file is too large: max {max_bytes} bytes"' in media_image_decode
-                and 'detail=f"image has too many pixels: max {MAX_IMAGE_PIXELS}"' in media_image_decode
-                and 'detail="unsupported video extension"' in video_io
-                and 'detail="uploaded video has unsupported container content"' in video_io
-                and 'detail="video extension does not match detected content"' in video_io
-                and 'detail="uploaded video is empty"' in video_io
-                and 'detail=f"uploaded video is too large: max {MAX_VIDEO_BYTES} bytes"' in video_io
-                and "unsupported image extension '{suffix}'" not in media_image_decode
+                'detail="上传文件为空"' in image_io
+                and 'detail=f"上传文件过大：最大 {MAX_IMAGE_BYTES} 字节"' in image_io
+                and 'detail="不支持的图片扩展名"' in media_image_decode
+                and 'detail="上传文件包含不支持的图片内容"' in media_image_decode
+                and 'detail="图片扩展名与检测到的内容不匹配"' in media_image_decode
+                and 'detail="不支持的图片格式"' in media_image_decode
+                and 'detail="图片内容与解码出的图片格式不匹配"' in media_image_decode
+                and 'detail="上传文件不是有效图片"' in media_image_decode
+                and 'detail=f"上传文件过大：最大 {max_bytes} 字节"' in media_image_decode
+                and 'detail=f"图片像素过多：最大 {MAX_IMAGE_PIXELS}"' in media_image_decode
+                and 'detail="不支持的视频扩展名"' in video_io
+                and 'detail="上传视频包含不支持的容器内容"' in video_io
+                and 'detail="视频扩展名与检测到的内容不匹配"' in video_io
+                and 'detail="上传视频为空"' in video_io
+                and 'detail=f"上传视频过大：最大 {MAX_VIDEO_BYTES} 字节"' in video_io
+                and "不支持的图片扩展名 '{suffix}'" not in media_image_decode
                 and "image extension does not match detected {detected.lower()} content" not in media_image_decode
-                and "unsupported image format '{image_format}'" not in media_image_decode
+                and "不支持的图片格式 '{image_format}'" not in media_image_decode
                 and "image content sniffed as {detected_format.lower()}" not in media_image_decode
                 and "uploaded file is too large: {len(data)} bytes" not in image_io
                 and "uploaded file is too large: {len(data)} bytes" not in media_image_decode
-                and "image has too many pixels: {width * height}" not in media_image_decode
-                and "unsupported video extension '{suffix}'" not in video_io
+                and "图片像素过多: {width * height}" not in media_image_decode
+                and "不支持的视频扩展名 '{suffix}'" not in video_io
                 and "video extension does not match detected {container} content" not in video_io
                 and "uploaded video is too large: {len(data)} bytes" not in video_io
                 and "uploaded file '{file.filename}'" not in image_io
@@ -1243,7 +1243,7 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
             "name": "security:unhandled_error_redaction",
             "ok": (
                 "def internal_error_payload" in server
-                and '"detail": "internal server error"' in server
+                and '"detail": "内部服务器错误"' in server
                 and '"request_id": request_id' in server
                 and "response = JSONResponse(status_code=500, content=internal_error_payload(request_id))" in server
                 and 'response.headers["X-Request-ID"] = request_id' in server
@@ -1261,28 +1261,28 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
                 "def raise_internal_error" in portrait_response
                 and '"message": detail' in portrait_response
                 and '"request_id": request_id' in portrait_response
-                # 边界助手：客户端错误原样抛出（计数但不脱敏），服务端错误转 request-id-only 500。
+                # 边界助手：客户端错误原样抛出（计数但不脱敏），服务端错误转为仅含 request-id 的 500。
                 and "def inference_error_boundary" in routes_inference_common
                 and "except HTTPException:" in routes_inference_common
                 and "raise_internal_error(request_id, internal_message)" in routes_inference_common
-                # 6 条路由各自接入边界并提供专属 internal_message。
-                and 'internal_message="vision inference runtime error"' in vision_routes
-                and 'internal_message="person inference runtime error"' in person_detection_routes
-                and 'internal_message="embedding inference runtime error"' in person_embeddings_routes
-                and 'internal_message="person track inference runtime error"' in person_tracks_routes
-                and 'internal_message="video person track inference runtime error"' in person_video_routes
-                and 'internal_message="stream person track inference runtime error"' in person_stream_routes
+                # 6 条路由各自接入边界并提供专属内部错误提示。
+                and 'internal_message="图片推理运行时错误"' in vision_routes
+                and 'internal_message="人员推理运行时错误"' in person_detection_routes
+                and 'internal_message="特征向量推理运行时错误"' in person_embeddings_routes
+                and 'internal_message="人员轨迹推理运行时错误"' in person_tracks_routes
+                and 'internal_message="视频人员轨迹推理运行时错误"' in person_video_routes
+                and 'internal_message="视频流人员轨迹推理运行时错误"' in person_stream_routes
                 and "inference_error_boundary(" in vision_routes
                 and "inference_error_boundary(" in person_detection_routes
                 and "inference_error_boundary(" in person_embeddings_routes
                 and "inference_error_boundary(" in person_tracks_routes
                 and "inference_error_boundary(" in person_video_routes
                 and "inference_error_boundary(" in person_stream_routes
-                # predict/debug 内联同一对调用。
-                and "raise_internal_error(request_id, \"inference runtime error\")" in predict_routes
-                and "raise_internal_error(request_id, \"debug model output runtime error\")" in debug_routes
-                and 'detail="failed to load model runtime"' in runtime_registry
-                and "runtime error: {exc}" not in "\n".join(
+                # predict/debug 路由内联同一对调用。
+                and "raise_internal_error(request_id, \"推理运行时错误\")" in predict_routes
+                and "raise_internal_error(request_id, \"调试模型输出运行时错误\")" in debug_routes
+                and 'detail="加载模型运行时失败"' in runtime_registry
+                and "运行时错误: {exc}" not in "\n".join(
                     [
                         predict_routes,
                         vision_routes,
@@ -1295,13 +1295,13 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
                         routes_inference_common,
                     ]
                 )
-                and "failed to load model runtime: {exc}" not in runtime_registry
+                and "加载模型运行时失败: {exc}" not in runtime_registry
             ),
         },
         {
             # 服务端错误只记录脱敏摘要（exception_log_summary：类型/状态码/detail 类型），
             # 不落地原始 exc，且禁用 logger.exception（会写完整堆栈）。边界助手统一用
-            # log_label 记录 6 条路由；predict/debug 内联同样的 logger.warning。
+            # log_label 记录 6 条路由；predict/debug 路由内联同样的 logger.warning。
             "name": "security:runtime_error_log_minimal_disclosure",
             "ok": (
                 # 边界助手：脱敏摘要 + log_label 占位。
@@ -1314,7 +1314,7 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
                 and 'log_label="person track inference failed"' in person_tracks_routes
                 and 'log_label="video person track inference failed"' in person_video_routes
                 and 'log_label="stream person track inference failed"' in person_stream_routes
-                # predict/debug 内联脱敏日志。
+                # predict/debug 路由内联脱敏日志。
                 and "exception_log_summary(exc)" in predict_routes
                 and "exception_log_summary(exc)" in debug_routes
                 and "logger.warning(\"inference failed: request_id=%s error=%s\"" in predict_routes
@@ -1350,11 +1350,11 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
                 and '"rollback_errors": rollback_errors' not in rollback_route_text
                 and "getattr(exc, 'detail', exc)" not in rollback_route_text
                 and rollback_route_text.count("exception_log_summary(exc)") >= 7
-                and "raise_rollback_failure(\"gallery mutation failed and rollback persistence failed\"" in portrait_gallery_mutations
-                and "raise_rollback_failure(\"video job mutation failed and rollback persistence failed\"" in portrait_job_routes
-                and "raise_rollback_failure(\"stream mutation failed and rollback persistence failed\"" in portrait_stream_routes
-                and "raise_rollback_failure(\"retention cleanup failed and rollback persistence failed\"" in portrait_admin_routes
-                and "raise_rollback_failure(\"model management mutation failed and rollback persistence failed\"" in portrait_model_routes
+                and "raise_rollback_failure(\"人员库变更失败，且回滚持久化失败\"" in portrait_gallery_mutations
+                and "raise_rollback_failure(\"视频任务变更失败，且回滚持久化失败\"" in portrait_job_routes
+                and "raise_rollback_failure(\"视频流变更失败，且回滚持久化失败\"" in portrait_stream_routes
+                and "raise_rollback_failure(\"保留清理失败，且回滚持久化失败\"" in portrait_admin_routes
+                and "raise_rollback_failure(\"模型管理变更失败，且回滚持久化失败\"" in portrait_model_routes
             ),
         },
         {
@@ -1401,14 +1401,14 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
                 and "def parse_encryption_keyring" in portrait_crypto
                 and "def candidate_decryption_keys" in portrait_crypto
                 and ("if encryption_required()" in portrait_crypto or "if encryption_required():" in portrait_crypto)
-                and "ENCRYPTION_KEY is required when REQUIRE_ENCRYPTION=true" in portrait_crypto
+                and "当 REQUIRE_ENCRYPTION=true 时，ENCRYPTION_KEY 为必填项" in portrait_crypto
                 and 'AES_GCM_ALGORITHM = "aes-256-gcm"' in portrait_crypto
                 and "AES_GCM_NONCE_BYTES = 12" in portrait_crypto
                 and "os.urandom(AES_GCM_NONCE_BYTES)" in portrait_crypto
                 and "AESGCM(key).encrypt(nonce, data, None)" in portrait_crypto
                 and "AESGCM(key).decrypt(nonce, data, None)" in portrait_crypto
                 and "InvalidTag" in portrait_crypto
-                and "encrypted payload authentication failed" in portrait_crypto
+                and "加密载荷认证失败" in portrait_crypto
                 and "LEGACY_XOR_ALGORITHM" in portrait_crypto
                 and '"key_id": key_id' in portrait_crypto
                 and "candidate_decryption_keys(key_id, kdf=kdf_name" in portrait_crypto
@@ -1448,8 +1448,8 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
                 "async def rollout_alias_preview" in rollout_routes
                 and "validate_alias_name(alias_name)" in rollout_routes.split("async def rollout_alias_preview", 1)[1].split("@router.post", 1)[0]
                 and "detail=str(exc)" not in rollout_routes.split("async def rollout_alias_preview", 1)[1].split("@router.post", 1)[0]
-                and 'detail="alias not found"' in rollout_routes
-                and 'detail=f"alias not found: {alias_name}"' not in rollout_routes
+                and 'detail="别名不存在"' in rollout_routes
+                and 'detail=f"别名不存在: {alias_name}"' not in rollout_routes
             ),
         },
         {
@@ -1491,7 +1491,7 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
                 and "write_raw_model_config(raw)" in model_config_writer
                 and "write_rollout_audit(event, result)" in model_config_writer
                 and "write_raw_model_config(previous_raw)" in model_config_writer
-                and "failed to write rollout audit; model config was rolled back" in model_config_writer
+                and "写入发布审计失败；模型配置已回滚" in model_config_writer
                 and '"rolled_back": True' in model_config_writer
                 and '"rollback_failed": True' in model_config_writer
                 and '"audit_error"' not in model_config_writer
@@ -1542,7 +1542,7 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
                 and "previous_thresholds = threshold_snapshot()" in portrait_model_routes
                 and "def restore_threshold_snapshot" in portrait_model_routes
                 and "save_threshold_state()" in portrait_model_routes
-                and "model management mutation failed and rollback persistence failed" in portrait_model_routes
+                and "模型管理变更失败，且回滚持久化失败" in portrait_model_routes
                 and "def model_registry_snapshot" in model_lifecycle_routes
                 and "def restore_model_registry_snapshot" in model_lifecycle_routes
                 and "def model_load_locks_snapshot" in model_lifecycle_routes
@@ -1641,11 +1641,11 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
                 and '"api_key"' not in portrait_audit.split("PUBLIC_AUDIT_EVENT_FIELDS", 1)[1].split("def", 1)[0]
                 and '"/v1/admin/audit/events"' in portrait_admin_routes
                 and "read_public_audit_events" in portrait_admin_routes
-                and "created_until must be >= created_since" in portrait_admin_routes
+                and "created_until 必须大于等于 created_since" in portrait_admin_routes
                 and "event: str | None = Query" in portrait_admin_routes
                 and "outcome: str | None = Query" in portrait_admin_routes
                 and "category: str | None = Query" in portrait_admin_routes
-                and "unsupported audit event category" in portrait_admin_routes
+                and "不支持的审计事件类别" in portrait_admin_routes
                 and 'permission_dependency("admin:status")' in portrait_admin_routes
                 and "MAX_PUBLIC_AUDIT_EVENT_LIMIT" in portrait_admin_routes
                 and "/v1/admin/audit/events?${auditEventQueryParams().toString()}" in console_module_sources
@@ -1722,8 +1722,8 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
             "ok": (
                 "def validate_int_range" in portrait_request_validation
                 and "isinstance(value, bool)" in portrait_request_validation
-                and "must be an integer" in portrait_request_validation
-                and "must be between" in portrait_request_validation
+                and "必须是整数" in portrait_request_validation
+                and "必须介于" in portrait_request_validation
                 and 'validate_int_range("top_k", top_k, minimum=1, maximum=100)' in portrait_gallery_routes
                 and 'validate_int_range("frame_interval", frame_interval, minimum=1)' in portrait_job_routes
                 and 'validate_int_range("max_frames", max_frames, minimum=1, maximum=MAX_VIDEO_FRAMES)' in portrait_job_routes
@@ -1735,7 +1735,7 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
             "name": "security:tenant_header_contract",
             "ok": (
                 "TENANT_HEADER_REQUIRED" in settings
-                and "x-tenant-id header is required" in portrait_security
+                and "缺少 x-tenant-id 请求头" in portrait_security
                 and 'request.url.path.startswith("/v1/")' in portrait_security
                 and "TENANT_HEADER_REQUIRED: ${TENANT_HEADER_REQUIRED:-true}" in compose
                 and "TENANT_HEADER_REQUIRED=true" in env_example
@@ -1876,18 +1876,18 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
             "ok": (
                 "SUPPORTED_THRESHOLD_PROFILES" in portrait_thresholds
                 and "def validate_threshold_profile" in portrait_thresholds
-                and 'detail="unsupported threshold profile"' in portrait_thresholds
-                and "unsupported threshold profile: {profile}" not in portrait_thresholds
+                and 'detail="不支持的阈值方案"' in portrait_thresholds
+                and "不支持的阈值方案: {profile}" not in portrait_thresholds
                 and "validate_threshold_profile(threshold_profile)" in portrait_compare_routes
                 and "validate_threshold_profile(threshold_profile)" in portrait_gallery_route_orchestration
                 and "SUPPORTED_GALLERY_MODALITIES" in portrait_gallery_route_orchestration
                 and "def validate_gallery_modality" in portrait_gallery_route_orchestration
                 and ("modality = validate_gallery_modality(modality)" in portrait_gallery_route_orchestration or "modality_key = validate_gallery_modality(modality)" in portrait_gallery_route_orchestration)
-                and 'detail="unsupported modality"' in portrait_gallery_route_orchestration
+                and 'detail="不支持的模态"' in portrait_gallery_route_orchestration
                 and 'profile=result["profile"]' in portrait_model_routes
                 and "def validate_threshold_modality" in portrait_thresholds
-                and 'detail="unsupported modality"' in portrait_thresholds
-                and "unsupported modality: {modality}" not in portrait_thresholds
+                and 'detail="不支持的模态"' in portrait_thresholds
+                and "不支持的模态: {modality}" not in portrait_thresholds
                 and "def validate_threshold_value" in portrait_thresholds
                 and "isinstance(raw_value, bool)" in portrait_thresholds
                 and "math.isfinite" in portrait_thresholds
@@ -1910,7 +1910,7 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
                 and 'ConfigDict(extra="forbid")' in portrait_gallery_routes
                 and "display_name: str | None = Field(default=None, max_length=256)" in portrait_gallery_routes
                 and "payload: GalleryPatchRequest" in portrait_gallery_routes
-                and "patch payload must not be empty" in portrait_gallery_routes
+                and "补丁请求体不能为空" in portrait_gallery_routes
                 and "class ThresholdUpdateRequest(BaseModel)" in portrait_model_routes
                 and 'ConfigDict(extra="forbid")' in portrait_model_routes
                 and "reject_boolean_thresholds" in portrait_model_routes
@@ -1930,7 +1930,7 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
                 and "RATE_LIMIT_BUCKET_TTL_SECONDS" in settings
                 and "def cleanup_idle_buckets" in rate_limit
                 and "def ensure_bucket_capacity" in rate_limit
-                and "rate limit bucket capacity exceeded" in rate_limit
+                and "限流桶容量已耗尽" in rate_limit
                 and "RATE_LIMIT_PER_MINUTE: ${RATE_LIMIT_PER_MINUTE:-120}" in compose
                 and "RATE_LIMIT_BURST: ${RATE_LIMIT_BURST:-240}" in compose
                 and "RATE_LIMIT_MAX_BUCKETS: ${RATE_LIMIT_MAX_BUCKETS:-10000}" in compose
@@ -1983,7 +1983,7 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
             "ok": (
                 "STATE_WRITE_FAIL_CLOSED" in settings
                 and "handle_state_write_error" in portrait_state
-                and "state write failed" in portrait_state
+                and "状态写入失败" in portrait_state
                 and "HTTP_503_SERVICE_UNAVAILABLE" in portrait_state
                 and "STATE_WRITE_FAIL_CLOSED: ${STATE_WRITE_FAIL_CLOSED:-true}" in compose
                 and "STATE_WRITE_FAIL_CLOSED=true" in env_example
@@ -1996,12 +1996,12 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
                 and "STATE_READ_FAIL_CLOSED = parse_bool_env(\"STATE_READ_FAIL_CLOSED\", True)" in settings
                 and "from app.settings import STATE_READ_FAIL_CLOSED, STATE_WRITE_FAIL_CLOSED" in portrait_state
                 and "if STATE_READ_FAIL_CLOSED:" in portrait_state
-                and "detail=\"state read failed\"" in portrait_state
+                and "detail=\"状态读取失败\"" in portrait_state
                 and "def handle_state_read_error" in portrait_state
-                and "gallery state root must be a mapping" in portrait_gallery_impl
-                and "video jobs state root must be a mapping" in portrait_jobs
-                and "streams state root must be a mapping" in portrait_streams
-                and "threshold state root must be a mapping" in portrait_thresholds
+                and "gallery state 根节点必须是映射" in portrait_gallery_impl
+                and "video jobs state 根节点必须是映射" in portrait_jobs
+                and "streams state 根节点必须是映射" in portrait_streams
+                and "threshold state 根节点必须是映射" in portrait_thresholds
                 and "STATE_READ_FAIL_CLOSED: ${STATE_READ_FAIL_CLOSED:-true}" in compose
                 and "STATE_READ_FAIL_CLOSED=true" in env_example
             ),
@@ -2014,10 +2014,10 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
                 and "exception_log_summary(exc)" in portrait_state
                 and "exception_log_summary(replace_exc)" in portrait_state
                 and "path_hash=%s" in portrait_state
-                and "failed to read state file %s: %s" not in portrait_state
-                and "failed to write state file %s: %s" not in portrait_state
-                and "atomic state replace failed for %s: %s" not in portrait_state
-                and "failed to append audit file %s: %s" not in portrait_state
+                and "读取状态文件失败 %s: %s" not in portrait_state
+                and "写入状态文件失败 %s: %s" not in portrait_state
+                and "atomic state 替换失败 for %s: %s" not in portrait_state
+                and "追加审计文件失败 %s: %s" not in portrait_state
             ),
         },
         {
@@ -2061,7 +2061,7 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
                 )
                 and "restore_video_job(job, previous_job)" in portrait_job_routes
                 and ("restore_video_job_in_store(job)" in portrait_job_routes or "persist_video_job(job)" in portrait_job_routes)
-                and "video job mutation failed and rollback persistence failed" in portrait_job_routes
+                and "视频任务变更失败，且回滚持久化失败" in portrait_job_routes
             ),
         },
         {
@@ -2073,39 +2073,39 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
                 and "async def run_video_job(" in portrait_jobs
                 and "tenant_id: str" in portrait_jobs
                 and "job = get_video_job(job_id, tenant_id=tenant_id)" in portrait_jobs
-                and "video job not found for background execution: tenant_hash=%s job_hash=%s" in portrait_jobs
+                and "video 任务不存在 for background execution: tenant_hash=%s job_hash=%s" in portrait_jobs
                 and "tenant_hash=%s job_hash=%s attempt=%s error=%s" in portrait_jobs
-                and "video job not found for background execution: %s/%s" not in portrait_jobs
+                and "video 任务不存在 for background execution: %s/%s" not in portrait_jobs
                 and "tenant_hash=%s job_id=%s error=%s" not in portrait_jobs
             ),
         },
         {
             "name": "security:video_job_error_redaction",
             "ok": (
-                'VIDEO_JOB_ERROR_MESSAGE = "video job failed"' in portrait_jobs
+                'VIDEO_JOB_ERROR_MESSAGE = "视频任务失败"' in portrait_jobs
                 and "def public_video_job_error" in portrait_jobs
                 and '"error": public_video_job_error(self.error)' in portrait_jobs
                 and "error=public_video_job_error(payload.get(\"error\"))" in portrait_jobs
                 and "job.error = VIDEO_JOB_ERROR_MESSAGE" in portrait_jobs
                 and "exception_log_summary(exc)" in portrait_jobs
                 and "video_job_identifier_fingerprint(tenant_id)" in portrait_jobs
-                and "logger.exception(\"video job failed" not in portrait_jobs
+                and "logger.exception(\"视频任务失败" not in portrait_jobs
                 and "job.error = str(exc)" not in portrait_jobs
-                and 'detail="job not found"' in portrait_job_routes
-                and 'detail=f"job not found: {job_id}"' not in portrait_job_routes
+                and 'detail="任务不存在"' in portrait_job_routes
+                and 'detail=f"任务不存在: {job_id}"' not in portrait_job_routes
             ),
         },
         {
             "name": "security:resource_not_found_minimal_disclosure",
             "ok": (
-                'detail="person not found"' in portrait_gallery_impl
-                and 'detail="person not found"' in portrait_gallery_routes
-                and 'detail="stream not found"' in portrait_stream_routes
-                and 'detail="job not found"' in portrait_job_routes
-                and 'detail=f"person not found: {resolved_id}"' not in portrait_gallery_impl
-                and 'detail=f"person not found: {person_id}"' not in portrait_gallery_routes
-                and 'detail=f"stream not found: {stream_id}"' not in portrait_stream_routes
-                and 'detail=f"job not found: {job_id}"' not in portrait_job_routes
+                'detail="人员不存在"' in portrait_gallery_impl
+                and 'detail="人员不存在"' in portrait_gallery_routes
+                and 'detail="视频流不存在"' in portrait_stream_routes
+                and 'detail="任务不存在"' in portrait_job_routes
+                and 'detail=f"人员不存在: {resolved_id}"' not in portrait_gallery_impl
+                and 'detail=f"人员不存在: {person_id}"' not in portrait_gallery_routes
+                and 'detail=f"视频流不存在: {stream_id}"' not in portrait_stream_routes
+                and 'detail=f"任务不存在: {job_id}"' not in portrait_job_routes
             ),
         },
         {
@@ -2128,10 +2128,10 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
                 and "created_object_infos: list[dict[str, Any]]" in portrait_gallery_mutations
                 and "cleanup_object_after_failed_feature(object_info, object_store=object_store)" in portrait_gallery_mutations
                 and "persist_delete_hook(tenant_id, person_id)" in portrait_gallery_mutations
-                and 'errors.append("delete mutated gallery person before restore failed")' in portrait_gallery_mutations
+                and 'errors.append("恢复前删除已变更人员失败")' in portrait_gallery_mutations
                 and "persist_person_hook(restored_person)" in portrait_gallery_mutations
                 and "persist_feature_hook(restored_person, feature)" in portrait_gallery_mutations
-                and "gallery mutation failed and rollback persistence failed" in portrait_gallery_mutations
+                and "人员库变更失败，且回滚持久化失败" in portrait_gallery_mutations
             ),
         },
         {
@@ -2144,7 +2144,7 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
                 )
                 and "restore_stream(stream, previous_stream)" in portrait_stream_routes
                 and "persist_stream(stream)" in portrait_stream_routes
-                and "stream mutation failed and rollback persistence failed" in portrait_stream_routes
+                and "视频流变更失败，且回滚持久化失败" in portrait_stream_routes
                 and "def remove_stream" in portrait_streams
                 and "def delete_stream_state" in portrait_streams
             ),
@@ -2176,7 +2176,7 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
                 and ("restore_video_job_in_store(job)" in portrait_admin_routes or "persist_video_job(restored_job)" in portrait_admin_routes)
                 and "persist_stream(stream)" in portrait_admin_routes
                 and "OBJECT_CLEANUP_FAILED" in portrait_admin_routes
-                and "retention cleanup failed and rollback persistence failed" in portrait_admin_routes
+                and "保留清理失败，且回滚持久化失败" in portrait_admin_routes
             ),
         },
         {
@@ -2239,16 +2239,16 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Check PortraitHub production readiness.")
+    parser = argparse.ArgumentParser(description="检查 PortraitHub 生产就绪状态。")
     parser.add_argument("--root", default=".")
     parser.add_argument("--models-root", default="models")
     parser.add_argument(
         "--scope",
         choices=["all", "platform"],
         default="all",
-        help="Use platform to skip real model capability status checks while keeping artifact and contract checks.",
+        help="使用 platform 跳过真实模型能力状态检查，同时保留构件和契约检查。",
     )
-    parser.add_argument("--strict", action="store_true", help="Fail on fallback capabilities or missing model files.")
+    parser.add_argument("--strict", action="store_true", help="遇到回退能力或缺失模型文件时失败。")
     args = parser.parse_args()
 
     root = Path(args.root).resolve()

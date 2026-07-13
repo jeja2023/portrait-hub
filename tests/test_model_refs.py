@@ -29,7 +29,7 @@ def test_split_cache_key_validates_format() -> None:
     for value in [" project/model.onnx", "project/model.onnx "]:
         with pytest.raises(HTTPException) as exc_info:
             split_cache_key(value)
-        assert exc_info.value.detail == "model must use 'project_name/model_name' format without leading/trailing whitespace"
+        assert exc_info.value.detail == "模型必须使用 'project_name/model_name' 格式，且不能包含首尾空白"
 
 
 def test_public_model_reference_validation_uses_fixed_error_detail() -> None:

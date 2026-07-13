@@ -126,13 +126,13 @@ const template = `
       </div>
       <form id="login-form">
         <div class="field">
-          <label>租户 ID (Tenant ID) <input id="tenant-input" autocomplete="off" value="default" /></label>
+          <label>租户标识 <input id="tenant-input" autocomplete="off" value="default" /></label>
         </div>
         <div class="field">
-          <label>接口令牌 (API Key) <input id="api-key-input" type="password" autocomplete="off" /></label>
+          <label>接口密钥 <input id="api-key-input" type="password" autocomplete="off" /></label>
         </div>
         <div class="field">
-          <label>JWT 令牌 (Bearer Token) <input id="bearer-input" type="password" autocomplete="off" /></label>
+          <label>JWT 令牌 <input id="bearer-input" type="password" autocomplete="off" /></label>
         </div>
         <button type="submit" class="primary login-button">登录系统</button>
       </form>
@@ -180,13 +180,13 @@ const template = `
           <summary>接入中心</summary>
           <div class="nav-group-items">
             <button type="button" class="nav-item" data-nav="access-credentials">应用凭证</button>
-            <button type="button" class="nav-item" data-nav="sdk-examples">SDK 示例</button>
-            <button type="button" class="nav-item" data-nav="openapi-docs">OpenAPI</button>
-            <button type="button" class="nav-item" data-nav="api-playground">API Playground</button>
+            <button type="button" class="nav-item" data-nav="sdk-examples">开发工具包示例</button>
+            <button type="button" class="nav-item" data-nav="openapi-docs">开放接口定义</button>
+            <button type="button" class="nav-item" data-nav="api-playground">接口调试台</button>
             <button type="button" class="nav-item" data-nav="call-logs">调用日志</button>
             <button type="button" class="nav-item" data-nav="error-codes">错误码</button>
-            <button type="button" class="nav-item" data-nav="webhooks">Webhook</button>
-            <button type="button" class="nav-item" data-nav="slo-panel">SLO 面板</button>
+            <button type="button" class="nav-item" data-nav="webhooks">事件回调</button>
+            <button type="button" class="nav-item" data-nav="slo-panel">服务等级目标面板</button>
           </div>
         </details>
         <details class="nav-group" data-nav-group="multimodal">
@@ -241,7 +241,7 @@ const template = `
           <div class="metric"><span>错误率</span><strong id="metric-error-rate">0%</strong></div>
           <div class="metric"><span>P95 推理耗时</span><strong id="metric-p95">0s</strong></div>
           <div class="metric"><span>GPU 空闲显存</span><strong id="metric-gpu-free">--</strong></div>
-          <button type="button" class="product-tile" data-nav-shortcut="vision"><strong>图片解析</strong><span>人脸、人体、姿态、衣着、步态、检测和 ReID embedding。</span></button>
+          <button type="button" class="product-tile" data-nav-shortcut="vision"><strong>图片解析</strong><span>人脸、人体、姿态、衣着、步态、检测和 重识别向量。</span></button>
           <button type="button" class="product-tile" data-nav-shortcut="video"><strong>视频解析</strong><span>离线视频任务创建、状态跟踪和结果回收。</span></button>
           <button type="button" class="product-tile" data-nav-shortcut="streams"><strong>视频流解析</strong><span>RTSP/HTTP 注册、启动、事件查询和实时订阅。</span></button>
           <button type="button" class="product-tile" data-nav-shortcut="video-results"><strong>解析结果</strong><span>按图片、视频和视频流集中查看解析输出与关键快照。</span></button>
@@ -449,7 +449,7 @@ const template = `
               <h3>特征分布</h3>
               <p>按人员和特征质量绘制的轻量分布图。</p>
             </div>
-            <div id="feature-scatter" class="scatter" aria-label="gallery feature distribution"></div>
+            <div id="feature-scatter" class="scatter" aria-label="图库特征分布"></div>
           </div>
         </div>
         <div class="card" id="person-features-card">
@@ -611,14 +611,14 @@ const template = `
           <div class="card">
             <div class="section-title">
               <h3>接入应用</h3>
-              <p>本清单用于接入规划、示例生成和租户级 API Key 鉴权。</p>
+              <p>本清单用于接入规划、示例生成和租户级 接口密钥鉴权。</p>
             </div>
             <form id="access-app-form" class="form-grid">
               <label>应用 ID <input id="access-app-id-input" placeholder="留空自动生成" /></label>
               <label>应用名称 <input id="access-app-name-input" placeholder="业务项目或服务名" /></label>
               <label>负责人 <input id="access-app-owner-input" placeholder="团队或联系人" /></label>
-              <label>JWT issuer <input id="access-jwt-issuer-input" placeholder="可选" /></label>
-              <label>JWT audience <input id="access-jwt-audience-input" placeholder="可选" /></label>
+              <label>JWT 签发方 <input id="access-jwt-issuer-input" placeholder="可选" /></label>
+              <label>JWT 接收方 <input id="access-jwt-audience-input" placeholder="可选" /></label>
               <label>状态
                 <select id="access-app-status-input">
                   <option value="active">启用</option>
@@ -653,7 +653,7 @@ const template = `
       <section class="view" data-view="sdk-examples">
         <div class="view-header">
           <div class="section-title">
-            <h2>SDK 示例</h2>
+            <h2>开发工具包示例</h2>
             <p>当前租户的 Python、Node 和 curl 最小调用片段。</p>
           </div>
           <button type="button" id="sdk-refresh-button">刷新示例</button>
@@ -687,13 +687,13 @@ const template = `
             <button type="button" id="sdk-video-copy-button">复制视频示例</button>
           </div>
         </div>
-        <div id="sdk-json" class="json-view data-viewer" role="region" aria-label="SDK 示例数据"></div>
+        <div id="sdk-json" class="json-view data-viewer" role="region" aria-label="开发工具包示例数据"></div>
       </section>
 
       <section class="view" data-view="openapi-docs">
         <div class="view-header">
           <div class="section-title">
-            <h2>OpenAPI</h2>
+            <h2>开放接口定义</h2>
             <p>查看当前服务暴露的稳定接口、核心路径和文档入口。</p>
           </div>
           <div class="toolbar-actions">
@@ -713,13 +713,13 @@ const template = `
             <button type="button" id="openapi-copy-button">复制检查命令</button>
           </div>
         </div>
-        <div id="openapi-json" class="json-view data-viewer" role="region" aria-label="OpenAPI 数据"></div>
+        <div id="openapi-json" class="json-view data-viewer" role="region" aria-label="开放接口定义数据"></div>
       </section>
 
       <section class="view" data-view="api-playground">
         <div class="view-header">
           <div class="section-title">
-            <h2>API Playground</h2>
+            <h2>接口调试台</h2>
             <p>使用当前租户和令牌发起受控测试请求，展示请求头、耗时和响应。</p>
           </div>
         </div>
@@ -756,9 +756,9 @@ const template = `
             <pre id="playground-request-code" class="code-view"></pre>
           </div>
           <div class="result-panel">
-            <div class="section-title"><h3>响应</h3><p>包含 request_id、耗时和错误码定位信息。</p></div>
+            <div class="section-title"><h3>响应</h3><p>包含请求 ID、耗时和错误码定位信息。</p></div>
             <div id="playground-summary" class="result-summary"></div>
-            <div id="playground-json" class="json-view data-viewer" role="region" aria-label="API Playground 响应数据"></div>
+            <div id="playground-json" class="json-view data-viewer" role="region" aria-label="接口调试台 响应数据"></div>
           </div>
         </div>
       </section>
@@ -767,12 +767,12 @@ const template = `
         <div class="view-header">
           <div class="section-title">
             <h2>调用日志</h2>
-            <p>按 request_id、应用、接口和状态定位服务端调用结果。</p>
+            <p>按请求 ID、应用、接口和状态定位服务端调用结果。</p>
           </div>
           <button type="button" id="call-logs-refresh-button">刷新日志</button>
         </div>
         <div class="form-grid compact">
-          <label>request_id <input id="call-log-request-input" placeholder="精确或部分匹配" /></label>
+          <label>请求 ID <input id="call-log-request-input" placeholder="精确或部分匹配" /></label>
           <label>页面/接口 <input id="call-log-endpoint-input" placeholder="gallery、compare、models..." /></label>
           <label>状态
             <select id="call-log-status-input">
@@ -804,7 +804,7 @@ const template = `
         </div>
         <div id="error-codes-summary" class="result-summary"></div>
         <div class="card">
-          <div class="section-title"><h3>错误码目录</h3><p>所有条目均为脱敏说明，定位具体请求请结合 request_id 和调用日志。</p></div>
+          <div class="section-title"><h3>错误码目录</h3><p>所有条目均为脱敏说明，定位具体请求请结合请求 ID 和调用日志。</p></div>
           <div id="error-codes-table" class="data-table-wrap"></div>
         </div>
         <div id="error-codes-json" class="json-view data-viewer" role="region" aria-label="错误码目录数据"></div>
@@ -812,7 +812,7 @@ const template = `
       <section class="view" data-view="webhooks">
         <div class="view-header">
           <div class="section-title">
-            <h2>Webhook</h2>
+            <h2>事件回调</h2>
             <p>维护租户回调端点、订阅事件、签名密钥轮换和重试策略。</p>
           </div>
           <button type="button" id="webhook-refresh-button">刷新回调清单</button>
@@ -824,7 +824,7 @@ const template = `
               <p>本地清单用于接入编排；生产投递器应在服务端读取等价配置。</p>
             </div>
             <form id="webhook-form" class="form-grid">
-              <label>Webhook ID <input id="webhook-id-input" placeholder="留空自动生成" /></label>
+              <label>事件回调 ID <input id="webhook-id-input" placeholder="留空自动生成" /></label>
               <label>名称 <input id="webhook-name-input" placeholder="业务回调" /></label>
               <label>接入应用
                 <select id="webhook-app-input"></select>
@@ -844,12 +844,12 @@ const template = `
               <label class="field-inline"><input type="checkbox" name="webhook-event" value="job.completed" checked /> job.completed</label>
               <label class="field-inline"><input type="checkbox" name="webhook-event" value="stream.event" checked /> stream.event</label>
               <label class="field-inline"><input type="checkbox" name="webhook-event" value="model.rollout" /> model.rollout</label>
-              <button type="submit" class="primary">保存 Webhook</button>
+              <button type="submit" class="primary">保存事件回调</button>
               <button type="button" id="webhook-rotate-button">轮换签名密钥</button>
               <button type="button" id="webhook-sample-button">生成样例事件</button>
             </form>
             <div id="webhook-summary" class="result-summary"></div>
-            <div id="webhook-json" class="json-view data-viewer" role="region" aria-label="Webhook 响应数据"></div>
+            <div id="webhook-json" class="json-view data-viewer" role="region" aria-label="事件回调响应数据"></div>
           </div>
           <div class="list-panel">
             <div class="section-title">
@@ -864,20 +864,20 @@ const template = `
       <section class="view" data-view="slo-panel">
         <div class="view-header">
           <div class="section-title">
-            <h2>SLO 面板</h2>
+            <h2>服务等级目标面板</h2>
             <p>汇总成功率、p95/p99、GPU 队列、活跃流和 worker 热状态。</p>
           </div>
-          <button type="button" id="slo-refresh-button">刷新 SLO</button>
+          <button type="button" id="slo-refresh-button">刷新服务等级目标</button>
         </div>
         <div id="slo-summary" class="result-summary"></div>
         <div class="split-grid">
           <div class="card">
             <div class="section-title"><h3>错误预算</h3><p>基于当前指标做轻量燃烧评估。</p></div>
             <div id="slo-badges" class="badge-row"></div>
-            <div id="slo-json" class="json-view data-viewer" role="region" aria-label="SLO 数据"></div>
+            <div id="slo-json" class="json-view data-viewer" role="region" aria-label="服务等级目标数据"></div>
           </div>
           <div class="card">
-            <div class="section-title"><h3>Worker 状态</h3><p>模型常驻、队列和流 worker 摘要。</p></div>
+            <div class="section-title"><h3>工作器状态</h3><p>模型常驻、队列和视频流工作器摘要。</p></div>
             <div id="slo-worker-list" class="simple-list"></div>
           </div>
         </div>
@@ -921,8 +921,8 @@ const template = `
           <div class="card">
             <div class="section-title"><h3>人工标注</h3><p>标记误检、错配和低质量样本，进入评估数据池。</p></div>
             <form id="track-review-annotation-form" class="form-grid">
-              <label>任务 ID <input id="track-review-job-input" placeholder="job_id" /></label>
-              <label>轨迹 ID <input id="track-review-track-input" placeholder="track_id" /></label>
+              <label>任务 ID <input id="track-review-job-input" placeholder="任务 ID" /></label>
+              <label>轨迹 ID <input id="track-review-track-input" placeholder="轨迹 ID" /></label>
               <label>标注
                 <select id="track-review-label-input">
                   <option value="false_positive">误检</option>
@@ -933,8 +933,8 @@ const template = `
                 </select>
               </label>
               <label>帧序号 <input id="track-review-frame-input" type="number" min="0" step="1" placeholder="可选" /></label>
-              <label>复核人 <input id="track-review-reviewer-input" placeholder="operator" /></label>
-              <label>证据引用 <input id="track-review-evidence-input" placeholder="frame/object key" /></label>
+              <label>复核人 <input id="track-review-reviewer-input" placeholder="复核人" /></label>
+              <label>证据引用 <input id="track-review-evidence-input" placeholder="帧或对象键" /></label>
               <label class="span-2">备注 <textarea id="track-review-note-input" placeholder="原因、场景、复核结论"></textarea></label>
               <button type="submit" class="primary">保存标注</button>
             </form>
@@ -1001,7 +1001,7 @@ const template = `
         </div>
         <div class="split-grid">
           <div class="card">
-            <div class="section-title"><h3>发布操作</h3><p>默认 dry-run，取消勾选才会写入配置和审计。</p></div>
+            <div class="section-title"><h3>发布操作</h3><p>默认预演，取消勾选才会写入配置和审计。</p></div>
             <form id="release-form" class="form-grid">
               <label>操作
                 <select id="release-action-input">
@@ -1014,16 +1014,16 @@ const template = `
               <label>别名 <input id="release-alias-input" placeholder="person_reid_default" /></label>
               <label>目标模型 <input id="release-target-input" placeholder="portrait_hub/model.onnx" /></label>
               <label>当前目标 <input id="release-expected-input" placeholder="可选" /></label>
-              <label>流量 key <input id="release-traffic-key-input" placeholder="tenant 或 request key" /></label>
+              <label>流量 key <input id="release-traffic-key-input" placeholder="租户或请求键" /></label>
               <label>灰度权重 <input id="release-weight-input" type="number" min="0" max="100000" value="10000" /></label>
-              <label class="field-inline"><input id="release-dry-run-input" type="checkbox" checked /> dry-run</label>
+              <label class="field-inline"><input id="release-dry-run-input" type="checkbox" checked /> 预演模式</label>
               <button type="submit" class="primary">执行发布操作</button>
             </form>
           </div>
           <div class="result-panel">
             <div class="section-title"><h3>发布结果</h3><p>包含别名、candidate、previous_target 和回滚依据。</p></div>
             <div id="release-summary" class="result-summary"></div>
-            <div class="section-title"><h3>发布审计</h3><p>最近非 dry-run 发布、灰度和回滚记录。</p></div>
+            <div class="section-title"><h3>发布审计</h3><p>最近非预演发布、灰度和回滚记录。</p></div>
             <div id="release-audit-table" class="data-table-wrap"></div>
             <div id="release-json" class="json-view data-viewer" role="region" aria-label="模型发布响应数据"></div>
           </div>
@@ -1048,9 +1048,9 @@ const template = `
               <label>事件 <input id="audit-event-filter-input" placeholder="admin_export / model" /></label>
               <label>结果 <select id="audit-outcome-filter-input"><option value="">全部</option><option value="success">success</option><option value="started">started</option><option value="failure">failure</option><option value="error">error</option></select></label>
               <label>分类 <select id="audit-category-filter-input"><option value="">全部</option><option value="delete_requests">删除</option><option value="exports">导出</option><option value="model_versions">模型</option><option value="retention">保留</option><option value="other">其它</option></select></label>
-              <label>request_id <input id="audit-request-filter-input" placeholder="精确或部分匹配" /></label>
-              <label>起始时间戳 <input id="audit-created-since-input" inputmode="decimal" placeholder="Unix seconds" /></label>
-              <label>结束时间戳 <input id="audit-created-until-input" inputmode="decimal" placeholder="Unix seconds" /></label>
+              <label>请求 ID <input id="audit-request-filter-input" placeholder="精确或部分匹配" /></label>
+              <label>起始时间戳 <input id="audit-created-since-input" inputmode="decimal" placeholder="Unix 秒" /></label>
+              <label>结束时间戳 <input id="audit-created-until-input" inputmode="decimal" placeholder="Unix 秒" /></label>
               <button type="button" id="audit-event-filter-button">筛选</button>
             </div>
             <div id="audit-event-table" class="data-table-wrap"></div>
@@ -1085,7 +1085,7 @@ const template = `
         <div class="view-header">
           <div class="section-title">
             <h2>比对阈值</h2>
-            <p>按 profile 更新各模态比对阈值。</p>
+            <p>按方案更新各模态比对阈值。</p>
           </div>
           <button type="button" id="admin-refresh-button">刷新治理状态</button>
         </div>
@@ -1419,24 +1419,24 @@ const fieldLabels = {
   application_id: "接入应用 ID",
   owner: "负责人",
   scopes: "权限范围",
-  jwt_issuer: "JWT issuer",
-  jwt_audience: "JWT audience",
+  jwt_issuer: "JWT 签发方",
+  jwt_audience: "JWT 接收方",
   last_called_at: "最近调用时间",
   last_error_at: "最近错误时间",
   call_count: "调用次数",
   error_count: "错误次数",
   error_rate: "错误率",
-  api_key_preview: "API Key 预览",
+  api_key_preview: "接口密钥预览",
   endpoint: "接口",
-  webhooks: "Webhook 端点",
-  webhook_id: "Webhook ID",
+  webhooks: "事件回调端点",
+  webhook_id: "事件回调 ID",
   sample_delivery: "样例投递",
   delivery_status: "投递状态",
   signing_secret_preview: "签名密钥预览",
   one_time_secret: "一次性密钥",
   retry_limit: "重试次数",
   timeout_seconds: "超时秒数",
-  openapi_url: "OpenAPI 地址",
+  openapi_url: "开放接口定义地址",
   docs_url: "Swagger 文档地址",
   redoc_url: "ReDoc 文档地址",
   core_paths: "核心接口路径",
@@ -1580,12 +1580,12 @@ function payloadLabel(name) {
     "admin-data": "数据保留与备份响应",
     alerts: "告警评估响应",
   "access-credentials": "应用凭证响应",
-  "sdk-examples": "SDK 示例响应",
-  "openapi-docs": "OpenAPI 响应",
-  "api-playground": "API Playground 响应",
+  "sdk-examples": "开发工具包示例响应",
+  "openapi-docs": "开放接口定义响应",
+  "api-playground": "接口调试台 响应",
   "call-logs": "调用日志响应",
-  webhooks: "Webhook 响应",
-  "slo-panel": "SLO 面板响应",
+  webhooks: "事件回调响应",
+  "slo-panel": "服务等级目标面板响应",
   "multimodal-compare": "融合比对响应",
   "track-review": "轨迹审阅响应",
   "evaluation-center": "评估中心响应",
@@ -2073,7 +2073,7 @@ function readFileAsDataUrl(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.addEventListener("load", () => resolve(String(reader.result || "")));
-    reader.addEventListener("error", () => reject(reader.error || new Error("file preview failed")));
+    reader.addEventListener("error", () => reject(reader.error || new Error("文件预览失败")));
     reader.readAsDataURL(file);
   });
 }
@@ -2487,9 +2487,9 @@ function checkedValues(name, values) {
 }
 
 function authMode() {
-  if (state.bearer && state.apiKey) return "API Key + JWT";
+  if (state.bearer && state.apiKey) return "接口密钥 + JWT";
   if (state.bearer) return "JWT";
-  if (state.apiKey) return "API Key";
+  if (state.apiKey) return "接口密钥";
   return "未配置令牌";
 }
 
@@ -2664,7 +2664,7 @@ function coreOpenApiPaths() {
     { scene: "流事件", method: "GET", path: "/v1/streams/{stream_id}/events" },
     { scene: "应用凭证", method: "GET", path: "/v1/access/applications" },
     { scene: "调用日志", method: "GET", path: "/v1/access/call-logs" },
-    { scene: "Webhook", method: "GET", path: "/v1/access/webhooks" },
+    { scene: "事件回调", method: "GET", path: "/v1/access/webhooks" },
     { scene: "模型状态", method: "GET", path: "/v1/models" },
     { scene: "阈值", method: "GET", path: "/v1/thresholds" },
     { scene: "多模态融合", method: "POST", path: "/v1/fusion/compare" },
@@ -2724,7 +2724,7 @@ async function refreshOpenApiDocs() {
     payload.path_count = Object.keys(schema.paths || {}).length;
   } catch (error) {
     payload.error = error.message || String(error);
-    payload.note = "OpenAPI 可能在生产环境被关闭；受控环境可启用 ENABLE_API_DOCS 后刷新。";
+    payload.note = "开放接口定义可能在生产环境被关闭；受控环境可启用 ENABLE_API_DOCS 后刷新。";
   }
   state.openApiCache = payload;
   renderOpenApiDocs(payload);
@@ -2804,7 +2804,7 @@ function renderWebhooks() {
             <button type="button" class="small" data-webhook-toggle="${escapeHtml(webhook.id)}">${webhook.status === "disabled" ? "启用" : "禁用"}</button>
           </td>
         </tr>`).join("")}</tbody>
-    </table>` : `<div class="data-empty">暂无 Webhook 端点</div>`;
+    </table>` : `<div class="data-empty">暂无 事件回调端点</div>`;
   renderPayload("webhooks", "#webhook-json", webhookPayload());
 }
 
@@ -2846,7 +2846,7 @@ async function saveWebhook(event) {
 async function rotateWebhookSecret(id = null) {
   const webhookId = id || qs("#webhook-id-input").value.trim();
   const webhook = state.webhooks.find((item) => normalizeWebhook(item).id === webhookId) || selectedWebhook();
-  if (!webhook) throw new Error("请先选择 Webhook");
+  if (!webhook) throw new Error("请先选择事件回调");
   const data = await api(`/v1/access/webhooks/${encodeURIComponent(normalizeWebhook(webhook).id)}/rotate`, { method: "POST" });
   const updated = normalizeWebhook(data.webhook || webhook);
   const found = state.webhooks.findIndex((item) => normalizeWebhook(item).id === updated.id);
@@ -2871,7 +2871,7 @@ async function toggleWebhook(id) {
 
 async function renderWebhookSample(id = null) {
   const webhook = state.webhooks.find((item) => normalizeWebhook(item).id === id) || selectedWebhook();
-  if (!webhook) throw new Error("请先选择 Webhook");
+  if (!webhook) throw new Error("请先选择事件回调");
   const data = await api(`/v1/access/webhooks/${encodeURIComponent(normalizeWebhook(webhook).id)}/sample`, { method: "POST" });
   renderPayload("webhooks", "#webhook-json", webhookPayload(data));
 }
@@ -3052,7 +3052,7 @@ async function submitPlayground(event) {
       { label: "状态", value: raw.ok ? "成功" : "异常" },
       { label: "HTTP", value: raw.status_code },
       { label: "耗时", value: `${latency}ms` },
-      { label: "request_id", value: raw.request_id || "--" },
+      { label: "请求 ID", value: raw.request_id || "--" },
       { label: "错误码", value: errorCode || "--" },
       { label: "接口", value: endpoint },
     ]);
@@ -3067,14 +3067,14 @@ async function submitPlayground(event) {
       controlled_use: "dev_or_approved_intranet",
       response: raw.payload,
     });
-    if (!raw.ok) setStatus(errorCode || raw.status_text || "Playground 请求失败", true);
+    if (!raw.ok) setStatus(errorCode || raw.status_text || "接口调试请求失败", true);
   } catch (error) {
     const latency = Math.round(performance.now() - started);
     renderSummary("#playground-summary", [
       { label: "状态", value: "异常" },
       { label: "HTTP", value: "--" },
       { label: "耗时", value: `${latency}ms` },
-      { label: "request_id", value: "--" },
+      { label: "请求 ID", value: "--" },
       { label: "错误码", value: "client_error" },
       { label: "接口", value: selection.template },
     ]);
@@ -3190,7 +3190,7 @@ function renderCallLogs() {
   ]);
   qs("#call-log-table").innerHTML = rows.length ? `
     <table class="data-table">
-      <thead><tr><th>时间</th><th>应用</th><th>request_id</th><th>接口</th><th>状态</th><th>耗时</th><th>模型/Worker</th></tr></thead>
+      <thead><tr><th>时间</th><th>应用</th><th>请求 ID</th><th>接口</th><th>状态</th><th>耗时</th><th>模型/工作器</th></tr></thead>
       <tbody>${rows.map((row) => `
         <tr><td>${escapeHtml(row.created_at ? formatDateTime(row.created_at) : "--")}</td><td>${escapeHtml(row.application_id || row.page)}</td><td>${escapeHtml(row.request_id)}</td><td>${escapeHtml(`${row.method ? `${row.method} ` : ""}${row.endpoint}`)}</td><td>${escapeHtml(`${localizeValue(row.status)} ${row.http_status || ""}${row.error_code ? ` / ${row.error_code}` : ""}`)}</td><td>${escapeHtml(row.latency_ms)}</td><td>${escapeHtml(row.model_version)} / ${escapeHtml(row.worker)}</td></tr>`).join("")}</tbody>
     </table>` : `<div class="data-empty">暂无调用记录</div>`;
@@ -3491,7 +3491,7 @@ function renderEvaluationMetrics(payload) {
     { metric: "ReID p95", value: `${formatNumber(metrics.inference_p95_seconds, 2)}s`, gate: "baseline" },
     { metric: "错误率", value: `${formatNumber(Number(metrics.error_rate || 0) * 100, 2)}%`, gate: Number(metrics.error_rate || 0) <= state.alertConfig.maxErrorRate ? "pass" : "review" },
     { metric: "GPU 空闲", value: metrics.gpu_free_gb === null ? "--" : `${formatNumber(metrics.gpu_free_gb, 1)}GB`, gate: "observe" },
-    { metric: "阈值 profile", value: Object.keys(payload.thresholds?.thresholds || payload.thresholds || {}).join(", ") || "--", gate: "calibrate" },
+    { metric: "阈值方案", value: Object.keys(payload.thresholds?.thresholds || payload.thresholds || {}).join(", ") || "--", gate: "calibrate" },
   ];
   qs("#evaluation-metrics-table").innerHTML = `
     <table class="data-table">
@@ -3592,7 +3592,7 @@ async function submitReleaseAction(event) {
   const expected = qs("#release-expected-input").value.trim();
   const dryRun = qs("#release-dry-run-input").checked;
   if (!aliasName) throw new Error("请输入模型别名");
-  if (!dryRun && !window.confirm("确认执行非 dry-run 模型发布操作？该操作会写入模型别名配置和审计记录。")) return;
+  if (!dryRun && !window.confirm("确认执行非预演模型发布操作？该操作会写入模型别名配置和审计记录。")) return;
   let payload;
   if (action === "preview") {
     const key = encodeURIComponent(qs("#release-traffic-key-input").value.trim() || state.tenantId);
@@ -3629,7 +3629,7 @@ function renderAuditEventRows(auditEvents) {
   const rows = Array.isArray(auditEvents?.records) ? auditEvents.records : [];
   qs("#audit-event-table").innerHTML = rows.length ? `
     <table class="data-table">
-      <thead><tr><th>时间</th><th>分类</th><th>事件</th><th>结果</th><th>request_id</th><th>审计哈希</th></tr></thead>
+      <thead><tr><th>时间</th><th>分类</th><th>事件</th><th>结果</th><th>请求 ID</th><th>审计哈希</th></tr></thead>
       <tbody>${rows.map((row) => {
         const hash = row.audit_hash ? String(row.audit_hash).slice(0, 16) : "--";
         return `<tr><td>${escapeHtml(row.created_at ? formatDateTime(row.created_at) : "--")}</td><td>${escapeHtml(localizeValue(row.category || "other"))}</td><td>${escapeHtml(row.event || "--")}</td><td>${escapeHtml(localizeValue(row.outcome || "--"))}</td><td>${escapeHtml(row.request_id || "--")}</td><td>${escapeHtml(hash)}</td></tr>`;
@@ -3685,7 +3685,7 @@ async function refreshAuditCompliance() {
     { label: "保留", value: auditCategoryCounts.retention ?? 0 },
     { label: "链错误", value: auditChainErrorCount },
     { label: "导出人员", value: exported.people?.length ?? 0 },
-    { label: "request_id", value: auditEventsPayload.request_id || auditVerificationPayload.request_id || exported.request_id || status.request_id || "--" },
+    { label: "请求 ID", value: auditEventsPayload.request_id || auditVerificationPayload.request_id || exported.request_id || status.request_id || "--" },
   ]);
   qs("#audit-check-list").innerHTML = checks.map((item) => `<div class="alert-item ${item.ok ? "ok" : "warn"}"><strong>${escapeHtml(item.name)}</strong><span>${escapeHtml(compactValue(item.current))} / ${escapeHtml(compactValue(item.limit))}</span></div>`).join("");
   renderAuditEventRows(auditEventsPayload);
@@ -3703,7 +3703,7 @@ function renderBackupSnapshots(payload) {
   ]);
   qs("#backup-snapshot-table").innerHTML = rows.length ? `
     <table class="data-table">
-      <thead><tr><th>时间</th><th>request_id</th><th>后端</th><th>字节数</th><th>增量起点</th><th>快照哈希</th></tr></thead>
+      <thead><tr><th>时间</th><th>请求 ID</th><th>后端</th><th>字节数</th><th>增量起点</th><th>快照哈希</th></tr></thead>
       <tbody>${rows.map((row) => {
         const createdAt = row.created_at === null || row.created_at === undefined ? "--" : formatDateTime(row.created_at);
         const updatedSince = row.updated_since === null || row.updated_since === undefined ? "--" : formatDateTime(row.updated_since);
@@ -4419,13 +4419,13 @@ function setupEvents() {
     if (toggleId) toggleAccessApp(toggleId);
   }));
   qs("#sdk-refresh-button").addEventListener("click", renderSdkExamples);
-  qs("#sdk-python-copy-button").addEventListener("click", wrapHandler(() => copyText(qs("#sdk-python-code").textContent, "Python 示例已复制")));
-  qs("#sdk-node-copy-button").addEventListener("click", wrapHandler(() => copyText(qs("#sdk-node-code").textContent, "Node 示例已复制")));
-  qs("#sdk-curl-copy-button").addEventListener("click", wrapHandler(() => copyText(qs("#sdk-curl-code").textContent, "curl 示例已复制")));
+  qs("#sdk-python-copy-button").addEventListener("click", wrapHandler(() => copyText(qs("#sdk-python-code").textContent, "Python 代码示例已复制")));
+  qs("#sdk-node-copy-button").addEventListener("click", wrapHandler(() => copyText(qs("#sdk-node-code").textContent, "Node.js 代码示例已复制")));
+  qs("#sdk-curl-copy-button").addEventListener("click", wrapHandler(() => copyText(qs("#sdk-curl-code").textContent, "curl 命令示例已复制")));
   qs("#sdk-batch-copy-button").addEventListener("click", wrapHandler(() => copyText(qs("#sdk-batch-code").textContent, "批量示例已复制")));
   qs("#sdk-video-copy-button").addEventListener("click", wrapHandler(() => copyText(qs("#sdk-video-code").textContent, "视频示例已复制")));
   qs("#openapi-refresh-button").addEventListener("click", wrapHandler(refreshOpenApiDocs));
-  qs("#openapi-copy-button").addEventListener("click", wrapHandler(() => copyText(qs("#openapi-code").textContent, "OpenAPI 检查命令已复制")));
+  qs("#openapi-copy-button").addEventListener("click", wrapHandler(() => copyText(qs("#openapi-code").textContent, "开放接口定义检查命令已复制")));
   qs("#playground-form").addEventListener("submit", wrapHandler(submitPlayground));
   qs("#playground-endpoint-input").addEventListener("change", renderPlaygroundRequestPreview);
   [
@@ -4638,7 +4638,7 @@ function setupEvents() {
       const value = qs(selector).value;
       if (value !== "") payload[key] = Number(value);
     });
-    if (!window.confirm("确认保存该阈值 profile？它会影响后续比对和检索判断。")) return;
+    if (!window.confirm("确认保存该阈值方案？它会影响后续比对和检索判断。")) return;
     renderPayload("admin-threshold", "#admin-threshold-json", await api(`/v1/thresholds/${encodeURIComponent(profile)}`, { method: "PUT", json: payload }));
   }));
   qs("#retention-form").addEventListener("submit", wrapHandler(async (event) => {

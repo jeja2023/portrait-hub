@@ -5,10 +5,10 @@ from fastapi import HTTPException, status
 from app.observability import logger
 
 
-HEALTH_CHECK_FAILED = "health check failed"
-MODEL_READINESS_CHECK_FAILED = "model readiness check failed"
-OBJECT_CLEANUP_FAILED = "object cleanup failed"
-OBJECT_DELETE_FAILED = "object delete failed"
+HEALTH_CHECK_FAILED = "健康检查失败"
+MODEL_READINESS_CHECK_FAILED = "模型就绪检查失败"
+OBJECT_CLEANUP_FAILED = "对象清理失败"
+OBJECT_DELETE_FAILED = "对象删除失败"
 
 
 def portrait_success(
@@ -37,7 +37,7 @@ def capability_payload(name: str, status: str, reason: str | None = None) -> dic
     return payload
 
 
-def raise_internal_error(request_id: str, detail: str = "internal server error") -> None:
+def raise_internal_error(request_id: str, detail: str = "内部服务器错误") -> None:
     raise HTTPException(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         detail={"message": detail, "request_id": request_id},

@@ -270,14 +270,14 @@ def audit_chain_previous_hash() -> str | None:
         return last_audit_hash(PORTRAIT_AUDIT_PATH)
     except Exception as exc:
         logger.warning(
-            "failed to read audit chain head: path_hash=%s error=%s",
+            "读取审计链头失败: path_hash=%s error=%s",
             state_path_fingerprint(PORTRAIT_AUDIT_PATH),
             exception_log_summary(exc),
         )
         if AUDIT_WRITE_FAIL_CLOSED:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="audit chain unavailable",
+                detail="审计链不可用",
             ) from exc
         return None
 

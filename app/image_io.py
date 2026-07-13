@@ -13,12 +13,12 @@ async def read_image_file(file: UploadFile) -> bytes:
     if not data:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="uploaded file is empty",
+            detail="上传文件为空",
         )
     if len(data) > MAX_IMAGE_BYTES:
         raise HTTPException(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail=f"uploaded file is too large: max {MAX_IMAGE_BYTES} bytes",
+            detail=f"上传文件过大：最大 {MAX_IMAGE_BYTES} 字节",
         )
     return data
 
@@ -26,7 +26,7 @@ async def read_image_file(file: UploadFile) -> bytes:
 def decode_image(data: bytes, filename: str | None) -> Image.Image:
     image = decode_image_bytes(data, filename).image
     if not isinstance(image, Image.Image):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="uploaded file is not a valid image")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="上传文件不是有效图片")
     return image
 
 

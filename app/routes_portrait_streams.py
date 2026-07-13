@@ -51,7 +51,7 @@ def stream_or_404(stream_id: str, tenant_id: str) -> StreamRecord:
     stream_id = validate_stream_id(stream_id)
     stream = get_stream(stream_id, tenant_id=tenant_id)
     if stream is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="stream not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="视频流不存在")
     return stream
 
 
@@ -61,13 +61,13 @@ def rollback_stream_snapshot(stream: StreamRecord, previous_stream: StreamRecord
     try:
         persist_stream(stream)
     except Exception as exc:
-        logger.warning("failed to persist restored stream snapshot: %s", exception_log_summary(exc))
-        return ["restore stream failed"]
+        logger.warning("持久化恢复后的视频流快照失败: %s", exception_log_summary(exc))
+        return ["恢复视频流失败"]
     return []
 
 
 def raise_stream_rollback_failure(original_error: Exception, rollback_errors: list[str]) -> None:
-    raise_rollback_failure("stream mutation failed and rollback persistence failed", original_error, rollback_errors)
+    raise_rollback_failure("视频流变更失败，且回滚持久化失败", original_error, rollback_errors)
 
 
 @router.post("/v1/streams", dependencies=[Depends(permission_dependency("streams"))])

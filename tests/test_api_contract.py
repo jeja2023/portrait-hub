@@ -353,7 +353,7 @@ def test_global_request_body_limit_rejects_oversized_content_length(monkeypatch)
     response = client.post("/predict", content=b"x" * 11, headers={"content-type": "application/json"})
 
     assert response.status_code == 413
-    assert response.json()["detail"] == "request body too large: max 10 bytes"
+    assert response.json()["detail"] == "请求体过大：最大 10 字节"
 
 
 def test_http_exception_headers_survive_middleware(monkeypatch) -> None:
@@ -382,7 +382,7 @@ def test_trusted_host_allowlist_rejects_untrusted_hosts(monkeypatch) -> None:
     allowed = client.get("/health", headers={"host": "trusted.local"})
 
     assert rejected.status_code == 400
-    assert "Invalid host header" in rejected.text
+    assert "Host 头无效" in rejected.text
     assert allowed.status_code == 200
 
 
@@ -410,7 +410,7 @@ def test_trusted_host_allowlist_hot_reload_updates_existing_app(monkeypatch, wor
         rejected = client.get("/health", headers={"host": "attacker.local"})
         allowed = client.get("/health", headers={"host": "trusted.local"})
         assert rejected.status_code == 400
-        assert "Invalid host header" in rejected.text
+        assert "Host 头无效" in rejected.text
         assert allowed.status_code == 200
     finally:
         if original_env is None:
@@ -565,7 +565,7 @@ def test_unhandled_errors_return_redacted_traceable_json() -> None:
     response = client.get("/boom", headers={"x-request-id": "req-500"})
 
     assert response.status_code == 500
-    assert response.json() == {"detail": "internal server error", "request_id": "req-500"}
+    assert response.json() == {"detail": "内部服务器错误", "request_id": "req-500"}
     assert "secret internal stack detail" not in response.text
     assert response.headers["X-Request-ID"] == "req-500"
     assert response.headers["X-Content-Type-Options"] == "nosniff"
@@ -590,7 +590,7 @@ def test_legacy_predict_runtime_errors_are_redacted(monkeypatch, caplog) -> None
     assert response.status_code == 500
     assert response.json() == {
         "detail": {
-            "message": "inference runtime error",
+            "message": "推理运行时错误",
             "request_id": "req-runtime-redaction",
         }
     }
@@ -799,7 +799,7 @@ def test_admin_audit_events_endpoint_is_tenant_scoped_and_redacted(monkeypatch, 
     assert filtered_payload["filters"]["category"] == "exports"
     invalid_category = client.get("/v1/admin/audit/events", params={"category": "secret"}, headers={"X-Tenant-ID": "tenant-a"})
     assert invalid_category.status_code == 400
-    assert invalid_category.json()["detail"] == "unsupported audit event category"
+    assert invalid_category.json()["detail"] == "不支持的审计事件类别"
 
 
 def test_admin_backups_endpoint_returns_recent_redacted_snapshots(monkeypatch, workspace_tmp_path) -> None:
@@ -952,7 +952,7 @@ def test_rollout_alias_preview_invalid_alias_returns_400(monkeypatch) -> None:
     )
 
     assert response.status_code == 400
-    assert response.json()["detail"] == "invalid alias name"
+    assert response.json()["detail"] == "别名名称无效"
     assert "bad/alias" not in response.text
     assert response.headers["X-Request-ID"]
 
@@ -972,7 +972,7 @@ def test_legacy_model_reference_errors_are_fixed_and_redacted() -> None:
 
     for response in [infer, info]:
         assert response.status_code == 400
-        assert response.json()["detail"] == "invalid model reference"
+        assert response.json()["detail"] == "模型引用无效"
         assert "secret/project" not in response.text
         assert "secret-model" not in response.text
 
@@ -989,7 +989,7 @@ def test_rollout_alias_preview_missing_alias_does_not_echo_alias(monkeypatch) ->
     )
 
     assert response.status_code == 404
-    assert response.json()["detail"] == "alias not found"
+    assert response.json()["detail"] == "别名不存在"
     assert "secret_alias" not in response.text
 
 

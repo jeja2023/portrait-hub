@@ -13,7 +13,7 @@ from app.video_io import SUPPORTED_VIDEO_EXTENSIONS, extract_video_frames_from_p
 def probe_video_file(path: str) -> dict[str, Any]:
     capture = cv2.VideoCapture(path)
     if not capture.isOpened():
-        raise ValueError("failed to open video source")
+        raise ValueError("打开视频源失败")
     try:
         fps = float(capture.get(cv2.CAP_PROP_FPS) or 0)
         frame_count = int(capture.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
@@ -68,4 +68,4 @@ async def extract_video_frames_from_bytes(
             try:
                 Path(temp_path).unlink(missing_ok=True)
             except Exception:
-                logger.warning("failed to remove temp video file")
+                logger.warning("删除临时视频文件失败")

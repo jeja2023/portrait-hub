@@ -24,11 +24,11 @@ def test_production_profile_requires_external_services(monkeypatch) -> None:
 
     failures = production_gates.production_externalization_failures()
 
-    assert "PORTRAIT_STORAGE_BACKEND must be postgres in production" in failures
-    assert "PORTRAIT_VECTOR_BACKEND must be pgvector or qdrant in production" in failures
-    assert "PORTRAIT_OBJECT_STORAGE_BACKEND must be s3 in production" in failures
-    assert "TASK_QUEUE_BACKEND must be redis in production" in failures
-    assert "OPENTELEMETRY_ENABLED must be true in production" in failures
+    assert "生产环境中 PORTRAIT_STORAGE_BACKEND 必须为 postgres" in failures
+    assert "生产环境中 PORTRAIT_VECTOR_BACKEND 必须为 pgvector 或 qdrant" in failures
+    assert "生产环境中 PORTRAIT_OBJECT_STORAGE_BACKEND 必须为 s3" in failures
+    assert "生产环境中 TASK_QUEUE_BACKEND 必须为 redis" in failures
+    assert "生产环境中 OPENTELEMETRY_ENABLED 必须为 true" in failures
 
 
 def test_production_profile_accepts_externalized_pgvector_stack(monkeypatch) -> None:

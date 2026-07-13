@@ -13,7 +13,7 @@ from typing import Any
 def normalize_auth_scheme(value: str) -> str:
     normalized = value.strip().lower().replace("_", "-")
     if normalized not in {"bearer", "api-key"}:
-        raise ValueError("auth_scheme must be 'bearer' or 'api-key'")
+        raise ValueError("auth_scheme 必须是 'bearer' 或 'api-key'")
     return normalized
 
 
@@ -103,13 +103,13 @@ def run_load_test(
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Simple PortraitHub HTTP load test.")
+    parser = argparse.ArgumentParser(description="简单的 PortraitHub HTTP 负载测试。")
     parser.add_argument("--url", default="http://127.0.0.1:8000/health")
     parser.add_argument("--method", default="GET")
     parser.add_argument("--requests", type=int, default=100)
     parser.add_argument("--concurrency", type=int, default=10)
     parser.add_argument("--token", default=None)
-    parser.add_argument("--auth-scheme", choices=["bearer", "api-key"], default="bearer", help="How --token is sent.")
+    parser.add_argument("--auth-scheme", choices=["bearer", "api-key"], default="bearer", help="--token 的发送方式。")
     parser.add_argument("--tenant-id", default="default")
     parser.add_argument("--timeout", type=float, default=10.0)
     args = parser.parse_args()

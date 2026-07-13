@@ -64,7 +64,7 @@ def record_call_log(
 
         record_application_call(tenant_id, application_id, status_code, created_at)
     except Exception:
-        # Call log persistence is best-effort telemetry and must not change the request outcome.
+        # 调用日志持久化是尽力而为的遥测，不应改变请求结果。
         return
 
 

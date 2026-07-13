@@ -55,26 +55,26 @@ def parse_gallery_metadata(raw: str | None) -> dict[str, Any]:
     try:
         parsed = json.loads(raw)
     except json.JSONDecodeError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="metadata must be valid JSON") from exc
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="元数据必须是有效 JSON") from exc
     if not isinstance(parsed, dict):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="metadata must be a JSON object")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="元数据必须是 JSON 对象")
     return normalize_public_metadata(parsed, field_name="metadata")
 
 
 def validate_gallery_modality(modality: str) -> str:
     modality_key = normalize_modality(str(modality))
     if modality_key not in SUPPORTED_GALLERY_MODALITIES:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="unsupported modality")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="不支持的模态")
     return modality_key
 
 
 def validate_gallery_image_count(files: list[UploadFile]) -> None:
     if not files:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="at least one image file is required")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="至少需要一个图片文件")
     if len(files) > MAX_EMBEDDING_IMAGES:
         raise HTTPException(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail=f"too many image files: {len(files)}, max {MAX_EMBEDDING_IMAGES}",
+            detail=f"图片文件过多：{len(files)}，最大 {MAX_EMBEDDING_IMAGES}",
         )
 
 

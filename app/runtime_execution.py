@@ -21,7 +21,7 @@ def build_input_array(tensor_data: list[Any], dtype: Any) -> Array:
     if input_array.size > MAX_TENSOR_ITEMS:
         raise HTTPException(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail=f"tensor is too large: {input_array.size} items, max {MAX_TENSOR_ITEMS}",
+            detail=f"张量过大：{input_array.size} 项，最大 {MAX_TENSOR_ITEMS}",
         )
     return input_array
 
@@ -158,7 +158,7 @@ async def run_model_bundle_batch(
         raw_outputs, queue_seconds, inference_seconds = await run_model_bundle(bundle, batched_input)
         return raw_outputs, queue_seconds, inference_seconds, "batch"
     except Exception as exc:
-        logger.warning("batch inference failed, falling back to per-item inference: %s", exception_log_summary(exc))
+        logger.warning("批量推理失败，回退到逐项推理: %s", exception_log_summary(exc))
     output_groups = []
     queue_seconds_sum = 0.0
     inference_seconds_sum = 0.0
@@ -191,7 +191,7 @@ async def run_yolo_frames(
         raw_outputs, queue_seconds, inference_seconds = await run_model_bundle(bundle, input_array)
         return raw_outputs, queue_seconds, inference_seconds, "batch"
     except Exception as exc:
-        logger.warning("batch inference failed, falling back to per-frame inference: %s", exception_log_summary(exc))
+        logger.warning("批量推理失败，回退到逐帧推理: %s", exception_log_summary(exc))
 
     output_groups: list[list[Array]] = []
     queue_seconds_sum = 0.0

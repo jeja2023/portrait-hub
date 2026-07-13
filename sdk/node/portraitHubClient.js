@@ -2,7 +2,7 @@ const fs = require("fs");
 
 class PortraitHubHTTPError extends Error {
   constructor(status, payload, headers) {
-    super(`PortraitHub request failed with HTTP ${status}`);
+    super(`PortraitHub 请求失败 with HTTP ${status}`);
     this.name = "PortraitHubHTTPError";
     this.status = status;
     this.payload = payload;
@@ -21,7 +21,7 @@ class PortraitHubClient {
   normalizeAuthScheme(value) {
     const normalized = String(value).trim().toLowerCase().replace(/-/g, "_");
     if (!["bearer", "api_key"].includes(normalized)) {
-      throw new Error("authScheme must be 'bearer' or 'api_key'");
+      throw new Error("authScheme 必须是 'bearer' 或 'api_key'");
     }
     return normalized;
   }

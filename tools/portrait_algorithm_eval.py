@@ -17,7 +17,7 @@ def load_manifest(path: Path) -> dict[str, Any]:
     with path.open("r", encoding="utf-8") as file:
         payload = json.load(file) if path.suffix.lower() == ".json" else yaml.safe_load(file)
     if not isinstance(payload, dict):
-        raise ValueError("manifest root must be a mapping")
+        raise ValueError("manifest 根节点必须是映射")
     return payload
 
 
@@ -610,7 +610,7 @@ def main() -> int:
     if args.json:
         print(json.dumps(report, ensure_ascii=False, indent=2))
     else:
-        print(f"portrait algorithm eval: {'OK' if report['ok'] else 'FAILED'}")
+        print(f"人像算法评估： {'通过' if report['ok'] else '失败'}")
         for name, metrics in report["metrics"].items():
             print(f"{name}: {json.dumps(metrics, ensure_ascii=False, sort_keys=True)}")
     return 0 if report["ok"] else 1

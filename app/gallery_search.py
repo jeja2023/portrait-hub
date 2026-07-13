@@ -21,7 +21,7 @@ def candidate_feature(candidate: dict[str, Any]) -> dict[str, Any]:
 
 def gallery_records_snapshot(tenant_id: str, modality_key: str) -> list[dict[str, Any]]:
     # 物化某个 tenant/modality 的内存候选记录。GALLERY 与 person.features 会被并发
-    # upsert 原地修改，因此迭代必须在锁内进行，避免 "changed size during iteration"。
+    # 执行 upsert 时会原地修改，因此迭代必须在锁内进行，避免 "changed size during iteration"。
     records: list[dict[str, Any]] = []
     with GALLERY_LOCK:
         for person in GALLERY.values():
@@ -542,7 +542,7 @@ def search_gallery(
 
     # 本地 numpy 后端会扫描此快照；pgvector/qdrant 查询各自的 ANN 索引并忽略它。
     # 至多构建一次、且仅在确有代码路径需要时构建，使 DB 后端图库在热路径上避免
-    # O(N) 的持锁拷贝。查询扩展仍需要种子候选的 embedding，因此当查询的质量满足
+    # 避免 O(N) 的持锁拷贝。查询扩展仍需要种子候选向量，因此当查询质量满足
     # 扩展条件时才物化快照。
     records_cache: list[dict[str, Any]] | None = None
 

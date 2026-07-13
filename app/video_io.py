@@ -47,7 +47,7 @@ def validate_video_filename(filename: str | None) -> str | None:
     if suffix and suffix not in SUPPORTED_VIDEO_EXTENSIONS:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="unsupported video extension",
+            detail="不支持的视频扩展名",
         )
     return suffix or None
 
@@ -68,12 +68,12 @@ def validate_video_content(data: bytes, filename: str | None = None) -> str:
     if container is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="uploaded video has unsupported container content",
+            detail="上传视频的容器内容不受支持",
         )
     if suffix and container not in VIDEO_EXTENSION_CONTAINERS.get(suffix, set()):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="video extension does not match detected content",
+            detail="视频扩展名与检测到的内容不匹配",
         )
     return container
 
@@ -88,7 +88,7 @@ async def read_video_file(file: UploadFile) -> bytes:
     if len(data) > MAX_VIDEO_BYTES:
         raise HTTPException(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail=f"uploaded video is too large: max {MAX_VIDEO_BYTES} bytes",
+            detail=f"上传视频过大：最大 {MAX_VIDEO_BYTES} bytes",
         )
     validate_video_content(data, file.filename)
     return data
@@ -446,7 +446,7 @@ def extract_video_frames_from_capture(
     source: str | None = None,
 ) -> tuple[list[Image.Image], dict[str, Any]]:
     if not capture.isOpened():
-        raise ValueError("failed to open video source")
+        raise ValueError("打开视频源失败")
 
     start = now()
     frame_interval = max(1, frame_interval)
@@ -579,7 +579,7 @@ async def extract_video_frames_from_upload(
             try:
                 Path(temp_path).unlink(missing_ok=True)
             except Exception:
-                logger.warning("failed to remove temp video file")
+                logger.warning("删除临时视频文件失败")
 
 
 __all__ = [

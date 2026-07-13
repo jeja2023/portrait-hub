@@ -51,7 +51,7 @@ class StreamProcessLock:
                 self.path.unlink(missing_ok=True)
         except Exception as exc:
             logger.warning(
-                "failed to release stream worker process lock: path_hash=%s error=%s",
+                "释放视频流 worker 进程锁失败: path_hash=%s error=%s",
                 state_path_fingerprint(self.path),
                 exception_log_summary(exc),
             )
@@ -72,7 +72,7 @@ def read_stream_process_lock_payload(path: Path) -> dict[str, Any] | None:
         return None
     except Exception as exc:
         logger.warning(
-            "failed to read stream worker process lock: path_hash=%s error=%s",
+            "读取视频流 worker 进程锁失败: path_hash=%s error=%s",
             state_path_fingerprint(path),
             exception_log_summary(exc),
         )
@@ -113,11 +113,11 @@ def remove_stale_stream_process_lock(path: Path) -> bool:
         return False
     try:
         path.unlink(missing_ok=True)
-        logger.warning("removed stale stream worker process lock: path_hash=%s", state_path_fingerprint(path))
+        logger.warning("已移除过期视频流 worker 进程锁: path_hash=%s", state_path_fingerprint(path))
         return True
     except Exception as exc:
         logger.warning(
-            "failed to remove stale stream worker process lock: path_hash=%s error=%s",
+            "移除过期视频流 worker 进程锁失败: path_hash=%s error=%s",
             state_path_fingerprint(path),
             exception_log_summary(exc),
         )
@@ -177,7 +177,7 @@ async def run_leased_stream_worker_session(
             release_stream_worker_lease(stream, owner_id)
         except Exception as exc:
             logger.warning(
-                "failed to release stream worker lease: tenant=%s stream=%s error=%s",
+                "释放视频流 worker 租约失败: tenant=%s stream=%s error=%s",
                 stream.tenant_id,
                 stream.stream_id,
                 exception_log_summary(exc),
@@ -271,7 +271,7 @@ async def run_daemon_forever(
             except Exception as exc:
                 process_lock.release()
                 logger.warning(
-                    "stream daemon failed to acquire lease: tenant=%s stream=%s error=%s",
+                    "视频流守护进程获取租约失败: tenant=%s stream=%s error=%s",
                     stream.tenant_id,
                     stream.stream_id,
                     exception_log_summary(exc),
@@ -292,13 +292,13 @@ async def run_daemon_forever(
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Run the PortraitHub stream worker daemon.")
-    parser.add_argument("--tenant-id", help="Only process streams for one tenant.")
-    parser.add_argument("--stream-id", help="Only process one stream id.")
-    parser.add_argument("--once", action="store_true", help="Process currently running streams once and exit.")
+    parser = argparse.ArgumentParser(description="运行 PortraitHub 视频流工作守护进程。")
+    parser.add_argument("--tenant-id", help="只处理某个租户的视频流。")
+    parser.add_argument("--stream-id", help="只处理一个视频流 ID。")
+    parser.add_argument("--once", action="store_true", help="处理当前运行中的视频流一次后退出。")
     parser.add_argument("--poll-interval", type=float, default=STREAM_WORKER_POLL_INTERVAL_SECONDS)
     parser.add_argument("--max-reconnects", type=int, default=STREAM_WORKER_MAX_RECONNECTS)
-    parser.add_argument("--json", action="store_true", help="Print JSON report in --once mode.")
+    parser.add_argument("--json", action="store_true", help="在 --once 模式下输出 JSON 报告。")
     args = parser.parse_args()
 
     if args.once:
@@ -312,7 +312,7 @@ def main() -> int:
         if args.json:
             print(json.dumps(report, ensure_ascii=False, indent=2))
         else:
-            print(f"portrait stream worker daemon: {report['status']} selected={report['selected_count']}")
+            print(f"视频流 worker 守护进程：{report['status']} 选中={report['selected_count']}")
         return 0
 
     asyncio.run(

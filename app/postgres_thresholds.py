@@ -20,7 +20,7 @@ def load_threshold_snapshot() -> dict[str, Any]:
                 for row in cursor:
                     thresholds.setdefault(str(row["modality"]), {})[str(row["profile"])] = float(row["threshold"])
     except Exception as exc:  # pragma: no cover - 需要外部数据库支持
-        logger.warning("postgres threshold load failed: %s", exception_log_summary(exc))
+        logger.warning("postgres threshold 加载失败ed: %s", exception_log_summary(exc))
         return {}
     return {"version": 1, "thresholds": thresholds}
 

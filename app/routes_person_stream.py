@@ -73,7 +73,7 @@ async def infer_stream_person_tracks(
         request_id,
         errors_metric="tracks_errors_total",
         log_label="stream person track inference failed",
-        internal_message="stream person track inference runtime error",
+        internal_message="视频流人员轨迹推理运行时错误",
     ):
         images, stream_meta = await asyncio.to_thread(
             extract_video_frames_from_path,

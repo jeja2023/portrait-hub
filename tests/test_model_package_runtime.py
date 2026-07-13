@@ -18,7 +18,7 @@ def test_explicit_labels_sidecar_is_required(workspace_tmp_path, caplog) -> None
         )
 
     assert exc_info.value.status_code == 500
-    assert exc_info.value.detail == "model labels file not found"
+    assert exc_info.value.detail == "模型标签文件不存在"
     assert "missing.labels.txt" not in str(exc_info.value.detail)
     assert "sidecar_path_hash=" in caplog.text
     assert "missing.labels.txt" not in caplog.text
@@ -47,7 +47,7 @@ async def test_model_load_failure_logs_are_redacted(monkeypatch, workspace_tmp_p
         await runtime_registry.get_or_load_model("portrait_hub/secret-model.onnx", model_path)
 
     assert exc_info.value.status_code == 500
-    assert exc_info.value.detail == "failed to load model runtime"
+    assert exc_info.value.detail == "加载模型运行时失败"
     assert "path_hash=" in caplog.text
     assert "RuntimeError" in caplog.text
     for secret in ["secret-model-dir", "secret-token", str(model_path)]:
@@ -66,20 +66,20 @@ async def test_load_failure_sets_cooldown_then_fast_fails(monkeypatch, workspace
 
     def fail_create_session(path, cache_key, device_id=None):
         create_calls["n"] += 1
-        raise RuntimeError("load fail")
+        raise RuntimeError("加载失败")
 
     monkeypatch.setattr(runtime_registry, "model_hash", lambda path: "digest")
     monkeypatch.setattr(runtime_registry, "validate_model_hash", lambda key, digest: None)
     monkeypatch.setattr(runtime_registry, "create_session", fail_create_session)
     monkeypatch.setattr(runtime_registry, "MODEL_LOAD_RETRY_COOLDOWN_SECONDS", 30.0)
 
-    # First request actually attempts the load and fails with 500.
+    # 第一次请求会实际尝试加载，并以 500 失败。
     with pytest.raises(HTTPException) as first:
         await runtime_registry.get_or_load_model("proj/model.onnx", model_path)
     assert first.value.status_code == 500
     assert MODEL_LOAD_RETRY_AFTER.get("proj/model.onnx", 0) > 0
 
-    # Second request inside the cooldown window fast-fails with 503 WITHOUT re-attempting the load.
+    # 冷却窗口内的第二次请求会直接以 503 快速失败，不会重新尝试加载。
     with pytest.raises(HTTPException) as second:
         await runtime_registry.get_or_load_model("proj/model.onnx", model_path)
     assert second.value.status_code == 503
@@ -92,7 +92,7 @@ async def test_cooldown_expiry_allows_retry_and_success_clears_it(monkeypatch, w
     model_path.write_bytes(b"fake onnx")
     MODEL_REGISTRY.clear()
     MODEL_LOAD_LOCKS.clear()
-    # Simulate a still-recorded-but-expired cooldown (retry-after in the past).
+    # 模拟仍有记录但已过期的冷却状态（retry-after 位于过去）。
     MODEL_LOAD_RETRY_AFTER.clear()
     MODEL_LOAD_RETRY_AFTER["proj/model.onnx"] = 1.0
 
@@ -108,7 +108,7 @@ async def test_cooldown_expiry_allows_retry_and_success_clears_it(monkeypatch, w
     bundle, cold_loaded, _ = await runtime_registry.get_or_load_model("proj/model.onnx", model_path)
 
     assert cold_loaded is True
-    # A successful load clears the stale cooldown entry so the model serves normally.
+    # 成功加载会清除过期冷却条目，使模型恢复正常服务。
     assert "proj/model.onnx" not in MODEL_LOAD_RETRY_AFTER
     runtime_registry.release_model_bundle(bundle)
     MODEL_REGISTRY.clear()
@@ -125,7 +125,7 @@ def test_explicit_labels_sidecar_must_not_be_empty(workspace_tmp_path, caplog) -
         labels_from_config({"artifact": {"labels": "labels.txt"}}, model_path)
 
     assert exc_info.value.status_code == 500
-    assert exc_info.value.detail == "model labels file is empty"
+    assert exc_info.value.detail == "模型标签文件为空"
     assert "labels.txt" not in str(exc_info.value.detail)
     assert "sidecar_path_hash=" in caplog.text
     assert "labels.txt" not in caplog.text
@@ -153,7 +153,7 @@ def test_explicit_labels_read_failure_is_redacted(monkeypatch, workspace_tmp_pat
         labels_from_config({"artifact": {"labels": "secret-labels.txt"}}, model_path)
 
     assert exc_info.value.status_code == 500
-    assert exc_info.value.detail == "failed to read model labels"
+    assert exc_info.value.detail == "读取模型标签失败"
     assert "sidecar_path_hash=" in caplog.text
     assert "OSError" in caplog.text
     assert "secret-labels.txt" not in str(exc_info.value.detail)
@@ -179,7 +179,7 @@ def test_explicit_model_card_sidecar_is_required(workspace_tmp_path, caplog) -> 
         model_card_for_path({"artifact": {"model_card": "missing.model-card.yml"}}, model_path)
 
     assert exc_info.value.status_code == 500
-    assert exc_info.value.detail == "model sidecar yaml not found"
+    assert exc_info.value.detail == "模型附属 YAML 不存在"
     assert "missing.model-card.yml" not in str(exc_info.value.detail)
     assert "sidecar_path_hash=" in caplog.text
     assert "missing.model-card.yml" not in caplog.text
@@ -197,7 +197,7 @@ def test_explicit_model_card_sidecar_must_be_mapping(workspace_tmp_path, caplog)
         model_card_for_path({"artifact": {"model_card": "model-card.yml"}}, model_path)
 
     assert exc_info.value.status_code == 500
-    assert exc_info.value.detail == "model sidecar yaml root must be a mapping"
+    assert exc_info.value.detail == "模型附属 YAML 根节点必须是映射"
     assert "model-card.yml" not in str(exc_info.value.detail)
     assert "sidecar_path_hash=" in caplog.text
     assert "model-card.yml" not in caplog.text
@@ -225,7 +225,7 @@ def test_explicit_model_card_read_failure_is_redacted(monkeypatch, workspace_tmp
         model_card_for_path({"artifact": {"model_card": "secret-card.yml"}}, model_path)
 
     assert exc_info.value.status_code == 500
-    assert exc_info.value.detail == "failed to read model sidecar yaml"
+    assert exc_info.value.detail == "读取模型附属 YAML 失败"
     assert "sidecar_path_hash=" in caplog.text
     assert "OSError" in caplog.text
     assert "secret-card.yml" not in str(exc_info.value.detail)

@@ -39,5 +39,5 @@ def test_decode_image_rejects_extension_content_mismatch() -> None:
         decode_image_bytes(png_bytes((20, 40, 80)), "secret-token.jpg")
 
     assert exc_info.value.status_code == 400
-    assert "does not match" in exc_info.value.detail
+    assert "不匹配" in exc_info.value.detail
     assert "secret-token" not in exc_info.value.detail

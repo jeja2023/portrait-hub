@@ -20,11 +20,11 @@ from app.settings import PORTRAIT_STORAGE_BACKEND  # noqa: E402
 
 def load_gallery_json(path: Path) -> dict[str, Any]:
     if not path.is_file():
-        raise MigrationError("gallery JSON state file not found")
+        raise MigrationError("人员库 JSON 状态文件不存在")
     with path.open("r", encoding="utf-8") as file:
         payload = json.load(file)
     if not isinstance(payload, dict) or not isinstance(payload.get("people"), list):
-        raise MigrationError("gallery JSON state must contain a people list")
+        raise MigrationError("人员库 JSON 状态必须包含 people 列表")
     return payload
 
 
@@ -33,7 +33,7 @@ def migrate_json_to_postgres(path: Path, *, dry_run: bool = False) -> dict[str, 
     people = payload.get("people", [])
     for item in people:
         if not isinstance(item, dict):
-            raise MigrationError("gallery person entry must be an object")
+            raise MigrationError("人员库人员条目必须是对象")
         PersonRecord.from_state(item)
     if not dry_run:
         replace_gallery_snapshot(payload)
@@ -68,17 +68,17 @@ def migrate_gallery_to_vector_store(*, tenant_id: str = "default", dry_run: bool
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="PortraitHub gallery migration helper.")
+    parser = argparse.ArgumentParser(description="PortraitHub 人员库迁移助手。")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    json_pg = subparsers.add_parser("json-to-postgres", help="Import a local gallery JSON state file into PostgreSQL.")
+    json_pg = subparsers.add_parser("json-to-postgres", help="将本地人员库 JSON 状态文件导入 PostgreSQL。")
     json_pg.add_argument("--path", type=Path, default=Path("runtime-state/portrait-gallery.json"))
     json_pg.add_argument("--dry-run", action="store_true")
 
-    vector = subparsers.add_parser("gallery-to-vector", help="Rebuild configured vector store from gallery records.")
+    vector = subparsers.add_parser("gallery-to-vector", help="根据人员库记录重建已配置的向量存储。")
     vector.add_argument("--tenant-id", default="default")
     vector.add_argument("--dry-run", action="store_true")
-    vector.add_argument("--skip-load-state", action="store_true", help="Use the current in-process gallery without loading the configured backend first.")
+    vector.add_argument("--skip-load-state", action="store_true", help="不先加载配置后端，直接使用当前进程内人员库。")
 
     args = parser.parse_args()
     if args.command == "json-to-postgres":

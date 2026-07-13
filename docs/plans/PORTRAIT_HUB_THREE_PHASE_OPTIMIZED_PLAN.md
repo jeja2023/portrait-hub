@@ -433,7 +433,7 @@ Prometheus / Grafana / OTEL Collector
 
 示例自动带入当前控制台配置，但敏感 token 默认遮罩。
 
-#### API Playground
+#### 接口调试台
 
 能力：
 

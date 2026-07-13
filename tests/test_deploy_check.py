@@ -85,7 +85,7 @@ def test_security_audit_script_has_clear_missing_dependency_message() -> None:
     content = Path("tools/security_audit.py").read_text(encoding="utf-8")
 
     assert "importlib.util.find_spec" in content
-    assert "pip-audit is not installed" in content
+    assert "未安装 pip-audit" in content
     assert "TMPDIR" in content
 
 

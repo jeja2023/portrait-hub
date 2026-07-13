@@ -113,7 +113,7 @@ async def vision_infer(
         request_id,
         errors_metric="vision_errors_total",
         log_label="vision inference failed",
-        internal_message="vision inference runtime error",
+        internal_message="图片推理运行时错误",
     ):
         rollout_key = traffic_key or request_id
         project, model, key, alias_name = resolve_model_reference(
@@ -144,7 +144,7 @@ async def vision_infer(
         else:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="unsupported vision task",
+                detail="不支持的视觉任务",
             )
 
         total_seconds = now() - total_start

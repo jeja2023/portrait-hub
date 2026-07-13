@@ -53,9 +53,9 @@ def console_asset_path(asset_path: str) -> Path:
     try:
         target.relative_to(root)
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="console asset not found") from exc
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="控制台资源不存在") from exc
     if not target.is_file() or target.name == "console.html":
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="console asset not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="控制台资源不存在")
     return target
 
 

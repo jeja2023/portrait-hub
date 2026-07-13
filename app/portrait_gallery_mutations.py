@@ -46,7 +46,7 @@ def cleanup_object_after_failed_feature(
             )
             return OBJECT_CLEANUP_FAILED
     except Exception as exc:
-        logger.warning("failed to cleanup object after feature persistence failure: %s", exception_log_summary(exc))
+        logger.warning("特征持久化失败后清理对象失败: %s", exception_log_summary(exc))
         return OBJECT_CLEANUP_FAILED
     return None
 
@@ -71,7 +71,7 @@ def cleanup_gallery_feature_objects(
             )
             errors.append(OBJECT_CLEANUP_FAILED)
         except Exception as exc:
-            logger.warning("failed to cleanup object during gallery person deletion: %s", exception_log_summary(exc))
+            logger.warning("删除人员期间清理对象失败: %s", exception_log_summary(exc))
             errors.append(OBJECT_CLEANUP_FAILED)
     return deleted_count, errors
 
@@ -93,7 +93,7 @@ def restore_gallery_person_snapshot(
         try:
             persist_delete_hook(tenant_id, person_id)
         except Exception as exc:
-            logger.warning("failed to persist restored empty gallery person deletion: %s", exception_log_summary(exc))
+            logger.warning("持久化恢复后的空人员删除状态失败: %s", exception_log_summary(exc))
             errors.append("delete restored empty gallery person failed")
         return errors
 
@@ -102,21 +102,21 @@ def restore_gallery_person_snapshot(
     try:
         persist_delete_hook(tenant_id, person_id)
     except Exception as exc:
-        logger.warning("failed to persist mutated gallery person deletion before restore: %s", exception_log_summary(exc))
-        errors.append("delete mutated gallery person before restore failed")
+        logger.warning("恢复前持久化已变更人员删除状态失败: %s", exception_log_summary(exc))
+        errors.append("恢复前删除已变更人员失败")
     gallery[key] = restored_person
     try:
         persist_person_hook(restored_person)
         for feature in restored_person.features:
             persist_feature_hook(restored_person, feature)
     except Exception as exc:
-        logger.warning("failed to persist restored gallery person snapshot: %s", exception_log_summary(exc))
-        errors.append("restore gallery person failed")
+        logger.warning("持久化恢复后的人员快照失败: %s", exception_log_summary(exc))
+        errors.append("恢复人员失败")
     return errors
 
 
 def raise_gallery_rollback_failure(original_error: Exception, rollback_errors: list[str]) -> None:
-    raise_rollback_failure("gallery mutation failed and rollback persistence failed", original_error, rollback_errors)
+    raise_rollback_failure("人员库变更失败，且回滚持久化失败", original_error, rollback_errors)
 
 
 def rollback_gallery_mutation(

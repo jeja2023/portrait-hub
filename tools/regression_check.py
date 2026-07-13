@@ -32,20 +32,20 @@ def load_manifest(path: Path) -> dict[str, Any]:
         else:
             raw = yaml.safe_load(file) or {}
     if not isinstance(raw, dict):
-        raise ValueError("manifest root must be a mapping")
+        raise ValueError("清单根节点必须是映射")
     return raw
 
 
 def manifest_relative_path(base_dir: Path, raw_path: str, field_name: str) -> Path:
     candidate = Path(raw_path)
     if candidate.is_absolute():
-        raise ValueError(f"{field_name} must be relative to the regression manifest directory")
+        raise ValueError(f"{field_name} 必须相对于回归清单目录")
     base = base_dir.resolve()
     resolved = (base / candidate).resolve()
     try:
         resolved.relative_to(base)
     except ValueError as exc:
-        raise ValueError(f"{field_name} must stay within the regression manifest directory") from exc
+        raise ValueError(f"{field_name} 必须位于回归清单目录内") from exc
     return resolved
 
 
@@ -108,14 +108,14 @@ def open_case_files(case: dict[str, Any], base_dir: Path) -> tuple[list[tuple[st
     file_items = []
     files = case.get("files") or {}
     if not isinstance(files, dict):
-        raise ValueError("case.files must be a mapping of form field to path or paths")
+        raise ValueError("case.files 必须是表单字段到路径或路径列表的映射")
 
     try:
         for field, raw_paths in files.items():
             paths = raw_paths if isinstance(raw_paths, list) else [raw_paths]
             for raw_path in paths:
                 if not isinstance(raw_path, str):
-                    raise ValueError(f"file path for field {field} must be a string")
+                    raise ValueError(f"字段 {field} 的文件路径必须是字符串")
                 path = manifest_relative_path(base_dir, raw_path, f"case.files.{field}")
                 handle = path.open("rb")
                 handles.append(handle)
@@ -130,7 +130,7 @@ def open_case_files(case: dict[str, Any], base_dir: Path) -> tuple[list[tuple[st
 def normalize_auth_scheme(value: str) -> str:
     normalized = value.strip().lower().replace("_", "-")
     if normalized not in {"bearer", "api-key"}:
-        raise ValueError("auth_scheme must be 'bearer' or 'api-key'")
+        raise ValueError("auth_scheme 必须是 'bearer' 或 'api-key'")
     return normalized
 
 
@@ -155,7 +155,7 @@ def run_case(
     method = str(case.get("method", "GET")).upper()
     path = str(case.get("path") or case.get("endpoint") or "")
     if not path.startswith("/"):
-        raise ValueError("case.path must start with /")
+        raise ValueError("case.path 必须以 / 开头")
 
     headers = dict(case.get("headers") or {})
     if tenant_id:
@@ -188,21 +188,21 @@ def run_regression(args: argparse.Namespace) -> dict[str, Any]:
     try:
         import httpx
     except ImportError as exc:
-        raise RuntimeError("httpx is required. Install requirements/dev.txt before running regression checks.") from exc
+        raise RuntimeError("httpx 为必填项。运行回归检查前请安装 requirements/dev.txt。") from exc
 
     manifest_path = Path(args.manifest).resolve()
     manifest = load_manifest(manifest_path)
     base_dir = manifest_path.parent
     cases = manifest.get("cases")
     if not isinstance(cases, list):
-        raise ValueError("manifest must include cases list")
+        raise ValueError("清单必须包含 cases 列表")
     tenant_id = str(manifest.get("tenant_id", args.tenant_id))
 
     results = []
     with httpx.Client(timeout=args.timeout) as client:
         for index, case in enumerate(cases):
             if not isinstance(case, dict):
-                raise ValueError(f"case #{index} must be a mapping")
+                raise ValueError(f"第 {index} 个用例必须是映射")
             name = str(case.get("name") or f"case_{index}")
             expected_status = int(case.get("expected_status", 200))
             tol_val = case.get("tolerance")
@@ -232,25 +232,25 @@ def run_regression(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Run fixed regression cases against a running gpu-services endpoint.")
-    parser.add_argument("--manifest", required=True, help="Regression manifest YAML/JSON.")
-    parser.add_argument("--base-url", default="http://127.0.0.1:9001", help="Service base URL.")
-    parser.add_argument("--token", default=None, help="API token for protected endpoints.")
-    parser.add_argument("--auth-scheme", choices=["bearer", "api-key"], default="bearer", help="How --token is sent unless a case overrides auth_scheme.")
-    parser.add_argument("--tenant-id", default="default", help="Default tenant id sent as X-Tenant-ID.")
-    parser.add_argument("--timeout", type=float, default=30.0, help="Request timeout in seconds.")
-    parser.add_argument("--tolerance", type=float, default=1e-6, help="Default float comparison tolerance.")
-    parser.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
+    parser = argparse.ArgumentParser(description="针对运行中的 gpu-services 端点执行固定回归用例。")
+    parser.add_argument("--manifest", required=True, help="回归清单 YAML/JSON。")
+    parser.add_argument("--base-url", default="http://127.0.0.1:9001", help="服务基础 URL。")
+    parser.add_argument("--token", default=None, help="受保护端点的 API 令牌。")
+    parser.add_argument("--auth-scheme", choices=["bearer", "api-key"], default="bearer", help="--token 的发送方式，除非用例覆盖 auth_scheme。")
+    parser.add_argument("--tenant-id", default="default", help="作为 X-Tenant-ID 发送的默认租户 ID。")
+    parser.add_argument("--timeout", type=float, default=30.0, help="请求超时时间（秒）。")
+    parser.add_argument("--tolerance", type=float, default=1e-6, help="默认浮点比较容差。")
+    parser.add_argument("--json", action="store_true", help="输出机器可读 JSON。")
     args = parser.parse_args()
 
     report = run_regression(args)
     if args.json:
         print(json.dumps(report, ensure_ascii=False, indent=2))
     else:
-        print(f"regression check: {'OK' if report['ok'] else 'FAILED'}")
+        print(f"回归检查：{'通过' if report['ok'] else '失败'}")
         for item in report["cases"]:
-            marker = "ok" if item["ok"] else "fail"
-            print(f"{marker}: {item['name']} status={item['status_code']}")
+            marker = "通过" if item["ok"] else "失败"
+            print(f"{marker}: {item['name']} 状态码={item['status_code']}")
             for error in item["errors"]:
                 print(f"  {error}")
     return 0 if report["ok"] else 1

@@ -44,7 +44,7 @@ def test_decode_image_rejects_too_many_pixels_before_full_decode(monkeypatch) ->
         decode_image_bytes(_png_bytes(), filename="sample.png")
 
     assert exc_info.value.status_code == 413
-    assert "image has too many pixels" in str(exc_info.value.detail)
+    assert "图片像素过多" in str(exc_info.value.detail)
 
 
 @pytest.mark.asyncio

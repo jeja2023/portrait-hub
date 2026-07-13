@@ -1,8 +1,8 @@
-# AI Model Governance
+# AI 模型治理
 
-Production model releases must carry a model card and a governance sidecar.
+生产模型发布必须携带模型卡和治理 sidecar。
 
-Required sidecar sections:
+sidecar 必要章节：
 
 - `dataset_lineage`
 - `bias`
@@ -13,10 +13,10 @@ Required sidecar sections:
 - `privacy`
 - `release`
 
-Release gates:
+发布门禁：
 
-1. Validate the model package with governance checks before cutover.
-2. Verify regression gates on held-out samples.
-3. Require an explicit rollback target for every active alias.
-4. Review ambiguous scores in a human review band.
-5. Track drift and threshold recalibration as a release artifact, not a note.
+1. 切换前使用治理检查校验模型包。
+2. 在留出样本上验证回归门禁。
+3. 为每个活跃别名要求明确的回滚目标。
+4. 对落入人工复核区间的模糊分数进行复核。
+5. 将漂移和阈值重新校准作为发布构件跟踪，而不是仅写入备注。

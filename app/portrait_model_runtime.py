@@ -47,7 +47,7 @@ from app.runtime_gait import gait_sequence_tensor
 from app.runtime_pose import decode_rtmpose_outputs, scale_pose_point, softmax_max
 
 
-# app.runtime_body 中 retry-after 时间戳的镜像（0.0 = 可用，
+# 此处镜像 app.runtime_body 中的 retry-after 时间戳（0.0 = 可用，
 # 未来的时间戳 = 冷却中）。此模块是跨调用之间的真理源；
 # 这些值会在每次调用前推入 runtime_body，并在调用后读回。
 _BODY_EMBEDDING_RUNTIME_UNAVAILABLE: float = 0.0

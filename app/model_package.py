@@ -21,7 +21,7 @@ def resolve_model_artifact_path(cache_key_value: str, project_name: str, model_n
         if candidate.is_absolute():
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="model artifact.path must be relative to the models directory",
+                detail="模型 artifact.path 必须相对于 models 目录",
             )
         return (MODELS_ROOT / candidate).resolve()
     return (MODELS_ROOT / project_name / model_name).resolve()
@@ -35,13 +35,13 @@ def get_model_path(project_name: str, model_name: str) -> Path:
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="model path must stay inside the models directory",
+            detail="模型路径必须位于 models 目录内",
         ) from exc
 
     if not model_path.is_file():
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="model artifact not found",
+            detail="模型构件不存在",
         )
     return model_path
 
@@ -62,7 +62,7 @@ def safe_sidecar_path(model_path: Path, relative_path: str) -> Path:
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="model sidecar path must stay inside the model project directory",
+            detail="模型附属文件路径必须位于模型项目目录内",
         ) from exc
     return sidecar_path
 
@@ -74,10 +74,10 @@ def sidecar_path_fingerprint(path: Path) -> str:
 def load_yaml_sidecar(path: Path, *, required: bool = False) -> dict[str, Any]:
     if not path.is_file():
         if required:
-            logger.error("required model sidecar yaml not found: sidecar_path_hash=%s", sidecar_path_fingerprint(path))
+            logger.error("必需的模型附属 YAML 不存在: sidecar_path_hash=%s", sidecar_path_fingerprint(path))
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="model sidecar yaml not found",
+                detail="模型附属 YAML 不存在",
             )
         return {}
     try:
@@ -85,25 +85,25 @@ def load_yaml_sidecar(path: Path, *, required: bool = False) -> dict[str, Any]:
             raw = yaml.safe_load(file) or {}
     except Exception as exc:
         logger.warning(
-            "failed to read model sidecar yaml: sidecar_path_hash=%s error=%s",
+            "读取模型附属 YAML 失败: sidecar_path_hash=%s error=%s",
             sidecar_path_fingerprint(path),
             exception_log_summary(exc),
         )
         if required:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="failed to read model sidecar yaml",
+                detail="读取模型附属 YAML 失败",
             ) from exc
         return {}
     if not isinstance(raw, dict):
         if required:
             logger.error(
-                "model sidecar yaml root must be a mapping: sidecar_path_hash=%s",
+                "模型附属 YAML 根节点必须是映射: sidecar_path_hash=%s",
                 sidecar_path_fingerprint(path),
             )
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="model sidecar yaml root must be a mapping",
+                detail="模型附属 YAML 根节点必须是映射",
             )
         return {}
     return raw
@@ -112,10 +112,10 @@ def load_yaml_sidecar(path: Path, *, required: bool = False) -> dict[str, Any]:
 def load_text_labels(path: Path, *, required: bool = False) -> list[str]:
     if not path.is_file():
         if required:
-            logger.error("required model labels file not found: sidecar_path_hash=%s", sidecar_path_fingerprint(path))
+            logger.error("必需的模型标签文件不存在: sidecar_path_hash=%s", sidecar_path_fingerprint(path))
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="model labels file not found",
+                detail="模型标签文件不存在",
             )
         return []
     try:
@@ -123,21 +123,21 @@ def load_text_labels(path: Path, *, required: bool = False) -> list[str]:
             labels = [line.strip() for line in file if line.strip() and not line.lstrip().startswith("#")]
     except Exception as exc:
         logger.warning(
-            "failed to read model labels: sidecar_path_hash=%s error=%s",
+            "读取模型标签失败: sidecar_path_hash=%s error=%s",
             sidecar_path_fingerprint(path),
             exception_log_summary(exc),
         )
         if required:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="failed to read model labels",
+                detail="读取模型标签失败",
             ) from exc
         return []
     if required and not labels:
-        logger.error("model labels file is empty: sidecar_path_hash=%s", sidecar_path_fingerprint(path))
+        logger.error("模型标签文件为空: sidecar_path_hash=%s", sidecar_path_fingerprint(path))
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="model labels file is empty",
+            detail="模型标签文件为空",
         )
     return labels
 

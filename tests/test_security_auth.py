@@ -60,7 +60,7 @@ def test_encrypt_bytes_uses_randomized_authenticated_encryption(monkeypatch) -> 
     with pytest.raises(ValueError) as exc_info:
         portrait_crypto.decrypt_bytes(tampered)
 
-    assert "authentication failed" in str(exc_info.value)
+    assert "加密载荷认证失败" in str(exc_info.value)
 
 
 def test_decrypt_bytes_reads_legacy_xor_payload(monkeypatch) -> None:
@@ -113,7 +113,7 @@ def test_encrypt_bytes_fails_closed_when_required_without_key(monkeypatch) -> No
     with pytest.raises(RuntimeError) as exc_info:
         portrait_crypto.encrypt_bytes(b"sensitive payload")
 
-    assert "ENCRYPTION_KEY is required" in str(exc_info.value)
+    assert "ENCRYPTION_KEY 为必填项" in str(exc_info.value)
 
 
 @pytest.mark.asyncio
@@ -187,7 +187,7 @@ async def test_require_api_token_rejects_jwt_for_wrong_tenant(monkeypatch) -> No
         await security.require_api_token(authorization=f"Bearer {token}", x_tenant_id="tenant-b")
 
     assert exc_info.value.status_code == 403
-    assert "tenant" in str(exc_info.value.detail)
+    assert "租户" in str(exc_info.value.detail)
 
 
 @pytest.mark.asyncio
@@ -213,7 +213,7 @@ def test_v1_requires_tenant_header_when_enabled(monkeypatch) -> None:
     response = client.get("/v1/admin/status")
 
     assert response.status_code == 400
-    assert "x-tenant-id header is required" in response.json()["detail"]
+    assert "缺少 x-tenant-id 请求头" in response.json()["detail"]
 
 
 def test_legacy_model_management_reads_are_rbac_protected(monkeypatch) -> None:
@@ -409,7 +409,7 @@ def test_ready_deep_redacts_model_readiness_errors(monkeypatch, caplog) -> None:
     assert response.status_code == 503
     payload = response.json()["detail"]
     assert payload["status"] == "not_ready"
-    assert payload["checks"][0]["error"] == "model readiness check failed"
+    assert payload["checks"][0]["error"] == "模型就绪检查失败"
     assert "secret" not in response.text
     assert "token=hidden" not in response.text
     assert "models" not in response.text
@@ -718,6 +718,6 @@ def test_get_model_path_missing_model_does_not_echo_model_id(monkeypatch, worksp
         model_package.get_model_path("secret_project", "secret-model.onnx")
 
     assert exc_info.value.status_code == 404
-    assert exc_info.value.detail == "model artifact not found"
+    assert exc_info.value.detail == "模型构件不存在"
     assert "secret_project" not in str(exc_info.value.detail)
     assert "secret-model" not in str(exc_info.value.detail)

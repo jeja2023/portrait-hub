@@ -30,8 +30,8 @@ groups:
         annotations:
           summary: PortraitHub GPU queue has sustained backlog
       - alert: PortraitHubUnexpectedCpuFallback
-        # On a GPU-intended deployment any CPU fallback means a degraded inference runtime.
-        # FORCE_CPU hosts never increment this counter, so the alert stays quiet there.
+        # 在面向 GPU 的部署中，任何 CPU 回退都表示推理运行时降级。
+        # 启用 FORCE_CPU 的主机不会递增该计数器，因此该告警会保持静默。
         expr: sum(rate(gpu_worker_cpu_fallback_total[10m])) > 0
         for: 10m
         labels:
@@ -53,7 +53,7 @@ groups:
         annotations:
           summary: PortraitHub stream backpressure is dropping frames
       - alert: PortraitHubLowVideoSamplingQuality
-        # Median quality of selected frames dropped below 0.4 over 15min (may indicate poor source quality or over-aggressive sampling).
+        # 15 分钟内选中帧质量中位数低于 0.4（可能表示源质量较差或采样过于激进）。
         expr: histogram_quantile(0.5, sum(rate(gpu_worker_video_frame_quality_bucket[15m])) by (le)) < 0.4
         for: 15m
         labels:
@@ -61,7 +61,7 @@ groups:
         annotations:
           summary: PortraitHub video sampling quality median is below 0.4
       - alert: PortraitHubHighNearDuplicateDropRate
-        # >30% of considered candidates are dropped as near-duplicates (may indicate sampling-interval misconfiguration or static video).
+        # 超过 30% 的候选帧因近重复被丢弃（可能表示采样间隔配置错误或视频画面静止）。
         expr: sum(rate(gpu_worker_video_near_duplicate_drops_total[10m])) / clamp_min(sum(rate(gpu_worker_video_frames_considered_total[10m])), 1) > 0.3
         for: 15m
         labels:

@@ -107,7 +107,7 @@ def test_alias_switch_rolls_back_config_when_audit_fails(monkeypatch, workspace_
     monkeypatch.setattr(model_config_writer, "MODEL_CONFIG_PATH", config_path)
 
     def fail_audit(event, payload):
-        raise OSError("audit unavailable secret-token")
+        raise OSError("审计不可用 secret-token")
 
     monkeypatch.setattr(model_config_writer, "write_rollout_audit", fail_audit)
 
@@ -115,7 +115,7 @@ def test_alias_switch_rolls_back_config_when_audit_fails(monkeypatch, workspace_
         model_config_writer.switch_alias_target("detector_default", "project/new.onnx")
 
     assert exc_info.value.status_code == 500
-    assert "rolled back" in str(exc_info.value.detail)
+    assert "已回滚" in str(exc_info.value.detail)
     assert "secret-token" not in str(exc_info.value.detail)
     raw = yaml.safe_load(config_path.read_text(encoding="utf-8"))
     assert raw == initial
@@ -144,9 +144,9 @@ def test_model_config_writer_file_failure_logs_are_redacted(monkeypatch, workspa
         model_config_writer.write_raw_model_config({"models": {}})
 
     assert read_exc.value.status_code == 500
-    assert read_exc.value.detail == "failed to read model config file"
+    assert read_exc.value.detail == "读取模型配置文件失败"
     assert write_exc.value.status_code == 500
-    assert write_exc.value.detail == "failed to write model config file"
+    assert write_exc.value.detail == "写入模型配置文件失败"
     assert "config_path_hash=" in caplog.text
     assert "OSError" in caplog.text
     for secret in ["secret-config-dir", "secret-models", "secret-token", str(config_path)]:
@@ -172,7 +172,7 @@ def test_alias_switch_rollback_failure_is_redacted(monkeypatch, workspace_tmp_pa
     monkeypatch.setattr(
         model_config_writer,
         "write_rollout_audit",
-        lambda event, payload: (_ for _ in ()).throw(OSError("audit secret-token")),
+        lambda event, payload: (_ for _ in ()).throw(OSError("审计 secret-token")),
     )
 
     write_count = 0
@@ -192,7 +192,7 @@ def test_alias_switch_rollback_failure_is_redacted(monkeypatch, workspace_tmp_pa
 
     assert exc_info.value.status_code == 500
     assert exc_info.value.detail == {
-        "message": "failed to write rollout audit and rollback model config",
+        "message": "写入发布审计失败，且模型配置回滚失败",
         "rolled_back": False,
         "rollback_failed": True,
     }

@@ -40,7 +40,7 @@ def test_prometheus_metrics_include_provider_and_fallback_counters() -> None:
     assert 'gpu_worker_model_session_provider_total{provider="CPUExecutionProvider"}' in text
     assert 'gpu_worker_model_session_provider_total{provider="CUDAExecutionProvider"}' in text
     assert 'gpu_worker_cpu_fallback_total{reason="cuda_provider_unavailable"}' in text
-    # Stream reconnects aggregate is always emitted as a counter (0 when no sessions).
+    # 流重连汇总始终按计数器输出（无会话时为 0）。
     assert "gpu_worker_stream_reconnects_total" in text
 
 

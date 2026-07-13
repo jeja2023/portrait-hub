@@ -29,7 +29,7 @@ from app.settings import (
 from app.video_io import public_video_metadata
 
 
-VIDEO_JOB_ERROR_MESSAGE = "video job failed"
+VIDEO_JOB_ERROR_MESSAGE = "视频任务失败"
 
 
 async def appearance_record(image: Any, include_embedding: bool = True) -> dict[str, Any]:
@@ -271,11 +271,11 @@ def load_video_jobs_state() -> None:
     else:
         payload = read_json_state(PORTRAIT_JOBS_STATE_PATH, {"jobs": []})
     if not isinstance(payload, dict):
-        handle_state_read_error(f"video jobs state root must be a mapping: {PORTRAIT_JOBS_STATE_PATH}")
+        handle_state_read_error(f"video jobs state 根节点必须是映射: {PORTRAIT_JOBS_STATE_PATH}")
         return
     jobs = payload.get("jobs", [])
     if not isinstance(jobs, list):
-        handle_state_read_error(f"video jobs state jobs must be a list: {PORTRAIT_JOBS_STATE_PATH}")
+        handle_state_read_error(f"video jobs state jobs 必须是列表: {PORTRAIT_JOBS_STATE_PATH}")
         return
     with VIDEO_JOBS_LOCK:
         VIDEO_JOBS.clear()
@@ -285,7 +285,7 @@ def load_video_jobs_state() -> None:
             try:
                 job = VideoJob.from_state(item)
             except Exception as exc:
-                logger.warning("skipping invalid video job state: %s", exception_log_summary(exc))
+                logger.warning("已跳过无效视频任务状态: %s", exception_log_summary(exc))
                 continue
             VIDEO_JOBS[job_key(job.tenant_id, job.job_id)] = job
 
@@ -363,7 +363,7 @@ async def run_batch_job(job_id: str, tenant_id: str, handler: Any) -> None:
     job = get_video_job(job_id, tenant_id=tenant_id)
     if job is None:
         logger.warning(
-            "batch job not found for background execution: tenant_hash=%s job_hash=%s",
+            "后台执行时批量任务不存在: tenant_hash=%s job_hash=%s",
             video_job_identifier_fingerprint(tenant_id),
             video_job_identifier_fingerprint(job_id),
         )
@@ -411,7 +411,7 @@ async def run_video_job(
     job = get_video_job(job_id, tenant_id=tenant_id)
     if job is None:
         logger.warning(
-            "video job not found for background execution: tenant_hash=%s job_hash=%s",
+            "后台执行时视频任务不存在: tenant_hash=%s job_hash=%s",
             video_job_identifier_fingerprint(tenant_id),
             video_job_identifier_fingerprint(job_id),
         )
@@ -484,7 +484,7 @@ async def run_video_job(
             return
         except Exception as exc:
             logger.warning(
-                "video job failed: tenant_hash=%s job_hash=%s attempt=%s error=%s",
+                "视频任务失败: tenant_hash=%s job_hash=%s attempt=%s error=%s",
                 video_job_identifier_fingerprint(tenant_id),
                 video_job_identifier_fingerprint(job_id),
                 job.attempts,

@@ -45,7 +45,7 @@ def test_create_session_falls_back_to_cpu_when_cuda_is_unavailable(monkeypatch, 
 
     assert session is sessions[0]
     assert session.get_providers() == ["CPUExecutionProvider"]
-    # The CPU fallback on a GPU-intended host must be observable in metrics.
+    # 面向 GPU 的主机发生 CPU 回退时，必须能在指标中观测到。
     assert fallbacks == ["cuda_provider_unavailable"]
     assert providers_recorded == ["CPUExecutionProvider"]
 
@@ -75,7 +75,7 @@ def test_create_session_force_cpu_records_provider_without_fallback(monkeypatch,
 
     runtime_sessions.create_session(model_path, "project/model.onnx", 0)
 
-    # FORCE_CPU is an intentional choice, not a fallback: provider recorded, fallback NOT.
+    # 启用 FORCE_CPU 是主动选择而非回退：记录 provider，但不记录 fallback。
     assert fallbacks == []
     assert providers_recorded == ["CPUExecutionProvider"]
 
@@ -86,7 +86,7 @@ def test_create_session_rejects_cpu_fallback_when_disabled(monkeypatch, workspac
     monkeypatch.setattr(runtime_sessions.ort, "get_available_providers", lambda: ["CPUExecutionProvider"])
     monkeypatch.setattr(runtime_sessions, "CPU_FALLBACK_ENABLED", False)
 
-    with pytest.raises(RuntimeError, match="CUDAExecutionProvider is not available"):
+    with pytest.raises(RuntimeError, match="CUDAExecutionProvider 不可用"):
         runtime_sessions.create_session(model_path, "project/model.onnx", 0)
 
 
@@ -104,7 +104,7 @@ def test_runtime_provider_status_accepts_cpu_fallback(monkeypatch) -> None:
 
 def test_session_providers_force_cpu_returns_cpu_only(monkeypatch) -> None:
     monkeypatch.setattr(runtime_sessions, "FORCE_CPU", True)
-    # Even a TensorRT-requesting model must collapse to CPU when FORCE_CPU is set.
+    # 设置 FORCE_CPU 时，即使请求 TensorRT 的模型也必须收敛到 CPU。
     monkeypatch.setattr(runtime_sessions, "model_config", lambda key: {"runtime": "tensorrt"})
 
     providers = runtime_sessions.session_providers("project/model.onnx")
@@ -127,8 +127,8 @@ def test_create_session_force_cpu_builds_single_cpu_session(monkeypatch, workspa
             return list(self.providers)
 
     monkeypatch.setattr(runtime_sessions, "FORCE_CPU", True)
-    # CUDA is reported "available" (as onnxruntime-gpu does on CPU-only hosts), yet
-    # FORCE_CPU must still build exactly one CPU session — no CUDA attempt, no rebuild.
+    # 即使 CUDA 被报告为“可用”（onnxruntime-gpu 在纯 CPU 主机上也会这样），
+    # 启用 FORCE_CPU 时仍必须只构建一个 CPU 会话，不尝试 CUDA，也不重建。
     monkeypatch.setattr(
         runtime_sessions.ort,
         "get_available_providers",

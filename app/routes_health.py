@@ -145,7 +145,7 @@ async def ready_deep(
                     )
             checks.append(item)
         except Exception as exc:
-            logger.warning("deep readiness model check failed for %s: %s", key, exception_log_summary(exc))
+            logger.warning("深度就绪模型检查失败 %s: %s", key, exception_log_summary(exc))
             ok = False
             checks.append({"model": key, "ok": False, "error": MODEL_READINESS_CHECK_FAILED})
 

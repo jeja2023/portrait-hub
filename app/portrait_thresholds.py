@@ -33,7 +33,7 @@ def load_threshold_state() -> None:
     else:
         payload = read_json_state(PORTRAIT_THRESHOLDS_STATE_PATH, {})
     if not isinstance(payload, dict):
-        handle_state_read_error(f"threshold state root must be a mapping: {PORTRAIT_THRESHOLDS_STATE_PATH}")
+        handle_state_read_error(f"threshold state 根节点必须是映射: {PORTRAIT_THRESHOLDS_STATE_PATH}")
         return
     thresholds = payload.get("thresholds", payload)
     if not isinstance(thresholds, dict):
@@ -89,7 +89,7 @@ def normalize_modality(modality: str) -> str:
 def validate_threshold_profile(profile: str) -> str:
     value = str(profile).strip().lower()
     if value not in SUPPORTED_THRESHOLD_PROFILES:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="unsupported threshold profile")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="不支持的阈值方案")
     return value
 
 
@@ -97,24 +97,24 @@ def validate_threshold_modality(modality: str) -> str:
     modality_key = normalize_modality(str(modality))
     with THRESHOLD_PROFILES_LOCK:
         if modality_key not in THRESHOLD_PROFILES:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="unsupported modality")
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="不支持的模态")
     return modality_key
 
 
 def validate_threshold_value(modality: str, raw_value: Any) -> float:
     if isinstance(raw_value, bool):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"threshold for {modality} must be numeric")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"{modality} 的阈值必须是数值")
     try:
         value = float(raw_value)
     except (TypeError, ValueError) as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"threshold for {modality} must be numeric",
+            detail=f"{modality} 的阈值必须是数值",
         ) from exc
     if not math.isfinite(value) or not 0.0 <= value <= 1.0:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"threshold for {modality} must be between 0 and 1",
+            detail=f"{modality} 的阈值必须介于 0 到 1 之间",
         )
     return value
 

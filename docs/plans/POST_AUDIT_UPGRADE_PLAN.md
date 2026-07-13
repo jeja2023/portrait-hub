@@ -30,7 +30,7 @@
 
 - Python/Node SDK 新增显式 `auth_scheme` / `authScheme`，应用 API Key 走 `X-API-Key`，默认 Bearer/JWT 兼容既有调用。
 - SDK 与控制台示例补齐批量异步和视频轮询：Python/Node SDK 新增 `search_batch`/`searchBatch` 与 `compare_batch`/`compareBatch`，控制台 SDK 页展示批量 `batch_id` 和离线视频任务轮询示例，并纳入 API 契约与 readiness 门禁。
-- API Playground 扩展为阶段二受控调试面：覆盖批量检索、批量比对、实时流创建和流事件查询，按接口模板自动构造 multipart/JSON/GET 请求，并保留统一响应外层的 `request_id`、HTTP 状态和 `detail.code` 供调用日志交叉排障。
+- 接口调试台 扩展为阶段二受控调试面：覆盖批量检索、批量比对、实时流创建和流事件查询，按接口模板自动构造 multipart/JSON/GET 请求，并保留统一响应外层的 `request_id`、HTTP 状态和 `detail.code` 供调用日志交叉排障。
 - SLO 面板补齐运维口径：优先使用近 30 天调用日志计算成功率、错误数和错误预算燃烧率，回退到 Prometheus 计数；同时展示推理 p95/p99、GPU 队列 p95/p99、全局/按设备队列深度、活跃流和模型热状态，并纳入 API 契约与 readiness 门禁。
 - 合规审计页接入审计链校验：新增受 `admin:status` 权限保护的 `/v1/admin/audit/verify` 和 `/v1/admin/audit/events`，返回脱敏 `path_hash`、记录数、错误数、链头哈希与当前租户最近审计事件白名单字段，支持按事件、结果、分类、request_id 和时间窗口过滤，并汇总删除、导出、模型版本和保留清理分类；控制台合规页展示校验结果、筛选控件、分类摘要和审计事件表，并纳入 API 契约、deploy check 与 readiness 门禁。
 - 数据保留与备份页补齐备份快照读回：新增受 `admin:export` 权限保护的 `/v1/admin/backups`，从审计链读取当前租户 `admin_backup` 快照，只返回时间、request_id、对象后端、字节数、增量起点和审计哈希；控制台展示最近快照摘要与表格，并纳入 API 契约、deploy check 与 readiness 门禁。

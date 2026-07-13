@@ -1,19 +1,19 @@
-# Supply Chain Security
+# 供应链安全
 
-PortraitHub release evidence should cover source, dependencies, container image, and model artifacts.
+PortraitHub 发布证据应覆盖源代码、依赖、容器镜像和模型构件。
 
-Required controls:
+必要控制项：
 
-- Generate a CycloneDX SBOM for the runtime container.
-- Scan the container image with Trivy.
-- Run `pip-audit` against locked dependency manifests.
-- Publish SLSA provenance or equivalent signed provenance for release artifacts.
-- Sign release images with cosign.
-- Keep OSSF Scorecard in CI.
-- Use Dependabot or Renovate for pinned dependency updates.
+- 为运行时容器生成 CycloneDX SBOM。
+- 使用 Trivy 扫描容器镜像。
+- 针对锁定依赖清单运行 `pip-audit`。
+- 为发布构件发布 SLSA provenance 或等效的签名来源证明。
+- 使用 cosign 签名发布镜像。
+- 在 CI 中保留 OSSF Scorecard 检查。
+- 使用 Dependabot 或 Renovate 维护钉版依赖更新。
 
-Model artifact controls:
+模型构件控制项：
 
-- Every production model should have a pinned `artifact.sha256`.
-- Every production model should have a model card and a governance sidecar.
-- Hashes and cards must be checked before alias cutover.
+- 每个生产模型都应钉定 `artifact.sha256`。
+- 每个生产模型都应具备模型卡和治理 sidecar。
+- 别名切换前必须校验哈希和模型卡。

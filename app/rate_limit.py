@@ -135,7 +135,7 @@ def ensure_bucket_capacity(now: float) -> None:
         if len(BUCKETS) >= RATE_LIMIT_MAX_BUCKETS:
             raise HTTPException(
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                detail="rate limit bucket capacity exceeded",
+                detail="限流桶容量已耗尽",
                 headers={"Retry-After": str(max(1, RATE_LIMIT_BUCKET_TTL_SECONDS))},
             )
 
@@ -161,7 +161,7 @@ def check_rate_limit(request: Request) -> None:
         if bucket.tokens < 1.0:
             raise HTTPException(
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                detail="rate limit exceeded",
+                detail="已超过限流阈值",
                 headers={"Retry-After": str(retry_after_seconds(bucket.tokens, refill_per_second))},
             )
         bucket.tokens -= 1.0

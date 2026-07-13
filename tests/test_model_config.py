@@ -99,8 +99,8 @@ def test_alias_resolution_errors_do_not_echo_alias_name() -> None:
     with pytest.raises(HTTPException) as missing_target_exc:
         alias_resolution(secret_alias, {})
 
-    assert invalid_exc.value.detail == "invalid alias config"
-    assert missing_target_exc.value.detail == "alias has no target"
+    assert invalid_exc.value.detail == "别名配置无效"
+    assert missing_target_exc.value.detail == "别名没有目标模型"
     assert secret_alias not in str(invalid_exc.value.detail)
     assert secret_alias not in str(missing_target_exc.value.detail)
 
@@ -167,7 +167,7 @@ def test_load_model_config_document_fails_closed_when_config_is_missing(monkeypa
     monkeypatch.setattr(model_config_loader, "MODEL_CONFIG_PATH", config_path)
     monkeypatch.setattr(model_config_loader, "MODEL_CONFIG_READ_FAIL_CLOSED", True)
 
-    with pytest.raises(RuntimeError, match="model config file not found") as exc_info:
+    with pytest.raises(RuntimeError, match="模型配置文件不存在") as exc_info:
         load_model_config_document()
 
     assert str(config_path) not in str(exc_info.value)
@@ -212,7 +212,7 @@ def test_load_model_config_document_fails_closed_for_malformed_config(monkeypatc
     monkeypatch.setattr(model_config_loader, "MODEL_CONFIG_PATH", config_path)
     monkeypatch.setattr(model_config_loader, "MODEL_CONFIG_READ_FAIL_CLOSED", True)
 
-    with pytest.raises(RuntimeError, match="failed to read model config file"):
+    with pytest.raises(RuntimeError, match="读取模型配置文件失败"):
         load_model_config_document()
 
 
@@ -222,5 +222,5 @@ def test_load_model_config_document_fails_closed_for_non_mapping_root(monkeypatc
     monkeypatch.setattr(model_config_loader, "MODEL_CONFIG_PATH", config_path)
     monkeypatch.setattr(model_config_loader, "MODEL_CONFIG_READ_FAIL_CLOSED", True)
 
-    with pytest.raises(RuntimeError, match="model config file root must be a mapping"):
+    with pytest.raises(RuntimeError, match="模型配置文件根节点必须是映射"):
         load_model_config_document()

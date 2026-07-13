@@ -136,7 +136,7 @@ def test_validate_model_package_rejects_path_like_model_keys(workspace_tmp_path:
 
     assert report["ok"] is False
     assert len(report["errors"]) == 4
-    assert all("must not contain path separators" in error for error in report["errors"])
+    assert all("不能包含路径分隔符" in error for error in report["errors"])
 
 
 def test_validate_model_package_rejects_path_like_alias_targets(workspace_tmp_path: Path) -> None:
@@ -175,7 +175,7 @@ def test_validate_model_package_rejects_path_like_alias_targets(workspace_tmp_pa
     )
 
     assert report["ok"] is False
-    assert sum("must not contain path separators" in error for error in report["errors"]) == 8
+    assert sum("不能包含路径分隔符" in error for error in report["errors"]) == 8
 
 
 def test_validate_model_package_reports_bad_alias_rollout_weight(workspace_tmp_path: Path) -> None:
@@ -215,8 +215,8 @@ def test_validate_model_package_reports_bad_alias_rollout_weight(workspace_tmp_p
     )
 
     assert report["ok"] is False
-    assert "alias rollout weight must be an integer: bad_weight" in report["errors"]
-    assert "alias rollout weight must be >= 0: bad_weight" in report["errors"]
+    assert "别名灰度权重必须是整数: bad_weight" in report["errors"]
+    assert "别名灰度权重必须大于等于 0: bad_weight" in report["errors"]
 
 
 def test_validate_model_package_rejects_alias_targets_missing_from_models(workspace_tmp_path: Path) -> None:
@@ -246,7 +246,7 @@ def test_validate_model_package_rejects_alias_targets_missing_from_models(worksp
     )
 
     assert report["ok"] is False
-    assert "alias target is not in models mapping: classifier_default -> project/missing.onnx" in report["errors"]
+    assert "别名目标不在 models 映射中: classifier_default -> project/missing.onnx" in report["errors"]
 
 
 def test_validate_model_package_checks_all_alias_rollout_candidates(workspace_tmp_path: Path) -> None:
@@ -285,4 +285,4 @@ def test_validate_model_package_checks_all_alias_rollout_candidates(workspace_tm
     )
 
     assert report["ok"] is False
-    assert "alias target is not in models mapping: weighted_default -> project/missing-low-weight.onnx" in report["errors"]
+    assert "别名目标不在 models 映射中: weighted_default -> project/missing-low-weight.onnx" in report["errors"]

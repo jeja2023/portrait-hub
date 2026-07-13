@@ -95,9 +95,9 @@ class RedisTaskQueue(LocalTaskQueue):
 
     def _client(self) -> Any:
         if redis is None:
-            raise RuntimeError("redis is not installed; install requirements-prod-optional.txt")
+            raise RuntimeError("未安装 redis；请安装 requirements-prod-optional.txt")
         if not REDIS_URL:
-            raise RuntimeError("REDIS_URL is not configured")
+            raise RuntimeError("未配置 REDIS_URL")
         # 复用单个客户端/连接池，而不是每次调用都重新构建一个。
         if self._cached_client is None:
             self._cached_client = redis.Redis.from_url(REDIS_URL, decode_responses=True)
@@ -114,7 +114,7 @@ class RedisTaskQueue(LocalTaskQueue):
             append_task_queue_state({**message.public_dict(), "event": "task_enqueued"}, required=False)
             return message
         except Exception as exc:
-            logger.warning("redis enqueue failed, falling back to local task queue: %s", exception_log_summary(exc))
+            logger.warning("Redis 入队失败，回退到本地任务队列: %s", exception_log_summary(exc))
             fallback_message = QueueMessage(
                 message_id=message.message_id,
                 queue=queue,

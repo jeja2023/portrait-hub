@@ -106,7 +106,7 @@ class AliasSwitchRequest(BaseModel):
             return value
         parts = value.split("/", 1)
         if len(parts) != 2 or not parts[0] or not parts[1]:
-            raise ValueError("model id must use 'project_name/model_name' format")
+            raise ValueError("模型 ID 必须使用 'project_name/model_name' 格式")
         project, model = parts
         validate_path_name(project)
         validate_path_name(model)
@@ -137,7 +137,7 @@ class AliasRolloutTarget(BaseModel):
     def reject_invalid_model_id(cls, value: str) -> str:
         parts = value.split("/", 1)
         if len(parts) != 2 or not parts[0] or not parts[1]:
-            raise ValueError("model id must use 'project_name/model_name' format")
+            raise ValueError("模型 ID 必须使用 'project_name/model_name' 格式")
         project, model = parts
         validate_path_name(project)
         validate_path_name(model)
@@ -164,7 +164,7 @@ class AliasWeightedRolloutRequest(BaseModel):
             return value
         parts = value.split("/", 1)
         if len(parts) != 2 or not parts[0] or not parts[1]:
-            raise ValueError("model id must use 'project_name/model_name' format")
+            raise ValueError("模型 ID 必须使用 'project_name/model_name' 格式")
         project, model = parts
         validate_path_name(project)
         validate_path_name(model)

@@ -15,7 +15,7 @@ class PortraitHubHTTPError(RuntimeError):
         self.status_code = status_code
         self.detail = detail
         self.headers = headers or {}
-        super().__init__(f"PortraitHub request failed with HTTP {status_code}: {detail}")
+        super().__init__(f"PortraitHub 请求失败 with HTTP {status_code}: {detail}")
 
 
 class PortraitHubClient:
@@ -36,7 +36,7 @@ class PortraitHubClient:
     def _normalize_auth_scheme(self, value: str) -> str:
         normalized = value.strip().lower().replace("-", "_")
         if normalized not in {"bearer", "api_key"}:
-            raise ValueError("auth_scheme must be 'bearer' or 'api_key'")
+            raise ValueError("auth_scheme 必须是 'bearer' 或 'api_key'")
         return normalized
 
     def _path_segment(self, value: str) -> str:

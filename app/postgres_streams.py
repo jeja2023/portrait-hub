@@ -146,6 +146,6 @@ def load_streams_snapshot() -> list[dict[str, Any]]:
                         }
                     )
     except Exception as exc:  # pragma: no cover - 需要外部数据库支持
-        logger.warning("postgres stream load failed: %s", exception_log_summary(exc))
+        logger.warning("postgres stream 加载失败ed: %s", exception_log_summary(exc))
         return []
     return streams

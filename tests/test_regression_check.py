@@ -129,7 +129,7 @@ def test_load_expected_rejects_paths_outside_manifest_dir(workspace_tmp_path: Pa
     base_dir = workspace_tmp_path / "manifest"
     base_dir.mkdir()
 
-    with pytest.raises(ValueError, match="case.expected_path must stay within"):
+    with pytest.raises(ValueError, match="case.expected_path 必须位于回归清单目录内"):
         load_expected({"expected_path": "../outside.json"}, base_dir)
 
 
@@ -137,7 +137,7 @@ def test_open_case_files_rejects_paths_outside_manifest_dir(workspace_tmp_path: 
     base_dir = workspace_tmp_path / "manifest"
     base_dir.mkdir()
 
-    with pytest.raises(ValueError, match="case.files.files must stay within"):
+    with pytest.raises(ValueError, match="case.files.files 必须位于回归清单目录内"):
         open_case_files({"files": {"files": "../outside.jpg"}}, base_dir)
 
 
@@ -166,7 +166,7 @@ def test_open_case_files_closes_handles_when_later_file_fails(
 
     monkeypatch.setattr(Path, "open", fake_open)
 
-    with pytest.raises(ValueError, match="case.files.files must stay within"):
+    with pytest.raises(ValueError, match="case.files.files 必须位于回归清单目录内"):
         open_case_files({"files": {"files": ["inside.jpg", "../outside.jpg"]}}, base_dir)
 
     assert len(opened) == 1

@@ -38,7 +38,7 @@ def reject_blocked_stream_address(address: ipaddress.IPv4Address | ipaddress.IPv
     if is_blocked_stream_address(address):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="stream_url host is not allowed by SSRF protection",
+            detail="stream_url 主机被 SSRF 防护策略拒绝",
         )
 
 
@@ -91,15 +91,15 @@ def validate_media_stream_url(stream_url: str) -> str:
     if parsed.scheme not in SUPPORTED_STREAM_SCHEMES:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="stream_url must use rtsp, rtmp, http, or https",
+            detail="stream_url 必须使用 rtsp、rtmp、http 或 https",
         )
     if not parsed.hostname:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="stream_url must include host")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="stream_url 必须包含主机")
     reject_private_ip_literal(parsed.hostname)
     if not host_matches_allowlist(parsed.hostname):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="stream_url host is not in STREAM_ALLOWED_HOSTS",
+            detail="stream_url 主机不在 STREAM_ALLOWED_HOSTS 允许列表中",
         )
     reject_private_resolved_addresses(parsed.hostname)
     return stream_url

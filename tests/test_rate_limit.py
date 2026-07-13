@@ -41,7 +41,7 @@ def test_rate_limit_rejects_new_bucket_when_capacity_is_full(monkeypatch) -> Non
         rate_limit.ensure_bucket_capacity(now=101.0)
 
     assert exc_info.value.status_code == 429
-    assert "bucket capacity" in str(exc_info.value.detail)
+    assert "限流桶容量" in str(exc_info.value.detail)
     assert exc_info.value.headers == {"Retry-After": "1"}
 
 
@@ -59,7 +59,7 @@ def test_rate_limit_rejects_same_tenant_path_after_burst(monkeypatch) -> None:
         rate_limit.check_rate_limit(request)
 
     assert exc_info.value.status_code == 429
-    assert "rate limit exceeded" in str(exc_info.value.detail)
+    assert "已超过限流阈值" in str(exc_info.value.detail)
     assert exc_info.value.headers == {"Retry-After": "1"}
 
 
@@ -71,7 +71,7 @@ def test_rate_limit_cannot_be_bypassed_by_rotating_tenant_header(monkeypatch) ->
     monkeypatch.setattr(rate_limit, "RATE_LIMIT_BUCKET_TTL_SECONDS", 3600)
     monkeypatch.setattr(rate_limit, "wall_time", lambda: 100.0)
 
-    # Same client IP, different forged tenant headers -> still throttled.
+    # 同一客户端 IP 即使伪造不同租户请求头，也仍会被限流。
     rate_limit.check_rate_limit(DummyRequest("/v1/models", tenant_id="tenant-a"))
     with pytest.raises(HTTPException) as exc_info:
         rate_limit.check_rate_limit(DummyRequest("/v1/models", tenant_id="forged-tenant"))
@@ -118,7 +118,7 @@ def test_rate_limit_distinguishes_clients_by_ip(monkeypatch) -> None:
     monkeypatch.setattr(rate_limit, "wall_time", lambda: 100.0)
 
     rate_limit.check_rate_limit(DummyRequest("/v1/models", host="198.51.100.7"))
-    # A different IP gets its own bucket.
+    # 不同 IP 会获得独立令牌桶。
     rate_limit.check_rate_limit(DummyRequest("/v1/models", host="198.51.100.8"))
 
 
@@ -167,7 +167,7 @@ def test_application_rate_limit_overrides_disabled_global_limit(monkeypatch) -> 
         rate_limit.check_rate_limit(request)
 
     assert exc_info.value.status_code == 429
-    assert "rate limit exceeded" in str(exc_info.value.detail)
+    assert "已超过限流阈值" in str(exc_info.value.detail)
     portrait_access.clear_access_state()
 
 
@@ -194,6 +194,6 @@ def test_application_daily_quota_is_enforced_even_without_global_rate_limit(monk
         rate_limit.check_rate_limit(request)
 
     assert exc_info.value.status_code == 429
-    assert "daily quota exceeded" in str(exc_info.value.detail)
+    assert "每日配额已耗尽" in str(exc_info.value.detail)
     assert int(exc_info.value.headers["Retry-After"]) > 0
     portrait_access.clear_access_state()

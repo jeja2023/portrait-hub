@@ -49,7 +49,7 @@ def test_readiness_model_check_rejects_escaping_artifact_path(workspace_tmp_path
     )
 
     assert path is None
-    assert error == "model artifact path escapes models root"
+    assert error == "模型构件路径逃逸模型根目录"
 
 
 def test_ci_security_audit_workflow_runs_pip_audit() -> None:
@@ -169,7 +169,7 @@ def test_readiness_rejects_ready_capability_without_configured_model(workspace_t
     checks = {item["name"]: item for item in check_capabilities(root)}
 
     assert checks["capability:face_embedding"]["ok"] is False
-    assert checks["capability:face_embedding"]["model_error"] == "model_id is not configured in models.yml or aliases"
+    assert checks["capability:face_embedding"]["model_error"] == "model_id 未在 models.yml 或 aliases 中配置"
 
 
 def test_cutover_check_passes_with_real_artifact_hashes(workspace_tmp_path: Path) -> None:

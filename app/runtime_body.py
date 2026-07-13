@@ -122,7 +122,7 @@ async def run_reid_body_embedding(image: Image.Image) -> tuple[list[float], dict
         runtime = await get_capability_runtime("body_embedding", {"reid"})
     except Exception as exc:
         _BODY_EMBEDDING_RUNTIME_UNAVAILABLE = _runtime_cooldown_deadline()
-        logger.warning("body embedding model unavailable, falling back to image fingerprint: %s", exception_log_summary(exc))
+        logger.warning("人体特征模型不可用，回退到图像指纹: %s", exception_log_summary(exc))
         return None
     if runtime is None:
         return None
@@ -132,10 +132,10 @@ async def run_reid_body_embedding(image: Image.Image) -> tuple[list[float], dict
         embeddings, meta = await infer_reid_images(runtime.bundle, runtime.cache_key, [crop])
     except Exception as exc:
         _BODY_EMBEDDING_RUNTIME_UNAVAILABLE = _runtime_cooldown_deadline()
-        logger.warning("body embedding inference failed, falling back to image fingerprint: %s", exception_log_summary(exc))
+        logger.warning("人体特征推理失败，回退到图像指纹: %s", exception_log_summary(exc))
         return None
     if embeddings.ndim != 2 or embeddings.shape[0] < 1 or embeddings.shape[1] < 1:
-        logger.warning("body embedding inference returned empty output, falling back to image fingerprint")
+        logger.warning("人体特征推理返回空输出，回退到图像指纹")
         return None
 
     embedding = [round(float(value), 8) for value in embeddings[0].tolist()]

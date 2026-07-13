@@ -48,14 +48,14 @@ def configured_model_path(model_id: str, config: dict[str, Any], models_root: Pa
     if isinstance(artifact_path, str) and artifact_path.strip():
         candidate = Path(artifact_path.strip())
         if candidate.is_absolute():
-            return None, "artifact.path must be relative to models root"
+            return None, "artifact.path 必须相对于模型根目录"
         path = (models_root / candidate).resolve()
     else:
         path = (models_root / model_id).resolve()
     try:
         path.relative_to(models_root.resolve())
     except ValueError:
-        return None, "model artifact path escapes models root"
+        return None, "模型构件路径逃逸模型根目录"
     return path, None
 
 
@@ -112,7 +112,7 @@ def check_artifacts(
         model_id = capability.get("model_id") if isinstance(capability, dict) else None
         config = models.get(model_id) if isinstance(model_id, str) else None
         if not isinstance(model_id, str) or not isinstance(config, dict):
-            checks.append({"name": f"artifact:{capability_name}", "ok": False, "detail": {"model_id": model_id, "error": "model config missing"}})
+            checks.append({"name": f"artifact:{capability_name}", "ok": False, "detail": {"model_id": model_id, "error": "模型配置不存在"}})
             continue
         path, error = configured_model_path(model_id, config, models_root)
         exists = bool(path and path.is_file())
@@ -144,9 +144,9 @@ def check_artifacts(
 
 def check_regression(manifest_path: Path | None) -> list[dict[str, Any]]:
     if manifest_path is None:
-        return [{"name": "regression:manifest", "ok": False, "detail": {"error": "manifest is required for cutover"}}]
+        return [{"name": "regression:manifest", "ok": False, "detail": {"error": "生产切换必须提供 manifest"}}]
     if not manifest_path.is_file():
-        return [{"name": "regression:manifest", "ok": False, "detail": {"path": str(manifest_path), "error": "manifest not found"}}]
+        return [{"name": "regression:manifest", "ok": False, "detail": {"path": str(manifest_path), "error": "manifest 不存在"}}]
     report = run_model_regression(load_manifest(manifest_path))
     metrics = report.get("metrics")
     metric_sections = sorted(metrics.keys()) if isinstance(metrics, dict) else []
@@ -195,13 +195,13 @@ def run_cutover_check(
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Validate PortraitHub real-model production cutover readiness.")
-    parser.add_argument("--root", default=".", help="Project root.")
-    parser.add_argument("--models-root", default="models", help="Model artifact root.")
-    parser.add_argument("--models-config", default="models.yml", help="models.yml path.")
-    parser.add_argument("--capabilities", default="model-capabilities.yml", help="model-capabilities.yml path.")
-    parser.add_argument("--regression-manifest", help="Held-out regression manifest YAML/JSON.")
-    parser.add_argument("--validate-onnx", action="store_true", help="Try loading model artifacts with CPUExecutionProvider.")
+    parser = argparse.ArgumentParser(description="校验 PortraitHub 真实模型生产切换就绪状态。")
+    parser.add_argument("--root", default=".", help="项目根目录。")
+    parser.add_argument("--models-root", default="models", help="模型构件根目录。")
+    parser.add_argument("--models-config", default="models.yml", help="models.yml 路径。")
+    parser.add_argument("--capabilities", default="model-capabilities.yml", help="model-capabilities.yml 路径。")
+    parser.add_argument("--regression-manifest", help="留出集回归清单 YAML/JSON。")
+    parser.add_argument("--validate-onnx", action="store_true", help="尝试使用 CPUExecutionProvider 加载模型构件。")
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args()
 
@@ -217,9 +217,9 @@ def main() -> int:
     if args.json:
         print(json.dumps(report, ensure_ascii=False, indent=2))
     else:
-        print(f"portrait cutover check: {'OK' if report['ok'] else 'FAILED'}")
+        print(f"人像发布切换检查：{'通过' if report['ok'] else '失败'}")
         for item in report["checks"]:
-            print(f"{'ok' if item['ok'] else 'fail'}: {item['name']}")
+            print(f"{'通过' if item['ok'] else '失败'}: {item['name']}")
     return 0 if report["ok"] else 1
 
 

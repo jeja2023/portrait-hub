@@ -362,14 +362,14 @@ async def require_permission(
         if application is not None:
             if application_scopes_allow_permission(application.get("scopes"), permission):
                 return
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=f"missing permission: {permission}")
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=f"缺少权限：{permission}")
     if not authorization or not authorization.startswith("Bearer "):
         raise unauthorized("missing bearer JWT")
     claims = verify_hs256_jwt(authorization.removeprefix("Bearer ").strip())
     if not jwt_tenant_matches(claims, tenant_id):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="JWT is not valid for tenant")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="JWT 与租户不匹配")
     if not has_permission(roles_from_claims(claims), permission):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=f"missing permission: {permission}")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=f"缺少权限：{permission}")
 
 
 def permission_dependency(permission: str) -> Callable[..., Any]:

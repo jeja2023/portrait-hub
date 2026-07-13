@@ -23,23 +23,23 @@ def load_raw_model_config() -> dict[str, Any]:
     if not MODEL_CONFIG_PATH.is_file():
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="model config file not found",
+            detail="模型配置文件不存在",
         )
     try:
         with MODEL_CONFIG_PATH.open("r", encoding="utf-8") as file:
             raw = yaml.safe_load(file) or {}
     except Exception as exc:
         logger.warning(
-            "failed to read model config file: config_path_hash=%s error=%s",
+            "读取模型配置文件失败: config_path_hash=%s error=%s",
             model_config_path_fingerprint(MODEL_CONFIG_PATH),
             exception_log_summary(exc),
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="failed to read model config file",
+            detail="读取模型配置文件失败",
         ) from exc
     if not isinstance(raw, dict):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="model config root must be a mapping")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="模型配置根节点必须是映射")
     return raw
 
 
@@ -58,7 +58,7 @@ def write_raw_model_config(raw: dict[str, Any]) -> None:
             try:
                 temp_path.unlink(missing_ok=True)
             except OSError as cleanup_exc:
-                logger.warning("failed to cleanup model config temp file: %s", exception_log_summary(cleanup_exc))
+                logger.warning("清理模型配置临时文件失败: %s", exception_log_summary(cleanup_exc))
     except Exception as exc:
         if temp_path is not None:
             try:
@@ -66,13 +66,13 @@ def write_raw_model_config(raw: dict[str, Any]) -> None:
             except Exception:
                 pass
         logger.warning(
-            "failed to write model config file: config_path_hash=%s error=%s",
+            "写入模型配置文件失败: config_path_hash=%s error=%s",
             model_config_path_fingerprint(MODEL_CONFIG_PATH),
             exception_log_summary(exc),
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="failed to write model config file",
+            detail="写入模型配置文件失败",
         ) from exc
 
 
@@ -82,20 +82,20 @@ def commit_model_config_with_audit(raw: dict[str, Any], previous_raw: dict[str, 
         write_rollout_audit(event, result)
     except Exception as exc:
         logger.warning(
-            "failed to write rollout audit; rolling back model config: error=%s",
+            "写入发布审计失败，正在回滚模型配置: error=%s",
             exception_log_summary(exc),
         )
         try:
             write_raw_model_config(previous_raw)
         except Exception as rollback_exc:
             logger.warning(
-                "failed to rollback model config after rollout audit failure: error=%s",
+                "发布审计失败后回滚模型配置失败: error=%s",
                 exception_log_summary(rollback_exc),
             )
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail={
-                    "message": "failed to write rollout audit and rollback model config",
+                    "message": "写入发布审计失败，且模型配置回滚失败",
                     "rolled_back": False,
                     "rollback_failed": True,
                 },
@@ -103,7 +103,7 @@ def commit_model_config_with_audit(raw: dict[str, Any], previous_raw: dict[str, 
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={
-                "message": "failed to write rollout audit; model config was rolled back",
+                "message": "写入发布审计失败；模型配置已回滚",
                 "rolled_back": True,
             },
         ) from exc
@@ -112,7 +112,7 @@ def commit_model_config_with_audit(raw: dict[str, Any], previous_raw: dict[str, 
 def models_mapping(raw: dict[str, Any]) -> dict[str, Any]:
     models = raw.get("models", raw)
     if not isinstance(models, dict):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="models must be a mapping")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="models 必须是映射")
     return models
 
 
@@ -122,7 +122,7 @@ def aliases_mapping(raw: dict[str, Any]) -> dict[str, Any]:
         aliases = {}
         raw["aliases"] = aliases
     if not isinstance(aliases, dict):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="aliases must be a mapping")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="aliases 必须是映射")
     return aliases
 
 
@@ -134,7 +134,7 @@ def current_alias_target(alias_name: str, alias_config: Any) -> str:
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="failed to resolve alias",
+            detail="解析别名失败",
         ) from exc
 
 
@@ -150,7 +150,7 @@ def validate_configured_target(target_model_id: str, models: dict[str, Any]) -> 
     if target not in models:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="target model is not configured in models.yml",
+            detail="目标模型未在 models.yml 中配置",
         )
     return target
 
@@ -159,9 +159,9 @@ def rollout_weight(value: Any) -> int:
     try:
         weight = int(value)
     except (TypeError, ValueError) as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="target weights must be integers") from exc
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="目标权重必须是整数") from exc
     if weight < 0:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="target weights must be >= 0")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="目标权重必须大于等于 0")
     return weight
 
 
@@ -185,7 +185,7 @@ def switch_alias_target(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail={
-                "message": "alias current target does not match expected_current_target",
+                "message": "别名当前目标与 expected_current_target 不一致",
             },
         )
 
@@ -226,14 +226,14 @@ def configure_weighted_alias_rollout(
     models = models_mapping(raw)
     aliases = aliases_mapping(raw)
     if not targets:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="targets must not be empty")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="targets 不能为空")
     expected_current_target = validate_model_target(expected_current_target) if expected_current_target is not None else None
 
     rollout_targets = []
     total_weight = 0
     for item in targets:
         if not isinstance(item, dict):
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="targets must be mappings")
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="targets 必须是映射")
         target_model_id = str(item.get("target_model_id") or item.get("target") or "")
         weight = rollout_weight(item.get("weight", 0))
         target_model_id = validate_configured_target(target_model_id, models)
@@ -243,7 +243,7 @@ def configure_weighted_alias_rollout(
             rollout_item["status"] = item["status"]
         rollout_targets.append(rollout_item)
     if total_weight <= 0:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="total rollout weight must be > 0")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="发布总权重必须大于 0")
 
     old_config = aliases.get(alias_name)
     old_target = current_alias_target(alias_name, old_config) if old_config is not None else None
@@ -251,7 +251,7 @@ def configure_weighted_alias_rollout(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail={
-                "message": "alias current target does not match expected_current_target",
+                "message": "别名当前目标与 expected_current_target 不一致",
             },
         )
 
@@ -286,11 +286,11 @@ def rollback_alias_target(alias_name: str, dry_run: bool = False) -> dict[str, A
     models = models_mapping(raw)
     aliases = aliases_mapping(raw)
     if alias_name not in aliases:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="alias not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="别名不存在")
     alias_config = aliases[alias_name]
     current_target = current_alias_target(alias_name, alias_config)
     if not isinstance(alias_config, dict) or not isinstance(alias_config.get("previous_target"), str):
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="alias has no previous_target")
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="别名没有 previous_target")
 
     rollback_target = validate_configured_target(alias_config["previous_target"], models)
     alias_config["target"] = rollback_target

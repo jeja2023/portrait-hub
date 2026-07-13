@@ -228,4 +228,4 @@ def test_access_application_api_key_rejects_missing_scope(monkeypatch: pytest.Mo
     denied = client.get("/v1/models", headers={**tenant_headers(), "X-API-Key": secret})
 
     assert denied.status_code == 403
-    assert "missing permission" in denied.text
+    assert "缺少权限" in denied.text

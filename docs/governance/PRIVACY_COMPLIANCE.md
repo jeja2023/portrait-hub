@@ -1,12 +1,12 @@
-# Privacy And Biometric Compliance
+# 隐私与生物识别合规
 
-PortraitHub deployments should be treated as biometric-adjacent systems.
+PortraitHub 部署应按生物识别相邻系统处理。
 
-Required controls:
+必要控制项：
 
-- Record consent or another lawful basis before enrollment or identification use.
-- Keep purpose limitation explicit per tenant.
-- Configure retention and deletion paths.
-- Encrypt sensitive state at rest.
-- Redact embeddings, vectors, secrets, filenames, and raw stream URLs from public responses and logs.
-- Keep human review available for high-impact decisions.
+- 入库或识别使用前记录同意或其他合法依据。
+- 按租户明确用途限制。
+- 配置保留与删除路径。
+- 对静态敏感状态加密。
+- 在公开响应和日志中脱敏 embedding、向量、密钥、文件名和原始流地址。
+- 对高影响决策保留人工复核通道。

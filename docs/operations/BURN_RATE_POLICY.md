@@ -1,11 +1,11 @@
-# Burn Rate Policy
+# 错误预算燃烧率策略
 
-PortraitHub uses two operational windows:
+PortraitHub 使用两个运维窗口：
 
-- Fast burn: short-window error rate above 2% means page immediately.
-- Slow burn: one-hour error rate above 1% means create a ticket and watch capacity.
+- 快速燃烧：短窗口错误率高于 2% 时立即通知值班。
+- 慢速燃烧：一小时错误率高于 1% 时创建工单并观察容量。
 
-Error budget guidance:
+错误预算处理建议：
 
-- Stop risky rollouts when error budget consumption trends up for more than one review cycle.
-- Revisit thresholds and traffic splitting when burn-rate alerts trigger repeatedly.
+- 当错误预算消耗连续超过一个复盘周期呈上升趋势时，停止高风险发布。
+- 当燃烧率告警反复触发时，重新评估阈值和流量切分。

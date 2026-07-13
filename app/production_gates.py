@@ -2,14 +2,14 @@ from __future__ import annotations
 
 import importlib.util
 
-try:  # pragma: no cover - optional production dependency
+try:  # pragma: no cover - 可选生产依赖
     import boto3
-except Exception:  # pragma: no cover - dependency may be intentionally absent locally
+except Exception:  # pragma: no cover - 本地环境可能故意缺少该依赖
     boto3 = None
 
-try:  # pragma: no cover - optional production dependency
+try:  # pragma: no cover - 可选生产依赖
     import redis
-except Exception:  # pragma: no cover - dependency may be intentionally absent locally
+except Exception:  # pragma: no cover - 本地环境可能故意缺少该依赖
     redis = None
 
 from app import settings
@@ -46,7 +46,7 @@ def production_externalization_failures() -> list[str]:
 
     failures: list[str] = []
     if settings.PORTRAIT_STORAGE_BACKEND != "postgres":
-        failures.append("PORTRAIT_STORAGE_BACKEND must be postgres in production")
+        failures.append("生产环境中 PORTRAIT_STORAGE_BACKEND 必须为 postgres")
     if not settings.POSTGRES_DSN.strip():
         failures.append("POSTGRES_DSN must be configured in production")
     if not postgres_driver_available():
@@ -55,7 +55,7 @@ def production_externalization_failures() -> list[str]:
         failures.append("psycopg_pool must be installed in production")
 
     if settings.PORTRAIT_VECTOR_BACKEND not in PRODUCTION_VECTOR_BACKENDS:
-        failures.append("PORTRAIT_VECTOR_BACKEND must be pgvector or qdrant in production")
+        failures.append("生产环境中 PORTRAIT_VECTOR_BACKEND 必须为 pgvector 或 qdrant")
     if not settings.PORTRAIT_REQUIRE_PRODUCTION_VECTOR_BACKEND:
         failures.append("PORTRAIT_REQUIRE_PRODUCTION_VECTOR_BACKEND must be true in production")
     if settings.PORTRAIT_VECTOR_BACKEND == "qdrant":
@@ -67,7 +67,7 @@ def production_externalization_failures() -> list[str]:
         failures.append("pgvector must be installed when PORTRAIT_VECTOR_BACKEND=pgvector")
 
     if settings.PORTRAIT_OBJECT_STORAGE_BACKEND != "s3":
-        failures.append("PORTRAIT_OBJECT_STORAGE_BACKEND must be s3 in production")
+        failures.append("生产环境中 PORTRAIT_OBJECT_STORAGE_BACKEND 必须为 s3")
     if not settings.S3_BUCKET.strip():
         failures.append("S3_BUCKET must be configured in production")
     if not settings.S3_REGION.strip():
@@ -76,14 +76,14 @@ def production_externalization_failures() -> list[str]:
         failures.append("boto3 must be installed in production")
 
     if settings.TASK_QUEUE_BACKEND != "redis":
-        failures.append("TASK_QUEUE_BACKEND must be redis in production")
+        failures.append("生产环境中 TASK_QUEUE_BACKEND 必须为 redis")
     if not settings.REDIS_URL.strip():
         failures.append("REDIS_URL must be configured in production")
     if not optional_dependency_available("redis", redis):
         failures.append("redis must be installed in production")
 
     if not settings.OPENTELEMETRY_ENABLED:
-        failures.append("OPENTELEMETRY_ENABLED must be true in production")
+        failures.append("生产环境中 OPENTELEMETRY_ENABLED 必须为 true")
     if not settings.OTEL_EXPORTER_OTLP_ENDPOINT.strip():
         failures.append("OTEL_EXPORTER_OTLP_ENDPOINT must be configured in production")
     for module_name in [
