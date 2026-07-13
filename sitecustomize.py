@@ -1,8 +1,8 @@
-"""Runtime patch for sharper video frame previews.
+"""为视频帧预览提供更清晰的运行时补丁。
 
-Python loads ``sitecustomize`` automatically when it is on ``sys.path``.
-We use that hook to keep the locked application files untouched while
-giving video parsing a higher resolution thumbnail for the results page.
+当 ``sitecustomize`` 位于 ``sys.path`` 上时，Python 会自动加载它。
+这里借助该钩子保持被锁定的应用文件不变，同时为结果页的视频解析提供
+更高分辨率的缩略图。
 """
 
 from __future__ import annotations
