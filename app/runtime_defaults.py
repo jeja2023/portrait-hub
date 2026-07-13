@@ -36,6 +36,7 @@ LOCAL_DEV_STATE_PATH_KEYS = {
 }
 
 LOCAL_DEV_ENV_DEFAULTS = {
+    "API_TOKEN": "",
     "AUTH_REQUIRED": "false",
     "RBAC_ENABLED": "false",
     "TENANT_HEADER_REQUIRED": "false",

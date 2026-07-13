@@ -47,6 +47,22 @@ def test_env_hot_reload_updates_loaded_settings_modules(monkeypatch, workspace_t
         rate_limit.RATE_LIMIT_PER_MINUTE = original_rate_limit
 
 
+def test_dev_start_local_env_clears_api_token_for_browser_console(workspace_tmp_path) -> None:
+    from app.runtime_defaults import parse_env_file
+    from dev_start import write_local_dev_env
+
+    env_path = workspace_tmp_path / ".env"
+    env_path.write_text("API_TOKEN=123456\nAUTH_REQUIRED=true\nRBAC_ENABLED=true\n", encoding="utf-8")
+
+    local_env_file, overrides = write_local_dev_env(workspace_tmp_path, env_path)
+    values = parse_env_file(local_env_file)
+
+    assert overrides["API_TOKEN"] == ""
+    assert values["API_TOKEN"] == ""
+    assert values["AUTH_REQUIRED"] == "false"
+    assert values["RBAC_ENABLED"] == "false"
+
+
 def test_env_hot_reload_updates_model_capabilities(monkeypatch, workspace_tmp_path) -> None:
     capabilities_path = workspace_tmp_path / "model-capabilities.yml"
     capabilities_path.write_text(
