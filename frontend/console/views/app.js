@@ -7,9 +7,16 @@ const state = {
   view: localStorage.getItem("portraitHubView") || "overview",
   analysisResultsTab: localStorage.getItem("portraitHubAnalysisResultsTab") || "image",
   isLoggedIn: localStorage.getItem("portraitHubLoggedIn") === "true",
+  accessApplications: loadAccessApplications(),
+  accessLastSecret: null,
+  webhooks: loadWebhooks(),
+  webhookLastSecret: null,
+  openApiCache: null,
   dashboard: {},
   galleryExport: {},
   latestPayloads: {},
+  callLogs: [],
+  errorCodes: null,
   analysisResults: {
     image: [],
     video: null,
@@ -48,6 +55,67 @@ function loadAlertConfig() {
   }
 }
 
+function defaultAccessApplications() {
+  return [
+    {
+      id: "default-client",
+      name: "默认接入应用",
+      owner: "platform",
+      status: "active",
+      scopes: ["infer", "compare", "gallery:read", "gallery:write"],
+      jwt_issuer: "",
+      jwt_audience: "",
+      created_at: Date.now(),
+      last_called_at: null,
+      error_rate: 0,
+    },
+  ];
+}
+
+function loadAccessApplications() {
+  try {
+    const payload = JSON.parse(localStorage.getItem("portraitHubAccessApplications") || "[]");
+    return Array.isArray(payload) && payload.length ? payload : defaultAccessApplications();
+  } catch {
+    return defaultAccessApplications();
+  }
+}
+
+function saveAccessApplications() {
+  localStorage.setItem("portraitHubAccessApplications", JSON.stringify(state.accessApplications));
+}
+
+function defaultWebhooks() {
+  return [
+    {
+      id: "default-webhook",
+      name: "默认事件回调",
+      application_id: "default-client",
+      url: "",
+      status: "disabled",
+      events: ["job.completed", "stream.event", "gallery.enrolled"],
+      retry_limit: 3,
+      timeout_seconds: 5,
+      created_at: Date.now(),
+      last_delivery_at: null,
+      failure_count: 0,
+      signing_secret_preview: null,
+    },
+  ];
+}
+
+function loadWebhooks() {
+  try {
+    const payload = JSON.parse(localStorage.getItem("portraitHubWebhooks") || "[]");
+    return Array.isArray(payload) && payload.length ? payload : defaultWebhooks();
+  } catch {
+    return defaultWebhooks();
+  }
+}
+
+function saveWebhooks() {
+  localStorage.setItem("portraitHubWebhooks", JSON.stringify(state.webhooks));
+}
 const template = `
   <!-- 登录页面 -->
   <div id="login-view" class="login-container hidden">
@@ -108,12 +176,40 @@ const template = `
             <button type="button" class="nav-item" data-nav="gallery-manage">人员管理</button>
           </div>
         </details>
+        <details class="nav-group" data-nav-group="access">
+          <summary>接入中心</summary>
+          <div class="nav-group-items">
+            <button type="button" class="nav-item" data-nav="access-credentials">应用凭证</button>
+            <button type="button" class="nav-item" data-nav="sdk-examples">SDK 示例</button>
+            <button type="button" class="nav-item" data-nav="openapi-docs">OpenAPI</button>
+            <button type="button" class="nav-item" data-nav="api-playground">API Playground</button>
+            <button type="button" class="nav-item" data-nav="call-logs">调用日志</button>
+            <button type="button" class="nav-item" data-nav="error-codes">错误码</button>
+            <button type="button" class="nav-item" data-nav="webhooks">Webhook</button>
+            <button type="button" class="nav-item" data-nav="slo-panel">SLO 面板</button>
+          </div>
+        </details>
+        <details class="nav-group" data-nav-group="multimodal">
+          <summary>多模态分析</summary>
+          <div class="nav-group-items">
+            <button type="button" class="nav-item" data-nav="multimodal-compare">融合比对</button>
+            <button type="button" class="nav-item" data-nav="track-review">轨迹审阅</button>
+          </div>
+        </details>
+        <details class="nav-group" data-nav-group="evaluation">
+          <summary>评估中心</summary>
+          <div class="nav-group-items">
+            <button type="button" class="nav-item" data-nav="evaluation-center">回归评估</button>
+            <button type="button" class="nav-item" data-nav="release-center">模型发布</button>
+          </div>
+        </details>
         <details class="nav-group" data-nav-group="ops">
           <summary>运维治理</summary>
           <div class="nav-group-items">
             <button type="button" class="nav-item" data-nav="models">模型管理</button>
             <button type="button" class="nav-item" data-nav="admin-threshold">比对阈值</button>
             <button type="button" class="nav-item" data-nav="admin-data">数据保留与备份</button>
+            <button type="button" class="nav-item" data-nav="audit-compliance">合规审计</button>
             <button type="button" class="nav-item" data-nav="alerts">告警评估</button>
           </div>
         </details>
@@ -503,6 +599,468 @@ const template = `
         </div>
       </section>
 
+      <section class="view" data-view="access-credentials">
+        <div class="view-header">
+          <div class="section-title">
+            <h2>应用凭证</h2>
+            <p>维护租户接入应用、scope、JWT 元信息和密钥轮换记录。</p>
+          </div>
+          <button type="button" id="access-refresh-button">刷新接入清单</button>
+        </div>
+        <div class="split-grid">
+          <div class="card">
+            <div class="section-title">
+              <h3>接入应用</h3>
+              <p>本清单用于接入规划、示例生成和租户级 API Key 鉴权。</p>
+            </div>
+            <form id="access-app-form" class="form-grid">
+              <label>应用 ID <input id="access-app-id-input" placeholder="留空自动生成" /></label>
+              <label>应用名称 <input id="access-app-name-input" placeholder="业务项目或服务名" /></label>
+              <label>负责人 <input id="access-app-owner-input" placeholder="团队或联系人" /></label>
+              <label>JWT issuer <input id="access-jwt-issuer-input" placeholder="可选" /></label>
+              <label>JWT audience <input id="access-jwt-audience-input" placeholder="可选" /></label>
+              <label>状态
+                <select id="access-app-status-input">
+                  <option value="active">启用</option>
+                  <option value="disabled">禁用</option>
+                </select>
+              </label>
+              <label>每分钟限额 <input id="access-rate-limit-input" type="number" min="0" step="1" placeholder="平台默认" /></label>
+              <label>突发容量 <input id="access-burst-input" type="number" min="0" step="1" placeholder="跟随限额" /></label>
+              <label>每日配额 <input id="access-daily-quota-input" type="number" min="0" step="1" placeholder="不限" /></label>
+              <label class="field-inline"><input type="checkbox" name="access-scope" value="infer" checked /> infer</label>
+              <label class="field-inline"><input type="checkbox" name="access-scope" value="compare" checked /> compare</label>
+              <label class="field-inline"><input type="checkbox" name="access-scope" value="gallery:read" checked /> gallery:read</label>
+              <label class="field-inline"><input type="checkbox" name="access-scope" value="gallery:write" /> gallery:write</label>
+              <label class="field-inline"><input type="checkbox" name="access-scope" value="jobs" /> jobs</label>
+              <label class="field-inline"><input type="checkbox" name="access-scope" value="streams" /> streams</label>
+              <button type="submit" class="primary">保存应用</button>
+              <button type="button" id="access-rotate-button">轮换密钥</button>
+            </form>
+            <div id="access-app-summary" class="result-summary"></div>
+            <div id="access-credentials-json" class="json-view data-viewer" role="region" aria-label="应用凭证响应数据"></div>
+          </div>
+          <div class="list-panel">
+            <div class="section-title">
+              <h3>应用列表</h3>
+              <p>选择应用可回填表单并生成对应示例。</p>
+            </div>
+            <div id="access-app-list" class="data-table-wrap"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="view" data-view="sdk-examples">
+        <div class="view-header">
+          <div class="section-title">
+            <h2>SDK 示例</h2>
+            <p>当前租户的 Python、Node 和 curl 最小调用片段。</p>
+          </div>
+          <button type="button" id="sdk-refresh-button">刷新示例</button>
+        </div>
+        <div class="triple-grid">
+          <div class="card">
+            <div class="section-title"><h3>Python</h3><p>使用 Python SDK 完成以图搜人。</p></div>
+            <pre id="sdk-python-code" class="code-view"></pre>
+            <button type="button" id="sdk-python-copy-button">复制 Python</button>
+          </div>
+          <div class="card">
+            <div class="section-title"><h3>Node.js</h3><p>使用 Node SDK 完成人像比对。</p></div>
+            <pre id="sdk-node-code" class="code-view"></pre>
+            <button type="button" id="sdk-node-copy-button">复制 Node</button>
+          </div>
+          <div class="card">
+            <div class="section-title"><h3>curl</h3><p>用于网关和内网联调的直接调用。</p></div>
+            <pre id="sdk-curl-code" class="code-view"></pre>
+            <button type="button" id="sdk-curl-copy-button">复制 curl</button>
+          </div>
+        </div>
+        <div class="split-grid">
+          <div class="card">
+            <div class="section-title"><h3>批量异步</h3><p>使用 SDK 提交批量以图搜人任务并记录 batch_id。</p></div>
+            <pre id="sdk-batch-code" class="code-view"></pre>
+            <button type="button" id="sdk-batch-copy-button">复制批量示例</button>
+          </div>
+          <div class="card">
+            <div class="section-title"><h3>视频轮询</h3><p>创建离线视频任务并按状态查询结果。</p></div>
+            <pre id="sdk-video-code" class="code-view"></pre>
+            <button type="button" id="sdk-video-copy-button">复制视频示例</button>
+          </div>
+        </div>
+        <div id="sdk-json" class="json-view data-viewer" role="region" aria-label="SDK 示例数据"></div>
+      </section>
+
+      <section class="view" data-view="openapi-docs">
+        <div class="view-header">
+          <div class="section-title">
+            <h2>OpenAPI</h2>
+            <p>查看当前服务暴露的稳定接口、核心路径和文档入口。</p>
+          </div>
+          <div class="toolbar-actions">
+            <button type="button" id="openapi-refresh-button">刷新接口定义</button>
+            <a href="/openapi.json" target="_blank" rel="noreferrer">打开 JSON</a>
+          </div>
+        </div>
+        <div id="openapi-summary" class="result-summary"></div>
+        <div class="split-grid">
+          <div class="card">
+            <div class="section-title"><h3>核心路径</h3><p>用于接入验收和网关放行校验。</p></div>
+            <div id="openapi-path-table" class="data-table-wrap"></div>
+          </div>
+          <div class="card">
+            <div class="section-title"><h3>文档入口</h3><p>生产环境可关闭交互文档，仅保留受控契约导出。</p></div>
+            <pre id="openapi-code" class="code-view"></pre>
+            <button type="button" id="openapi-copy-button">复制检查命令</button>
+          </div>
+        </div>
+        <div id="openapi-json" class="json-view data-viewer" role="region" aria-label="OpenAPI 数据"></div>
+      </section>
+
+      <section class="view" data-view="api-playground">
+        <div class="view-header">
+          <div class="section-title">
+            <h2>API Playground</h2>
+            <p>使用当前租户和令牌发起受控测试请求，展示请求头、耗时和响应。</p>
+          </div>
+        </div>
+        <form id="playground-form" class="form-grid">
+          <label>接口
+            <select id="playground-endpoint-input">
+              <option value="/v1/gallery/search" data-method="POST">POST /v1/gallery/search</option>
+              <option value="/v1/gallery/search/batch" data-method="POST">POST /v1/gallery/search/batch</option>
+              <option value="/v1/compare/persons" data-method="POST">POST /v1/compare/persons</option>
+              <option value="/v1/compare/batch" data-method="POST">POST /v1/compare/batch</option>
+              <option value="/v1/fusion/compare" data-method="POST">POST /v1/fusion/compare</option>
+              <option value="/v1/infer/persons" data-method="POST">POST /v1/infer/persons</option>
+              <option value="/v1/jobs/video" data-method="POST">POST /v1/jobs/video</option>
+              <option value="/v1/streams" data-method="POST">POST /v1/streams</option>
+              <option value="/v1/streams" data-method="GET">GET /v1/streams</option>
+              <option value="/v1/streams/{stream_id}/events" data-method="GET">GET /v1/streams/{stream_id}/events</option>
+              <option value="/v1/models" data-method="GET">GET /v1/models</option>
+              <option value="/v1/thresholds" data-method="GET">GET /v1/thresholds</option>
+            </select>
+          </label>
+          <label class="span-2">文件 A / 查询图 / 视频 <input id="playground-file-a-input" type="file" accept="image/*,video/*" multiple /></label>
+          <label class="span-2">文件 B / 批量右侧图 <input id="playground-file-b-input" type="file" accept="image/*" multiple /></label>
+          <label>阈值方案 <input id="playground-threshold-input" value="normal" /></label>
+          <label>Top K / limit <input id="playground-top-k-input" type="number" min="1" value="5" /></label>
+          <label>流 ID <input id="playground-stream-id-input" placeholder="查询流事件时填写" /></label>
+          <label class="span-2">流地址 <input id="playground-stream-url-input" placeholder="rtsp://camera.example/live" /></label>
+          <label>流名称 <input id="playground-stream-name-input" placeholder="可选" /></label>
+          <label class="field-inline"><input id="playground-async-mode-input" type="checkbox" /> 异步批量</label>
+          <button type="submit" class="primary">发送请求</button>
+        </form>
+        <div class="split-grid">
+          <div class="card">
+            <div class="section-title"><h3>请求预览</h3><p>敏感令牌默认遮罩。</p></div>
+            <pre id="playground-request-code" class="code-view"></pre>
+          </div>
+          <div class="result-panel">
+            <div class="section-title"><h3>响应</h3><p>包含 request_id、耗时和错误码定位信息。</p></div>
+            <div id="playground-summary" class="result-summary"></div>
+            <div id="playground-json" class="json-view data-viewer" role="region" aria-label="API Playground 响应数据"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="view" data-view="call-logs">
+        <div class="view-header">
+          <div class="section-title">
+            <h2>调用日志</h2>
+            <p>按 request_id、应用、接口和状态定位服务端调用结果。</p>
+          </div>
+          <button type="button" id="call-logs-refresh-button">刷新日志</button>
+        </div>
+        <div class="form-grid compact">
+          <label>request_id <input id="call-log-request-input" placeholder="精确或部分匹配" /></label>
+          <label>页面/接口 <input id="call-log-endpoint-input" placeholder="gallery、compare、models..." /></label>
+          <label>状态
+            <select id="call-log-status-input">
+              <option value="">全部</option>
+              <option value="success">成功</option>
+              <option value="error">异常</option>
+            </select>
+          </label>
+          <label>错误码 <input id="call-log-error-code-input" placeholder="rate_limited、http_500" /></label>
+          <label>起始时间 <input id="call-log-created-since-input" type="number" min="0" step="1" placeholder="Unix 秒" /></label>
+          <label>结束时间 <input id="call-log-created-until-input" type="number" min="0" step="1" placeholder="Unix 秒" /></label>
+          <label>应用
+            <select id="call-log-application-input"><option value="">全部应用</option></select>
+          </label>
+          <button type="button" id="call-log-filter-button">筛选</button>
+        </div>
+        <div id="call-log-summary" class="result-summary"></div>
+        <div id="call-log-table" class="data-table-wrap"></div>
+        <div id="call-logs-json" class="json-view data-viewer" role="region" aria-label="调用日志数据"></div>
+      </section>
+
+      <section class="view" data-view="error-codes">
+        <div class="view-header">
+          <div class="section-title">
+            <h2>错误码</h2>
+            <p>面向接入方的稳定错误码、HTTP 状态和重试建议。</p>
+          </div>
+          <button type="button" id="error-codes-refresh-button">刷新错误码</button>
+        </div>
+        <div id="error-codes-summary" class="result-summary"></div>
+        <div class="card">
+          <div class="section-title"><h3>错误码目录</h3><p>所有条目均为脱敏说明，定位具体请求请结合 request_id 和调用日志。</p></div>
+          <div id="error-codes-table" class="data-table-wrap"></div>
+        </div>
+        <div id="error-codes-json" class="json-view data-viewer" role="region" aria-label="错误码目录数据"></div>
+      </section>
+      <section class="view" data-view="webhooks">
+        <div class="view-header">
+          <div class="section-title">
+            <h2>Webhook</h2>
+            <p>维护租户回调端点、订阅事件、签名密钥轮换和重试策略。</p>
+          </div>
+          <button type="button" id="webhook-refresh-button">刷新回调清单</button>
+        </div>
+        <div class="split-grid">
+          <div class="card">
+            <div class="section-title">
+              <h3>回调端点</h3>
+              <p>本地清单用于接入编排；生产投递器应在服务端读取等价配置。</p>
+            </div>
+            <form id="webhook-form" class="form-grid">
+              <label>Webhook ID <input id="webhook-id-input" placeholder="留空自动生成" /></label>
+              <label>名称 <input id="webhook-name-input" placeholder="业务回调" /></label>
+              <label>接入应用
+                <select id="webhook-app-input"></select>
+              </label>
+              <label>状态
+                <select id="webhook-status-input">
+                  <option value="active">启用</option>
+                  <option value="disabled">禁用</option>
+                </select>
+              </label>
+              <label class="span-2">回调 URL <input id="webhook-url-input" placeholder="https://service.internal/portrait/events" /></label>
+              <label>重试次数 <input id="webhook-retry-input" type="number" min="0" max="10" value="3" /></label>
+              <label>超时秒数 <input id="webhook-timeout-input" type="number" min="1" max="60" value="5" /></label>
+              <label class="field-inline"><input type="checkbox" name="webhook-event" value="gallery.enrolled" checked /> gallery.enrolled</label>
+              <label class="field-inline"><input type="checkbox" name="webhook-event" value="search.completed" /> search.completed</label>
+              <label class="field-inline"><input type="checkbox" name="webhook-event" value="compare.completed" /> compare.completed</label>
+              <label class="field-inline"><input type="checkbox" name="webhook-event" value="job.completed" checked /> job.completed</label>
+              <label class="field-inline"><input type="checkbox" name="webhook-event" value="stream.event" checked /> stream.event</label>
+              <label class="field-inline"><input type="checkbox" name="webhook-event" value="model.rollout" /> model.rollout</label>
+              <button type="submit" class="primary">保存 Webhook</button>
+              <button type="button" id="webhook-rotate-button">轮换签名密钥</button>
+              <button type="button" id="webhook-sample-button">生成样例事件</button>
+            </form>
+            <div id="webhook-summary" class="result-summary"></div>
+            <div id="webhook-json" class="json-view data-viewer" role="region" aria-label="Webhook 响应数据"></div>
+          </div>
+          <div class="list-panel">
+            <div class="section-title">
+              <h3>端点列表</h3>
+              <p>选择端点可回填表单并生成对应样例。</p>
+            </div>
+            <div id="webhook-list" class="data-table-wrap"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="view" data-view="slo-panel">
+        <div class="view-header">
+          <div class="section-title">
+            <h2>SLO 面板</h2>
+            <p>汇总成功率、p95/p99、GPU 队列、活跃流和 worker 热状态。</p>
+          </div>
+          <button type="button" id="slo-refresh-button">刷新 SLO</button>
+        </div>
+        <div id="slo-summary" class="result-summary"></div>
+        <div class="split-grid">
+          <div class="card">
+            <div class="section-title"><h3>错误预算</h3><p>基于当前指标做轻量燃烧评估。</p></div>
+            <div id="slo-badges" class="badge-row"></div>
+            <div id="slo-json" class="json-view data-viewer" role="region" aria-label="SLO 数据"></div>
+          </div>
+          <div class="card">
+            <div class="section-title"><h3>Worker 状态</h3><p>模型常驻、队列和流 worker 摘要。</p></div>
+            <div id="slo-worker-list" class="simple-list"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="view" data-view="multimodal-compare">
+        <div class="view-header">
+          <div class="section-title">
+            <h2>融合比对</h2>
+            <p>左右证据输入，多模态分数、质量和冲突风险展开展示。</p>
+          </div>
+        </div>
+        <form id="multimodal-form" class="form-grid">
+          <label class="span-2">证据 A <input id="multimodal-a-input" type="file" accept="image/*" /></label>
+          <label class="span-2">证据 B <input id="multimodal-b-input" type="file" accept="image/*" /></label>
+          <label>阈值方案 <input id="multimodal-threshold-input" value="normal" /></label>
+          <label class="field-inline"><input type="checkbox" name="multimodal-scope" value="face" checked /> face</label>
+          <label class="field-inline"><input type="checkbox" name="multimodal-scope" value="body" checked /> body</label>
+          <label class="field-inline"><input type="checkbox" name="multimodal-scope" value="appearance" checked /> appearance</label>
+          <label class="field-inline"><input type="checkbox" name="multimodal-scope" value="gait" /> gait</label>
+          <button type="submit" class="primary">融合比对</button>
+        </form>
+        <div class="result-panel">
+          <div class="section-title"><h3>融合结论</h3><p>通过状态是算法建议，最终身份裁决需结合业务流程。</p></div>
+          <div id="multimodal-summary" class="result-summary"></div>
+          <div id="multimodal-table" class="data-table-wrap"></div>
+          <div id="multimodal-json" class="json-view data-viewer" role="region" aria-label="多模态融合响应数据"></div>
+        </div>
+      </section>
+
+      <section class="view" data-view="track-review">
+        <div class="view-header">
+          <div class="section-title">
+            <h2>轨迹审阅</h2>
+            <p>从视频任务结果中查看关键帧、tracklet 稳定性和候选证据。</p>
+          </div>
+          <button type="button" id="track-review-refresh-button">刷新轨迹</button>
+        </div>
+        <div id="track-review-summary" class="result-summary"></div>
+        <div class="split-grid">
+          <div class="card">
+            <div class="section-title"><h3>人工标注</h3><p>标记误检、错配和低质量样本，进入评估数据池。</p></div>
+            <form id="track-review-annotation-form" class="form-grid">
+              <label>任务 ID <input id="track-review-job-input" placeholder="job_id" /></label>
+              <label>轨迹 ID <input id="track-review-track-input" placeholder="track_id" /></label>
+              <label>标注
+                <select id="track-review-label-input">
+                  <option value="false_positive">误检</option>
+                  <option value="mismatch">错配</option>
+                  <option value="low_quality">低质量</option>
+                  <option value="confirmed">确认正确</option>
+                  <option value="uncertain">待复核</option>
+                </select>
+              </label>
+              <label>帧序号 <input id="track-review-frame-input" type="number" min="0" step="1" placeholder="可选" /></label>
+              <label>复核人 <input id="track-review-reviewer-input" placeholder="operator" /></label>
+              <label>证据引用 <input id="track-review-evidence-input" placeholder="frame/object key" /></label>
+              <label class="span-2">备注 <textarea id="track-review-note-input" placeholder="原因、场景、复核结论"></textarea></label>
+              <button type="submit" class="primary">保存标注</button>
+            </form>
+          </div>
+          <div class="card">
+            <div class="section-title"><h3>评估数据池</h3><p>最近人工标注，不直接修改线上模型。</p></div>
+            <div id="track-review-annotation-table" class="data-table-wrap"></div>
+          </div>
+        </div>
+        <div id="track-review-visuals" class="result-visual-grid"></div>
+        <div id="track-review-json" class="json-view data-viewer" role="region" aria-label="轨迹审阅数据"></div>
+      </section>
+
+      <section class="view" data-view="evaluation-center">
+        <div class="view-header">
+          <div class="section-title">
+            <h2>回归评估</h2>
+            <p>汇总模型能力、阈值、留出集指标和生产门禁状态。</p>
+          </div>
+          <button type="button" id="evaluation-refresh-button">刷新评估</button>
+        </div>
+        <div id="evaluation-summary" class="result-summary"></div>
+        <div class="split-grid">
+          <div class="card">
+            <div class="section-title"><h3>能力矩阵</h3><p>fallback 和 placeholder 会作为生产风险标记。</p></div>
+            <div id="evaluation-capability-table" class="data-table-wrap"></div>
+          </div>
+          <div class="card">
+            <div class="section-title"><h3>指标摘要</h3><p>用于回归报告和阈值标定的控制台视图。</p></div>
+            <div id="evaluation-metrics-table" class="data-table-wrap"></div>
+          </div>
+        </div>
+        <div class="split-grid">
+          <div class="card">
+            <div class="section-title"><h3>评估数据池</h3><p>汇总轨迹审阅产生的人工标注，只展示租户内统计。</p></div>
+            <div id="evaluation-review-summary" class="result-summary"></div>
+            <div id="evaluation-review-label-table" class="data-table-wrap"></div>
+          </div>
+          <div class="card">
+            <div class="section-title"><h3>证据索引</h3><p>展示最近样本的任务、轨迹、帧和证据引用。</p></div>
+            <div id="evaluation-review-evidence-table" class="data-table-wrap"></div>
+          </div>
+        </div>
+        <div class="split-grid">
+          <div class="card">
+            <div class="section-title"><h3>评估数据集</h3><p>由人工标注池派生的留出集、正例和校准样本。</p></div>
+            <div id="evaluation-dataset-table" class="data-table-wrap"></div>
+          </div>
+          <div class="card">
+            <div class="section-title"><h3>阈值推荐</h3><p>基于当前租户标注池生成只读建议，不自动写入配置。</p></div>
+            <div id="evaluation-threshold-table" class="data-table-wrap"></div>
+          </div>
+        </div>
+        <div id="evaluation-json" class="json-view data-viewer" role="region" aria-label="评估中心数据"></div>
+      </section>
+
+      <section class="view" data-view="release-center">
+        <div class="view-header">
+          <div class="section-title">
+            <h2>模型发布</h2>
+            <p>预览别名路由、灰度权重、切换 production 和回滚路径。</p>
+          </div>
+          <button type="button" id="release-refresh-button">刷新发布状态</button>
+        </div>
+        <div class="split-grid">
+          <div class="card">
+            <div class="section-title"><h3>发布操作</h3><p>默认 dry-run，取消勾选才会写入配置和审计。</p></div>
+            <form id="release-form" class="form-grid">
+              <label>操作
+                <select id="release-action-input">
+                  <option value="preview">预览</option>
+                  <option value="switch">切换</option>
+                  <option value="weighted">灰度</option>
+                  <option value="rollback">回滚</option>
+                </select>
+              </label>
+              <label>别名 <input id="release-alias-input" placeholder="person_reid_default" /></label>
+              <label>目标模型 <input id="release-target-input" placeholder="portrait_hub/model.onnx" /></label>
+              <label>当前目标 <input id="release-expected-input" placeholder="可选" /></label>
+              <label>流量 key <input id="release-traffic-key-input" placeholder="tenant 或 request key" /></label>
+              <label>灰度权重 <input id="release-weight-input" type="number" min="0" max="100000" value="10000" /></label>
+              <label class="field-inline"><input id="release-dry-run-input" type="checkbox" checked /> dry-run</label>
+              <button type="submit" class="primary">执行发布操作</button>
+            </form>
+          </div>
+          <div class="result-panel">
+            <div class="section-title"><h3>发布结果</h3><p>包含别名、candidate、previous_target 和回滚依据。</p></div>
+            <div id="release-summary" class="result-summary"></div>
+            <div class="section-title"><h3>发布审计</h3><p>最近非 dry-run 发布、灰度和回滚记录。</p></div>
+            <div id="release-audit-table" class="data-table-wrap"></div>
+            <div id="release-json" class="json-view data-viewer" role="region" aria-label="模型发布响应数据"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="view" data-view="audit-compliance">
+        <div class="view-header">
+          <div class="section-title">
+            <h2>合规审计</h2>
+            <p>查看审计写入策略、保留策略、备份快照和敏感数据脱敏状态。</p>
+          </div>
+          <button type="button" id="audit-refresh-button">刷新审计状态</button>
+        </div>
+        <div id="audit-summary" class="result-summary"></div>
+        <div class="split-grid">
+          <div class="card">
+            <div class="section-title"><h3>合规检查</h3><p>围绕认证、租户头、加密、审计和数据保留。</p></div>
+            <div id="audit-check-list" class="alert-list"></div>
+            <div class="section-title"><h3>最近审计事件</h3><p>当前租户最近写入的脱敏审计事件。</p></div>
+                        <div class="form-grid compact-form">
+              <label>事件 <input id="audit-event-filter-input" placeholder="admin_export / model" /></label>
+              <label>结果 <select id="audit-outcome-filter-input"><option value="">全部</option><option value="success">success</option><option value="started">started</option><option value="failure">failure</option><option value="error">error</option></select></label>
+              <label>分类 <select id="audit-category-filter-input"><option value="">全部</option><option value="delete_requests">删除</option><option value="exports">导出</option><option value="model_versions">模型</option><option value="retention">保留</option><option value="other">其它</option></select></label>
+              <label>request_id <input id="audit-request-filter-input" placeholder="精确或部分匹配" /></label>
+              <label>起始时间戳 <input id="audit-created-since-input" inputmode="decimal" placeholder="Unix seconds" /></label>
+              <label>结束时间戳 <input id="audit-created-until-input" inputmode="decimal" placeholder="Unix seconds" /></label>
+              <button type="button" id="audit-event-filter-button">筛选</button>
+            </div>
+            <div id="audit-event-table" class="data-table-wrap"></div>
+          </div>
+          <div class="card">
+            <div class="section-title"><h3>导出与保留</h3><p>当前租户的导出分页、对象状态和最近管理动作。</p></div>
+            <div id="audit-json" class="json-view data-viewer" role="region" aria-label="合规审计数据"></div>
+          </div>
+        </div>
+      </section>
       <section class="view" data-view="models">
         <div class="view-header">
           <div class="section-title">
@@ -573,6 +1131,15 @@ const template = `
               <button type="submit">创建备份</button>
             </form>
           </div>
+        </div>
+        <div class="card">
+          <div class="section-title">
+            <h3>最近备份快照</h3>
+            <p>从审计链读取当前租户的备份快照索引，只展示安全白名单字段。</p>
+          </div>
+          <button type="button" id="backup-snapshot-refresh-button">刷新快照</button>
+          <div id="backup-snapshot-summary" class="summary-grid"></div>
+          <div id="backup-snapshot-table" class="data-table-wrap"></div>
         </div>
         <div id="admin-data-json" class="json-view data-viewer" role="region" aria-label="数据保留与备份响应数据"></div>
       </section>
@@ -847,6 +1414,60 @@ const fieldLabels = {
   driver_available: "驱动是否可用",
   bucket_configured: "存储桶已配置",
   endpoint_configured: "服务终结点已配置",
+  applications: "接入应用",
+  app_id: "应用 ID",
+  application_id: "接入应用 ID",
+  owner: "负责人",
+  scopes: "权限范围",
+  jwt_issuer: "JWT issuer",
+  jwt_audience: "JWT audience",
+  last_called_at: "最近调用时间",
+  last_error_at: "最近错误时间",
+  call_count: "调用次数",
+  error_count: "错误次数",
+  error_rate: "错误率",
+  api_key_preview: "API Key 预览",
+  endpoint: "接口",
+  webhooks: "Webhook 端点",
+  webhook_id: "Webhook ID",
+  sample_delivery: "样例投递",
+  delivery_status: "投递状态",
+  signing_secret_preview: "签名密钥预览",
+  one_time_secret: "一次性密钥",
+  retry_limit: "重试次数",
+  timeout_seconds: "超时秒数",
+  openapi_url: "OpenAPI 地址",
+  docs_url: "Swagger 文档地址",
+  redoc_url: "ReDoc 文档地址",
+  core_paths: "核心接口路径",
+  path_count: "路径数量",
+  schema: "接口契约",
+  http_status: "HTTP 状态码",
+  latency_ms: "耗时（毫秒）",
+  success_rate: "成功率",
+  p99_seconds: "P99 响应耗时（秒）",
+  error_budget: "错误预算",
+  worker: "GPU worker",
+  workers: "工作进程",
+  modalities: "模态明细",
+  final_score: "融合分数",
+  raw_score: "原始融合分数",
+  decision: "融合决策",
+  consistency: "模态一致性",
+  used: "参与融合",
+  weight: "融合权重",
+  alias: "模型别名",
+  target: "目标模型",
+  previous_target: "上一版本模型",
+  expected_current_target: "期望当前目标",
+  traffic_key: "流量 key",
+  action: "操作",
+  datasets: "评估数据集",
+  capabilities: "能力矩阵",
+  production: "生产状态",
+  audit: "审计",
+  audit_hash: "审计哈希",
+  audit_prev_hash: "上一条审计哈希",
   region_configured: "区域已配置",
 };
 
@@ -855,6 +1476,7 @@ const valueLabels = {
   appearance: "衣着外观",
   backup: "系统备份",
   body: "人体",
+  collect_more_samples: "继续收集样本",
   cleanup: "数据清理",
   completed: "已完成",
   detect: "通用检测",
@@ -865,6 +1487,7 @@ const valueLabels = {
   false: "否",
   fusion: "多模态融合",
   gait: "步态序列",
+  hold_threshold: "保持阈值",
   inactive: "未启用",
   loaded: "模型已加载",
   no: "否",
@@ -875,11 +1498,25 @@ const valueLabels = {
   pose: "姿态解析",
   ready: "就绪",
   running: "分析中",
+  raise_threshold: "提高阈值",
+  review_quality_gate: "复核质量门禁",
   success: "成功",
   text: "文本",
   tracks: "轨迹提取",
   true: "是",
   unloaded: "模型未加载",
+  disabled: "已禁用",
+  dry_run: "预演投递",
+  strict: "严格模式",
+  loose: "宽松模式",
+  preview: "预览",
+  switch: "切换",
+  weighted: "灰度",
+  rollback: "回滚",
+  candidate: "候选版本",
+  fallback: "兜底能力",
+  placeholder: "占位能力",
+  production: "生产能力",
   yes: "是",
   local: "本地服务",
   json: "JSON持久化",
@@ -942,6 +1579,18 @@ function payloadLabel(name) {
     "admin-threshold": "比对阈值响应",
     "admin-data": "数据保留与备份响应",
     alerts: "告警评估响应",
+  "access-credentials": "应用凭证响应",
+  "sdk-examples": "SDK 示例响应",
+  "openapi-docs": "OpenAPI 响应",
+  "api-playground": "API Playground 响应",
+  "call-logs": "调用日志响应",
+  webhooks: "Webhook 响应",
+  "slo-panel": "SLO 面板响应",
+  "multimodal-compare": "融合比对响应",
+  "track-review": "轨迹审阅响应",
+  "evaluation-center": "评估中心响应",
+  "release-center": "模型发布响应",
+  "audit-compliance": "合规审计响应",
   };
   return labels[name] || "接口响应";
 }
@@ -1115,7 +1764,7 @@ function sanitizeVideoPayload(value) {
 
 function renderPayload(name, selector, payload) {
   state.latestPayloads[name] = payload;
-  const renderedPayload = ["jobs", "job", "video-results", "image-results", "stream-results"].includes(name) ? sanitizeVideoPayload(payload) : payload;
+  const renderedPayload = ["jobs", "job", "video-results", "image-results", "stream-results", "track-review"].includes(name) ? sanitizeVideoPayload(payload) : payload;
   const node = qs(selector);
   if (node && node.classList.contains("data-viewer")) {
     renderDataViewer(selector, renderedPayload, name);
@@ -1138,6 +1787,21 @@ function formatNumber(value, digits = 2) {
   return Number(value).toFixed(digits);
 }
 
+function formatByteSize(value) {
+  const bytes = Number(value);
+  if (!Number.isFinite(bytes)) return "--";
+  if (Math.abs(bytes) < 1024) return `${bytes} B`;
+  const units = ["KB", "MB", "GB", "TB"];
+  let size = bytes;
+  let unit = "B";
+  for (const item of units) {
+    size /= 1024;
+    unit = item;
+    if (Math.abs(size) < 1024) break;
+  }
+  const digits = Math.abs(size) >= 100 ? 0 : Math.abs(size) >= 10 ? 1 : 2;
+  return `${formatNumber(size, digits)} ${unit}`;
+}
 function fitVisualSize(width, height, maxWidth, maxHeight, allowUpscale = false) {
   const sourceWidth = Math.max(1, Number(width) || 1);
   const sourceHeight = Math.max(1, Number(height) || 1);
@@ -1172,6 +1836,19 @@ function setView(view) {
     renderAnalysisResultsTab(state.analysisResultsTab);
     if (state.isLoggedIn) refreshAnalysisResults().catch(() => {});
   }
+  if (view === "access-credentials") refreshAccessApplications().catch(() => renderAccessApplications());
+  if (view === "sdk-examples") renderSdkExamples();
+  if (view === "openapi-docs") refreshOpenApiDocs().catch(() => renderOpenApiDocs());
+  if (view === "api-playground") renderPlaygroundRequestPreview();
+  if (view === "call-logs") refreshCallLogs().catch(() => renderCallLogs());
+  if (view === "error-codes") refreshErrorCodes().catch(() => renderErrorCodes());
+  if (view === "webhooks") refreshWebhooks().catch(() => renderWebhooks());
+  if (view === "slo-panel" && state.isLoggedIn) refreshSloPanel().catch(() => renderSloPanel());
+  if (view === "track-review" && state.isLoggedIn) refreshTrackReview().catch(() => {});
+  if (view === "evaluation-center" && state.isLoggedIn) refreshEvaluationCenter().catch(() => {});
+  if (view === "release-center" && state.isLoggedIn) refreshReleaseCenter().catch(() => {});
+  if (view === "audit-compliance" && state.isLoggedIn) refreshAuditCompliance().catch(() => {});
+  if (view === "admin-data" && state.isLoggedIn) refreshAdminData().catch(() => renderBackupSnapshots({ snapshots: [] }));
 }
 
 function closeSocket(name) {
@@ -1233,6 +1910,12 @@ function wrapHandler(fn) {
 }
 
 async function api(path, options = {}) {
+  const raw = await apiRaw(path, options);
+  if (!raw.ok) throw new Error(JSON.stringify(raw.payload));
+  return raw.data;
+}
+
+async function apiRaw(path, options = {}) {
   const init = { method: options.method || "GET", headers: headers(options.headers || {}) };
   if (options.json !== undefined) {
     init.headers["Content-Type"] = "application/json";
@@ -1249,8 +1932,15 @@ async function api(path, options = {}) {
       payload = { body: text };
     }
   }
-  if (!response.ok) throw new Error(JSON.stringify(payload));
-  return payload.data || payload;
+  return {
+    ok: response.ok,
+    status_code: response.status,
+    status_text: response.statusText,
+    payload,
+    data: payload.data || payload,
+    request_id: payload.request_id || payload.data?.request_id || payload.detail?.request_id || null,
+    error_code: payload.detail?.code || payload.error?.code || payload.code || null,
+  };
 }
 
 async function textApi(path) {
@@ -1263,6 +1953,19 @@ async function textApi(path) {
 function metricValue(metrics, name) {
   const found = metrics.find((item) => item.name === name && Object.keys(item.labels).length === 0);
   return found ? Number(found.value) : 0;
+}
+
+function metricRows(metrics, name) {
+  return metrics.filter((item) => item.name === name);
+}
+
+function metricSum(metrics, name) {
+  return metricRows(metrics, name).reduce((total, item) => total + Number(item.value || 0), 0);
+}
+
+function metricMax(metrics, name) {
+  const values = metricRows(metrics, name).map((item) => Number(item.value || 0));
+  return values.length ? Math.max(...values) : 0;
 }
 
 function histogramP95(metrics, baseName) {
@@ -1588,8 +2291,8 @@ function requestSnippet(path, formFieldExamples = []) {
     `curl -X POST "${window.location.origin}${path}"`,
     `  -H "X-Tenant-ID: ${state.tenantId}"`,
   ];
-  if (state.apiKey) lines.push(`  -H "X-API-Key: ${state.apiKey}"`);
-  if (state.bearer) lines.push(`  -H "Authorization: Bearer ${state.bearer.slice(0, 12)}..."`);
+  if (state.apiKey) lines.push('  -H "X-API-Key: ${PORTRAIT_HUB_API_TOKEN}"');
+  if (state.bearer) lines.push('  -H "Authorization: Bearer ${PORTRAIT_HUB_BEARER_TOKEN}"');
   formFieldExamples.forEach((item) => lines.push(`  -F "${item}"`));
   return lines.join(" \\\n");
 }
@@ -1729,6 +2432,1300 @@ function renderAlerts() {
   renderPayload("alerts", "#alerts-json", { config: state.alertConfig, checks });
 }
 
+function randomToken(prefix = "phk") {
+  const bytes = new Uint8Array(18);
+  if (window.crypto && window.crypto.getRandomValues) {
+    window.crypto.getRandomValues(bytes);
+  } else {
+    bytes.forEach((_, index) => { bytes[index] = Math.floor(Math.random() * 256); });
+  }
+  return `${prefix}_${Array.from(bytes).map((item) => item.toString(16).padStart(2, "0")).join("")}`;
+}
+
+function maskToken(value) {
+  const text = String(value || "");
+  if (!text) return "未配置";
+  if (text.length <= 10) return "••••";
+  return `${text.slice(0, 6)}...${text.slice(-4)}`;
+}
+
+function selectedCheckboxValues(name) {
+  return qsa(`input[name="${name}"]:checked`).map((item) => item.value);
+}
+
+function optionalLimitValue(selector) {
+  const raw = qs(selector).value.trim();
+  if (raw === "") return null;
+  const value = Math.floor(Number(raw));
+  return Number.isFinite(value) && value >= 0 ? value : null;
+}
+
+function formatLimitValue(value, fallback = "默认") {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) && numeric > 0 ? String(Math.floor(numeric)) : fallback;
+}
+
+function accessAppCallSummary(app) {
+  const calls = Math.max(0, Math.floor(Number(app.call_count || 0)));
+  const errorRate = Math.max(0, Number(app.error_rate || 0) * 100);
+  const lastCalled = app.last_called_at ? formatDateTime(app.last_called_at) : "未调用";
+  return `${calls} calls · ${formatNumber(errorRate, 2)}% err · ${lastCalled}`;
+}
+
+function populateCallLogApplicationOptions() {
+  const node = document.querySelector("#call-log-application-input");
+  if (!node) return;
+  const selected = node.value;
+  const apps = state.accessApplications.map(normalizeAccessApplication);
+  node.innerHTML = `<option value="">全部应用</option>${apps.map((app) => `<option value="${escapeHtml(app.id)}">${escapeHtml(app.name || app.id)}</option>`).join("")}`;
+  if (apps.some((app) => app.id === selected)) node.value = selected;
+}
+
+function checkedValues(name, values) {
+  const set = new Set(values || []);
+  qsa(`input[name="${name}"]`).forEach((item) => { item.checked = set.has(item.value); });
+}
+
+function authMode() {
+  if (state.bearer && state.apiKey) return "API Key + JWT";
+  if (state.bearer) return "JWT";
+  if (state.apiKey) return "API Key";
+  return "未配置令牌";
+}
+
+function normalizeAccessApplication(app) {
+  const id = app.id || app.app_id || "";
+  return { ...app, id, app_id: app.app_id || id };
+}
+
+function normalizeWebhook(webhook) {
+  const id = webhook.id || webhook.webhook_id || "";
+  return { ...webhook, id, webhook_id: webhook.webhook_id || id };
+}
+
+function selectedAccessApp() {
+  const id = qs("#access-app-id-input")?.value.trim();
+  return state.accessApplications.find((item) => item.id === id) || state.accessApplications[0] || null;
+}
+
+function fillAccessAppForm(app) {
+  if (!app) return;
+  qs("#access-app-id-input").value = app.id || "";
+  qs("#access-app-name-input").value = app.name || "";
+  qs("#access-app-owner-input").value = app.owner || "";
+  qs("#access-jwt-issuer-input").value = app.jwt_issuer || "";
+  qs("#access-jwt-audience-input").value = app.jwt_audience || "";
+  qs("#access-app-status-input").value = app.status || "active";
+  qs("#access-rate-limit-input").value = app.rate_limit_per_minute ?? "";
+  qs("#access-burst-input").value = app.rate_limit_burst ?? "";
+  qs("#access-daily-quota-input").value = app.daily_quota ?? "";
+  checkedValues("access-scope", app.scopes || []);
+}
+
+function accessPayload() {
+  return {
+    tenant_id: state.tenantId,
+    auth_mode: authMode(),
+    api_key_preview: maskToken(state.apiKey),
+    bearer_preview: maskToken(state.bearer),
+    last_secret_preview: state.accessLastSecret ? maskToken(state.accessLastSecret.secret) : null,
+    applications: state.accessApplications,
+  };
+}
+
+async function refreshAccessApplications() {
+  try {
+    const payload = await api("/v1/access/applications");
+    state.accessApplications = (payload.applications || []).map(normalizeAccessApplication);
+    saveAccessApplications();
+  } catch (error) {
+    renderPayload("access-credentials", "#access-credentials-json", { ...accessPayload(), warning: error.message || String(error) });
+  }
+  renderAccessApplications();
+}
+
+function renderAccessApplications() {
+  const apps = state.accessApplications.map(normalizeAccessApplication);
+  state.accessApplications = apps;
+  const activeCount = apps.filter((item) => item.status !== "disabled").length;
+  const scopeCount = new Set(apps.flatMap((item) => item.scopes || [])).size;
+  const limitedCount = apps.filter((item) => Number(item.rate_limit_per_minute || 0) > 0 || Number(item.daily_quota || 0) > 0).length;
+  const maxErrorRate = apps.reduce((max, item) => Math.max(max, Number(item.error_rate || 0)), 0);
+  populateCallLogApplicationOptions();
+  renderSummary("#access-app-summary", [
+    { label: "应用数", value: apps.length },
+    { label: "启用", value: activeCount },
+    { label: "Scope", value: scopeCount },
+    { label: "限额", value: limitedCount },
+    { label: "最高错误率", value: `${formatNumber(maxErrorRate * 100, 2)}%` },
+  ]);
+  const node = qs("#access-app-list");
+  if (node) {
+    node.innerHTML = apps.length ? `
+      <table class="data-table">
+        <thead><tr><th>应用</th><th>状态</th><th>Scope</th><th>限额</th><th>调用</th><th>操作</th></tr></thead>
+        <tbody>
+          ${apps.map((app) => `
+            <tr>
+              <td><strong>${escapeHtml(app.name || app.id)}</strong><br><small>${escapeHtml(app.id)}</small></td>
+              <td>${escapeHtml(localizeValue(app.status || "active"))}</td>
+              <td>${escapeHtml((app.scopes || []).join(", ") || "--")}</td>
+              <td>${escapeHtml(`${formatLimitValue(app.rate_limit_per_minute)}/min · burst ${formatLimitValue(app.rate_limit_burst, "跟随")} · day ${formatLimitValue(app.daily_quota, "不限")}${Number(app.daily_quota || 0) > 0 ? ` (${Number(app.daily_quota_used || 0)}/${Number(app.daily_quota || 0)})` : ""}`)}</td>
+              <td>${escapeHtml(accessAppCallSummary(app))}</td>
+              <td>
+                <button type="button" class="small" data-access-edit="${escapeHtml(app.id)}">选择</button>
+                <button type="button" class="small" data-access-rotate="${escapeHtml(app.id)}">轮换</button>
+                <button type="button" class="small" data-access-toggle="${escapeHtml(app.id)}">${app.status === "disabled" ? "启用" : "禁用"}</button>
+              </td>
+            </tr>`).join("")}
+        </tbody>
+      </table>` : `<div class="data-empty">暂无接入应用</div>`;
+  }
+  renderPayload("access-credentials", "#access-credentials-json", accessPayload());
+}
+
+async function saveAccessApp(event) {
+  event.preventDefault();
+  const id = qs("#access-app-id-input").value.trim() || `app_${Date.now()}`;
+  const payload = {
+    app_id: id,
+    name: qs("#access-app-name-input").value.trim() || id,
+    owner: qs("#access-app-owner-input").value.trim() || "platform",
+    status: qs("#access-app-status-input").value || "active",
+    scopes: selectedCheckboxValues("access-scope"),
+    jwt_issuer: qs("#access-jwt-issuer-input").value.trim() || null,
+    jwt_audience: qs("#access-jwt-audience-input").value.trim() || null,
+    rate_limit_per_minute: optionalLimitValue("#access-rate-limit-input"),
+    rate_limit_burst: optionalLimitValue("#access-burst-input"),
+    daily_quota: optionalLimitValue("#access-daily-quota-input"),
+  };
+  const existing = state.accessApplications.findIndex((item) => normalizeAccessApplication(item).id === id);
+  let data;
+  if (existing >= 0) {
+    try {
+      data = await api(`/v1/access/applications/${encodeURIComponent(id)}`, { method: "PATCH", json: payload });
+    } catch (error) {
+      data = await api("/v1/access/applications", { method: "POST", json: payload });
+    }
+  } else {
+    data = await api("/v1/access/applications", { method: "POST", json: payload });
+  }
+  const app = normalizeAccessApplication(data.application || payload);
+  const found = state.accessApplications.findIndex((item) => normalizeAccessApplication(item).id === app.id);
+  if (found >= 0) state.accessApplications[found] = app;
+  else state.accessApplications.push(app);
+  if (data.one_time_secret) state.accessLastSecret = { app_id: app.id, secret: data.one_time_secret, generated_at: Date.now() };
+  saveAccessApplications();
+  qs("#access-app-id-input").value = app.id;
+  renderAccessApplications();
+  renderPayload("access-credentials", "#access-credentials-json", data.one_time_secret ? { ...accessPayload(), one_time_secret: state.accessLastSecret } : accessPayload());
+}
+
+async function rotateAccessApp(id = null) {
+  const appId = id || qs("#access-app-id-input").value.trim();
+  const app = state.accessApplications.find((item) => normalizeAccessApplication(item).id === appId) || selectedAccessApp();
+  if (!app) throw new Error("请先选择接入应用");
+  const data = await api(`/v1/access/applications/${encodeURIComponent(normalizeAccessApplication(app).id)}/rotate`, { method: "POST" });
+  const updated = normalizeAccessApplication(data.application || app);
+  const found = state.accessApplications.findIndex((item) => normalizeAccessApplication(item).id === updated.id);
+  if (found >= 0) state.accessApplications[found] = updated;
+  state.accessLastSecret = { app_id: updated.id, secret: data.one_time_secret, generated_at: Date.now() };
+  saveAccessApplications();
+  renderAccessApplications();
+  renderPayload("access-credentials", "#access-credentials-json", {
+    ...accessPayload(),
+    one_time_secret: state.accessLastSecret,
+    note: "密钥只在本次轮换结果中显示；服务器端只保留哈希。",
+  });
+}
+
+async function toggleAccessApp(id) {
+  const app = state.accessApplications.find((item) => normalizeAccessApplication(item).id === id);
+  if (!app) return;
+  const nextStatus = app.status === "disabled" ? "active" : "disabled";
+  const data = await api(`/v1/access/applications/${encodeURIComponent(normalizeAccessApplication(app).id)}`, { method: "PATCH", json: { status: nextStatus } });
+  const updated = normalizeAccessApplication(data.application || { ...app, status: nextStatus });
+  const found = state.accessApplications.findIndex((item) => normalizeAccessApplication(item).id === updated.id);
+  if (found >= 0) state.accessApplications[found] = updated;
+  saveAccessApplications();
+  renderAccessApplications();
+}
+function coreOpenApiPaths() {
+  return [
+    { scene: "人员入库", method: "POST", path: "/v1/gallery/enroll" },
+    { scene: "以图搜人", method: "POST", path: "/v1/gallery/search" },
+    { scene: "批量检索", method: "POST", path: "/v1/gallery/search/batch" },
+    { scene: "人像比对", method: "POST", path: "/v1/compare/persons" },
+    { scene: "批量比对", method: "POST", path: "/v1/compare/batch" },
+    { scene: "图片解析", method: "POST", path: "/v1/infer/persons" },
+    { scene: "视频任务", method: "POST", path: "/v1/jobs/video" },
+    { scene: "视频任务结果", method: "GET", path: "/v1/jobs/{job_id}/result" },
+    { scene: "实时流", method: "POST", path: "/v1/streams" },
+    { scene: "流事件", method: "GET", path: "/v1/streams/{stream_id}/events" },
+    { scene: "应用凭证", method: "GET", path: "/v1/access/applications" },
+    { scene: "调用日志", method: "GET", path: "/v1/access/call-logs" },
+    { scene: "Webhook", method: "GET", path: "/v1/access/webhooks" },
+    { scene: "模型状态", method: "GET", path: "/v1/models" },
+    { scene: "阈值", method: "GET", path: "/v1/thresholds" },
+    { scene: "多模态融合", method: "POST", path: "/v1/fusion/compare" },
+  ];
+}
+
+function renderOpenApiDocs(payload = state.openApiCache) {
+  const baseUrl = window.location.origin;
+  const schema = payload?.schema || null;
+  const schemaPaths = schema?.paths || {};
+  const rows = coreOpenApiPaths().map((item) => {
+    const pathItem = schemaPaths[item.path] || {};
+    const available = Boolean(pathItem[item.method.toLowerCase()]);
+    return { ...item, available };
+  });
+  const loaded = Boolean(schema);
+  renderSummary("#openapi-summary", [
+    { label: "契约状态", value: loaded ? "已加载" : payload?.error ? "不可用" : "待刷新" },
+    { label: "核心路径", value: rows.length },
+    { label: "已声明", value: loaded ? rows.filter((item) => item.available).length : "--" },
+    { label: "租户", value: state.tenantId },
+  ]);
+  qs("#openapi-path-table").innerHTML = `
+    <table class="data-table">
+      <thead><tr><th>场景</th><th>方法</th><th>路径</th><th>契约</th></tr></thead>
+      <tbody>${rows.map((row) => `<tr><td>${escapeHtml(row.scene)}</td><td>${escapeHtml(row.method)}</td><td>${escapeHtml(row.path)}</td><td>${escapeHtml(loaded ? (row.available ? "已声明" : "缺失") : "待刷新")}</td></tr>`).join("")}</tbody>
+    </table>`;
+  qs("#openapi-code").textContent = [
+    `curl -H "X-Tenant-ID: ${state.tenantId}" "${baseUrl}/openapi.json"`,
+    `curl -H "X-Tenant-ID: ${state.tenantId}" "${baseUrl}/v1/access/applications"`,
+    `curl -H "X-Tenant-ID: ${state.tenantId}" "${baseUrl}/v1/models"`,
+    `curl -H "X-Tenant-ID: ${state.tenantId}" "${baseUrl}/v1/thresholds"`,
+  ].join("\n");
+  renderPayload("openapi-docs", "#openapi-json", payload || {
+    tenant_id: state.tenantId,
+    openapi_url: `${baseUrl}/openapi.json`,
+    docs_url: `${baseUrl}/docs`,
+    redoc_url: `${baseUrl}/redoc`,
+    core_paths: rows,
+  });
+}
+
+async function refreshOpenApiDocs() {
+  const baseUrl = window.location.origin;
+  const payload = {
+    tenant_id: state.tenantId,
+    openapi_url: `${baseUrl}/openapi.json`,
+    docs_url: `${baseUrl}/docs`,
+    redoc_url: `${baseUrl}/redoc`,
+    schema: null,
+  };
+  try {
+    const schema = await api("/openapi.json");
+    payload.schema = schema;
+    payload.title = schema.info?.title || "PortraitHub API";
+    payload.version = schema.info?.version || "--";
+    payload.path_count = Object.keys(schema.paths || {}).length;
+  } catch (error) {
+    payload.error = error.message || String(error);
+    payload.note = "OpenAPI 可能在生产环境被关闭；受控环境可启用 ENABLE_API_DOCS 后刷新。";
+  }
+  state.openApiCache = payload;
+  renderOpenApiDocs(payload);
+}
+
+async function refreshWebhooks() {
+  try {
+    const payload = await api("/v1/access/webhooks");
+    state.webhooks = (payload.webhooks || []).map(normalizeWebhook);
+    saveWebhooks();
+  } catch (error) {
+    renderPayload("webhooks", "#webhook-json", webhookPayload({ warning: error.message || String(error) }));
+  }
+  renderWebhooks();
+}
+
+function selectedWebhook() {
+  const id = qs("#webhook-id-input")?.value.trim();
+  return state.webhooks.find((item) => normalizeWebhook(item).id === id) || state.webhooks[0] || null;
+}
+
+function populateWebhookAppOptions(selectedId = "") {
+  const options = state.accessApplications.map((app) => {
+    const normalized = normalizeAccessApplication(app);
+    return `<option value="${escapeHtml(normalized.id)}" ${normalized.id === selectedId ? "selected" : ""}>${escapeHtml(normalized.name || normalized.id)}</option>`;
+  }).join("");
+  qs("#webhook-app-input").innerHTML = options || `<option value="default-client">默认接入应用</option>`;
+}
+
+function fillWebhookForm(webhook) {
+  if (!webhook) return;
+  const normalized = normalizeWebhook(webhook);
+  populateWebhookAppOptions(normalized.application_id || state.accessApplications[0]?.id || "default-client");
+  qs("#webhook-id-input").value = normalized.id || "";
+  qs("#webhook-name-input").value = normalized.name || "";
+  qs("#webhook-url-input").value = normalized.url || "";
+  qs("#webhook-status-input").value = normalized.status || "disabled";
+  qs("#webhook-retry-input").value = normalized.retry_limit ?? 3;
+  qs("#webhook-timeout-input").value = normalized.timeout_seconds ?? 5;
+  checkedValues("webhook-event", normalized.events || []);
+}
+
+function webhookPayload(extra = {}) {
+  return {
+    tenant_id: state.tenantId,
+    last_secret_preview: state.webhookLastSecret ? maskToken(state.webhookLastSecret.secret) : null,
+    webhooks: state.webhooks,
+    ...extra,
+  };
+}
+
+function renderWebhooks() {
+  state.webhooks = state.webhooks.map(normalizeWebhook);
+  populateWebhookAppOptions(selectedWebhook()?.application_id || state.accessApplications[0]?.id || "default-client");
+  if (!qs("#webhook-id-input").value && state.webhooks[0]) fillWebhookForm(state.webhooks[0]);
+  const enabledCount = state.webhooks.filter((item) => item.status !== "disabled").length;
+  const eventCount = new Set(state.webhooks.flatMap((item) => item.events || [])).size;
+  renderSummary("#webhook-summary", [
+    { label: "端点数", value: state.webhooks.length },
+    { label: "启用", value: enabledCount },
+    { label: "事件", value: eventCount },
+    { label: "租户", value: state.tenantId },
+  ]);
+  qs("#webhook-list").innerHTML = state.webhooks.length ? `
+    <table class="data-table">
+      <thead><tr><th>端点</th><th>应用</th><th>事件</th><th>状态</th><th>操作</th></tr></thead>
+      <tbody>${state.webhooks.map((webhook) => `
+        <tr>
+          <td><strong>${escapeHtml(webhook.name || webhook.id)}</strong><br><small>${escapeHtml(webhook.url || "未配置 URL")}</small></td>
+          <td>${escapeHtml(webhook.application_id || "--")}</td>
+          <td>${escapeHtml((webhook.events || []).join(", ") || "--")}</td>
+          <td>${escapeHtml(localizeValue(webhook.status || "disabled"))}</td>
+          <td>
+            <button type="button" class="small" data-webhook-edit="${escapeHtml(webhook.id)}">选择</button>
+            <button type="button" class="small" data-webhook-rotate="${escapeHtml(webhook.id)}">轮换</button>
+            <button type="button" class="small" data-webhook-sample="${escapeHtml(webhook.id)}">样例</button>
+            <button type="button" class="small" data-webhook-toggle="${escapeHtml(webhook.id)}">${webhook.status === "disabled" ? "启用" : "禁用"}</button>
+          </td>
+        </tr>`).join("")}</tbody>
+    </table>` : `<div class="data-empty">暂无 Webhook 端点</div>`;
+  renderPayload("webhooks", "#webhook-json", webhookPayload());
+}
+
+async function saveWebhook(event) {
+  event.preventDefault();
+  const id = qs("#webhook-id-input").value.trim() || `wh_${Date.now()}`;
+  const payload = {
+    webhook_id: id,
+    name: qs("#webhook-name-input").value.trim() || id,
+    application_id: qs("#webhook-app-input").value || state.accessApplications[0]?.id || "default-client",
+    url: qs("#webhook-url-input").value.trim() || null,
+    status: qs("#webhook-status-input").value || "disabled",
+    events: selectedCheckboxValues("webhook-event"),
+    retry_limit: Number(qs("#webhook-retry-input").value || 0),
+    timeout_seconds: Number(qs("#webhook-timeout-input").value || 5),
+  };
+  let data;
+  const existing = state.webhooks.findIndex((item) => normalizeWebhook(item).id === id);
+  if (existing >= 0) {
+    try {
+      data = await api(`/v1/access/webhooks/${encodeURIComponent(id)}`, { method: "PATCH", json: payload });
+    } catch (error) {
+      data = await api("/v1/access/webhooks", { method: "POST", json: payload });
+    }
+  } else {
+    data = await api("/v1/access/webhooks", { method: "POST", json: payload });
+  }
+  const webhook = normalizeWebhook(data.webhook || payload);
+  const found = state.webhooks.findIndex((item) => normalizeWebhook(item).id === webhook.id);
+  if (found >= 0) state.webhooks[found] = webhook;
+  else state.webhooks.push(webhook);
+  if (data.one_time_secret) state.webhookLastSecret = { webhook_id: webhook.id, secret: data.one_time_secret, generated_at: Date.now() };
+  saveWebhooks();
+  qs("#webhook-id-input").value = webhook.id;
+  renderWebhooks();
+  renderPayload("webhooks", "#webhook-json", data.one_time_secret ? webhookPayload({ one_time_secret: state.webhookLastSecret }) : webhookPayload());
+}
+
+async function rotateWebhookSecret(id = null) {
+  const webhookId = id || qs("#webhook-id-input").value.trim();
+  const webhook = state.webhooks.find((item) => normalizeWebhook(item).id === webhookId) || selectedWebhook();
+  if (!webhook) throw new Error("请先选择 Webhook");
+  const data = await api(`/v1/access/webhooks/${encodeURIComponent(normalizeWebhook(webhook).id)}/rotate`, { method: "POST" });
+  const updated = normalizeWebhook(data.webhook || webhook);
+  const found = state.webhooks.findIndex((item) => normalizeWebhook(item).id === updated.id);
+  if (found >= 0) state.webhooks[found] = updated;
+  state.webhookLastSecret = { webhook_id: updated.id, secret: data.one_time_secret, generated_at: Date.now() };
+  saveWebhooks();
+  renderWebhooks();
+  renderPayload("webhooks", "#webhook-json", webhookPayload({ one_time_secret: state.webhookLastSecret }));
+}
+
+async function toggleWebhook(id) {
+  const webhook = state.webhooks.find((item) => normalizeWebhook(item).id === id);
+  if (!webhook) return;
+  const nextStatus = webhook.status === "disabled" ? "active" : "disabled";
+  const data = await api(`/v1/access/webhooks/${encodeURIComponent(normalizeWebhook(webhook).id)}`, { method: "PATCH", json: { status: nextStatus } });
+  const updated = normalizeWebhook(data.webhook || { ...webhook, status: nextStatus });
+  const found = state.webhooks.findIndex((item) => normalizeWebhook(item).id === updated.id);
+  if (found >= 0) state.webhooks[found] = updated;
+  saveWebhooks();
+  renderWebhooks();
+}
+
+async function renderWebhookSample(id = null) {
+  const webhook = state.webhooks.find((item) => normalizeWebhook(item).id === id) || selectedWebhook();
+  if (!webhook) throw new Error("请先选择 Webhook");
+  const data = await api(`/v1/access/webhooks/${encodeURIComponent(normalizeWebhook(webhook).id)}/sample`, { method: "POST" });
+  renderPayload("webhooks", "#webhook-json", webhookPayload(data));
+}
+
+function renderSdkExamples() {
+  const baseUrl = window.location.origin;
+  const app = selectedAccessApp() || state.accessApplications[0] || {};
+  const python = `import os\nfrom pathlib import Path\nfrom sdk.python.portrait_hub_client import PortraitHubClient\n\nclient = PortraitHubClient(\n    base_url="${baseUrl}",\n    tenant_id="${state.tenantId}",\n    api_token=os.getenv("PORTRAIT_HUB_API_TOKEN"),\n    auth_scheme="api_key",\n)\nresult = client.search(Path("query.jpg"), modality="body", top_k=5, threshold_profile="normal")\nprint(result["request_id"], result.get("data", {}).get("candidate_count"))`;
+  const nodeSnippet = `const { PortraitHubClient } = require("./sdk/node/portraitHubClient");\n\nconst client = new PortraitHubClient({\n  baseUrl: "${baseUrl}",\n  tenantId: "${state.tenantId}",\n  apiToken: process.env.PORTRAIT_HUB_API_TOKEN,\n  authScheme: "api_key",\n});\n\nconst result = await client.comparePersons("a.jpg", "b.jpg", "normal");\nconsole.log(result.request_id, result.data?.passed);`;
+  const curl = requestSnippet("/v1/gallery/search", ["file=@query.jpg", "modality=body", "top_k=5", "threshold_profile=normal"]);
+  const batch = `import os\nfrom pathlib import Path\nfrom sdk.python.portrait_hub_client import PortraitHubClient\n\nclient = PortraitHubClient(\n    base_url="${baseUrl}",\n    tenant_id="${state.tenantId}",\n    api_token=os.getenv("PORTRAIT_HUB_API_TOKEN"),\n    auth_scheme="api_key",\n)\nbatch = client.search_batch(\n    [Path("query-a.jpg"), Path("query-b.jpg")],\n    modality="body",\n    top_k=10,\n    threshold_profile="normal",\n    async_mode=True,\n)\nbatch_id = batch.get("data", {}).get("batch_id")\nprint(batch["request_id"], batch_id)`;
+  const video = `const { PortraitHubClient } = require("./sdk/node/portraitHubClient");\n\nconst wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));\nconst terminal = new Set(["completed", "failed", "cancelled"]);\nconst client = new PortraitHubClient({\n  baseUrl: "${baseUrl}",\n  tenantId: "${state.tenantId}",\n  apiToken: process.env.PORTRAIT_HUB_API_TOKEN,\n  authScheme: "api_key",\n});\n\nconst job = await client.createVideoJob("sample.mp4", { frameInterval: 5, maxFrames: 120 });\nconst jobId = job.data?.job?.job_id ?? job.data?.job_id;\nlet status = job;\nwhile (jobId && !terminal.has(status.data?.job?.status)) {\n  await wait(2000);\n  status = await client.getJob(jobId);\n}\nconst result = jobId ? await client.jobResult(jobId) : {};\nconsole.log(jobId, result.request_id);`;
+  qs("#sdk-python-code").textContent = python;
+  qs("#sdk-node-code").textContent = nodeSnippet;
+  qs("#sdk-curl-code").textContent = curl;
+  qs("#sdk-batch-code").textContent = batch;
+  qs("#sdk-video-code").textContent = video;
+  renderPayload("sdk-examples", "#sdk-json", {
+    tenant_id: state.tenantId,
+    selected_application: app.id || null,
+    scopes: app.scopes || [],
+    examples: { python, node: nodeSnippet, curl, batch, video },
+  });
+}
+
+function playgroundMethod(endpoint) {
+  return endpoint === "/v1/models" || endpoint === "/v1/thresholds" || endpoint === "/v1/streams/{stream_id}/events" ? "GET" : "POST";
+}
+
+function playgroundSelection() {
+  const select = qs("#playground-endpoint-input");
+  const option = select.options[select.selectedIndex];
+  return {
+    template: select.value,
+    method: option?.dataset.method || playgroundMethod(select.value),
+  };
+}
+
+function resolvePlaygroundPath(template, strict = false) {
+  if (!template.includes("{stream_id}")) return template;
+  const streamId = qs("#playground-stream-id-input").value.trim();
+  if (!streamId) {
+    if (strict) throw new Error("请填写流 ID");
+    return template;
+  }
+  return template.replace("{stream_id}", encodeURIComponent(streamId));
+}
+
+function withPlaygroundLimit(path, template) {
+  if (template !== "/v1/streams" && template !== "/v1/streams/{stream_id}/events") return path;
+  const limit = qs("#playground-top-k-input").value || "5";
+  const params = new URLSearchParams({ limit });
+  return `${path}${path.includes("?") ? "&" : "?"}${params.toString()}`;
+}
+
+function appendFile(form, name, input) {
+  const file = formFiles(input)[0];
+  if (file) form.set(name, file);
+  return file;
+}
+
+function appendFiles(form, name, input) {
+  const files = formFiles(input);
+  files.forEach((file) => form.append(name, file));
+  return files;
+}
+
+function requirePlaygroundFiles(files, label) {
+  if (!files.length) throw new Error(`请选择${label}`);
+  return files;
+}
+
+function playgroundErrorCode(raw) {
+  if (raw.error_code) return raw.error_code;
+  const detail = raw.payload?.detail;
+  if (typeof detail === "string") return detail;
+  return null;
+}
+
+function renderPlaygroundRequestPreview() {
+  const selection = playgroundSelection();
+  const resolved = resolvePlaygroundPath(selection.template, false);
+  const method = selection.method;
+  const fileACount = formFiles(qs("#playground-file-a-input")).length;
+  const fileBCount = formFiles(qs("#playground-file-b-input")).length;
+  const lines = [
+    `${method} ${method === "GET" ? withPlaygroundLimit(resolved, selection.template) : resolved}`,
+    selection.template !== resolved ? `Template: ${selection.template}` : null,
+    `X-Tenant-ID: ${state.tenantId}`,
+    state.apiKey ? `X-API-Key: ${maskToken(state.apiKey)}` : "X-API-Key: 未配置",
+    state.bearer ? `Authorization: Bearer ${maskToken(state.bearer)}` : "Authorization: 未配置",
+  ].filter(Boolean);
+  if (method === "POST" && selection.template === "/v1/streams") {
+    lines.push("Content-Type: application/json");
+    lines.push(`stream_url: ${qs("#playground-stream-url-input").value.trim() || "<required>"}`);
+    lines.push(`name: ${qs("#playground-stream-name-input").value.trim() || "<optional>"}`);
+  } else if (method === "POST") {
+    lines.push("Content-Type: multipart/form-data");
+    lines.push(`file_a_count: ${fileACount}`);
+    lines.push(`file_b_count: ${fileBCount}`);
+    lines.push(`threshold_profile: ${qs("#playground-threshold-input").value.trim() || "normal"}`);
+    lines.push(`top_k: ${qs("#playground-top-k-input").value || "5"}`);
+    lines.push(`async_mode: ${qs("#playground-async-mode-input").checked ? "true" : "false"}`);
+  }
+  lines.push("controlled_use: dev_or_approved_intranet; server_call_logs_audit=true");
+  qs("#playground-request-code").textContent = lines.join("\n");
+}
+
+function buildPlaygroundForm(endpoint) {
+  const form = new FormData();
+  const fileAInput = qs("#playground-file-a-input");
+  const fileBInput = qs("#playground-file-b-input");
+  const thresholdProfile = qs("#playground-threshold-input").value.trim() || "normal";
+  const topK = qs("#playground-top-k-input").value || "5";
+  const asyncMode = qs("#playground-async-mode-input").checked ? "true" : "false";
+
+  if (endpoint === "/v1/gallery/search") {
+    requirePlaygroundFiles([appendFile(form, "file", fileAInput)].filter(Boolean), "查询图片");
+    form.set("modality", "body");
+    form.set("top_k", topK);
+    form.set("threshold_profile", thresholdProfile);
+  } else if (endpoint === "/v1/gallery/search/batch") {
+    requirePlaygroundFiles(appendFiles(form, "files", fileAInput), "批量查询图片");
+    form.set("modality", "body");
+    form.set("top_k", topK);
+    form.set("threshold_profile", thresholdProfile);
+    form.set("async_mode", asyncMode);
+  } else if (endpoint === "/v1/compare/persons" || endpoint === "/v1/fusion/compare") {
+    requirePlaygroundFiles([appendFile(form, "image_a", fileAInput)].filter(Boolean), "文件 A");
+    requirePlaygroundFiles([appendFile(form, "image_b", fileBInput)].filter(Boolean), "文件 B");
+    form.set("threshold_profile", thresholdProfile);
+    if (endpoint === "/v1/fusion/compare") form.set("modalities", "face,body,appearance");
+  } else if (endpoint === "/v1/compare/batch") {
+    const filesA = appendFiles(form, "image_a", fileAInput);
+    const filesB = appendFiles(form, "image_b", fileBInput);
+    requirePlaygroundFiles(filesA, "批量文件 A");
+    requirePlaygroundFiles(filesB, "批量文件 B");
+    if (filesA.length !== filesB.length) throw new Error("批量比对的文件 A/B 数量需要一致");
+    form.set("modality", "body");
+    form.set("threshold_profile", thresholdProfile);
+    form.set("async_mode", asyncMode);
+  } else if (endpoint === "/v1/infer/persons") {
+    requirePlaygroundFiles(appendFiles(form, "files", fileAInput), "解析图片");
+  } else if (endpoint === "/v1/jobs/video") {
+    requirePlaygroundFiles([appendFile(form, "file", fileAInput)].filter(Boolean), "视频文件");
+  }
+  return form;
+}
+
+async function submitPlayground(event) {
+  event.preventDefault();
+  const selection = playgroundSelection();
+  const method = selection.method;
+  const endpoint = resolvePlaygroundPath(selection.template, true);
+  const started = performance.now();
+  try {
+    let raw;
+    if (method === "GET") {
+      raw = await apiRaw(withPlaygroundLimit(endpoint, selection.template));
+    } else if (selection.template === "/v1/streams") {
+      const streamUrl = qs("#playground-stream-url-input").value.trim();
+      if (!streamUrl) throw new Error("请输入流地址");
+      raw = await apiRaw(endpoint, {
+        method: "POST",
+        json: {
+          stream_url: streamUrl,
+          name: qs("#playground-stream-name-input").value.trim() || null,
+          settings: {},
+          metadata: { source: "api_playground" },
+        },
+      });
+    } else {
+      raw = await apiRaw(endpoint, { method: "POST", body: buildPlaygroundForm(selection.template) });
+    }
+    const latency = Math.round(performance.now() - started);
+    const errorCode = playgroundErrorCode(raw);
+    renderSummary("#playground-summary", [
+      { label: "状态", value: raw.ok ? "成功" : "异常" },
+      { label: "HTTP", value: raw.status_code },
+      { label: "耗时", value: `${latency}ms` },
+      { label: "request_id", value: raw.request_id || "--" },
+      { label: "错误码", value: errorCode || "--" },
+      { label: "接口", value: endpoint },
+    ]);
+    renderPayload("api-playground", "#playground-json", {
+      endpoint,
+      endpoint_template: selection.template,
+      method,
+      http_status: raw.status_code,
+      latency_ms: latency,
+      request_id: raw.request_id,
+      error_code: errorCode,
+      controlled_use: "dev_or_approved_intranet",
+      response: raw.payload,
+    });
+    if (!raw.ok) setStatus(errorCode || raw.status_text || "Playground 请求失败", true);
+  } catch (error) {
+    const latency = Math.round(performance.now() - started);
+    renderSummary("#playground-summary", [
+      { label: "状态", value: "异常" },
+      { label: "HTTP", value: "--" },
+      { label: "耗时", value: `${latency}ms` },
+      { label: "request_id", value: "--" },
+      { label: "错误码", value: "client_error" },
+      { label: "接口", value: selection.template },
+    ]);
+    renderPayload("api-playground", "#playground-json", {
+      endpoint: selection.template,
+      endpoint_template: selection.template,
+      method,
+      latency_ms: latency,
+      error_code: "client_error",
+      error: error.message || String(error),
+    });
+    throw error;
+  }
+}
+
+function normalizeCallLog(row) {
+  const statusText = row.status || (Number(row.http_status || 0) >= 400 ? "error" : "success");
+  return {
+    page: row.application_id || row.page || "--",
+    application_id: row.application_id || "--",
+    request_id: row.request_id || "--",
+    endpoint: row.endpoint || row.path || "--",
+    method: row.method || "",
+    status: statusText,
+    http_status: row.http_status || (statusText === "error" ? 500 : 200),
+    error_code: row.error_code || null,
+    latency_ms: row.latency_ms ?? "--",
+    model_version: row.model_version || row.model_id || "--",
+    worker: row.worker || row.gpu_worker || "--",
+    created_at: row.created_at || null,
+  };
+}
+
+function localCallLogRows() {
+  return Object.entries(state.latestPayloads).map(([name, payload]) => {
+    const data = payloadData(payload) || {};
+    const error = data.error || payload?.error;
+    return normalizeCallLog({
+      page: name,
+      application_id: "当前会话",
+      request_id: data.request_id || payload?.request_id || data.response?.request_id || "--",
+      endpoint: data.endpoint || data.path || name,
+      status: error ? "error" : "success",
+      http_status: data.http_status || (error ? 500 : 200),
+      error_code: data.error_code || (error ? "client_error" : null),
+      latency_ms: data.latency_ms ?? (data.timing?.total_seconds !== undefined ? Math.round(Number(data.timing.total_seconds || 0) * 1000) : "--"),
+      model_version: data.model_version || data.model_id || data.response?.model_version || "--",
+      worker: data.worker || data.gpu_worker || "--",
+    });
+  });
+}
+
+function buildCallLogRows() {
+  const rows = state.callLogs.length ? state.callLogs.map(normalizeCallLog) : localCallLogRows();
+  return rows.sort((left, right) => Number(right.created_at || 0) - Number(left.created_at || 0));
+}
+
+async function refreshCallLogs() {
+  const params = new URLSearchParams({ limit: "200" });
+  const requestFilter = qs("#call-log-request-input").value.trim();
+  const endpointFilter = qs("#call-log-endpoint-input").value.trim();
+  const statusFilter = qs("#call-log-status-input").value;
+  const errorCodeFilter = qs("#call-log-error-code-input").value.trim();
+  const createdSinceFilter = qs("#call-log-created-since-input").value.trim();
+  const createdUntilFilter = qs("#call-log-created-until-input").value.trim();
+  const applicationFilter = qs("#call-log-application-input")?.value || "";
+  if (requestFilter) params.set("request_id", requestFilter);
+  if (endpointFilter) params.set("endpoint", endpointFilter);
+  if (statusFilter) params.set("status", statusFilter);
+  if (errorCodeFilter) params.set("error_code", errorCodeFilter);
+  if (createdSinceFilter) params.set("created_since", createdSinceFilter);
+  if (createdUntilFilter) params.set("created_until", createdUntilFilter);
+  if (applicationFilter) params.set("application_id", applicationFilter);
+  try {
+    const payload = await api(`/v1/access/call-logs?${params.toString()}`);
+    state.callLogs = (payload.logs || []).map(normalizeCallLog);
+  } catch (error) {
+    state.callLogs = [];
+    renderPayload("call-logs", "#call-logs-json", { tenant_id: state.tenantId, warning: error.message || String(error), rows: localCallLogRows() });
+  }
+  renderCallLogs();
+}
+
+function renderCallLogs() {
+  const requestFilter = qs("#call-log-request-input").value.trim().toLowerCase();
+  const endpointFilter = qs("#call-log-endpoint-input").value.trim().toLowerCase();
+  const statusFilter = qs("#call-log-status-input").value;
+  const errorCodeFilter = qs("#call-log-error-code-input").value.trim();
+  const normalizedErrorCodeFilter = errorCodeFilter.toLowerCase();
+  const createdSinceRaw = qs("#call-log-created-since-input").value.trim();
+  const createdUntilRaw = qs("#call-log-created-until-input").value.trim();
+  const createdSinceFilter = createdSinceRaw === "" ? null : Number(createdSinceRaw);
+  const createdUntilFilter = createdUntilRaw === "" ? null : Number(createdUntilRaw);
+  const applicationFilter = qs("#call-log-application-input")?.value || "";
+  populateCallLogApplicationOptions();
+  const rows = buildCallLogRows().filter((row) => {
+    if (requestFilter && !String(row.request_id).toLowerCase().includes(requestFilter)) return false;
+    if (endpointFilter && !`${row.page} ${row.endpoint} ${row.method}`.toLowerCase().includes(endpointFilter)) return false;
+    if (statusFilter && row.status !== statusFilter) return false;
+    if (normalizedErrorCodeFilter && !String(row.error_code || "").toLowerCase().includes(normalizedErrorCodeFilter)) return false;
+    const createdAt = Number(row.created_at || 0);
+    if (createdSinceFilter !== null && (!Number.isFinite(createdAt) || createdAt < createdSinceFilter)) return false;
+    if (createdUntilFilter !== null && (!Number.isFinite(createdAt) || createdAt > createdUntilFilter)) return false;
+    if (applicationFilter && row.application_id !== applicationFilter) return false;
+    return true;
+  });
+  const source = state.callLogs.length ? "服务端" : "当前会话";
+  renderSummary("#call-log-summary", [
+    { label: "记录数", value: rows.length },
+    { label: "异常", value: rows.filter((row) => row.status === "error").length },
+    { label: "租户", value: state.tenantId },
+    { label: "来源", value: source },
+  ]);
+  qs("#call-log-table").innerHTML = rows.length ? `
+    <table class="data-table">
+      <thead><tr><th>时间</th><th>应用</th><th>request_id</th><th>接口</th><th>状态</th><th>耗时</th><th>模型/Worker</th></tr></thead>
+      <tbody>${rows.map((row) => `
+        <tr><td>${escapeHtml(row.created_at ? formatDateTime(row.created_at) : "--")}</td><td>${escapeHtml(row.application_id || row.page)}</td><td>${escapeHtml(row.request_id)}</td><td>${escapeHtml(`${row.method ? `${row.method} ` : ""}${row.endpoint}`)}</td><td>${escapeHtml(`${localizeValue(row.status)} ${row.http_status || ""}${row.error_code ? ` / ${row.error_code}` : ""}`)}</td><td>${escapeHtml(row.latency_ms)}</td><td>${escapeHtml(row.model_version)} / ${escapeHtml(row.worker)}</td></tr>`).join("")}</tbody>
+    </table>` : `<div class="data-empty">暂无调用记录</div>`;
+  renderPayload("call-logs", "#call-logs-json", {
+    tenant_id: state.tenantId,
+    source,
+    filters: {
+      application_id: applicationFilter || null,
+      error_code: errorCodeFilter || null,
+      created_since: createdSinceFilter,
+      created_until: createdUntilFilter,
+    },
+    rows,
+  });
+}
+
+function renderErrorCodes(payload = state.errorCodes) {
+  const rows = Array.isArray(payload?.error_codes) ? payload.error_codes : [];
+  const retryable = rows.filter((row) => row.retryable).length;
+  renderSummary("#error-codes-summary", [
+    { label: "错误码", value: rows.length },
+    { label: "可重试", value: retryable },
+    { label: "不可重试", value: rows.length - retryable },
+    { label: "租户", value: payload?.tenant_id || state.tenantId },
+  ]);
+  qs("#error-codes-table").innerHTML = rows.length ? `
+    <table class="data-table">
+      <thead><tr><th>Code</th><th>HTTP</th><th>类别</th><th>重试</th><th>说明</th><th>处理建议</th></tr></thead>
+      <tbody>${rows.map((row) => `<tr><td>${escapeHtml(row.code || "--")}</td><td>${escapeHtml(row.http_status ?? "--")}</td><td>${escapeHtml(localizeValue(row.category || "--"))}</td><td>${row.retryable ? "是" : "否"}</td><td>${escapeHtml(row.description || "--")}</td><td>${escapeHtml(row.operator_action || "--")}</td></tr>`).join("")}</tbody>
+    </table>` : `<div class="data-empty">暂无错误码目录</div>`;
+  renderPayload("error-codes", "#error-codes-json", { tenant_id: state.tenantId, ...(payload || {}), error_codes: rows });
+}
+
+async function refreshErrorCodes() {
+  const payload = await api("/v1/access/error-codes");
+  state.errorCodes = payloadData(payload) || payload;
+  renderErrorCodes(state.errorCodes);
+}
+function histogramQuantile(metrics, baseName, quantile) {
+  const buckets = metrics
+    .filter((item) => item.name === `${baseName}_bucket` && item.labels.le !== "+Inf")
+    .map((item) => ({ le: Number(item.labels.le), count: Number(item.value) }))
+    .sort((left, right) => left.le - right.le);
+  if (!buckets.length) return 0;
+  const total = buckets[buckets.length - 1].count;
+  if (total <= 0) return 0;
+  const target = total * quantile;
+  const bucket = buckets.find((item) => item.count >= target);
+  return bucket ? bucket.le : buckets[buckets.length - 1].le;
+}
+
+function summarizeSloCallLogs(logs) {
+  const rows = Array.isArray(logs) ? logs : [];
+  const total = rows.length;
+  const errors = rows.filter((row) => Number(row.http_status || 0) >= 400 || row.status === "error" || row.error_code).length;
+  const success = Math.max(0, total - errors);
+  return {
+    total,
+    success,
+    errors,
+    success_rate: total ? success / total : null,
+    error_rate: total ? errors / total : null,
+  };
+}
+
+function sloTone(ok, warn = false) {
+  if (ok) return "ok";
+  return warn ? "warn" : "danger";
+}
+
+function renderSloPanel() {
+  const metrics = state.dashboard.metrics || {};
+  const rawMetrics = state.dashboard.raw_metrics || [];
+  const status = state.dashboard.status || {};
+  const callLogSummary = summarizeSloCallLogs(state.dashboard.slo_call_logs || []);
+  const p99 = metrics.inference_p99_seconds ?? histogramQuantile(rawMetrics, "gpu_worker_inference_seconds", 0.99);
+  const queueP95 = metrics.queue_p95_seconds ?? histogramQuantile(rawMetrics, "gpu_worker_queue_seconds", 0.95);
+  const queueP99 = metrics.queue_p99_seconds ?? histogramQuantile(rawMetrics, "gpu_worker_queue_seconds", 0.99);
+  const observedErrorRate = callLogSummary.error_rate ?? Number(metrics.error_rate || 0);
+  const successRate = callLogSummary.success_rate ?? (1 - Number(metrics.error_rate || 0));
+  const errorBudgetLimit = Math.max(0.0001, Number(state.alertConfig.maxErrorRate || 0.005));
+  const errorBudgetRemaining = Math.max(0, errorBudgetLimit - observedErrorRate);
+  const errorBudgetBurn = observedErrorRate / errorBudgetLimit;
+  const queueLimitSeconds = 0.5;
+  const p95LimitSeconds = Number(state.alertConfig.maxP95Latency || 0);
+  const activeStreams = Number(status.stream_worker?.active_sessions ?? metrics.stream_active_sessions_metric ?? 0);
+  const loadedModels = Number((status.loaded_models || []).length || metrics.loaded_models_metric || 0);
+  const gpuQueueDepth = Number(metrics.gpu_queue_depth || 0);
+  const gpuDeviceQueues = Array.isArray(metrics.gpu_device_queue_depths) ? metrics.gpu_device_queue_depths : [];
+  renderSummary("#slo-summary", [
+    { label: "30天成功率", value: `${formatNumber(successRate * 100, 2)}%` },
+    { label: "P95/P99", value: `${formatNumber(metrics.inference_p95_seconds, 2)}s / ${formatNumber(p99, 2)}s` },
+    { label: "队列 P95/P99", value: `${formatNumber(queueP95, 3)}s / ${formatNumber(queueP99, 3)}s` },
+    { label: "GPU 队列", value: gpuDeviceQueues.length ? gpuDeviceQueues.map((item) => `${item.device}:${item.depth}`).join(" / ") : String(gpuQueueDepth) },
+    { label: "GPU 显存", value: metrics.gpu_free_gb === null ? "--" : `${formatNumber(metrics.gpu_free_gb, 1)}GB free${metrics.gpu_used_gb ? ` / ${formatNumber(metrics.gpu_used_gb, 1)}GB used` : ""}` },
+  ]);
+  renderBadges("#slo-badges", [
+    { label: "错误预算剩余", value: `${formatNumber(errorBudgetRemaining * 100, 2)}%`, tone: sloTone(errorBudgetRemaining > 0, errorBudgetBurn <= 1.5) },
+    { label: "燃烧率", value: `${formatNumber(errorBudgetBurn, 2)}x`, tone: sloTone(errorBudgetBurn <= 1, errorBudgetBurn <= 2) },
+    { label: "近30天样本", value: callLogSummary.total || "metrics", tone: callLogSummary.total ? "ok" : "warn" },
+    { label: "活跃流", value: activeStreams, tone: "ok" },
+    { label: "GPU队列", value: gpuQueueDepth, tone: sloTone(gpuQueueDepth === 0, gpuQueueDepth <= 2) },
+    { label: "队列P95", value: `${formatNumber(queueP95, 3)}s`, tone: sloTone(queueP95 <= queueLimitSeconds, queueP95 <= queueLimitSeconds * 2) },
+  ]);
+  const workerItems = [
+    { name: "模型热状态", value: `${loadedModels} loaded`, ok: loadedModels > 0 },
+    { name: "推理延迟", value: `p95 ${formatNumber(metrics.inference_p95_seconds, 2)}s / p99 ${formatNumber(p99, 2)}s`, ok: !p95LimitSeconds || Number(metrics.inference_p95_seconds || 0) <= p95LimitSeconds },
+    { name: "GPU 队列", value: gpuDeviceQueues.length ? gpuDeviceQueues.map((item) => `${item.device}:${item.depth}`).join(" / ") : String(gpuQueueDepth), ok: gpuQueueDepth === 0 },
+    { name: "流 worker", value: `${activeStreams}/${status.stream_worker?.max_workers ?? "--"}`, ok: true },
+    { name: "任务队列", value: String(status.task_queue?.queue_length ?? "--"), ok: Number(status.task_queue?.queue_length || 0) === 0 },
+    { name: "向量库", value: localizeValue(status.configured_backends?.vector || "--"), ok: true },
+    { name: "对象存储", value: localizeValue(status.configured_backends?.object_storage || "--"), ok: true },
+  ];
+  qs("#slo-worker-list").innerHTML = workerItems.map((item) => `<div class="alert-item ${item.ok ? "ok" : "warn"}"><strong>${escapeHtml(item.name)}</strong><span>${escapeHtml(item.value)}</span></div>`).join("");
+  renderPayload("slo-panel", "#slo-json", {
+    tenant_id: state.tenantId,
+    success_rate: successRate,
+    success_rate_source: callLogSummary.total ? "call_logs_30d" : "metrics_counter",
+    call_log_window_seconds: 30 * 24 * 3600,
+    call_log_summary: callLogSummary,
+    p95_seconds: metrics.inference_p95_seconds,
+    p99_seconds: p99,
+    queue_p95_seconds: queueP95,
+    queue_p99_seconds: queueP99,
+    gpu_queue_depth: gpuQueueDepth,
+    gpu_device_queue_depths: gpuDeviceQueues,
+    error_budget_limit: errorBudgetLimit,
+    error_budget_remaining: errorBudgetRemaining,
+    error_budget_burn_rate: errorBudgetBurn,
+    active_streams: activeStreams,
+    loaded_models: loadedModels,
+    status,
+    metrics,
+  });
+}
+
+async function refreshSloPanel() {
+  await refreshDashboard();
+  const createdSince = Math.floor(Date.now() / 1000) - (30 * 24 * 3600);
+  try {
+    const logsPayload = await api(`/v1/access/call-logs?limit=500&created_since=${createdSince}`);
+    state.dashboard.slo_call_logs = logsPayload.logs || [];
+  } catch (error) {
+    state.dashboard.slo_call_logs = [];
+    state.dashboard.slo_call_logs_warning = error.message || String(error);
+  }
+  renderSloPanel();
+}
+
+function selectedMultimodalScopes() {
+  const scopes = selectedCheckboxValues("multimodal-scope");
+  return scopes.length ? scopes : ["body"];
+}
+
+function renderMultimodalDetails(payload) {
+  const data = payloadData(payload) || {};
+  const modalities = data.modalities || {};
+  const rows = Object.entries(modalities).map(([name, item]) => ({ name, ...item }));
+  qs("#multimodal-table").innerHTML = rows.length ? `
+    <table class="data-table">
+      <thead><tr><th>模态</th><th>参与</th><th>原始分数</th><th>质量</th><th>权重</th><th>原因</th></tr></thead>
+      <tbody>${rows.map((row) => `
+        <tr><td>${escapeHtml(localizeValue(row.name))}</td><td>${row.used ? "是" : "否"}</td><td>${escapeHtml(formatNumber(row.score, 4))}</td><td>${escapeHtml(formatNumber(row.quality, 4))}</td><td>${escapeHtml(formatNumber(row.weight, 2))}</td><td>${escapeHtml(row.reason || "--")}</td></tr>`).join("")}</tbody>
+    </table>` : `<div class="data-empty">暂无模态明细</div>`;
+}
+
+async function submitMultimodalCompare(event) {
+  event.preventDefault();
+  const filesA = formFiles(qs("#multimodal-a-input"));
+  const filesB = formFiles(qs("#multimodal-b-input"));
+  if (!filesA.length || !filesB.length) throw new Error("请选择左右两侧证据图片");
+  const form = new FormData();
+  form.set("image_a", filesA[0]);
+  form.set("image_b", filesB[0]);
+  form.set("threshold_profile", qs("#multimodal-threshold-input").value.trim() || "normal");
+  form.set("modalities", selectedMultimodalScopes().join(","));
+  const payload = await api("/v1/fusion/compare", { method: "POST", body: form });
+  const data = payloadData(payload) || {};
+  renderSummary("#multimodal-summary", [
+    { label: "结论", value: data.passed === undefined ? "--" : data.passed ? "通过" : "未通过" },
+    { label: "融合分", value: formatNumber(data.final_score, 4) },
+    { label: "阈值", value: formatNumber(data.threshold, 4) },
+    { label: "风险", value: data.decision?.risk || "--" },
+  ]);
+  renderMultimodalDetails(payload);
+  renderPayload("multimodal-compare", "#multimodal-json", payload);
+}
+
+function renderTrackReviewAnnotations(annotations) {
+  const rows = Array.isArray(annotations) ? annotations : [];
+  qs("#track-review-annotation-table").innerHTML = rows.length ? `
+    <table class="data-table">
+      <thead><tr><th>时间</th><th>任务/轨迹</th><th>标注</th><th>帧</th><th>复核人</th><th>备注</th></tr></thead>
+      <tbody>${rows.map((row) => `
+        <tr><td>${escapeHtml(row.created_at ? formatDateTime(row.created_at) : "--")}</td><td>${escapeHtml(`${row.job_id || "--"} / ${row.track_id || "--"}`)}</td><td>${escapeHtml(localizeValue(row.label || "--"))}</td><td>${escapeHtml(row.frame_index ?? "--")}</td><td>${escapeHtml(row.reviewer || "--")}</td><td>${escapeHtml(row.note || row.evidence_ref || "--")}</td></tr>`).join("")}</tbody>
+    </table>` : `<div class="data-empty">暂无人工标注</div>`;
+}
+async function refreshTrackReview() {
+  const [payload, reviewPayload] = await Promise.all([
+    api("/v1/jobs/video/results?limit=24"),
+    api("/v1/evaluation/track-reviews?limit=100").catch((error) => ({ data: { annotations: [], warning: error.message || String(error) } })),
+  ]);
+  const annotations = payloadData(reviewPayload)?.annotations || reviewPayload.annotations || [];
+  const info = videoResultsVisualInfo(payload);
+  const tracks = info.results.flatMap((entry) => {
+    const frames = Array.isArray(entry.result?.frames) ? entry.result.frames : [];
+    return frames.flatMap((frame) => frame.persons || frame.tracks || []);
+  });
+  renderSummary("#track-review-summary", [
+    { label: "任务数", value: info.results.length },
+    { label: "关键帧", value: info.visuals.length },
+    { label: "轨迹/人体", value: tracks.length },
+    { label: "人工标注", value: annotations.length },
+  ]);
+  renderTrackReviewAnnotations(annotations);
+  renderVideoVisualGrid("#track-review-visuals", info.visuals, "暂无可审阅轨迹，请先完成视频解析任务", {
+    variant: "video",
+    maxWidth: 260,
+    maxHeight: 180,
+  });
+  renderPayload("track-review", "#track-review-json", { ...payload, track_count: tracks.length, review_annotations: annotations });
+}
+
+function renderCapabilityTable(capabilities) {
+  const rows = Object.entries(capabilities || {}).map(([name, item]) => ({ name, ...(item || {}) }));
+  qs("#evaluation-capability-table").innerHTML = rows.length ? `
+    <table class="data-table">
+      <thead><tr><th>能力</th><th>状态</th><th>模型</th><th>Adapter</th><th>风险</th></tr></thead>
+      <tbody>${rows.map((row) => {
+        const risk = ["production", "ready"].includes(row.status) && row.model_id !== row.fallback_model_id ? "clear" : "needs_gate";
+        return `<tr><td>${escapeHtml(row.name)}</td><td>${escapeHtml(localizeValue(row.status || "--"))}</td><td>${escapeHtml(row.model_id || "--")}</td><td>${escapeHtml(row.adapter || row.production_adapter || "--")}</td><td>${escapeHtml(risk)}</td></tr>`;
+      }).join("")}</tbody>
+    </table>` : `<div class="data-empty">暂无模型能力数据</div>`;
+}
+
+function renderEvaluationDatasets(datasets) {
+  const rows = Array.isArray(datasets) ? datasets : [];
+  qs("#evaluation-dataset-table").innerHTML = rows.length ? `
+    <table class="data-table">
+      <thead><tr><th>数据集</th><th>用途</th><th>样本</th><th>任务/轨迹</th><th>最新样本</th><th>证据</th></tr></thead>
+      <tbody>${rows.map((row) => {
+        const evidence = Array.isArray(row.evidence_index) && row.evidence_index.length ? row.evidence_index[0].evidence_ref : "--";
+        return `<tr><td>${escapeHtml(row.name || row.dataset_id || "--")}</td><td>${escapeHtml(localizeValue(row.purpose || "--"))}</td><td>${escapeHtml(row.sample_count ?? 0)}</td><td>${escapeHtml(`${row.job_count ?? 0} / ${row.track_count ?? 0}`)}</td><td>${escapeHtml(row.latest_created_at ? formatDateTime(row.latest_created_at) : "--")}</td><td>${escapeHtml(evidence || "--")}</td></tr>`;
+      }).join("")}</tbody>
+    </table>` : `<div class="data-empty">暂无评估数据集</div>`;
+}
+function renderEvaluationThresholdRecommendations(payload) {
+  const data = payload || {};
+  const rows = Array.isArray(data.recommendations) ? data.recommendations : [];
+  qs("#evaluation-threshold-table").innerHTML = rows.length ? `
+    <table class="data-table">
+      <thead><tr><th>模态</th><th>Profile</th><th>当前</th><th>建议</th><th>动作</th><th>证据</th></tr></thead>
+      <tbody>${rows.map((row) => {
+        const counts = row.evidence_counts || {};
+        const evidence = [
+          `误检 ${counts.false_positive || 0}`,
+          `错配 ${counts.mismatch || 0}`,
+          `确认 ${counts.confirmed || 0}`,
+          `低质 ${counts.low_quality || 0}`,
+        ].join(" / ");
+        const current = formatNumber(row.current_threshold, 4);
+        const recommended = formatNumber(row.recommended_threshold, 4);
+        return `<tr><td>${escapeHtml(localizeValue(row.modality || "--"))}</td><td>${escapeHtml(row.profile || "--")}</td><td>${escapeHtml(current)}</td><td>${escapeHtml(recommended)}</td><td>${escapeHtml(localizeValue(row.action || "--"))}</td><td>${escapeHtml(evidence)}</td></tr>`;
+      }).join("")}</tbody>
+    </table>` : `<div class="data-empty">暂无阈值推荐</div>`;
+}
+function renderEvaluationReviewSummary(summary) {
+  const data = summary || {};
+  const labels = Array.isArray(data.label_counts) ? data.label_counts : [];
+  const evidenceRows = Array.isArray(data.evidence_index) && data.evidence_index.length
+    ? data.evidence_index
+    : (Array.isArray(data.recent_annotations) ? data.recent_annotations : []);
+  const attentionLabels = new Set(["false_positive", "mismatch", "low_quality", "uncertain"]);
+  const attentionCount = Number(data.review_attention_count ?? labels.reduce((total, row) => (
+    attentionLabels.has(row.label) ? total + Number(row.count || 0) : total
+  ), 0));
+  renderSummary("#evaluation-review-summary", [
+    { label: "标注样本", value: data.count ?? data.total_annotations ?? 0 },
+    { label: "需复核", value: attentionCount },
+    { label: "任务数", value: data.unique_job_count ?? 0 },
+    { label: "轨迹数", value: data.unique_track_count ?? 0 },
+  ]);
+  qs("#evaluation-review-label-table").innerHTML = labels.length ? `
+    <table class="data-table">
+      <thead><tr><th>标注</th><th>数量</th><th>用途</th></tr></thead>
+      <tbody>${labels.map((row) => `<tr><td>${escapeHtml(localizeValue(row.label || "unknown"))}</td><td>${escapeHtml(row.count ?? 0)}</td><td>${attentionLabels.has(row.label) ? "回归留出" : "确认样本"}</td></tr>`).join("")}</tbody>
+    </table>` : `<div class="data-empty">暂无标注统计</div>`;
+  qs("#evaluation-review-evidence-table").innerHTML = evidenceRows.length ? `
+    <table class="data-table">
+      <thead><tr><th>时间</th><th>任务/轨迹</th><th>标注</th><th>帧</th><th>证据引用</th></tr></thead>
+      <tbody>${evidenceRows.map((row) => `
+        <tr><td>${escapeHtml(row.created_at ? formatDateTime(row.created_at) : "--")}</td><td>${escapeHtml(`${row.job_id || "--"} / ${row.track_id || "--"}`)}</td><td>${escapeHtml(localizeValue(row.label || "--"))}</td><td>${escapeHtml(row.frame_index ?? "--")}</td><td>${escapeHtml(row.evidence_ref || "--")}</td></tr>`).join("")}</tbody>
+    </table>` : `<div class="data-empty">暂无证据索引</div>`;
+}
+function renderEvaluationMetrics(payload) {
+  const metrics = payload.metrics || {};
+  const rows = [
+    { metric: "ReID p95", value: `${formatNumber(metrics.inference_p95_seconds, 2)}s`, gate: "baseline" },
+    { metric: "错误率", value: `${formatNumber(Number(metrics.error_rate || 0) * 100, 2)}%`, gate: Number(metrics.error_rate || 0) <= state.alertConfig.maxErrorRate ? "pass" : "review" },
+    { metric: "GPU 空闲", value: metrics.gpu_free_gb === null ? "--" : `${formatNumber(metrics.gpu_free_gb, 1)}GB`, gate: "observe" },
+    { metric: "阈值 profile", value: Object.keys(payload.thresholds?.thresholds || payload.thresholds || {}).join(", ") || "--", gate: "calibrate" },
+  ];
+  qs("#evaluation-metrics-table").innerHTML = `
+    <table class="data-table">
+      <thead><tr><th>指标</th><th>当前值</th><th>门禁</th></tr></thead>
+      <tbody>${rows.map((row) => `<tr><td>${escapeHtml(row.metric)}</td><td>${escapeHtml(row.value)}</td><td>${escapeHtml(row.gate)}</td></tr>`).join("")}</tbody>
+    </table>`;
+}
+
+
+async function submitTrackReviewAnnotation(event) {
+  event.preventDefault();
+  const jobId = qs("#track-review-job-input").value.trim();
+  const trackId = qs("#track-review-track-input").value.trim();
+  if (!jobId || !trackId) throw new Error("请输入任务 ID 和轨迹 ID");
+  const frameValue = qs("#track-review-frame-input").value.trim();
+  const payload = {
+    job_id: jobId,
+    track_id: trackId,
+    label: qs("#track-review-label-input").value,
+    reviewer: qs("#track-review-reviewer-input").value.trim() || null,
+    note: qs("#track-review-note-input").value.trim() || null,
+    evidence_ref: qs("#track-review-evidence-input").value.trim() || null,
+  };
+  if (frameValue) payload.frame_index = Number(frameValue);
+  await api("/v1/evaluation/track-reviews", { method: "POST", json: payload });
+  qs("#track-review-note-input").value = "";
+  await refreshTrackReview();
+}
+
+async function refreshEvaluationCenter() {
+  const [status, thresholds, models, reviewPayload, datasetsPayload, thresholdPayload] = await Promise.all([
+    api("/v1/admin/status"),
+    api("/v1/thresholds"),
+    api("/v1/models"),
+    api("/v1/evaluation/track-reviews/summary?limit=10").catch((error) => ({ summary: { count: 0, label_counts: [], evidence_index: [], warning: error.message || String(error) } })),
+    api("/v1/evaluation/datasets?limit=20").catch((error) => ({ datasets: [], warning: error.message || String(error) })),
+    api("/v1/evaluation/threshold-recommendations").catch((error) => ({ threshold_recommendations: { sample_count: 0, recommendations: [], warning: error.message || String(error) } })),
+  ]);
+  if (!state.dashboard.metrics) await refreshDashboard();
+  const capabilities = status.model_capabilities || {};
+  const reviewSummary = reviewPayload.summary || payloadData(reviewPayload)?.summary || {};
+  const datasets = datasetsPayload.datasets || payloadData(datasetsPayload)?.datasets || [];
+  const thresholdRecommendations = thresholdPayload.threshold_recommendations || payloadData(thresholdPayload)?.threshold_recommendations || {};
+  const thresholdRows = Array.isArray(thresholdRecommendations.recommendations) ? thresholdRecommendations.recommendations : [];
+  const nonProduction = Object.values(capabilities).filter((item) => !["ready", "production"].includes(item?.status) || item?.model_id === item?.fallback_model_id).length;
+  const payload = { tenant_id: state.tenantId, status, thresholds, models, metrics: state.dashboard.metrics || {}, capabilities, review_summary: reviewSummary, datasets, threshold_recommendations: thresholdRecommendations };
+  renderSummary("#evaluation-summary", [
+    { label: "能力数", value: Object.keys(capabilities).length },
+    { label: "需门禁", value: nonProduction },
+    { label: "数据集", value: datasets.length },
+    { label: "阈值建议", value: thresholdRows.length },
+    { label: "标注样本", value: reviewSummary.count ?? reviewSummary.total_annotations ?? 0 },
+  ]);
+  renderCapabilityTable(capabilities);
+  renderEvaluationMetrics(payload);
+  renderEvaluationDatasets(datasets);
+  renderEvaluationThresholdRecommendations(thresholdRecommendations);
+  renderEvaluationReviewSummary(reviewSummary);
+  renderPayload("evaluation-center", "#evaluation-json", payload);
+}
+
+function renderReleaseAuditRows(audit) {
+  const rows = Array.isArray(audit?.records) ? audit.records : [];
+  qs("#release-audit-table").innerHTML = rows.length ? `
+    <table class="data-table">
+      <thead><tr><th>时间</th><th>事件</th><th>别名</th><th>目标/灰度</th><th>写入</th></tr></thead>
+      <tbody>${rows.map((row) => {
+        const rollout = Array.isArray(row.rollout)
+          ? row.rollout.map((item) => `${item.target || "--"}:${item.weight ?? "--"}${item.status ? `/${item.status}` : ""}`).join(", ")
+          : "";
+        const target = row.new_target || rollout || "--";
+        return `<tr><td>${escapeHtml(row.time ? formatDateTime(row.time) : "--")}</td><td>${escapeHtml(row.event || "--")}</td><td>${escapeHtml(row.alias || "--")}</td><td>${escapeHtml(target)}</td><td>${escapeHtml(row.written === undefined ? "--" : row.written ? "是" : "否")}</td></tr>`;
+      }).join("")}</tbody>
+    </table>` : `<div class="data-empty">暂无发布审计记录</div>`;
+}
+async function refreshReleaseCenter(payload = null) {
+  const [aliases, models, audit] = await Promise.all([
+    api("/rollout/aliases").catch((error) => ({ error: error.message || String(error), aliases: [] })),
+    api("/v1/models"),
+    api("/rollout/audit?limit=20").catch((error) => ({ error: error.message || String(error), records: [], count: 0, malformed_count: 0 })),
+  ]);
+  const data = payload ? { action: payload.action, result: payload.result, aliases, models, audit } : { aliases, models, audit };
+  renderSummary("#release-summary", [
+    { label: "别名数", value: (aliases.aliases || []).length },
+    { label: "模型数", value: models.count ?? 0 },
+    { label: "审计记录", value: audit.count ?? (audit.records || []).length },
+    { label: "异常行", value: audit.malformed_count ?? 0 },
+  ]);
+  renderReleaseAuditRows(audit);
+  renderPayload("release-center", "#release-json", data);
+}
+
+async function submitReleaseAction(event) {
+  event.preventDefault();
+  const action = qs("#release-action-input").value;
+  const aliasName = qs("#release-alias-input").value.trim();
+  const target = qs("#release-target-input").value.trim();
+  const expected = qs("#release-expected-input").value.trim();
+  const dryRun = qs("#release-dry-run-input").checked;
+  if (!aliasName) throw new Error("请输入模型别名");
+  if (!dryRun && !window.confirm("确认执行非 dry-run 模型发布操作？该操作会写入模型别名配置和审计记录。")) return;
+  let payload;
+  if (action === "preview") {
+    const key = encodeURIComponent(qs("#release-traffic-key-input").value.trim() || state.tenantId);
+    payload = await api(`/rollout/aliases/preview?alias_name=${encodeURIComponent(aliasName)}&traffic_key=${key}`);
+  } else if (action === "switch") {
+    if (!target) throw new Error("请输入目标模型");
+    payload = await api("/rollout/aliases/switch", { method: "POST", json: { alias_name: aliasName, target_model_id: target, expected_current_target: expected || null, dry_run: dryRun } });
+  } else if (action === "weighted") {
+    if (!target) throw new Error("请输入目标模型");
+    payload = await api("/rollout/aliases/weighted", { method: "POST", json: { alias_name: aliasName, targets: [{ target_model_id: target, weight: Number(qs("#release-weight-input").value || 0), status: "candidate" }], expected_current_target: expected || null, dry_run: dryRun } });
+  } else {
+    payload = await api("/rollout/aliases/rollback", { method: "POST", json: { alias_name: aliasName, dry_run: dryRun } });
+  }
+  await refreshReleaseCenter({ action, result: payload });
+}
+
+function auditEventQueryParams() {
+  const params = new URLSearchParams({ limit: "20" });
+  const eventFilter = qs("#audit-event-filter-input")?.value.trim() || "";
+  const outcomeFilter = qs("#audit-outcome-filter-input")?.value || "";
+  const requestFilter = qs("#audit-request-filter-input")?.value.trim() || "";
+  const categoryFilter = qs("#audit-category-filter-input")?.value || "";
+  const createdSinceFilter = qs("#audit-created-since-input")?.value.trim() || "";
+  const createdUntilFilter = qs("#audit-created-until-input")?.value.trim() || "";
+  if (eventFilter) params.set("event", eventFilter);
+  if (outcomeFilter) params.set("outcome", outcomeFilter);
+  if (requestFilter) params.set("request_id", requestFilter);
+  if (categoryFilter) params.set("category", categoryFilter);
+  if (createdSinceFilter) params.set("created_since", createdSinceFilter);
+  if (createdUntilFilter) params.set("created_until", createdUntilFilter);
+  return params;
+}
+function renderAuditEventRows(auditEvents) {
+  const rows = Array.isArray(auditEvents?.records) ? auditEvents.records : [];
+  qs("#audit-event-table").innerHTML = rows.length ? `
+    <table class="data-table">
+      <thead><tr><th>时间</th><th>分类</th><th>事件</th><th>结果</th><th>request_id</th><th>审计哈希</th></tr></thead>
+      <tbody>${rows.map((row) => {
+        const hash = row.audit_hash ? String(row.audit_hash).slice(0, 16) : "--";
+        return `<tr><td>${escapeHtml(row.created_at ? formatDateTime(row.created_at) : "--")}</td><td>${escapeHtml(localizeValue(row.category || "other"))}</td><td>${escapeHtml(row.event || "--")}</td><td>${escapeHtml(localizeValue(row.outcome || "--"))}</td><td>${escapeHtml(row.request_id || "--")}</td><td>${escapeHtml(hash)}</td></tr>`;
+      }).join("")}</tbody>
+    </table>` : `<div class="data-empty">暂无审计事件</div>`;
+}
+async function refreshAuditCompliance() {
+  const [status, exported, auditVerificationPayload, auditEventsPayload] = await Promise.all([
+    api("/v1/admin/status"),
+    api("/v1/admin/export?people_limit=10&jobs_limit=10&streams_limit=10&stream_events_limit=5"),
+    api("/v1/admin/audit/verify").catch((error) => ({
+      audit_chain: {
+        ok: false,
+        record_count: 0,
+        error_count: 1,
+        head_hash: null,
+        path_hash: null,
+        errors: [{ reason: error.message || String(error) }],
+      },
+    })),
+    api(`/v1/admin/audit/events?${auditEventQueryParams().toString()}`).catch((error) => ({
+      error: error.message || String(error),
+      records: [],
+      count: 0,
+      malformed_count: 0,
+      scanned_count: 0,
+    })),
+  ]);
+  const security = status.security || {};
+  const auditChain = auditVerificationPayload.audit_chain || auditVerificationPayload;
+  const auditChainErrorCount = Number(auditChain.error_count || 0);
+  const auditEventRows = Array.isArray(auditEventsPayload.records) ? auditEventsPayload.records : [];
+  const auditEventMalformedCount = Number(auditEventsPayload.malformed_count || 0);
+  const auditEventSummary = auditEventsPayload.summary || {};
+  const auditCategoryCounts = auditEventSummary.category_counts || {};
+  const checks = [
+    { name: "强制鉴权", ok: Boolean(security.api_token_enabled || security.jwt_configured), current: security.api_token_enabled || security.jwt_configured, limit: true },
+    { name: "租户头", ok: Boolean(security.tenant_header_required), current: security.tenant_header_required, limit: true },
+    { name: "审计失败关闭", ok: Boolean(security.audit_write_fail_closed), current: security.audit_write_fail_closed, limit: true },
+    { name: "载荷加密", ok: Boolean(security.encryption_enabled || !security.require_encryption), current: security.encryption_enabled, limit: security.require_encryption },
+    { name: "审计链校验", ok: Boolean(auditChain.ok) && auditChainErrorCount === 0, current: `${auditChain.record_count ?? 0} records / ${auditChainErrorCount} errors`, limit: "0 errors" },
+    { name: "审计事件读回", ok: !auditEventsPayload.error, current: `${auditEventRows.length} events / ${auditEventMalformedCount} malformed`, limit: "tenant scoped" },
+  ];
+  renderSummary("#audit-summary", [
+    { label: "检查数", value: checks.length },
+    { label: "通过", value: checks.filter((item) => item.ok).length },
+    { label: "审计链", value: auditChain.ok ? "ok" : "warn" },
+    { label: "审计记录", value: auditChain.record_count ?? 0 },
+    { label: "最近事件", value: auditEventsPayload.matched_count ?? auditEventRows.length },
+    { label: "删除", value: auditCategoryCounts.delete_requests ?? 0 },
+    { label: "导出", value: auditCategoryCounts.exports ?? 0 },
+    { label: "模型", value: auditCategoryCounts.model_versions ?? 0 },
+    { label: "保留", value: auditCategoryCounts.retention ?? 0 },
+    { label: "链错误", value: auditChainErrorCount },
+    { label: "导出人员", value: exported.people?.length ?? 0 },
+    { label: "request_id", value: auditEventsPayload.request_id || auditVerificationPayload.request_id || exported.request_id || status.request_id || "--" },
+  ]);
+  qs("#audit-check-list").innerHTML = checks.map((item) => `<div class="alert-item ${item.ok ? "ok" : "warn"}"><strong>${escapeHtml(item.name)}</strong><span>${escapeHtml(compactValue(item.current))} / ${escapeHtml(compactValue(item.limit))}</span></div>`).join("");
+  renderAuditEventRows(auditEventsPayload);
+  renderPayload("audit-compliance", "#audit-json", { status, export: exported, audit_chain: auditChain, audit_events: auditEventsPayload, checks });
+}
+function renderBackupSnapshots(payload) {
+  const rows = Array.isArray(payload?.snapshots) ? payload.snapshots : [];
+  const backends = Array.from(new Set(rows.map((row) => row.object_backend).filter(Boolean)));
+  renderSummary("#backup-snapshot-summary", [
+    { label: "快照", value: payload?.count ?? rows.length },
+    { label: "扫描", value: payload?.scanned_count ?? 0 },
+    { label: "异常行", value: payload?.malformed_count ?? 0 },
+    { label: "后端", value: backends.length ? backends.join(", ") : "--" },
+    { label: "租户", value: payload?.tenant_id || state.tenantId },
+  ]);
+  qs("#backup-snapshot-table").innerHTML = rows.length ? `
+    <table class="data-table">
+      <thead><tr><th>时间</th><th>request_id</th><th>后端</th><th>字节数</th><th>增量起点</th><th>快照哈希</th></tr></thead>
+      <tbody>${rows.map((row) => {
+        const createdAt = row.created_at === null || row.created_at === undefined ? "--" : formatDateTime(row.created_at);
+        const updatedSince = row.updated_since === null || row.updated_since === undefined ? "--" : formatDateTime(row.updated_since);
+        const snapshotId = row.snapshot_id || row.audit_hash || "";
+        const hash = snapshotId ? String(snapshotId).slice(0, 16) : "--";
+        return `<tr><td>${escapeHtml(createdAt)}</td><td>${escapeHtml(row.request_id || "--")}</td><td>${escapeHtml(row.object_backend || "--")}</td><td>${escapeHtml(formatByteSize(row.bytes))}</td><td>${escapeHtml(updatedSince)}</td><td>${escapeHtml(hash)}</td></tr>`;
+      }).join("")}</tbody>
+    </table>` : `<div class="data-empty">暂无备份快照</div>`;
+}
+
+async function refreshAdminData(payload = null) {
+  const backupSnapshots = await api("/v1/admin/backups?limit=20").catch((error) => ({
+    error: error.message || String(error),
+    snapshots: [],
+    count: 0,
+    malformed_count: 0,
+    scanned_count: 0,
+    tenant_id: state.tenantId,
+  }));
+  renderBackupSnapshots(backupSnapshots);
+  renderPayload("admin-data", "#admin-data-json", payload ? { ...payload, backup_snapshots: backupSnapshots } : { backup_snapshots: backupSnapshots });
+}
 function setAlertInputs() {
   qs("#alert-error-rate-input").value = state.alertConfig.maxErrorRate;
   qs("#alert-p95-input").value = state.alertConfig.maxP95Latency;
@@ -1748,18 +3745,31 @@ async function refreshDashboard() {
     + metricValue(metrics, "gpu_worker_embeddings_errors_total")
     + metricValue(metrics, "gpu_worker_tracks_errors_total")
     + metricValue(metrics, "gpu_worker_vision_errors_total");
-  const gpuFreeBytes = metrics
-    .filter((item) => item.name === "gpu_worker_gpu_memory_free_bytes")
-    .reduce((total, item) => total + Number(item.value), 0);
+  const gpuFreeBytes = metricSum(metrics, "gpu_worker_gpu_memory_free_bytes");
+  const gpuUsedBytes = metricSum(metrics, "gpu_worker_gpu_memory_used_bytes");
+  const gpuDeviceQueues = metricRows(metrics, "gpu_worker_gpu_device_queue_depth").map((item) => ({
+    device: item.labels.device || "default",
+    depth: Number(item.value || 0),
+  }));
   const summary = {
     status,
     totals: exportPayload.pagination || {},
+    raw_metrics: metrics,
     metrics: {
       requests,
       errors,
       error_rate: requests > 0 ? errors / requests : 0,
       inference_p95_seconds: histogramP95(metrics, "gpu_worker_inference_seconds"),
+      inference_p99_seconds: histogramQuantile(metrics, "gpu_worker_inference_seconds", 0.99),
+      queue_p95_seconds: histogramQuantile(metrics, "gpu_worker_queue_seconds", 0.95),
+      queue_p99_seconds: histogramQuantile(metrics, "gpu_worker_queue_seconds", 0.99),
+      gpu_queue_depth: metricValue(metrics, "gpu_worker_gpu_queue_depth"),
+      gpu_device_queue_depths: gpuDeviceQueues,
+      gpu_device_queue_max: metricMax(metrics, "gpu_worker_gpu_device_queue_depth"),
       gpu_free_gb: gpuFreeBytes ? gpuFreeBytes / (1024 ** 3) : null,
+      gpu_used_gb: gpuUsedBytes ? gpuUsedBytes / (1024 ** 3) : null,
+      stream_active_sessions_metric: metricValue(metrics, "gpu_worker_stream_active_sessions"),
+      loaded_models_metric: metricValue(metrics, "gpu_worker_loaded_models"),
     },
   };
   state.dashboard = summary;
@@ -1817,7 +3827,7 @@ async function refreshAdmin() {
 }
 
 async function refreshAll() {
-  await Promise.allSettled([refreshDashboard(), refreshModels(), refreshGallery(), refreshStreams(), refreshAdmin(), refreshAnalysisResults()]);
+  await Promise.allSettled([refreshDashboard(), refreshModels(), refreshGallery(), refreshStreams(), refreshAdmin(), refreshAdminData(), refreshAnalysisResults(), refreshTrackReview(), refreshEvaluationCenter(), refreshReleaseCenter(), refreshAuditCompliance()]);
 }
 
 function renderGallerySummary(payload) {
@@ -2389,18 +4399,83 @@ function setupEvents() {
   qs("#gallery-refresh-button").addEventListener("click", wrapHandler(refreshGallery));
   qs("#streams-refresh-button").addEventListener("click", wrapHandler(refreshStreams));
   qs("#admin-refresh-button").addEventListener("click", wrapHandler(refreshAdmin));
+  qs("#backup-snapshot-refresh-button").addEventListener("click", wrapHandler(refreshAdminData));
   qs("#alerts-refresh-button").addEventListener("click", wrapHandler(async () => {
     await refreshDashboard();
     renderAlerts();
   }));
 
+  qs("#access-refresh-button").addEventListener("click", wrapHandler(refreshAccessApplications));
+  qs("#access-app-form").addEventListener("submit", wrapHandler(saveAccessApp));
+  qs("#access-rotate-button").addEventListener("click", wrapHandler(() => rotateAccessApp()));
+  qs("#access-app-list").addEventListener("click", wrapHandler((event) => {
+    const target = event.target instanceof Element ? event.target.closest("[data-access-edit], [data-access-rotate], [data-access-toggle]") : null;
+    if (!target) return;
+    const editId = target.dataset.accessEdit;
+    const rotateId = target.dataset.accessRotate;
+    const toggleId = target.dataset.accessToggle;
+    if (editId) fillAccessAppForm(state.accessApplications.find((item) => item.id === editId));
+    if (rotateId) rotateAccessApp(rotateId);
+    if (toggleId) toggleAccessApp(toggleId);
+  }));
+  qs("#sdk-refresh-button").addEventListener("click", renderSdkExamples);
+  qs("#sdk-python-copy-button").addEventListener("click", wrapHandler(() => copyText(qs("#sdk-python-code").textContent, "Python 示例已复制")));
+  qs("#sdk-node-copy-button").addEventListener("click", wrapHandler(() => copyText(qs("#sdk-node-code").textContent, "Node 示例已复制")));
+  qs("#sdk-curl-copy-button").addEventListener("click", wrapHandler(() => copyText(qs("#sdk-curl-code").textContent, "curl 示例已复制")));
+  qs("#sdk-batch-copy-button").addEventListener("click", wrapHandler(() => copyText(qs("#sdk-batch-code").textContent, "批量示例已复制")));
+  qs("#sdk-video-copy-button").addEventListener("click", wrapHandler(() => copyText(qs("#sdk-video-code").textContent, "视频示例已复制")));
+  qs("#openapi-refresh-button").addEventListener("click", wrapHandler(refreshOpenApiDocs));
+  qs("#openapi-copy-button").addEventListener("click", wrapHandler(() => copyText(qs("#openapi-code").textContent, "OpenAPI 检查命令已复制")));
+  qs("#playground-form").addEventListener("submit", wrapHandler(submitPlayground));
+  qs("#playground-endpoint-input").addEventListener("change", renderPlaygroundRequestPreview);
+  [
+    "#playground-file-a-input",
+    "#playground-file-b-input",
+    "#playground-threshold-input",
+    "#playground-top-k-input",
+    "#playground-stream-id-input",
+    "#playground-stream-url-input",
+    "#playground-stream-name-input",
+    "#playground-async-mode-input",
+  ].forEach((selector) => {
+    const element = qs(selector);
+    element.addEventListener(element.type === "file" || element.type === "checkbox" ? "change" : "input", renderPlaygroundRequestPreview);
+  });
+  qs("#call-logs-refresh-button").addEventListener("click", wrapHandler(refreshCallLogs));
+  qs("#call-log-filter-button").addEventListener("click", wrapHandler(refreshCallLogs));
+  qs("#error-codes-refresh-button").addEventListener("click", wrapHandler(refreshErrorCodes));
+  qs("#webhook-refresh-button").addEventListener("click", wrapHandler(refreshWebhooks));
+  qs("#webhook-form").addEventListener("submit", wrapHandler(saveWebhook));
+  qs("#webhook-rotate-button").addEventListener("click", wrapHandler(() => rotateWebhookSecret()));
+  qs("#webhook-sample-button").addEventListener("click", wrapHandler(() => renderWebhookSample()));
+  qs("#webhook-list").addEventListener("click", wrapHandler((event) => {
+    const target = event.target instanceof Element ? event.target.closest("[data-webhook-edit], [data-webhook-rotate], [data-webhook-toggle], [data-webhook-sample]") : null;
+    if (!target) return;
+    const editId = target.dataset.webhookEdit;
+    const rotateId = target.dataset.webhookRotate;
+    const toggleId = target.dataset.webhookToggle;
+    const sampleId = target.dataset.webhookSample;
+    if (editId) fillWebhookForm(state.webhooks.find((item) => item.id === editId));
+    if (rotateId) rotateWebhookSecret(rotateId);
+    if (toggleId) toggleWebhook(toggleId);
+    if (sampleId) renderWebhookSample(sampleId);
+  }));
+  qs("#slo-refresh-button").addEventListener("click", wrapHandler(refreshSloPanel));
+  qs("#multimodal-form").addEventListener("submit", wrapHandler(submitMultimodalCompare));
+  qs("#track-review-refresh-button").addEventListener("click", wrapHandler(refreshTrackReview));
+  qs("#track-review-annotation-form").addEventListener("submit", wrapHandler(submitTrackReviewAnnotation));
+  qs("#evaluation-refresh-button").addEventListener("click", wrapHandler(refreshEvaluationCenter));
+  qs("#release-refresh-button").addEventListener("click", wrapHandler(refreshReleaseCenter));
+  qs("#release-form").addEventListener("submit", wrapHandler(submitReleaseAction));
+  qs("#audit-refresh-button").addEventListener("click", wrapHandler(refreshAuditCompliance));
+  qs("#audit-event-filter-button").addEventListener("click", wrapHandler(refreshAuditCompliance));
   qs("#vision-form").addEventListener("submit", wrapHandler(submitVision));
   qs("#compare-form").addEventListener("submit", wrapHandler(submitCompare));
   qs("#enroll-form").addEventListener("submit", wrapHandler(submitGalleryEnroll));
   qs("#search-form").addEventListener("submit", wrapHandler(submitGallerySearch));
   qs("#video-form").addEventListener("submit", wrapHandler(submitVideoJob));
   qs("#stream-form").addEventListener("submit", wrapHandler(submitStream));
-  ["#vision-visuals", "#job-visuals", "#image-results-visuals", "#video-results-visuals"].forEach((selector) => qs(selector).addEventListener("click", (event) => {
+  ["#vision-visuals", "#job-visuals", "#image-results-visuals", "#video-results-visuals", "#track-review-visuals"].forEach((selector) => qs(selector).addEventListener("click", (event) => {
     const trigger = event.target instanceof Element ? event.target.closest("[data-result-visual-index]") : null;
     if (!trigger) return;
     const index = Number(trigger.dataset.resultVisualIndex);
@@ -2438,6 +4513,7 @@ function setupEvents() {
   qs("#unload-model-button").addEventListener("click", wrapHandler(async () => {
     const id = encodedInput("#model-id-input", "模型 ID");
     if (!id) return;
+    if (!window.confirm("确认卸载该模型？正在使用的请求可能回退到冷加载。")) return;
     renderPayload("models", "#models-json", await api(`/v1/models/${id}/unload`, { method: "POST" }));
     await refreshModels();
   }));
@@ -2467,6 +4543,7 @@ function setupEvents() {
   qs("#person-delete-button").addEventListener("click", wrapHandler(async () => {
     const id = encodedInput("#person-id-input", "人员 ID");
     if (!id) return;
+    if (!window.confirm("确认删除该人员并清理相关特征、对象和向量索引？")) return;
     renderPayload("gallery", "#gallery-json", await api(`/v1/gallery/${id}`, { method: "DELETE" }));
     await refreshGallery();
   }));
@@ -2561,25 +4638,28 @@ function setupEvents() {
       const value = qs(selector).value;
       if (value !== "") payload[key] = Number(value);
     });
+    if (!window.confirm("确认保存该阈值 profile？它会影响后续比对和检索判断。")) return;
     renderPayload("admin-threshold", "#admin-threshold-json", await api(`/v1/thresholds/${encodeURIComponent(profile)}`, { method: "PUT", json: payload }));
   }));
   qs("#retention-form").addEventListener("submit", wrapHandler(async (event) => {
     event.preventDefault();
-    renderPayload("admin-data", "#admin-data-json", await api("/v1/admin/retention/cleanup", {
+    const result = await api("/v1/admin/retention/cleanup", {
       method: "POST",
       json: { retention_days: Number(qs("#retention-days-input").value), confirm: qs("#retention-confirm-input").value },
-    }));
+    });
+    await refreshAdminData({ action: "retention_cleanup", result });
   }));
   qs("#backup-form").addEventListener("submit", wrapHandler(async (event) => {
     event.preventDefault();
     const updatedSince = qs("#backup-updated-since-input").value;
-    renderPayload("admin-data", "#admin-data-json", await api("/v1/admin/backup", {
+    const result = await api("/v1/admin/backup", {
       method: "POST",
       json: {
         updated_since: updatedSince === "" ? null : Number(updatedSince),
         confirm: qs("#backup-confirm-input").value,
       },
-    }));
+    });
+    await refreshAdminData({ action: "backup", result });
   }));
   qs("#alert-form").addEventListener("submit", wrapHandler(async (event) => {
     event.preventDefault();

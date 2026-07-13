@@ -410,6 +410,7 @@ curl http://127.0.0.1:9001/ready
 
 ```bash
 TOKEN="你的API_TOKEN"
+# 如果这里使用接入中心生成的应用密钥，下面的 smoke/regression 命令增加 --auth-scheme api-key。
 ```
 
 推荐用内置冒烟测试做一次完整接口检查：
@@ -418,6 +419,7 @@ TOKEN="你的API_TOKEN"
 python3 tools/service_smoke_test.py \
   --base-url http://127.0.0.1:9001 \
   --token "$TOKEN" \
+  --auth-scheme api-key \
   --require-ready \
   --model-id person_detector_default
 ```
@@ -428,6 +430,7 @@ python3 tools/service_smoke_test.py \
 python3 tools/service_smoke_test.py \
   --base-url http://127.0.0.1:9001 \
   --token "$TOKEN" \
+  --auth-scheme api-key \
   --require-ready \
   --deep-ready \
   --load-models \
@@ -440,7 +443,8 @@ python3 tools/service_smoke_test.py \
 python3 tools/regression_check.py \
   --manifest regression.yml \
   --base-url http://127.0.0.1:9001 \
-  --token "$TOKEN"
+  --token "$TOKEN" \
+  --auth-scheme api-key
 ```
 
 新模型通过校验后，可以用别名切换接口发布。先 dry-run：

@@ -48,7 +48,7 @@ def parse_csv_env(name: str, default: str = "") -> list[str]:
     return [item.strip() for item in os.getenv(name, default).split(",") if item.strip()]
 
 
-APP_VERSION = "0.5.57"
+APP_VERSION = "0.6.0"
 PORTRAIT_RUNTIME_PROFILE = os.getenv("PORTRAIT_RUNTIME_PROFILE", os.getenv("APP_ENV", "development")).strip().lower() or "development"
 PRODUCTION_EXTERNAL_SERVICES_REQUIRED = parse_bool_env("PRODUCTION_EXTERNAL_SERVICES_REQUIRED", True)
 MODELS_ROOT = Path(os.getenv("MODELS_ROOT", "models")).resolve()
@@ -131,6 +131,9 @@ PORTRAIT_AUDIT_PATH = Path(os.getenv("PORTRAIT_AUDIT_PATH", str(RUNTIME_STATE_DI
 AUDIT_WRITE_FAIL_CLOSED = parse_bool_env("AUDIT_WRITE_FAIL_CLOSED", True)
 PORTRAIT_JOBS_STATE_PATH = Path(os.getenv("PORTRAIT_JOBS_STATE_PATH", str(RUNTIME_STATE_DIR / "portrait-jobs.json")))
 PORTRAIT_STREAMS_STATE_PATH = Path(os.getenv("PORTRAIT_STREAMS_STATE_PATH", str(RUNTIME_STATE_DIR / "portrait-streams.json")))
+PORTRAIT_ACCESS_STATE_PATH = Path(os.getenv("PORTRAIT_ACCESS_STATE_PATH", str(RUNTIME_STATE_DIR / "portrait-access.json")))
+PORTRAIT_REVIEW_STATE_PATH = Path(os.getenv("PORTRAIT_REVIEW_STATE_PATH", str(RUNTIME_STATE_DIR / "portrait-review-annotations.json")))
+PORTRAIT_ACCESS_KEY_ROTATION_GRACE_SECONDS = parse_float_env("PORTRAIT_ACCESS_KEY_ROTATION_GRACE_SECONDS", 300.0)
 STREAM_WORKER_LOCK_DIR = Path(os.getenv("STREAM_WORKER_LOCK_DIR", str(PORTRAIT_STREAMS_STATE_PATH.parent / "stream-worker-locks")))
 ALLOW_PRIVATE_STREAM_HOSTS = parse_bool_env("ALLOW_PRIVATE_STREAM_HOSTS", False)
 STREAM_ALLOWED_HOSTS = [item.lower() for item in parse_csv_env("STREAM_ALLOWED_HOSTS")]

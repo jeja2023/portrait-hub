@@ -9,6 +9,7 @@ from app.model_refs import split_cache_key, validate_alias_name
 from app.observability import logger
 from app.portrait_auth import permission_dependency
 from app.portrait_response import exception_log_summary
+from app.rollout_audit import MAX_ROLLOUT_AUDIT_LIMIT, read_rollout_audit
 from app.schemas import AliasRollbackRequest, AliasSwitchRequest, AliasWeightedRolloutRequest
 from app.security import require_api_token
 
@@ -49,6 +50,22 @@ async def rollout_aliases() -> dict[str, Any]:
         "config_loaded": True,
         "aliases": aliases,
         "count": len(aliases),
+    }
+
+
+@router.get("/rollout/audit", dependencies=[Depends(require_api_token), Depends(permission_dependency("models:read"))])
+async def rollout_audit_entries(limit: int = Query(100, ge=1, le=MAX_ROLLOUT_AUDIT_LIMIT)) -> dict[str, Any]:
+    try:
+        records, malformed_count = read_rollout_audit(limit)
+    except Exception as exc:
+        logger.warning("failed to read rollout audit: %s", exception_log_summary(exc))
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="rollout audit unavailable") from exc
+    return {
+        "status": "success",
+        "records": records,
+        "count": len(records),
+        "limit": limit,
+        "malformed_count": malformed_count,
     }
 
 

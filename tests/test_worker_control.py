@@ -33,11 +33,18 @@ def test_auth_headers_include_default_tenant_without_token() -> None:
     assert auth_headers(None) == {"X-Tenant-ID": "default"}
 
 
-def test_auth_headers_include_token_and_custom_tenant() -> None:
+def test_auth_headers_include_bearer_token_and_custom_tenant() -> None:
     assert auth_headers("token", "tenant-a") == {
         "X-Tenant-ID": "tenant-a",
         "Authorization": "Bearer token",
-        "X-API-Key": "token",
+    }
+
+
+
+def test_auth_headers_can_send_application_api_key() -> None:
+    assert auth_headers("phk_secret", "tenant-a", "api-key") == {
+        "X-Tenant-ID": "tenant-a",
+        "X-API-Key": "phk_secret",
     }
 
 
@@ -67,7 +74,11 @@ def test_request_worker_redacts_sensitive_payload(monkeypatch) -> None:
 
     monkeypatch.setitem(__import__("sys").modules, "httpx", FakeHttpx)
 
-    args = type("Args", (), {"action": "health", "token": "token", "tenant_id": "tenant-a", "timeout": 1.0, "model": []})()
+    args = type(
+        "Args",
+        (),
+        {"action": "health", "token": "token", "tenant_id": "tenant-a", "auth_scheme": "bearer", "timeout": 1.0, "model": []},
+    )()
     result = request_worker("http://testserver", args)
 
     assert result["payload"]["error"]["api_key"] == "<redacted>"

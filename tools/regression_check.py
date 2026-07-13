@@ -127,7 +127,31 @@ def open_case_files(case: dict[str, Any], base_dir: Path) -> tuple[list[tuple[st
     return file_items, handles
 
 
-def run_case(client: Any, base_url: str, token: str | None, tenant_id: str, case: dict[str, Any], base_dir: Path) -> dict[str, Any]:
+def normalize_auth_scheme(value: str) -> str:
+    normalized = value.strip().lower().replace("_", "-")
+    if normalized not in {"bearer", "api-key"}:
+        raise ValueError("auth_scheme must be 'bearer' or 'api-key'")
+    return normalized
+
+
+def apply_auth_headers(headers: dict[str, Any], token: str | None, auth_scheme: str) -> None:
+    if not token:
+        return
+    if normalize_auth_scheme(auth_scheme) == "api-key":
+        headers.setdefault("X-API-Key", token)
+    else:
+        headers.setdefault("Authorization", f"Bearer {token}")
+
+
+def run_case(
+    client: Any,
+    base_url: str,
+    token: str | None,
+    tenant_id: str,
+    case: dict[str, Any],
+    base_dir: Path,
+    auth_scheme: str = "bearer",
+) -> dict[str, Any]:
     method = str(case.get("method", "GET")).upper()
     path = str(case.get("path") or case.get("endpoint") or "")
     if not path.startswith("/"):
@@ -136,9 +160,7 @@ def run_case(client: Any, base_url: str, token: str | None, tenant_id: str, case
     headers = dict(case.get("headers") or {})
     if tenant_id:
         headers.setdefault("X-Tenant-ID", tenant_id)
-    if token:
-        headers.setdefault("Authorization", f"Bearer {token}")
-        headers.setdefault("X-API-Key", token)
+    apply_auth_headers(headers, token, str(case.get("auth_scheme", auth_scheme)))
 
     files, handles = open_case_files(case, base_dir)
     try:
@@ -190,7 +212,7 @@ def run_regression(args: argparse.Namespace) -> dict[str, Any]:
                 tol_val = args.tolerance
             tolerance = float(tol_val) if tol_val is not None else 1e-6
             case_tenant_id = str(case.get("tenant_id", tenant_id))
-            actual = run_case(client, args.base_url, args.token, case_tenant_id, case, base_dir)
+            actual = run_case(client, args.base_url, args.token, case_tenant_id, case, base_dir, args.auth_scheme)
             comparison = CompareResult()
             if actual["status_code"] != expected_status:
                 comparison.error("$status_code", f"expected {expected_status}, got {actual['status_code']}")
@@ -214,6 +236,7 @@ def main() -> int:
     parser.add_argument("--manifest", required=True, help="Regression manifest YAML/JSON.")
     parser.add_argument("--base-url", default="http://127.0.0.1:9001", help="Service base URL.")
     parser.add_argument("--token", default=None, help="API token for protected endpoints.")
+    parser.add_argument("--auth-scheme", choices=["bearer", "api-key"], default="bearer", help="How --token is sent unless a case overrides auth_scheme.")
     parser.add_argument("--tenant-id", default="default", help="Default tenant id sent as X-Tenant-ID.")
     parser.add_argument("--timeout", type=float, default=30.0, help="Request timeout in seconds.")
     parser.add_argument("--tolerance", type=float, default=1e-6, help="Default float comparison tolerance.")

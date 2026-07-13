@@ -88,7 +88,7 @@ v1 已加入的生产加固：
 - `MAX_PUBLIC_METADATA_BYTES`、`MAX_PUBLIC_METADATA_DEPTH`、`MAX_PUBLIC_METADATA_KEYS` 和 `MAX_PUBLIC_METADATA_STRING_LENGTH` 限制用户可写的元数据/设置字段。
 - `MAX_AUDIT_PAYLOAD_BYTES`、`MAX_AUDIT_DEPTH`、`MAX_AUDIT_KEYS`、`MAX_AUDIT_LIST_ITEMS` 和 `MAX_AUDIT_STRING_LENGTH` 限制脱敏审计载荷的大小和复杂度。
 - `API_LIST_DEFAULT_LIMIT`、`MAX_API_LIST_LIMIT`、`STREAM_EVENT_LIST_DEFAULT_LIMIT` 和 `MAX_STREAM_EVENT_LIST_LIMIT` 限制列表/导出响应大小。
-- `/v1/admin/export` 和 `/v1/admin/retention/cleanup` 提供按租户范围的运维导出和保留清理，覆盖任务、流事件、底库记录和底库对象载荷；导出支持 `updated_since` 增量过滤，`/v1/admin/backup` 可把导出快照写入本地或 S3 对象存储。
+- `/v1/admin/export`、`/v1/admin/audit/verify`、`/v1/admin/audit/events`、`/v1/admin/backups` 和 `/v1/admin/retention/cleanup` 提供按租户范围的运维导出、审计链校验、最近审计事件读回、备份快照读回和保留清理；审计链校验只返回脱敏 `path_hash`、记录数、错误数和链头哈希，审计事件接口只返回当前租户的白名单字段，支持按事件、结果、分类、request_id 和时间窗口过滤，并返回删除、导出、模型版本、保留清理分类汇总；导出支持 `updated_since` 增量过滤，`/v1/admin/backup` 可把导出快照写入本地或 S3 对象存储，`/v1/admin/backups` 只按白名单返回当前租户最近快照的时间、request_id、对象后端、字节数、增量起点和审计哈希。
 
 生产集成产物：
 
@@ -514,6 +514,8 @@ python tools/validate_model_package.py --config models.yml --models-root models 
 - `tools/validate_model_package.py` 用于上线前校验算法侧交付的模型包。生产上线建议加 `--strict-hash --strict-sidecars`，要求 sha256、模型卡和 labels 齐全。
 - `tools/regression_check.py` 用于固定样例回归检查，可以对运行中的服务发起 HTTP 请求，并按期望输出子集和浮点容忍阈值比对。
 - `tools/portrait_migrate.py`、`tools/portrait_backup_scheduler.py` 和 `tools/load_test.py` 分别用于数据迁移、备份调度和 HTTP 压测；`tools/portrait_migrate.py gallery-to-vector --dry-run --skip-load-state` 可用于快速验证本地向量迁移路径。
+- 对外接入应用密钥使用 `X-API-Key`，`service_smoke_test.py`、`regression_check.py` 和 `load_test.py` 均支持 `--auth-scheme api-key`；内部运维 JWT/全局 token 继续使用默认 Bearer。Postman 集合位于 `tools/portrait_hub_postman_collection.json`，变量为 `base_url`、`tenant_id` 和 `api_key`。
+- 两个业务 demo client 位于 `examples/demo-clients/`：Python 默认 `tenant-a`，Node 默认 `tenant-b`，均通过 SDK 使用应用 API Key，可用 `--dry-run` 验证接入步骤。
 
 服务启动后可以执行 HTTP 冒烟测试：
 
@@ -521,6 +523,7 @@ python tools/validate_model_package.py --config models.yml --models-root models 
 python tools/service_smoke_test.py \
   --base-url http://127.0.0.1:9001 \
   --token "$API_TOKEN" \
+  --auth-scheme api-key \
   --require-ready \
   --model-id person_detector_default
 ```
@@ -558,7 +561,8 @@ cases:
 python tools/regression_check.py \
   --manifest regression.yml \
   --base-url http://127.0.0.1:9001 \
-  --token "$API_TOKEN"
+  --token "$API_TOKEN" \
+  --auth-scheme api-key
 ```
 
 多 worker 运维控制可以使用：
@@ -681,6 +685,7 @@ curl -X POST http://127.0.0.1:9001/vision/infer \
 - `/metrics` 还暴露模型维度指标，例如 `gpu_worker_model_config_info`、`gpu_worker_model_loaded_info`、`gpu_worker_model_inference_count_total`，标签包含 `model`、`task`、`version` 和 `status`。
 - 设置 `OPENTELEMETRY_ENABLED=true` 且安装 optional 依赖后，服务会自动为 FastAPI 请求生成 OpenTelemetry span，并通过 OTLP HTTP exporter 输出。
 - 别名切换、weighted rollout 和 rollback 会追加写入 `ROLLOUT_AUDIT_PATH` 指向的 JSONL 文件。Docker Compose 默认把审计文件放在宿主机 `./runtime-state/` 中，便于容器重建后继续保留。
+- 管理员可通过 `GET /rollout/audit?limit=20` 查看最近非 dry-run 发布、灰度和回滚记录；接口只返回时间、事件、别名、目标、灰度权重和写入状态等白名单字段。
 
 ## 业务容器接入
 
@@ -706,6 +711,12 @@ http://gpu-worker-1:8000/predict
 
 端口默认只绑定 `127.0.0.1`，外部机器不能直接访问。需要跨机器访问时，建议放在受控内网网关或反向代理后面，再加鉴权和限流。
 
+业务项目正式接入 `/v1` 人像中台接口时，建议从以下交付物起步：
+
+- [PortraitHub 接入指南](docs/operations/INTEGRATION_GUIDE.md)：稳定 API、SDK 示例、错误处理、SLO 和接入验收清单。
+- 接入中心提供 `GET /v1/access/error-codes`，控制台“错误码”页可直接查看稳定 `detail.code`、HTTP 状态和重试建议。
+- [Nginx 网关模板](ops/nginx-gateway.example.conf)：内网 TLS、租户限流、请求体大小、`X-Request-ID` 透传和受保护指标入口示例。
+
 ## 配置项
 
 通过 `docker-compose.yml` 的环境变量调整：
@@ -728,6 +739,7 @@ http://gpu-worker-1:8000/predict
 - `TENSORRT_ENGINE_CACHE_PATH`: TensorRT engine cache 路径，默认 `/tmp/tensorrt-engine-cache`。
 - `RUNTIME_STATE_HOST_DIR`: 宿主机运行期状态目录，默认 `./runtime-state`。
 - `ROLLOUT_AUDIT_PATH`: 灰度/别名变更审计 JSONL 文件路径，默认 `/workspace/runtime-state/rollout-audit.jsonl`。
+- `PORTRAIT_REVIEW_STATE_PATH`: 轨迹审阅人工标注状态文件路径，默认 `/workspace/runtime-state/portrait-review-annotations.json`；这些标注进入评估数据池，不直接修改线上模型；评估中心会通过 `/v1/evaluation/track-reviews/summary` 展示租户内汇总、最近样本和证据索引，通过 `/v1/evaluation/datasets` 展示由标注池派生的动态数据集列表，并通过 `/v1/evaluation/threshold-recommendations` 给出只读阈值推荐；推荐不会自动写入阈值配置。
 - `MAX_IMAGE_BYTES`: `/infer/persons` 单张上传图片大小上限，默认 `10485760`。
 - `MAX_PERSON_FRAMES`: `/infer/persons` 单次请求图片数量上限，默认 `16`。
 - `MAX_EMBEDDING_IMAGES`: `/infer/person-embeddings` 单次请求图片数量上限，默认 `64`。

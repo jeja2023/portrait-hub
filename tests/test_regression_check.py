@@ -61,7 +61,7 @@ class FakeRegressionClient:
         return FakeRegressionResponse()
 
 
-def test_run_case_sends_default_tenant_and_token_headers() -> None:
+def test_run_case_sends_default_tenant_and_bearer_headers() -> None:
     client = FakeRegressionClient()
 
     actual = run_case(client, "http://testserver", "token", "tenant-a", {"path": "/v1/admin/status"}, Path("."))
@@ -70,8 +70,45 @@ def test_run_case_sends_default_tenant_and_token_headers() -> None:
     headers = client.calls[0]["headers"]
     assert headers["X-Tenant-ID"] == "tenant-a"
     assert headers["Authorization"] == "Bearer token"
-    assert headers["X-API-Key"] == "token"
+    assert "X-API-Key" not in headers
 
+
+
+def test_run_case_can_send_application_api_key_header() -> None:
+    client = FakeRegressionClient()
+
+    actual = run_case(
+        client,
+        "http://testserver",
+        "phk_secret",
+        "tenant-a",
+        {"path": "/v1/admin/status"},
+        Path("."),
+        auth_scheme="api-key",
+    )
+
+    assert actual == {"status_code": 200, "payload": {"status": "ok"}}
+    headers = client.calls[0]["headers"]
+    assert headers["X-Tenant-ID"] == "tenant-a"
+    assert headers["X-API-Key"] == "phk_secret"
+    assert "Authorization" not in headers
+
+
+def test_run_case_allows_case_level_auth_scheme_override() -> None:
+    client = FakeRegressionClient()
+
+    run_case(
+        client,
+        "http://testserver",
+        "phk_secret",
+        "tenant-a",
+        {"path": "/v1/admin/status", "auth_scheme": "api-key"},
+        Path("."),
+    )
+
+    headers = client.calls[0]["headers"]
+    assert headers["X-API-Key"] == "phk_secret"
+    assert "Authorization" not in headers
 
 def test_run_case_preserves_explicit_tenant_header() -> None:
     client = FakeRegressionClient()

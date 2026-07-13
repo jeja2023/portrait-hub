@@ -23,13 +23,21 @@ class PortraitHubClient:
         self,
         base_url: str,
         api_token: str | None = None,
+        auth_scheme: str = "bearer",
         timeout: float = 30.0,
         tenant_id: str = "default",
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.api_token = api_token
+        self.auth_scheme = self._normalize_auth_scheme(auth_scheme)
         self.timeout = timeout
         self.tenant_id = tenant_id
+
+    def _normalize_auth_scheme(self, value: str) -> str:
+        normalized = value.strip().lower().replace("-", "_")
+        if normalized not in {"bearer", "api_key"}:
+            raise ValueError("auth_scheme must be 'bearer' or 'api_key'")
+        return normalized
 
     def _path_segment(self, value: str) -> str:
         return quote(str(value), safe="")
@@ -41,7 +49,10 @@ class PortraitHubClient:
         headers = dict(extra or {})
         headers["X-Tenant-ID"] = self.tenant_id
         if self.api_token:
-            headers["Authorization"] = f"Bearer {self.api_token}"
+            if self.auth_scheme == "api_key":
+                headers["X-API-Key"] = self.api_token
+            else:
+                headers["Authorization"] = f"Bearer {self.api_token}"
         return headers
 
     def _path_with_query(self, path: str, params: dict[str, Any] | None = None) -> str:
@@ -155,11 +166,56 @@ class PortraitHubClient:
             files=[("files", image) for image in images],
         )
 
-    def search(self, image: str | Path, modality: str = "body", top_k: int = 5) -> dict[str, Any]:
+    def search(
+        self,
+        image: str | Path,
+        modality: str = "body",
+        top_k: int = 5,
+        threshold_profile: str = "normal",
+    ) -> dict[str, Any]:
         return self._multipart(
             "/v1/gallery/search",
-            fields={"modality": modality, "top_k": top_k},
+            fields={"modality": modality, "top_k": top_k, "threshold_profile": threshold_profile},
             files=[("file", image)],
+        )
+
+    def search_batch(
+        self,
+        images: list[str | Path],
+        modality: str = "body",
+        top_k: int = 5,
+        threshold_profile: str = "normal",
+        async_mode: bool = False,
+    ) -> dict[str, Any]:
+        return self._multipart(
+            "/v1/gallery/search/batch",
+            fields={
+                "modality": modality,
+                "top_k": top_k,
+                "threshold_profile": threshold_profile,
+                "async_mode": async_mode,
+            },
+            files=[("files", image) for image in images],
+        )
+
+    def compare_batch(
+        self,
+        image_a: list[str | Path],
+        image_b: list[str | Path],
+        modality: str = "body",
+        threshold_profile: str = "normal",
+        include_vectors: bool = False,
+        async_mode: bool = False,
+    ) -> dict[str, Any]:
+        return self._multipart(
+            "/v1/compare/batch",
+            fields={
+                "modality": modality,
+                "threshold_profile": threshold_profile,
+                "include_vectors": include_vectors,
+                "async_mode": async_mode,
+            },
+            files=[("image_a", image) for image in image_a] + [("image_b", image) for image in image_b],
         )
 
     def reindex_gallery(

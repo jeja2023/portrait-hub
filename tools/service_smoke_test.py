@@ -26,13 +26,33 @@ class SmokeReport:
         return all(item["ok"] for item in self.checks)
 
 
-def request_json(base_url: str, path: str, token: str | None, timeout: float, tenant_id: str = "default") -> tuple[int, Any]:
-    url = base_url.rstrip("/") + path
+def normalize_auth_scheme(value: str) -> str:
+    normalized = value.strip().lower().replace("_", "-")
+    if normalized not in {"bearer", "api-key"}:
+        raise ValueError("auth_scheme must be 'bearer' or 'api-key'")
+    return normalized
+
+
+def auth_headers(token: str | None, tenant_id: str = "default", auth_scheme: str = "bearer") -> dict[str, str]:
     headers = {"Accept": "application/json", "X-Tenant-ID": tenant_id}
     if token:
-        headers["Authorization"] = f"Bearer {token}"
-        headers["X-API-Key"] = token
-    request = Request(url, headers=headers)
+        if normalize_auth_scheme(auth_scheme) == "api-key":
+            headers["X-API-Key"] = token
+        else:
+            headers["Authorization"] = f"Bearer {token}"
+    return headers
+
+
+def request_json(
+    base_url: str,
+    path: str,
+    token: str | None,
+    timeout: float,
+    tenant_id: str = "default",
+    auth_scheme: str = "bearer",
+) -> tuple[int, Any]:
+    url = base_url.rstrip("/") + path
+    request = Request(url, headers=auth_headers(token, tenant_id, auth_scheme))
     try:
         with urlopen(request, timeout=timeout) as response:
             body = response.read().decode("utf-8")
@@ -62,9 +82,10 @@ def check_json_endpoint(
     timeout: float,
     expected_status: set[int],
     tenant_id: str = "default",
+    auth_scheme: str = "bearer",
 ) -> Any:
     try:
-        status, payload = request_json(base_url, path, token, timeout, tenant_id)
+        status, payload = request_json(base_url, path, token, timeout, tenant_id, auth_scheme)
     except (TimeoutError, URLError) as exc:
         report.add(name, False, f"request failed: {exc}")
         return None
@@ -73,9 +94,17 @@ def check_json_endpoint(
     return payload
 
 
-def check_openapi(report: SmokeReport, base_url: str, token: str | None, timeout: float, required: bool, tenant_id: str = "default") -> None:
+def check_openapi(
+    report: SmokeReport,
+    base_url: str,
+    token: str | None,
+    timeout: float,
+    required: bool,
+    tenant_id: str = "default",
+    auth_scheme: str = "bearer",
+) -> None:
     expected_status = {200} if required else {200, 404}
-    openapi = check_json_endpoint(report, "openapi", base_url, "/openapi.json", token, timeout, expected_status, tenant_id)
+    openapi = check_json_endpoint(report, "openapi", base_url, "/openapi.json", token, timeout, expected_status, tenant_id, auth_scheme)
     openapi_status = report.checks[-1]["detail"]["status"] if report.checks else None
     if openapi_status == 200 and isinstance(openapi, dict) and isinstance(openapi.get("paths"), dict):
         paths = set(openapi.get("paths", {}))
@@ -89,20 +118,20 @@ def check_openapi(report: SmokeReport, base_url: str, token: str | None, timeout
 
 def run_smoke(args: argparse.Namespace) -> SmokeReport:
     report = SmokeReport()
-    health = check_json_endpoint(report, "health", args.base_url, "/health", args.token, args.timeout, {200}, args.tenant_id)
+    health = check_json_endpoint(report, "health", args.base_url, "/health", args.token, args.timeout, {200}, args.tenant_id, args.auth_scheme)
     if isinstance(health, dict) and health.get("status") == "healthy":
         report.add("health_status", True, health.get("status") if isinstance(health, dict) else health)
     else:
         report.add("health_status", False, health)
 
-    check_openapi(report, args.base_url, args.token, args.timeout, args.check_openapi, args.tenant_id)
+    check_openapi(report, args.base_url, args.token, args.timeout, args.check_openapi, args.tenant_id, args.auth_scheme)
 
-    check_json_endpoint(report, "metrics", args.base_url, "/metrics", args.token, args.timeout, {200}, args.tenant_id)
+    check_json_endpoint(report, "metrics", args.base_url, "/metrics", args.token, args.timeout, {200}, args.tenant_id, args.auth_scheme)
 
     if args.require_ready:
-        check_json_endpoint(report, "ready", args.base_url, "/ready", args.token, args.timeout, {200}, args.tenant_id)
+        check_json_endpoint(report, "ready", args.base_url, "/ready", args.token, args.timeout, {200}, args.tenant_id, args.auth_scheme)
     else:
-        check_json_endpoint(report, "ready_optional", args.base_url, "/ready", args.token, args.timeout, {200, 503}, args.tenant_id)
+        check_json_endpoint(report, "ready_optional", args.base_url, "/ready", args.token, args.timeout, {200, 503}, args.tenant_id, args.auth_scheme)
 
     if args.deep_ready:
         query = urlencode(
@@ -111,14 +140,14 @@ def run_smoke(args: argparse.Namespace) -> SmokeReport:
                 "dummy_inference": "true" if args.dummy_inference else "false",
             }
         )
-        check_json_endpoint(report, "ready_deep", args.base_url, f"/ready/deep?{query}", args.token, args.timeout, {200}, args.tenant_id)
+        check_json_endpoint(report, "ready_deep", args.base_url, f"/ready/deep?{query}", args.token, args.timeout, {200}, args.tenant_id, args.auth_scheme)
 
     for model_id in args.model_id or []:
         query_args = {"model_id": model_id}
         if args.traffic_key:
             query_args["traffic_key"] = args.traffic_key
         query = urlencode(query_args)
-        check_json_endpoint(report, f"model_package:{model_id}", args.base_url, f"/model-package?{query}", args.token, args.timeout, {200}, args.tenant_id)
+        check_json_endpoint(report, f"model_package:{model_id}", args.base_url, f"/model-package?{query}", args.token, args.timeout, {200}, args.tenant_id, args.auth_scheme)
 
     return report
 
@@ -127,6 +156,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Run a smoke test against a running gpu-services endpoint.")
     parser.add_argument("--base-url", default="http://127.0.0.1:9001", help="Service base URL.")
     parser.add_argument("--token", default=None, help="API token for protected endpoints.")
+    parser.add_argument("--auth-scheme", choices=["bearer", "api-key"], default="bearer", help="How --token is sent.")
     parser.add_argument("--tenant-id", default="default", help="Tenant id sent as X-Tenant-ID for tenant-scoped endpoints.")
     parser.add_argument("--timeout", type=float, default=10.0, help="Request timeout in seconds.")
     parser.add_argument("--require-ready", action="store_true", help="Fail if /ready is not runtime-ready.")

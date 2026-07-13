@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 import threading
+from typing import Any
 
 from fastapi import HTTPException, Request, status
 
@@ -20,6 +21,12 @@ class TokenBucket:
     updated_at: float
 
 
+@dataclass(frozen=True)
+class RequestRateLimits:
+    per_minute: int
+    burst: int
+
+
 BUCKETS: dict[str, TokenBucket] = {}
 BUCKETS_LOCK = threading.RLock()
 LAST_CLEANUP_AT = 0.0
@@ -30,6 +37,44 @@ def retry_after_seconds(tokens: float, refill_per_second: float) -> int:
         return 60
     needed = max(0.0, 1.0 - tokens)
     return max(1, int((needed / refill_per_second) + 0.999))
+
+
+def positive_int(value: Any) -> int | None:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed > 0 else None
+
+
+def application_policy_from_request(request: Request, now: float) -> dict[str, Any] | None:
+    tenant_id = request.headers.get("x-tenant-id")
+    api_key = request.headers.get("x-api-key")
+    if not tenant_id or not api_key:
+        return None
+    from app.portrait_access import application_request_policy
+
+    policy = application_request_policy(tenant_id, api_key, now)
+    state = getattr(request, "state", None)
+    if state is not None:
+        setattr(state, "portrait_application_id", str(policy.get("app_id") or "") if policy else None)
+    return policy
+
+
+def request_rate_limits(request: Request, now: float) -> RequestRateLimits:
+    per_minute = RATE_LIMIT_PER_MINUTE
+    burst = RATE_LIMIT_BURST if RATE_LIMIT_BURST > 0 else RATE_LIMIT_PER_MINUTE
+    application_policy = application_policy_from_request(request, now)
+    if application_policy is not None:
+        application_per_minute = positive_int(application_policy.get("rate_limit_per_minute"))
+        application_burst = positive_int(application_policy.get("rate_limit_burst"))
+        if application_per_minute is not None:
+            per_minute = application_per_minute
+        if application_burst is not None:
+            burst = application_burst
+        elif application_per_minute is not None:
+            burst = application_per_minute
+    return RequestRateLimits(per_minute=per_minute, burst=burst)
 
 
 def rate_limit_enabled() -> bool:
@@ -96,13 +141,14 @@ def ensure_bucket_capacity(now: float) -> None:
 
 
 def check_rate_limit(request: Request) -> None:
-    if not rate_limit_enabled():
-        return
     now = wall_time()
+    limits = request_rate_limits(request, now)
+    if limits.per_minute <= 0:
+        return
     with BUCKETS_LOCK:
         cleanup_idle_buckets(now)
-        burst = RATE_LIMIT_BURST if RATE_LIMIT_BURST > 0 else RATE_LIMIT_PER_MINUTE
-        refill_per_second = RATE_LIMIT_PER_MINUTE / 60.0
+        burst = limits.burst if limits.burst > 0 else limits.per_minute
+        refill_per_second = limits.per_minute / 60.0
         key = bucket_key(request)
         bucket = BUCKETS.get(key)
         if bucket is None:

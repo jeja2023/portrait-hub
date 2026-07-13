@@ -1,8 +1,8 @@
 # 后审计优化升级记录
 
-版本：`0.5.57`
+版本：`0.6.0`
 
-日期：2026-07-11
+日期：2026-07-13
 
 本文记录本轮全面检查后的已落地优化，以及仍需要真实生产依赖或业务数据配合的扩展验收项。它补充 `影鉴优化方案.md` 和 `PLATFORM_ACCEPTANCE.md`，作为后续升级的执行清单。
 
@@ -16,7 +16,52 @@
 - 标准化 Node 检查入口：新增根目录 `package.json`，`npm run check` 统一执行 Node SDK 契约测试，并同步 CI、部署检查和生产就绪模板。
 
 
-## 2026-07-11 / v0.5.57 批量并发稳定化
+## 2026-07-13 / v0.6.0 三阶段平台收口
+
+本轮按 `PORTRAIT_HUB_THREE_PHASE_OPTIMIZED_PLAN.md` 复核现状后，确认 ReID-only 平台闭环、图库/比对/视频任务/视频流、模型治理、阈值、审计、保留清理、SLO 和多模态分析骨架均已有代码落点。剩余可在无新增真实模型资产情况下完成的缺口集中在阶段二接入中心的信息架构。`0.6.0` 将这批三阶段平台能力正式纳入版本记录；真实模型包、真实回归报告、真实 cutover 证据和真实 staging 服务联调继续作为完整生产切换前置验收。
+
+本轮同时启用项目版本 `0.6.0`，同步更新 `app/settings.py`、`pyproject.toml`、`package.json`、`更新日志.md` 和三阶段计划版本号。
+
+已完成：
+
+- 控制台“接入中心”补齐 OpenAPI 页面，可读取 `/openapi.json`、展示核心 `/v1` 路径声明状态，并提供受控环境检查命令。
+- 控制台新增 Webhook 页面，可维护租户回调端点、接入应用、事件订阅、重试和超时策略，支持一次性签名密钥轮换预览和 dry-run 样例事件生成。
+- 新增 `/v1/access/applications` 与 `/v1/access/webhooks` 管理接口，持久化租户应用、API Key 哈希、Webhook 签名密钥哈希和轮换宽限窗口，并将 `phk_...` 应用密钥接入 `require_api_token` 与 RBAC scope 校验。
+
+- Python/Node SDK 新增显式 `auth_scheme` / `authScheme`，应用 API Key 走 `X-API-Key`，默认 Bearer/JWT 兼容既有调用。
+- SDK 与控制台示例补齐批量异步和视频轮询：Python/Node SDK 新增 `search_batch`/`searchBatch` 与 `compare_batch`/`compareBatch`，控制台 SDK 页展示批量 `batch_id` 和离线视频任务轮询示例，并纳入 API 契约与 readiness 门禁。
+- API Playground 扩展为阶段二受控调试面：覆盖批量检索、批量比对、实时流创建和流事件查询，按接口模板自动构造 multipart/JSON/GET 请求，并保留统一响应外层的 `request_id`、HTTP 状态和 `detail.code` 供调用日志交叉排障。
+- SLO 面板补齐运维口径：优先使用近 30 天调用日志计算成功率、错误数和错误预算燃烧率，回退到 Prometheus 计数；同时展示推理 p95/p99、GPU 队列 p95/p99、全局/按设备队列深度、活跃流和模型热状态，并纳入 API 契约与 readiness 门禁。
+- 合规审计页接入审计链校验：新增受 `admin:status` 权限保护的 `/v1/admin/audit/verify` 和 `/v1/admin/audit/events`，返回脱敏 `path_hash`、记录数、错误数、链头哈希与当前租户最近审计事件白名单字段，支持按事件、结果、分类、request_id 和时间窗口过滤，并汇总删除、导出、模型版本和保留清理分类；控制台合规页展示校验结果、筛选控件、分类摘要和审计事件表，并纳入 API 契约、deploy check 与 readiness 门禁。
+- 数据保留与备份页补齐备份快照读回：新增受 `admin:export` 权限保护的 `/v1/admin/backups`，从审计链读取当前租户 `admin_backup` 快照，只返回时间、request_id、对象后端、字节数、增量起点和审计哈希；控制台展示最近快照摘要与表格，并纳入 API 契约、deploy check 与 readiness 门禁。
+- 对外验收工具链同步应用 API Key：`service_smoke_test.py`、`regression_check.py`、`load_test.py`、`worker_control.py` 支持 `--auth-scheme api-key`，Postman 集合默认使用 `X-Tenant-ID` + `X-API-Key`。
+- 新增 `examples/demo-clients/` 两套业务 demo client：Python/tenant-a 与 Node/tenant-b 均默认应用 API Key，可 dry-run 验证 health、models、thresholds、enroll、search、compare 和 video job 接入步骤。
+- 接入应用补齐项目级限流与配额字段：`rate_limit_per_minute`、`rate_limit_burst`、`daily_quota` 已接入入口限流，应用级配置可覆盖全局令牌桶并独立执行每日配额。
+- 调用日志页从当前会话 payload 升级为服务端 `/v1/access/call-logs` 环形日志，支持按租户、request_id、应用、接口、状态、错误码和时间窗口筛选；调用日志会回写应用调用次数、错误次数、错误率、最近调用和最近错误时间，接入应用状态读写已加全局锁保护。
+- 接入中心新增 `/v1/access/error-codes` 稳定错误码目录与控制台“错误码”页，向调用方解释 `detail.code`、HTTP 状态、是否建议重试和运维处理动作，并纳入 API 契约、deploy check 与平台 strict readiness 门禁。
+- `frontend/console/views/operations.js` 同步注册 OpenAPI、Webhook、SLO、多模态、评估、发布和审计相关视图目标，避免模块化控制台漏挂新增页面。
+- `docs/operations/INTEGRATION_GUIDE.md` 补充 OpenAPI 契约快照要求、Webhook 外层事件体、签名头、幂等去重和重试规则。
+- 接入中心二次优化：接入状态读写增加线程锁，调用日志回写应用 `call_count`/`error_count`/`error_rate`/最近调用时间，限流阶段缓存应用 ID 供调用日志复用；控制台应用列表与日志页展示这些排障信号，复制示例改用环境变量占位，Python SDK 示例统一使用 `os.getenv("PORTRAIT_HUB_API_TOKEN")`，避免泄露真实 API Key。
+- 模型发布中心补齐 rollout 审计读回：新增 `GET /rollout/audit` 返回最近非 dry-run 切换/灰度/回滚记录，控制台发布中心展示审计表；readiness 新增 `security:rollout_audit_readback`，确保发布审计不再只写不可查。
+- 轨迹审阅补齐人工标注与评估数据池：新增 `GET/POST /v1/evaluation/track-reviews`，支持误检、错配、低质量、确认正确和待复核标注；状态按租户隔离并写入 `PORTRAIT_REVIEW_STATE_PATH`，控制台轨迹审阅页可直接录入和查看，评估中心通过 `/v1/evaluation/track-reviews/summary` 展示标注汇总、最近样本和证据索引，通过 `/v1/evaluation/datasets` 展示由标注池派生的动态数据集列表，并通过 `/v1/evaluation/threshold-recommendations` 基于标注池生成只读阈值推荐且不自动应用，readiness 新增 `security:track_review_annotation_pool`。
+
+本轮验收：
+
+```powershell
+python -m pytest -q
+$env:PORTRAIT_RUN_CONTAINER_INTEGRATION_TESTS = '1'
+.\.venv\Scripts\python.exe -m pytest tests\test_production_integration_containers.py -q
+.\.venv\Scripts\python.exe tools\type_check.py
+npm run check
+python tools\deploy_check.py --import-app --json
+python tools\portrait_production_readiness.py --scope platform --strict
+python tools\portrait_production_readiness.py --strict
+git diff --check
+```
+
+结果：主测试 `483 passed, 4 skipped`；testcontainers 数据栈代理测试 `4 passed`；strict mypy 通过 `158 source files`；Node 检查和部署检查通过；`deploy_check.py --import-app --json` 为 `ok=true`、60 项全绿；平台 strict readiness `ok=true`、`strict_failure_count=0`、180 项全绿；`git diff --check` 无 whitespace error。完整 `portrait_production_readiness.py --strict` 仍按预期阻断在 5 个真实模型能力：appearance、face_detection、face_embedding、gait、pose，不能用 fallback/placeholder 冒充生产能力。
+
+## 2026-07-11 / v0.5.58 批量并发稳定化
 
 本轮在 v0.5.55 的批量异步处理基础上收口并发风险：新增有界并发 helper，限制多图片解码、图库批量检索和批量比对的批内并发；失败时停止启动后续工作并取消进行中任务；批量进度回调改为串行化更新；图片像素上限改为完整加载前显式检查，不再依赖修改 PIL 全局状态。已补充 `tests/test_bounded_batch_concurrency.py`，并在 `.venv` 下通过 `tools/type_check.py` strict mypy 门禁。
 

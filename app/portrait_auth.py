@@ -35,9 +35,9 @@ except Exception:  # pragma: no cover - 当依赖不存在时执行
 
 ROLE_PERMISSIONS = {
     "admin": {"*"},
-    "operator": {"infer", "compare", "gallery:read", "gallery:write", "jobs", "streams", "models:read", "admin:status", "metrics:read"},
+    "operator": {"infer", "compare", "gallery:read", "gallery:write", "jobs", "streams", "models:read", "admin:status", "metrics:read", "access:read"},
     "algorithm": {"infer", "compare", "models:read", "models:write", "thresholds:write"},
-    "auditor": {"gallery:read", "jobs:read", "streams:read", "models:read", "admin:status", "admin:export", "metrics:read"},
+    "auditor": {"gallery:read", "jobs:read", "streams:read", "models:read", "admin:status", "admin:export", "metrics:read", "access:read"},
     "viewer": {"gallery:read", "jobs:read", "streams:read", "models:read"},
 }
 DEFAULT_JWT_SECRET_ID = "primary"
@@ -349,13 +349,24 @@ async def require_permission(
     permission: str,
     authorization: str | None = Header(default=None),
     x_tenant_id: str | None = Header(default=None),
+    x_api_key: str | None = Header(default=None),
 ) -> None:
     if not RBAC_ENABLED:
         return
+    tenant_id = optional_header_value(x_tenant_id)
+    api_key = optional_header_value(x_api_key)
+    if tenant_id and api_key:
+        from app.portrait_access import application_key_matches, application_scopes_allow_permission
+
+        application = application_key_matches(tenant_id, api_key)
+        if application is not None:
+            if application_scopes_allow_permission(application.get("scopes"), permission):
+                return
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=f"missing permission: {permission}")
     if not authorization or not authorization.startswith("Bearer "):
         raise unauthorized("missing bearer JWT")
     claims = verify_hs256_jwt(authorization.removeprefix("Bearer ").strip())
-    if not jwt_tenant_matches(claims, optional_header_value(x_tenant_id)):
+    if not jwt_tenant_matches(claims, tenant_id):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="JWT is not valid for tenant")
     if not has_permission(roles_from_claims(claims), permission):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=f"missing permission: {permission}")
@@ -365,7 +376,8 @@ def permission_dependency(permission: str) -> Callable[..., Any]:
     async def dependency(
         authorization: str | None = Header(default=None),
         x_tenant_id: str | None = Header(default=None),
+        x_api_key: str | None = Header(default=None),
     ) -> None:
-        await require_permission(permission, authorization, x_tenant_id)
+        await require_permission(permission, authorization, x_tenant_id, x_api_key)
 
     return dependency

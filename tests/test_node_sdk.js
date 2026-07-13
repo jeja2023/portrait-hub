@@ -17,6 +17,30 @@ function response({ ok, status, body, contentType = "application/json" }) {
   };
 }
 
+async function testHeadersSupportBearerAndApplicationApiKey() {
+  const bearer = new PortraitHubClient({ baseUrl: "http://testserver", apiToken: "token", tenantId: "tenant-a" });
+  assert.deepStrictEqual(bearer.headers(), {
+    "X-Tenant-ID": "tenant-a",
+    Authorization: "Bearer token",
+  });
+
+  const apiKey = new PortraitHubClient({
+    baseUrl: "http://testserver",
+    apiToken: "phk_secret",
+    tenantId: "tenant-a",
+    authScheme: "api_key",
+  });
+  assert.deepStrictEqual(apiKey.headers(), {
+    "X-Tenant-ID": "tenant-a",
+    "X-API-Key": "phk_secret",
+  });
+
+  assert.throws(
+    () => new PortraitHubClient({ baseUrl: "http://testserver", authScheme: "basic" }),
+    /authScheme/,
+  );
+}
+
 async function testBadJsonHttpErrorKeepsStructuredException() {
   const client = new PortraitHubClient({ baseUrl: "http://testserver" });
 
@@ -51,10 +75,67 @@ async function testPathsAndQueriesAreEncoded() {
   );
 }
 
+async function testBatchMethodsSendExpectedMultipartFields() {
+  const client = new PortraitHubClient({ baseUrl: "http://testserver", apiToken: "token", tenantId: "tenant-a" });
+  const calls = [];
+  client.multipart = async (path, fields, files) => {
+    calls.push({ path, fields, files });
+    return { status: "ok" };
+  };
+
+  assert.deepStrictEqual(await client.search("query.jpg", "face", 3, "strict"), { status: "ok" });
+  assert.deepStrictEqual(calls.at(-1), {
+    path: "/v1/gallery/search",
+    fields: { modality: "face", top_k: 3, threshold_profile: "strict" },
+    files: [["file", "query.jpg"]],
+  });
+
+  assert.deepStrictEqual(
+    await client.searchBatch(["query-a.jpg", "query-b.jpg"], {
+      modality: "body",
+      topK: 10,
+      thresholdProfile: "normal",
+      asyncMode: true,
+    }),
+    { status: "ok" },
+  );
+  assert.deepStrictEqual(calls.at(-1), {
+    path: "/v1/gallery/search/batch",
+    fields: { modality: "body", top_k: 10, threshold_profile: "normal", async_mode: true },
+    files: [["files", "query-a.jpg"], ["files", "query-b.jpg"]],
+  });
+
+  assert.deepStrictEqual(
+    await client.compareBatch(["a1.jpg", "a2.jpg"], ["b1.jpg", "b2.jpg"], {
+      modality: "appearance",
+      thresholdProfile: "loose",
+      includeVectors: true,
+      asyncMode: true,
+    }),
+    { status: "ok" },
+  );
+  assert.deepStrictEqual(calls.at(-1), {
+    path: "/v1/compare/batch",
+    fields: {
+      modality: "appearance",
+      threshold_profile: "loose",
+      include_vectors: true,
+      async_mode: true,
+    },
+    files: [
+      ["image_a", "a1.jpg"],
+      ["image_a", "a2.jpg"],
+      ["image_b", "b1.jpg"],
+      ["image_b", "b2.jpg"],
+    ],
+  });
+}
 async function main() {
+  await testHeadersSupportBearerAndApplicationApiKey();
   await testBadJsonHttpErrorKeepsStructuredException();
   await testEmptySuccessBodyIsObjectPayload();
   await testPathsAndQueriesAreEncoded();
+  await testBatchMethodsSendExpectedMultipartFields();
 }
 
 main().catch((error) => {

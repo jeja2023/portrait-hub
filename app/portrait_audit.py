@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import hashlib
 import math
+from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -36,7 +37,36 @@ RESERVED_AUDIT_FIELDS = CORE_AUDIT_FIELDS | {
 } | AUDIT_CHAIN_FIELDS
 MAX_AUDIT_KEY_LENGTH = 128
 MAX_OMITTED_FIELD_NAMES = 8
-
+MAX_PUBLIC_AUDIT_EVENT_LIMIT = 500
+MAX_PUBLIC_BACKUP_SNAPSHOT_LIMIT = 200
+AUDIT_EVENT_CATEGORY_KEYS = ("delete_requests", "exports", "model_versions", "retention", "other")
+PUBLIC_BACKUP_SNAPSHOT_FIELDS = {
+    "event",
+    "request_id",
+    "tenant_id",
+    "outcome",
+    "created_at",
+    "updated_since",
+    "object_backend",
+    "bytes",
+    "audit_prev_hash",
+    "audit_hash",
+    "audit_hash_algorithm",
+}
+PUBLIC_AUDIT_EVENT_FIELDS = {
+    "event",
+    "request_id",
+    "tenant_id",
+    "outcome",
+    "created_at",
+    "audit_chain_version",
+    "audit_hash_algorithm",
+    "audit_prev_hash",
+    "audit_hash",
+    "audit_truncated",
+    "audit_omitted_fields",
+    "audit_omitted_items",
+}
 
 @dataclass
 class AuditSanitizeStats:
@@ -353,6 +383,214 @@ def audit_event(event: str, *, request_id: str, tenant_id: str, outcome: str = "
             logger.warning("postgres audit write failed: %s", exception_log_summary(exc))
             if AUDIT_WRITE_FAIL_CLOSED:
                 raise
+
+
+
+def audit_event_category(event: Any) -> str:
+    text = str(event or "").lower()
+    if "retention" in text or "cleanup" in text:
+        return "retention"
+    if "delete" in text or "remove" in text:
+        return "delete_requests"
+    if "export" in text or "backup" in text:
+        return "exports"
+    if "model" in text or "alias" in text or "rollout" in text:
+        return "model_versions"
+    return "other"
+
+
+def public_audit_event_record(raw: dict[str, Any]) -> dict[str, Any]:
+    record = {key: raw[key] for key in PUBLIC_AUDIT_EVENT_FIELDS if key in raw}
+    record["category"] = audit_event_category(record.get("event"))
+    return record
+
+
+def audit_event_matches_filters(
+    payload: dict[str, Any],
+    *,
+    tenant_id: str | None = None,
+    event: str | None = None,
+    outcome: str | None = None,
+    request_id: str | None = None,
+    category: str | None = None,
+    created_since: float | None = None,
+    created_until: float | None = None,
+) -> bool:
+    if tenant_id is not None and payload.get("tenant_id") != tenant_id:
+        return False
+    if event and event.lower() not in str(payload.get("event") or "").lower():
+        return False
+    if outcome and outcome.lower() != str(payload.get("outcome") or "").lower():
+        return False
+    if request_id and request_id.lower() not in str(payload.get("request_id") or "").lower():
+        return False
+    if category and audit_event_category(payload.get("event")) != category:
+        return False
+    if created_since is not None or created_until is not None:
+        raw_created_at = payload.get("created_at")
+        if raw_created_at is None:
+            return False
+        try:
+            created_at = float(raw_created_at)
+        except (TypeError, ValueError):
+            return False
+        if created_since is not None and created_at < created_since:
+            return False
+        if created_until is not None and created_at > created_until:
+            return False
+    return True
+
+
+def empty_public_audit_event_summary() -> dict[str, Any]:
+    return {
+        "category_counts": {key: 0 for key in AUDIT_EVENT_CATEGORY_KEYS},
+        "outcome_counts": {},
+    }
+
+
+def read_public_audit_events(
+    limit: int = 50,
+    tenant_id: str | None = None,
+    path: Path | None = None,
+    *,
+    event: str | None = None,
+    outcome: str | None = None,
+    request_id: str | None = None,
+    category: str | None = None,
+    created_since: float | None = None,
+    created_until: float | None = None,
+) -> dict[str, Any]:
+    audit_path = path or PORTRAIT_AUDIT_PATH
+    bounded_limit = max(1, min(int(limit), MAX_PUBLIC_AUDIT_EVENT_LIMIT))
+    records: deque[dict[str, Any]] = deque(maxlen=bounded_limit)
+    malformed_count = 0
+    scanned_count = 0
+    matched_count = 0
+    summary = empty_public_audit_event_summary()
+    if not audit_path.is_file():
+        return {
+            "records": [],
+            "count": 0,
+            "limit": bounded_limit,
+            "matched_count": 0,
+            "malformed_count": 0,
+            "scanned_count": 0,
+            "summary": summary,
+            "filters": {
+                "tenant_id": tenant_id,
+                "event": event,
+                "outcome": outcome,
+                "request_id": request_id,
+                "category": category,
+                "created_since": created_since,
+                "created_until": created_until,
+            },
+        }
+
+    with audit_path.open("r", encoding="utf-8") as file:
+        for line in file:
+            raw_line = line.strip()
+            if not raw_line:
+                continue
+            scanned_count += 1
+            try:
+                payload = json.loads(raw_line)
+            except json.JSONDecodeError:
+                malformed_count += 1
+                continue
+            if not isinstance(payload, dict):
+                malformed_count += 1
+                continue
+            if not audit_event_matches_filters(
+                payload,
+                tenant_id=tenant_id,
+                event=event,
+                outcome=outcome,
+                request_id=request_id,
+                category=category,
+                created_since=created_since,
+                created_until=created_until,
+            ):
+                continue
+            matched_count += 1
+            event_category = audit_event_category(payload.get("event"))
+            summary["category_counts"][event_category] = summary["category_counts"].get(event_category, 0) + 1
+            outcome_key = str(payload.get("outcome") or "unknown")
+            summary["outcome_counts"][outcome_key] = summary["outcome_counts"].get(outcome_key, 0) + 1
+            records.append(public_audit_event_record(payload))
+    return {
+        "records": list(reversed(records)),
+        "count": len(records),
+        "limit": bounded_limit,
+        "matched_count": matched_count,
+        "malformed_count": malformed_count,
+        "scanned_count": scanned_count,
+        "summary": summary,
+        "filters": {
+            "tenant_id": tenant_id,
+            "event": event,
+            "outcome": outcome,
+            "request_id": request_id,
+            "category": category,
+            "created_since": created_since,
+            "created_until": created_until,
+        },
+    }
+
+
+def public_backup_snapshot_record(raw: dict[str, Any]) -> dict[str, Any]:
+    record = {key: raw[key] for key in PUBLIC_BACKUP_SNAPSHOT_FIELDS if key in raw}
+    audit_hash = record.get("audit_hash")
+    if isinstance(audit_hash, str) and audit_hash:
+        record["snapshot_id"] = audit_hash
+    return record
+
+
+def read_public_backup_snapshots(limit: int = 20, tenant_id: str | None = None, path: Path | None = None) -> dict[str, Any]:
+    audit_path = path or PORTRAIT_AUDIT_PATH
+    bounded_limit = max(1, min(int(limit), MAX_PUBLIC_BACKUP_SNAPSHOT_LIMIT))
+    snapshots: deque[dict[str, Any]] = deque(maxlen=bounded_limit)
+    malformed_count = 0
+    scanned_count = 0
+    if not audit_path.is_file():
+        return {"snapshots": [], "count": 0, "limit": bounded_limit, "malformed_count": 0, "scanned_count": 0}
+
+    with audit_path.open("r", encoding="utf-8") as file:
+        for line in file:
+            raw_line = line.strip()
+            if not raw_line:
+                continue
+            scanned_count += 1
+            try:
+                payload = json.loads(raw_line)
+            except json.JSONDecodeError:
+                malformed_count += 1
+                continue
+            if not isinstance(payload, dict):
+                malformed_count += 1
+                continue
+            if payload.get("tenant_id") != tenant_id or payload.get("event") != "admin_backup":
+                continue
+            snapshots.append(public_backup_snapshot_record(payload))
+    return {
+        "snapshots": list(reversed(snapshots)),
+        "count": len(snapshots),
+        "limit": bounded_limit,
+        "malformed_count": malformed_count,
+        "scanned_count": scanned_count,
+    }
+
+def public_audit_chain_verification(path: Path | None = None) -> dict[str, Any]:
+    audit_path = path or PORTRAIT_AUDIT_PATH
+    result = verify_audit_chain(audit_path)
+    return {
+        "ok": bool(result.get("ok")),
+        "path_hash": state_path_fingerprint(audit_path),
+        "record_count": int(result.get("record_count") or 0),
+        "head_hash": result.get("head_hash"),
+        "error_count": int(result.get("error_count") or 0),
+        "errors": result.get("errors", [])[:20],
+    }
 
 
 def verify_audit_chain(path: Path | None = None) -> dict[str, Any]:

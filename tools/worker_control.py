@@ -10,10 +10,21 @@ from typing import Any
 from tools.report_redaction import redact_for_report
 
 
-def auth_headers(token: str | None, tenant_id: str = "default") -> dict[str, str]:
+def normalize_auth_scheme(value: str) -> str:
+    normalized = value.strip().lower().replace("_", "-")
+    if normalized not in {"bearer", "api-key"}:
+        raise ValueError("auth_scheme must be 'bearer' or 'api-key'")
+    return normalized
+
+
+
+def auth_headers(token: str | None, tenant_id: str = "default", auth_scheme: str = "bearer") -> dict[str, str]:
     headers = {"X-Tenant-ID": tenant_id}
     if token:
-        headers.update({"Authorization": f"Bearer {token}", "X-API-Key": token})
+        if normalize_auth_scheme(auth_scheme) == "api-key":
+            headers["X-API-Key"] = token
+        else:
+            headers["Authorization"] = f"Bearer {token}"
     return headers
 
 
@@ -36,7 +47,7 @@ def request_worker(base_url: str, args: argparse.Namespace) -> dict[str, Any]:
         raise RuntimeError("httpx is required. Install requirements/dev.txt before running worker control.") from exc
 
     base_url = base_url.rstrip("/")
-    headers = auth_headers(args.token, args.tenant_id)
+    headers = auth_headers(args.token, args.tenant_id, args.auth_scheme)
     timeout = args.timeout
     action = args.action
     with httpx.Client(timeout=timeout) as client:
@@ -80,6 +91,7 @@ def main() -> int:
         help="Worker base URL. Can be repeated. Defaults to 9001 and 9002.",
     )
     parser.add_argument("--token", default=None, help="API token for protected endpoints.")
+    parser.add_argument("--auth-scheme", choices=["bearer", "api-key"], default="bearer", help="How --token is sent.")
     parser.add_argument("--tenant-id", default="default", help="Tenant id sent as X-Tenant-ID.")
     parser.add_argument("--timeout", type=float, default=30.0, help="Request timeout in seconds.")
     parser.add_argument(

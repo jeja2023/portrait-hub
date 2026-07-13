@@ -29,6 +29,7 @@ from app.core import (
 from app.config_hot_reload import ENV_PATH, reload_runtime_config
 from app.portrait_errors import PortraitError
 from app.rate_limit import check_rate_limit
+from app.portrait_call_logs import application_id_from_api_key, record_call_log
 from app.routes import router
 from app.security_headers import apply_security_headers
 from app.settings import APP_VERSION, CONFIG_HOT_RELOAD_ENABLED, ENABLE_API_DOCS, MAX_REQUEST_BODY_BYTES, MODEL_CONFIG_PATH, MODEL_CAPABILITIES_PATH, OPENTELEMETRY_ENABLED, OTEL_SERVICE_NAME, TRUSTED_HOSTS, WARMUP_FAIL_FAST
@@ -193,6 +194,19 @@ def internal_error_payload(request_id: str) -> dict[str, Any]:
     }
 
 
+def error_code_from_http_detail(detail: Any, status_code: int) -> str | None:
+    if isinstance(detail, dict):
+        code = detail.get("code")
+        if isinstance(code, str) and code.strip():
+            return code.strip()
+        nested = detail.get("detail")
+        if isinstance(nested, dict):
+            nested_code = nested.get("code")
+            if isinstance(nested_code, str) and nested_code.strip():
+                return nested_code.strip()
+    return f"http_{status_code}" if status_code >= 400 else None
+
+
 def create_app() -> FastAPI:
     app = FastAPI(
         title="PortraitHub Inference Service",
@@ -207,10 +221,12 @@ def create_app() -> FastAPI:
 
     @app.exception_handler(RequestValidationError)
     async def request_validation_exception_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
+        request.state.portrait_error_code = "validation_error"
         return JSONResponse(status_code=422, content=validation_error_payload(exc, request_id_from_headers(request)))
 
     @app.exception_handler(PortraitError)
     async def portrait_error_exception_handler(request: Request, exc: PortraitError) -> JSONResponse:
+        request.state.portrait_error_code = exc.code
         request_id = request_id_from_headers(request)
         return JSONResponse(status_code=exc.status_code, content={"detail": exc.public_detail(), "request_id": request_id})
 
@@ -221,6 +237,7 @@ def create_app() -> FastAPI:
         tenant_id = request.headers.get("x-tenant-id") or None
         context_tokens = set_log_context(request_id=request_id, tenant_id=tenant_id, traceparent=traceparent)
         start = now()
+        logged_error_code: str | None = None
         try:
             observe("requests_total")
             try:
@@ -228,12 +245,14 @@ def create_app() -> FastAPI:
                 check_rate_limit(request)
                 response = await call_next(request)
             except HTTPException as exc:
+                logged_error_code = error_code_from_http_detail(exc.detail, exc.status_code)
                 response = JSONResponse(
                     status_code=exc.status_code,
                     content={"detail": exc.detail, "request_id": request_id},
                     headers=exc.headers,
                 )
             except Exception:
+                logged_error_code = "internal_error"
                 duration = now() - start
                 log_json(
                     logging.ERROR,
@@ -247,6 +266,20 @@ def create_app() -> FastAPI:
                 response = JSONResponse(status_code=500, content=internal_error_payload(request_id))
             duration = now() - start
             observe_request_status(response.status_code)
+            request_state = getattr(request, "state", None)
+            logged_error_code = logged_error_code or getattr(request_state, "portrait_error_code", None)
+            application_id = getattr(request_state, "portrait_application_id", None) or application_id_from_api_key(tenant_id, request.headers.get("x-api-key"))
+            record_call_log(
+                request_id=request_id,
+                tenant_id=tenant_id,
+                application_id=application_id,
+                method=request.method,
+                path=request.url.path,
+                status_code=response.status_code,
+                latency_ms=max(0, int(duration * 1000)),
+                created_at=start,
+                error_code=logged_error_code,
+            )
             response.headers["X-Request-ID"] = request_id
             if traceparent:
                 response.headers["traceparent"] = traceparent

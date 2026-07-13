@@ -14,7 +14,7 @@ class FakeHTTPResponse:
         return b'{"status":"healthy"}'
 
 
-def test_request_json_sends_tenant_and_auth_headers(monkeypatch) -> None:
+def test_request_json_sends_bearer_auth_by_default(monkeypatch) -> None:
     captured = {}
 
     def fake_urlopen(request, timeout):
@@ -30,8 +30,26 @@ def test_request_json_sends_tenant_and_auth_headers(monkeypatch) -> None:
     assert payload == {"status": "healthy"}
     assert captured["headers"]["X-tenant-id"] == "tenant-a"
     assert captured["headers"]["Authorization"] == "Bearer token"
-    assert captured["headers"]["X-api-key"] == "token"
+    assert "X-api-key" not in captured["headers"]
     assert captured["timeout"] == 3.0
+
+
+def test_request_json_can_send_application_api_key(monkeypatch) -> None:
+    captured = {}
+
+    def fake_urlopen(request, timeout):
+        captured["headers"] = dict(request.header_items())
+        return FakeHTTPResponse()
+
+    monkeypatch.setattr("tools.service_smoke_test.urlopen", fake_urlopen)
+
+    status, payload = request_json("http://testserver", "/health", "phk_secret", 3.0, tenant_id="tenant-a", auth_scheme="api-key")
+
+    assert status == 200
+    assert payload == {"status": "healthy"}
+    assert captured["headers"]["X-api-key"] == "phk_secret"
+    assert captured["headers"]["X-tenant-id"] == "tenant-a"
+    assert "Authorization" not in captured["headers"]
 
 
 def test_smoke_report_redacts_sensitive_detail() -> None:

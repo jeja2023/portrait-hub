@@ -4,6 +4,20 @@ from app.portrait_auth import jwt_tenant_matches, optional_header_value, unautho
 from app.settings import API_TOKEN, AUTH_REQUIRED, RBAC_ENABLED
 
 
+def access_application_identity(x_api_key: str | None, x_tenant_id: str | None) -> str | None:
+    tenant_id = optional_header_value(x_tenant_id)
+    api_key = optional_header_value(x_api_key)
+    if not tenant_id or not api_key:
+        return None
+    from app.portrait_access import application_key_matches
+
+    application = application_key_matches(tenant_id, api_key)
+    if application is None:
+        return None
+    app_id = str(application.get("app_id") or application.get("id") or "application")
+    return f"access-app:{tenant_id}:{app_id}"
+
+
 def authenticated_request_identity(
     authorization: str | None,
     x_api_key: str | None = None,
@@ -36,6 +50,9 @@ def authenticated_request_identity(
             bearer = f"Bearer {API_TOKEN}"
             if authorization == bearer or x_api_key == API_TOKEN:
                 return "api-token"
+        application_identity = access_application_identity(x_api_key, x_tenant_id)
+        if application_identity:
+            return application_identity
     except HTTPException:
         return None
     return None
@@ -65,17 +82,22 @@ async def require_api_token(
         if not jwt_tenant_matches(claims, optional_header_value(x_tenant_id)):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="JWT is not valid for tenant")
         return
+
+    if API_TOKEN:
+        bearer = f"Bearer {API_TOKEN}"
+        if authorization == bearer or x_api_key == API_TOKEN:
+            return
+
+    if access_application_identity(x_api_key, x_tenant_id):
+        return
+
     if RBAC_ENABLED and not API_TOKEN:
-        raise unauthorized("missing bearer JWT")
+        raise unauthorized("missing bearer JWT or API key")
 
     if AUTH_REQUIRED and not API_TOKEN:
         raise unauthorized("authentication is required but no credential backend is configured")
 
     if not API_TOKEN:
-        return
-
-    bearer = f"Bearer {API_TOKEN}"
-    if authorization == bearer or x_api_key == API_TOKEN:
         return
 
     raise unauthorized("invalid or missing API token")

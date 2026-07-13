@@ -1,8 +1,10 @@
+from types import SimpleNamespace
+
 import pytest
 from fastapi import HTTPException
 from starlette.datastructures import Address, Headers, URL
 
-from app import rate_limit
+from app import portrait_access, rate_limit
 
 
 class DummyRequest:
@@ -13,6 +15,7 @@ class DummyRequest:
             merged.update(headers)
         self.headers = Headers(merged)
         self.client = Address(host=host, port=12345)
+        self.state = SimpleNamespace()
 
 
 def test_rate_limit_cleanup_removes_idle_buckets(monkeypatch) -> None:
@@ -135,3 +138,62 @@ def test_retry_after_uses_refill_window() -> None:
     assert rate_limit.retry_after_seconds(tokens=0.0, refill_per_second=0.5) == 2
     assert rate_limit.retry_after_seconds(tokens=0.99, refill_per_second=100.0) == 1
     assert rate_limit.retry_after_seconds(tokens=0.0, refill_per_second=0.0) == 60
+
+
+def test_application_rate_limit_overrides_disabled_global_limit(monkeypatch) -> None:
+    rate_limit.BUCKETS.clear()
+    portrait_access.clear_access_state()
+    monkeypatch.setattr(portrait_access, "save_access_state", lambda: None)
+    monkeypatch.setattr(rate_limit, "RATE_LIMIT_PER_MINUTE", 0)
+    monkeypatch.setattr(rate_limit, "RATE_LIMIT_BURST", 0)
+    monkeypatch.setattr(rate_limit, "RATE_LIMIT_MAX_BUCKETS", 100)
+    monkeypatch.setattr(rate_limit, "RATE_LIMIT_BUCKET_TTL_SECONDS", 3600)
+    monkeypatch.setattr(rate_limit, "wall_time", lambda: 100.0)
+    _, secret = portrait_access.create_application(
+        "tenant-a",
+        app_id="limited-app",
+        name="Limited App",
+        owner="integration-team",
+        status_value="active",
+        scopes=["models:read"],
+        rate_limit_per_minute=60,
+        rate_limit_burst=1,
+    )
+    request = DummyRequest("/v1/models", headers={"x-api-key": secret})
+
+    rate_limit.check_rate_limit(request)
+    assert request.state.portrait_application_id == "limited-app"
+    with pytest.raises(HTTPException) as exc_info:
+        rate_limit.check_rate_limit(request)
+
+    assert exc_info.value.status_code == 429
+    assert "rate limit exceeded" in str(exc_info.value.detail)
+    portrait_access.clear_access_state()
+
+
+def test_application_daily_quota_is_enforced_even_without_global_rate_limit(monkeypatch) -> None:
+    rate_limit.BUCKETS.clear()
+    portrait_access.clear_access_state()
+    monkeypatch.setattr(portrait_access, "save_access_state", lambda: None)
+    monkeypatch.setattr(rate_limit, "RATE_LIMIT_PER_MINUTE", 0)
+    monkeypatch.setattr(rate_limit, "RATE_LIMIT_BURST", 0)
+    monkeypatch.setattr(rate_limit, "wall_time", lambda: 100.0)
+    _, secret = portrait_access.create_application(
+        "tenant-a",
+        app_id="quota-app",
+        name="Quota App",
+        owner="integration-team",
+        status_value="active",
+        scopes=["models:read"],
+        daily_quota=1,
+    )
+    request = DummyRequest("/v1/models", headers={"x-api-key": secret})
+
+    rate_limit.check_rate_limit(request)
+    with pytest.raises(HTTPException) as exc_info:
+        rate_limit.check_rate_limit(request)
+
+    assert exc_info.value.status_code == 429
+    assert "daily quota exceeded" in str(exc_info.value.detail)
+    assert int(exc_info.value.headers["Retry-After"]) > 0
+    portrait_access.clear_access_state()

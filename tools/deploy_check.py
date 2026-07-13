@@ -36,7 +36,7 @@ class DeployReport:
 def read_text(path: Path) -> str:
     return path.read_text(encoding="utf-8-sig")
 
-SOURCE_ENCODING_ROOTS = ("app", "tools", "sdk", "tests", "frontend", ".github", "deploy", "docs", "ops", "requirements", "package.json")
+SOURCE_ENCODING_ROOTS = ("app", "tools", "sdk", "tests", "frontend", ".github", "deploy", "docs", "ops", "requirements", "examples", "package.json")
 SOURCE_ENCODING_SUFFIXES = (".bat", ".css", ".html", ".in", ".js", ".json", ".lock", ".md", ".py", ".sql", ".txt", ".yaml", ".yml", ".example")
 
 
@@ -105,8 +105,10 @@ def check_required_files(root: Path, report: DeployReport) -> None:
         "app/tracking_association.py",
         "app/portrait_errors.py",
         "app/portrait_runtime_store.py",
+        "app/portrait_review.py",
         "app/portrait_gallery_orchestration.py",
         "app/production_gates.py",
+        "app/rollout_audit.py",
         "frontend/console/console.html",
         "frontend/console/console.css",
         "frontend/console/console.config.js",
@@ -141,6 +143,9 @@ def check_required_files(root: Path, report: DeployReport) -> None:
         "examples/portrait-model-ab-shadow.example.yml",
         "examples/production-models.example.yml",
         "examples/production-model-capabilities.example.yml",
+        "examples/demo-clients/README.md",
+        "examples/demo-clients/python_demo_client.py",
+        "examples/demo-clients/node_demo_client.js",
         "deploy/portrait-stream-worker.service",
         "deploy/k8s-stream-worker.yaml",
         "deploy/portrait-governance-scheduler.service",
@@ -157,12 +162,12 @@ def check_required_files(root: Path, report: DeployReport) -> None:
 
 def check_python_syntax(root: Path, report: DeployReport) -> None:
     errors = []
-    for path in [root / "main.py", *sorted((root / "app").glob("*.py")), *sorted((root / "tools").glob("*.py"))]:
+    for path in [root / "main.py", *sorted((root / "app").glob("*.py")), *sorted((root / "tools").glob("*.py")), *sorted((root / "examples").rglob("*.py"))]:
         try:
             ast.parse(read_text(path), filename=str(path))
         except SyntaxError as exc:
             errors.append(f"{path}: {exc}")
-    report.add("python_syntax", not errors, {"errors": errors, "file_count": len(list((root / "app").glob("*.py"))) + len(list((root / "tools").glob("*.py"))) + 1})
+    report.add("python_syntax", not errors, {"errors": errors, "file_count": len(list((root / "app").glob("*.py"))) + len(list((root / "tools").glob("*.py"))) + len(list((root / "examples").rglob("*.py"))) + 1})
 
 
 def check_code_quality(root: Path, report: DeployReport) -> None:
@@ -734,6 +739,13 @@ def check_import_app(root: Path, report: DeployReport) -> None:
             "/rollout/aliases/switch",
             "/rollout/aliases/weighted",
             "/rollout/aliases/rollback",
+            "/v1/evaluation/datasets",
+            "/v1/evaluation/threshold-recommendations",
+            "/v1/evaluation/track-reviews",
+            "/v1/evaluation/track-reviews/summary",
+            "/v1/access/error-codes",
+            "/v1/admin/audit/verify",
+            "/v1/admin/backups",
         }
         missing = sorted(required - paths)
         report.add("app_import", True, {"route_count": len(paths)})

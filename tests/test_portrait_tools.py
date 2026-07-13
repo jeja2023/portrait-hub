@@ -60,6 +60,17 @@ def test_migrate_gallery_to_vector_store_dry_run_counts_features() -> None:
         GALLERY.update(snapshot)
 
 
+
+def test_load_test_auth_headers_support_bearer_and_api_key() -> None:
+    assert load_test.auth_headers("token", "tenant-a") == {
+        "x-tenant-id": "tenant-a",
+        "authorization": "Bearer token",
+    }
+    assert load_test.auth_headers("phk_secret", "tenant-a", "api-key") == {
+        "x-tenant-id": "tenant-a",
+        "x-api-key": "phk_secret",
+    }
+
 def test_load_test_report_summarizes_status_and_latency(monkeypatch) -> None:
     calls = []
 
@@ -77,6 +88,7 @@ def test_load_test_report_summarizes_status_and_latency(monkeypatch) -> None:
         token=None,
         tenant_id="default",
         timeout=1.0,
+        auth_scheme="bearer",
     )
 
     assert report["requests"] == 3
@@ -91,6 +103,7 @@ def test_load_test_records_unreachable_targets_as_error() -> None:
         token=None,
         tenant_id="default",
         timeout=0.01,
+        auth_scheme="bearer",
     )
 
     assert str(result["status"]).startswith("error:")

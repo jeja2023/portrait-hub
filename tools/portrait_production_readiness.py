@@ -30,7 +30,13 @@ def check_templates(root: Path) -> list[dict[str, Any]]:
     required = [
         "app/portrait_errors.py",
         "app/portrait_runtime_store.py",
+        "app/portrait_review.py",
         "app/portrait_gallery_orchestration.py",
+        "app/portrait_access.py",
+        "app/portrait_call_logs.py",
+        "app/rollout_audit.py",
+        "app/routes_portrait_access.py",
+        "app/routes_portrait_review.py",
         "app/production_gates.py",
         "app/tracking_state.py",
         "app/tracking_association.py",
@@ -69,6 +75,9 @@ def check_templates(root: Path) -> list[dict[str, Any]]:
         "examples/portrait-model-ab-shadow.example.yml",
         "examples/production-models.example.yml",
         "examples/production-model-capabilities.example.yml",
+        "examples/demo-clients/README.md",
+        "examples/demo-clients/python_demo_client.py",
+        "examples/demo-clients/node_demo_client.js",
         "deploy/portrait-stream-worker.service",
         "deploy/k8s-stream-worker.yaml",
         "deploy/portrait-governance-scheduler.service",
@@ -125,6 +134,13 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
     settings = (root / "app" / "settings.py").read_text(encoding="utf-8") if (root / "app" / "settings.py").is_file() else ""
     security = (root / "app" / "security.py").read_text(encoding="utf-8") if (root / "app" / "security.py").is_file() else ""
     portrait_auth = (root / "app" / "portrait_auth.py").read_text(encoding="utf-8") if (root / "app" / "portrait_auth.py").is_file() else ""
+    portrait_bootstrap = (root / "app" / "portrait_bootstrap.py").read_text(encoding="utf-8") if (root / "app" / "portrait_bootstrap.py").is_file() else ""
+    portrait_access_routes = (root / "app" / "routes_portrait_access.py").read_text(encoding="utf-8") if (root / "app" / "routes_portrait_access.py").is_file() else ""
+    portrait_access = (root / "app" / "portrait_access.py").read_text(encoding="utf-8") if (root / "app" / "portrait_access.py").is_file() else ""
+    portrait_call_logs = (root / "app" / "portrait_call_logs.py").read_text(encoding="utf-8") if (root / "app" / "portrait_call_logs.py").is_file() else ""
+    portrait_errors = (root / "app" / "portrait_errors.py").read_text(encoding="utf-8") if (root / "app" / "portrait_errors.py").is_file() else ""
+    portrait_review = (root / "app" / "portrait_review.py").read_text(encoding="utf-8") if (root / "app" / "portrait_review.py").is_file() else ""
+    portrait_review_routes = (root / "app" / "routes_portrait_review.py").read_text(encoding="utf-8") if (root / "app" / "routes_portrait_review.py").is_file() else ""
     debug_routes = (root / "app" / "routes_debug.py").read_text(encoding="utf-8") if (root / "app" / "routes_debug.py").is_file() else ""
     health_routes = (root / "app" / "routes_health.py").read_text(encoding="utf-8") if (root / "app" / "routes_health.py").is_file() else ""
     server = (root / "app" / "server.py").read_text(encoding="utf-8") if (root / "app" / "server.py").is_file() else ""
@@ -138,6 +154,7 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
     model_lifecycle_routes = (root / "app" / "routes_model_lifecycle.py").read_text(encoding="utf-8") if (root / "app" / "routes_model_lifecycle.py").is_file() else ""
     model_query_routes = (root / "app" / "routes_model_query.py").read_text(encoding="utf-8") if (root / "app" / "routes_model_query.py").is_file() else ""
     model_config_writer = (root / "app" / "model_config_writer.py").read_text(encoding="utf-8") if (root / "app" / "model_config_writer.py").is_file() else ""
+    rollout_audit = (root / "app" / "rollout_audit.py").read_text(encoding="utf-8") if (root / "app" / "rollout_audit.py").is_file() else ""
     model_config_resolver = (root / "app" / "model_config_resolver.py").read_text(encoding="utf-8") if (root / "app" / "model_config_resolver.py").is_file() else ""
     model_config_loader = (root / "app" / "model_config_loader.py").read_text(encoding="utf-8") if (root / "app" / "model_config_loader.py").is_file() else ""
     model_package = (root / "app" / "model_package.py").read_text(encoding="utf-8") if (root / "app" / "model_package.py").is_file() else ""
@@ -430,7 +447,8 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
                 and "PORTRAIT_RUNTIME_PROFILE=production" in (root / "ops" / "production.env.example").read_text(encoding="utf-8")
                 and "OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318/v1/traces" in (root / "ops" / "production.env.example").read_text(encoding="utf-8")
             ),
-        },        {
+        },
+        {
             "name": "frontend:websocket_console_subscription",
             "ok": (
                 "new WebSocket" in console_runtime_js
@@ -787,6 +805,65 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
             ),
         },
         {
+            "name": "sdk:batch_async_and_video_examples",
+            "ok": (
+                "def search_batch" in python_sdk
+                and "def compare_batch" in python_sdk
+                and '"/v1/gallery/search/batch"' in python_sdk
+                and '"/v1/compare/batch"' in python_sdk
+                and "searchBatch(images" in node_sdk
+                and "compareBatch(" in node_sdk
+                and '"/v1/gallery/search/batch"' in node_sdk
+                and '"/v1/compare/batch"' in node_sdk
+                and "asyncMode" in node_sdk
+                and "sdk-batch-code" in console_module_sources
+                and "sdk-video-code" in console_module_sources
+                and "sdk-batch-copy-button" in console_module_sources
+                and "sdk-video-copy-button" in console_module_sources
+                and "client.search_batch" in console_module_sources
+                and "async_mode=True" in console_module_sources
+                and "createVideoJob" in console_module_sources
+                and "client.jobResult" in console_module_sources
+            ),
+        },
+        {
+            "name": "frontend:api_playground_stage_two_coverage",
+            "ok": (
+                'value="/v1/gallery/search/batch" data-method="POST"' in console_module_sources
+                and 'value="/v1/compare/batch" data-method="POST"' in console_module_sources
+                and 'value="/v1/streams" data-method="POST"' in console_module_sources
+                and 'value="/v1/streams" data-method="GET"' in console_module_sources
+                and 'value="/v1/streams/{stream_id}/events" data-method="GET"' in console_module_sources
+                and "playground-stream-id-input" in console_module_sources
+                and "playground-stream-url-input" in console_module_sources
+                and "playground-async-mode-input" in console_module_sources
+                and "function apiRaw" in console_module_sources
+                and "function playgroundSelection" in console_module_sources
+                and 'appendFiles(form, "files"' in console_module_sources
+                and "endpoint_template" in console_module_sources
+                and "http_status" in console_module_sources
+                and "error_code" in console_module_sources
+                and "controlled_use" in console_module_sources
+            ),
+        },
+        {
+            "name": "frontend:slo_panel_operational_contract",
+            "ok": (
+                "function summarizeSloCallLogs" in console_module_sources
+                and "call_logs_30d" in console_module_sources
+                and "/v1/access/call-logs?limit=500&created_since=" in console_module_sources
+                and "queue_p95_seconds" in console_module_sources
+                and "queue_p99_seconds" in console_module_sources
+                and "gpu_queue_depth" in console_module_sources
+                and "gpu_device_queue_depths" in console_module_sources
+                and "error_budget_burn_rate" in console_module_sources
+                and "success_rate_source" in console_module_sources
+                and "call_log_window_seconds" in console_module_sources
+                and "gpu_worker_queue_seconds" in console_module_sources
+                and "gpu_worker_gpu_device_queue_depth" in console_module_sources
+            ),
+        },
+        {
             "name": "security:trusted_host_allowlist",
             "ok": (
                 "TRUSTED_HOSTS" in settings
@@ -860,9 +937,9 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
             "name": "security:least_privilege_rbac_roles",
             "ok": (
                 '"admin": {"*"}' in portrait_auth
-                and '"operator": {"infer", "compare", "gallery:read", "gallery:write", "jobs", "streams", "models:read", "admin:status", "metrics:read"}' in portrait_auth
+                and '"operator": {"infer", "compare", "gallery:read", "gallery:write", "jobs", "streams", "models:read", "admin:status", "metrics:read", "access:read"}' in portrait_auth
                 and '"algorithm": {"infer", "compare", "models:read", "models:write", "thresholds:write"}' in portrait_auth
-                and '"auditor": {"gallery:read", "jobs:read", "streams:read", "models:read", "admin:status", "admin:export", "metrics:read"}' in portrait_auth
+                and '"auditor": {"gallery:read", "jobs:read", "streams:read", "models:read", "admin:status", "admin:export", "metrics:read", "access:read"}' in portrait_auth
                 and '"viewer": {"gallery:read", "jobs:read", "streams:read", "models:read"}' in portrait_auth
                 and '"viewer": {"infer"' not in portrait_auth
                 and 'permission_dependency("models:write")' in debug_routes
@@ -874,6 +951,90 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
                 and 'permission_dependency("models:read")' not in portrait_admin_routes
                 and 'permission_dependency("models:write")' not in portrait_admin_routes
                 and 'permission_dependency("admin:status")' in portrait_console_routes
+                and 'permission_dependency("access:read")' in portrait_access_routes
+                and 'permission_dependency("access:write")' in portrait_access_routes
+                and "application_scopes_allow_permission" in portrait_auth
+                and "x_api_key" in portrait_auth
+            ),
+        },
+        {
+            "name": "security:access_center_state_safety",
+            "ok": (
+                "_ACCESS_LOCK = threading.RLock()" in portrait_access
+                and "with _ACCESS_LOCK:" in portrait_access
+                and "def record_application_call" in portrait_access
+                and "call_count" in portrait_access
+                and "error_count" in portrait_access
+                and "last_error_at" in portrait_access
+                and "error_rate" in portrait_access
+                and "record_application_call(tenant_id, application_id, status_code, created_at)" in portrait_call_logs
+                and "error_code: str | None = None" in portrait_call_logs
+                and "created_since: float | None = None" in portrait_call_logs
+                and "created_until: float | None = None" in portrait_call_logs
+                and "error_code: str | None = Query" in portrait_access_routes
+                and "created_since: float | None = Query" in portrait_access_routes
+                and "created_until: float | None = Query" in portrait_access_routes
+                and "call-log-error-code-input" in console_module_sources
+                and "call-log-created-since-input" in console_module_sources
+                and "call-log-created-until-input" in console_module_sources
+                and "created_since" in console_module_sources
+                and "created_until" in console_module_sources
+                and "error_code=logged_error_code" in server
+                and "portrait_error_code" in server
+                and "portrait_application_id" in rate_limit
+                and "portrait_application_id" in server
+                and "must not change the request outcome" in portrait_call_logs
+            ),
+        },
+        {
+            "name": "security:access_error_code_catalog",
+            "ok": (
+                "ERROR_CODE_CATALOG" in portrait_errors
+                and "def error_code_catalog" in portrait_errors
+                and "validation_error" in portrait_errors
+                and "rate_limited" in portrait_errors
+                and "storage_error" in portrait_errors
+                and "batch_job_error" in portrait_errors
+                and "migration_error" in portrait_errors
+                and "from app.portrait_errors import error_code_catalog" in portrait_access_routes
+                and '@router.get("/v1/access/error-codes", dependencies=[Depends(permission_dependency("access:read"))])' in portrait_access_routes
+                and '"error_codes": error_codes' in portrait_access_routes
+                and "/v1/access/error-codes" in console_module_sources
+                and 'data-nav="error-codes"' in console_module_sources
+                and "error-codes-table" in console_module_sources
+                and "error-codes-json" in console_module_sources
+                and "renderErrorCodes" in console_module_sources
+            ),
+        },
+        {
+            "name": "security:track_review_annotation_pool",
+            "ok": (
+                "_REVIEW_LOCK = threading.RLock()" in portrait_review
+                and "PORTRAIT_REVIEW_STATE_PATH" in settings
+                and "def create_review_annotation" in portrait_review
+                and "def list_review_annotations" in portrait_review
+                and "def review_annotation_summary" in portrait_review
+                and "def list_review_datasets" in portrait_review
+                and "def review_threshold_recommendations" in portrait_review
+                and "review_annotation_heuristic" in portrait_review
+                and "\"auto_apply\": False" in portrait_review
+                and 'record.get("tenant_id") != tenant_id' in portrait_review
+                and "unsupported review label" in portrait_review
+                and "restore_review_state" in portrait_review_routes
+                and 'permission_dependency("jobs:read")' in portrait_review_routes
+                and 'permission_dependency("jobs")' in portrait_review_routes
+                and '"track_review_annotation_created"' in portrait_review_routes
+                and "load_review_state()" in portrait_bootstrap
+                and "track-review-annotation-form" in console_module_sources
+                and "/v1/evaluation/datasets" in console_module_sources
+                and "/v1/evaluation/threshold-recommendations" in portrait_review_routes
+                and "/v1/evaluation/threshold-recommendations" in console_module_sources
+                and "evaluation-dataset-table" in console_module_sources
+                and "evaluation-threshold-table" in console_module_sources
+                and "renderEvaluationThresholdRecommendations" in console_module_sources
+                and "/v1/evaluation/track-reviews" in console_module_sources
+                and "/v1/evaluation/track-reviews/summary" in console_module_sources
+                and "evaluation-review-summary" in console_module_sources
             ),
         },
         {
@@ -1340,6 +1501,20 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
             ),
         },
         {
+            "name": "security:rollout_audit_readback",
+            "ok": (
+                "def read_rollout_audit" in rollout_audit
+                and "public_rollout_audit_record" in rollout_audit
+                and "MAX_ROLLOUT_AUDIT_LIMIT" in rollout_audit
+                and "ROLLOUT_AUDIT_FIELDS" in rollout_audit
+                and "ROLLOUT_TARGET_FIELDS" in rollout_audit
+                and "malformed_count" in rollout_audit
+                and "rollout_audit_entries" in rollout_routes
+                and 'permission_dependency("models:read")' in rollout_routes
+                and 'read_rollout_audit(limit)' in rollout_routes
+            ),
+        },
+        {
             "name": "security:management_mutation_audit",
             "ok": (
                 ('audit_event("model_warmup"' in model_lifecycle_routes or '"model_warmup"' in model_lifecycle_routes)
@@ -1430,6 +1605,83 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
                 and "MAX_AUDIT_KEYS=128" in env_example
                 and "MAX_AUDIT_LIST_ITEMS=64" in env_example
                 and "MAX_AUDIT_STRING_LENGTH=2048" in env_example
+            ),
+        },
+        {
+            "name": "security:audit_chain_console_verification",
+            "ok": (
+                "def public_audit_chain_verification" in portrait_audit
+                and "state_path_fingerprint(audit_path)" in portrait_audit
+                and "verify_audit_chain(audit_path)" in portrait_audit
+                and '"/v1/admin/audit/verify"' in portrait_admin_routes
+                and "public_audit_chain_verification" in portrait_admin_routes
+                and 'permission_dependency("admin:status")' in portrait_admin_routes
+                and '"audit_chain": audit_chain' in portrait_admin_routes
+                and "/v1/admin/audit/verify" in console_module_sources
+                and "auditVerificationPayload" in console_module_sources
+                and "auditChainErrorCount" in console_module_sources
+                and "audit_chain" in console_module_sources
+                and "path_hash" in console_module_sources
+            ),
+        },
+        {
+            "name": "security:audit_event_readback",
+            "ok": (
+                "def read_public_audit_events" in portrait_audit
+                and "def audit_event_matches_filters" in portrait_audit
+                and "def audit_event_category" in portrait_audit
+                and "category_counts" in portrait_audit
+                and "outcome_counts" in portrait_audit
+                and "def public_audit_event_record" in portrait_audit
+                and "PUBLIC_AUDIT_EVENT_FIELDS" in portrait_audit
+                and "MAX_PUBLIC_AUDIT_EVENT_LIMIT" in portrait_audit
+                and "created_since" in portrait_audit
+                and "created_until" in portrait_audit
+                and 'payload.get("tenant_id") != tenant_id' in portrait_audit
+                and '"api_key"' not in portrait_audit.split("PUBLIC_AUDIT_EVENT_FIELDS", 1)[1].split("def", 1)[0]
+                and '"/v1/admin/audit/events"' in portrait_admin_routes
+                and "read_public_audit_events" in portrait_admin_routes
+                and "created_until must be >= created_since" in portrait_admin_routes
+                and "event: str | None = Query" in portrait_admin_routes
+                and "outcome: str | None = Query" in portrait_admin_routes
+                and "category: str | None = Query" in portrait_admin_routes
+                and "unsupported audit event category" in portrait_admin_routes
+                and 'permission_dependency("admin:status")' in portrait_admin_routes
+                and "MAX_PUBLIC_AUDIT_EVENT_LIMIT" in portrait_admin_routes
+                and "/v1/admin/audit/events?${auditEventQueryParams().toString()}" in console_module_sources
+                and "function auditEventQueryParams" in console_module_sources
+                and "audit-event-filter-button" in console_module_sources
+                and "audit-category-filter-input" in console_module_sources
+                and "params.set(\"category\", categoryFilter)" in console_module_sources
+                and "audit-event-table" in console_module_sources
+                and "function renderAuditEventRows" in console_module_sources
+                and "auditEventsPayload" in console_module_sources
+                and "audit_events" in console_module_sources
+            ),
+        },
+        {
+            "name": "security:backup_snapshot_readback",
+            "ok": (
+                "def public_backup_snapshot_record" in portrait_audit
+                and "def read_public_backup_snapshots" in portrait_audit
+                and "PUBLIC_BACKUP_SNAPSHOT_FIELDS" in portrait_audit
+                and "MAX_PUBLIC_BACKUP_SNAPSHOT_LIMIT" in portrait_audit
+                and 'record["snapshot_id"] = audit_hash' in portrait_audit
+                and 'payload.get("tenant_id") != tenant_id or payload.get("event") != "admin_backup"' in portrait_audit
+                and '"object_key"' not in portrait_audit.split("PUBLIC_BACKUP_SNAPSHOT_FIELDS", 1)[1].split("PUBLIC_AUDIT_EVENT_FIELDS", 1)[0]
+                and '"bucket"' not in portrait_audit.split("PUBLIC_BACKUP_SNAPSHOT_FIELDS", 1)[1].split("PUBLIC_AUDIT_EVENT_FIELDS", 1)[0]
+                and '"sha256"' not in portrait_audit.split("PUBLIC_BACKUP_SNAPSHOT_FIELDS", 1)[1].split("PUBLIC_AUDIT_EVENT_FIELDS", 1)[0]
+                and '"/v1/admin/backups"' in portrait_admin_routes
+                and "read_public_backup_snapshots" in portrait_admin_routes
+                and 'permission_dependency("admin:export")' in portrait_admin_routes
+                and "MAX_PUBLIC_BACKUP_SNAPSHOT_LIMIT" in portrait_admin_routes
+                and "/v1/admin/backups?limit=20" in console_module_sources
+                and "backup-snapshot-summary" in console_module_sources
+                and "backup-snapshot-table" in console_module_sources
+                and "backup-snapshot-refresh-button" in console_module_sources
+                and "function renderBackupSnapshots" in console_module_sources
+                and "async function refreshAdminData" in console_module_sources
+                and "backup_snapshots" in console_module_sources
             ),
         },
         {

@@ -8,7 +8,13 @@
       "name": "Health",
       "request": {
         "method": "GET",
-        "url": "{{base_url}}/health"
+        "url": "{{base_url}}/health",
+        "header": [
+          {
+            "key": "X-Tenant-ID",
+            "value": "{{tenant_id}}"
+          }
+        ]
       }
     },
     {
@@ -17,8 +23,12 @@
         "method": "POST",
         "header": [
           {
-            "key": "Authorization",
-            "value": "Bearer {{api_token}}"
+            "key": "X-Tenant-ID",
+            "value": "{{tenant_id}}"
+          },
+          {
+            "key": "X-API-Key",
+            "value": "{{api_key}}"
           }
         ],
         "body": {
@@ -50,8 +60,12 @@
         "method": "POST",
         "header": [
           {
-            "key": "Authorization",
-            "value": "Bearer {{api_token}}"
+            "key": "X-Tenant-ID",
+            "value": "{{tenant_id}}"
+          },
+          {
+            "key": "X-API-Key",
+            "value": "{{api_key}}"
           }
         ],
         "body": {
@@ -83,8 +97,12 @@
         "method": "POST",
         "header": [
           {
-            "key": "Authorization",
-            "value": "Bearer {{api_token}}"
+            "key": "X-Tenant-ID",
+            "value": "{{tenant_id}}"
+          },
+          {
+            "key": "X-API-Key",
+            "value": "{{api_key}}"
           }
         ],
         "body": {
@@ -111,11 +129,32 @@
         "method": "GET",
         "header": [
           {
-            "key": "Authorization",
-            "value": "Bearer {{api_token}}"
+            "key": "X-Tenant-ID",
+            "value": "{{tenant_id}}"
+          },
+          {
+            "key": "X-API-Key",
+            "value": "{{api_key}}"
           }
         ],
         "url": "{{base_url}}/v1/thresholds"
+      }
+    },
+    {
+      "name": "Rollout Audit",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "X-Tenant-ID",
+            "value": "{{tenant_id}}"
+          },
+          {
+            "key": "X-API-Key",
+            "value": "{{api_key}}"
+          }
+        ],
+        "url": "{{base_url}}/rollout/audit?limit=20"
       }
     }
   ],
@@ -125,7 +164,11 @@
       "value": "http://127.0.0.1:9001"
     },
     {
-      "key": "api_token",
+      "key": "tenant_id",
+      "value": "default"
+    },
+    {
+      "key": "api_key",
       "value": ""
     }
   ]

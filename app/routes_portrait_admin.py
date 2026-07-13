@@ -6,7 +6,14 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.observability import logger
 from app.portrait_async import run_blocking_io
-from app.portrait_audit import audit_event
+from app.portrait_audit import (
+    MAX_PUBLIC_AUDIT_EVENT_LIMIT,
+    MAX_PUBLIC_BACKUP_SNAPSHOT_LIMIT,
+    audit_event,
+    public_audit_chain_verification,
+    read_public_audit_events,
+    read_public_backup_snapshots,
+)
 from app.portrait_auth import permission_dependency
 from app.portrait_gallery import (
     GALLERY,
@@ -266,6 +273,52 @@ async def v1_admin_status(ctx: PortraitRequestContext = Depends(portrait_request
     )
 
 
+@router.get("/v1/admin/audit/verify", dependencies=[Depends(permission_dependency("admin:status"))])
+async def v1_admin_audit_verify(ctx: PortraitRequestContext = Depends(portrait_request_context)) -> dict[str, Any]:
+    request_id = ctx.request_id
+    tenant_id = ctx.tenant_id
+    try:
+        audit_chain = await run_blocking_io(public_audit_chain_verification)
+    except Exception as exc:
+        logger.warning("failed to verify audit chain: %s", exception_log_summary(exc))
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="audit chain verification unavailable") from exc
+    return portrait_success(request_id, {"tenant_id": tenant_id, "audit_chain": audit_chain})
+
+
+@router.get("/v1/admin/audit/events", dependencies=[Depends(permission_dependency("admin:status"))])
+async def v1_admin_audit_events(
+    limit: int = Query(50, ge=1, le=MAX_PUBLIC_AUDIT_EVENT_LIMIT),
+    event: str | None = Query(None, max_length=128),
+    outcome: str | None = Query(None, max_length=64),
+    request_id: str | None = Query(None, max_length=128),
+    category: str | None = Query(None, max_length=64),
+    created_since: float | None = Query(None, ge=0),
+    created_until: float | None = Query(None, ge=0),
+    ctx: PortraitRequestContext = Depends(portrait_request_context),
+) -> dict[str, Any]:
+    request_id_header = ctx.request_id
+    tenant_id = ctx.tenant_id
+    if category is not None and category not in {"delete_requests", "exports", "model_versions", "retention", "other"}:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="unsupported audit event category")
+    if created_since is not None and created_until is not None and created_until < created_since:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="created_until must be >= created_since")
+    try:
+        audit_events = await run_blocking_io(
+            read_public_audit_events,
+            limit,
+            tenant_id,
+            event=event.strip() if event else None,
+            outcome=outcome.strip() if outcome else None,
+            request_id=request_id.strip() if request_id else None,
+            category=category,
+            created_since=created_since,
+            created_until=created_until,
+        )
+    except Exception as exc:
+        logger.warning("failed to read audit events: %s", exception_log_summary(exc))
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="audit events unavailable") from exc
+    return portrait_success(request_id_header, {"tenant_id": tenant_id, **audit_events})
+
 @router.get("/v1/admin/export", dependencies=[Depends(permission_dependency("admin:export"))])
 async def v1_admin_export(
     people_limit: int | None = Query(None),
@@ -387,6 +440,20 @@ async def v1_admin_export(
         redact_sensitive_fields(export_payload),
     )
 
+
+@router.get("/v1/admin/backups", dependencies=[Depends(permission_dependency("admin:export"))])
+async def v1_admin_backups(
+    limit: int = Query(20, ge=1, le=MAX_PUBLIC_BACKUP_SNAPSHOT_LIMIT),
+    ctx: PortraitRequestContext = Depends(portrait_request_context),
+) -> dict[str, Any]:
+    request_id = ctx.request_id
+    tenant_id = ctx.tenant_id
+    try:
+        backups = await run_blocking_io(read_public_backup_snapshots, limit, tenant_id)
+    except Exception as exc:
+        logger.warning("failed to read backup snapshots: %s", exception_log_summary(exc))
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="backup snapshots unavailable") from exc
+    return portrait_success(request_id, {"tenant_id": tenant_id, **backups})
 
 @router.post("/v1/admin/backup", dependencies=[Depends(permission_dependency("admin:export"))])
 async def v1_admin_backup(

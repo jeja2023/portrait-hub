@@ -10,11 +10,33 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any
 
 
-def request_once(url: str, *, method: str, token: str | None, tenant_id: str, timeout: float) -> dict[str, Any]:
+def normalize_auth_scheme(value: str) -> str:
+    normalized = value.strip().lower().replace("_", "-")
+    if normalized not in {"bearer", "api-key"}:
+        raise ValueError("auth_scheme must be 'bearer' or 'api-key'")
+    return normalized
+
+
+def auth_headers(token: str | None, tenant_id: str, auth_scheme: str = "bearer") -> dict[str, str]:
     headers = {"x-tenant-id": tenant_id}
     if token:
-        headers["authorization"] = f"Bearer {token}"
-    request = urllib.request.Request(url, method=method, headers=headers)
+        if normalize_auth_scheme(auth_scheme) == "api-key":
+            headers["x-api-key"] = token
+        else:
+            headers["authorization"] = f"Bearer {token}"
+    return headers
+
+
+def request_once(
+    url: str,
+    *,
+    method: str,
+    token: str | None,
+    tenant_id: str,
+    timeout: float,
+    auth_scheme: str = "bearer",
+) -> dict[str, Any]:
+    request = urllib.request.Request(url, method=method, headers=auth_headers(token, tenant_id, auth_scheme))
     started = time.perf_counter()
     try:
         with urllib.request.urlopen(request, timeout=timeout) as response:
@@ -45,12 +67,13 @@ def run_load_test(
     token: str | None,
     tenant_id: str,
     timeout: float,
+    auth_scheme: str = "bearer",
 ) -> dict[str, Any]:
     started = time.perf_counter()
     results = []
     with ThreadPoolExecutor(max_workers=max(1, concurrency)) as executor:
         futures = [
-            executor.submit(request_once, url, method=method, token=token, tenant_id=tenant_id, timeout=timeout)
+            executor.submit(request_once, url, method=method, token=token, tenant_id=tenant_id, timeout=timeout, auth_scheme=auth_scheme)
             for _ in range(max(1, requests))
         ]
         for future in as_completed(futures):
@@ -86,6 +109,7 @@ def main() -> int:
     parser.add_argument("--requests", type=int, default=100)
     parser.add_argument("--concurrency", type=int, default=10)
     parser.add_argument("--token", default=None)
+    parser.add_argument("--auth-scheme", choices=["bearer", "api-key"], default="bearer", help="How --token is sent.")
     parser.add_argument("--tenant-id", default="default")
     parser.add_argument("--timeout", type=float, default=10.0)
     args = parser.parse_args()
@@ -97,6 +121,7 @@ def main() -> int:
         token=args.token,
         tenant_id=args.tenant_id,
         timeout=args.timeout,
+        auth_scheme=args.auth_scheme,
     )
     print(json.dumps(report, ensure_ascii=False, sort_keys=True))
     return 0

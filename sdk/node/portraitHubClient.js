@@ -11,15 +11,27 @@ class PortraitHubHTTPError extends Error {
 }
 
 class PortraitHubClient {
-  constructor({ baseUrl, apiToken = null, tenantId = "default" }) {
+  constructor({ baseUrl, apiToken = null, tenantId = "default", authScheme = "bearer" }) {
     this.baseUrl = baseUrl.replace(/\/$/, "");
     this.apiToken = apiToken;
     this.tenantId = tenantId;
+    this.authScheme = this.normalizeAuthScheme(authScheme);
+  }
+
+  normalizeAuthScheme(value) {
+    const normalized = String(value).trim().toLowerCase().replace(/-/g, "_");
+    if (!["bearer", "api_key"].includes(normalized)) {
+      throw new Error("authScheme must be 'bearer' or 'api_key'");
+    }
+    return normalized;
   }
 
   headers(extra = {}) {
     const headers = { "X-Tenant-ID": this.tenantId, ...extra };
-    if (this.apiToken) headers.Authorization = `Bearer ${this.apiToken}`;
+    if (this.apiToken) {
+      if (this.authScheme === "api_key") headers["X-API-Key"] = this.apiToken;
+      else headers.Authorization = `Bearer ${this.apiToken}`;
+    }
     return headers;
   }
 
@@ -119,8 +131,37 @@ class PortraitHubClient {
     );
   }
 
-  search(image, modality = "body", topK = 5) {
-    return this.multipart("/v1/gallery/search", { modality, top_k: topK }, [["file", image]]);
+  search(image, modality = "body", topK = 5, thresholdProfile = "normal") {
+    return this.multipart(
+      "/v1/gallery/search",
+      { modality, top_k: topK, threshold_profile: thresholdProfile },
+      [["file", image]],
+    );
+  }
+
+  searchBatch(images, { modality = "body", topK = 5, thresholdProfile = "normal", asyncMode = false } = {}) {
+    return this.multipart(
+      "/v1/gallery/search/batch",
+      { modality, top_k: topK, threshold_profile: thresholdProfile, async_mode: asyncMode },
+      images.map((path) => ["files", path]),
+    );
+  }
+
+  compareBatch(
+    imageA,
+    imageB,
+    { modality = "body", thresholdProfile = "normal", includeVectors = false, asyncMode = false } = {},
+  ) {
+    return this.multipart(
+      "/v1/compare/batch",
+      {
+        modality,
+        threshold_profile: thresholdProfile,
+        include_vectors: includeVectors,
+        async_mode: asyncMode,
+      },
+      [...imageA.map((path) => ["image_a", path]), ...imageB.map((path) => ["image_b", path])],
+    );
   }
 
   reindexGallery({ modality = null, modelId = null, dryRun = false } = {}) {

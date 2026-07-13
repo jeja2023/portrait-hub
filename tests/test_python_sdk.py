@@ -12,6 +12,52 @@ class DummyHeaders:
     def items(self):
         return [("Retry-After", "2")]
 
+class FakeOKResponse:
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, traceback):
+        return None
+
+    def read(self):
+        return b'{"status":"ok"}'
+
+def test_python_sdk_keeps_bearer_auth_default(monkeypatch) -> None:
+    captured = {}
+
+    def fake_urlopen(request, timeout):
+        captured["headers"] = {key.lower(): value for key, value in request.header_items()}
+        return FakeOKResponse()
+
+    monkeypatch.setattr("sdk.python.portrait_hub_client.urllib_request.urlopen", fake_urlopen)
+    client = PortraitHubClient("http://testserver", api_token="token", tenant_id="tenant-a")
+
+    assert client.health() == {"status": "ok"}
+    assert captured["headers"]["authorization"] == "Bearer token"
+    assert captured["headers"]["x-tenant-id"] == "tenant-a"
+    assert "x-api-key" not in captured["headers"]
+
+
+def test_python_sdk_can_send_application_api_key_header(monkeypatch) -> None:
+    captured = {}
+
+    def fake_urlopen(request, timeout):
+        captured["headers"] = {key.lower(): value for key, value in request.header_items()}
+        return FakeOKResponse()
+
+    monkeypatch.setattr("sdk.python.portrait_hub_client.urllib_request.urlopen", fake_urlopen)
+    client = PortraitHubClient("http://testserver", api_token="phk_secret", auth_scheme="api_key", tenant_id="tenant-a")
+
+    assert client.health() == {"status": "ok"}
+    assert captured["headers"]["x-api-key"] == "phk_secret"
+    assert captured["headers"]["x-tenant-id"] == "tenant-a"
+    assert "authorization" not in captured["headers"]
+
+
+def test_python_sdk_rejects_unknown_auth_scheme() -> None:
+    with pytest.raises(ValueError, match="auth_scheme"):
+        PortraitHubClient("http://testserver", auth_scheme="basic")
+
 
 def test_python_sdk_raises_structured_http_error(monkeypatch) -> None:
     def fake_urlopen(request, timeout):
@@ -134,6 +180,60 @@ def test_python_sdk_reindex_query_serializes_booleans(monkeypatch) -> None:
     assert client.reindex_gallery(modality="body", model_id="arc/face", dry_run=True) == {"status": "ok"}
     assert captured["url"] == "http://testserver/v1/gallery/reindex?modality=body&model_id=arc%2Fface&dry_run=true"
 
+
+def test_python_sdk_gallery_and_compare_batch_methods_use_multipart_fields(monkeypatch) -> None:
+    calls = []
+    client = PortraitHubClient("http://testserver", api_token="token", tenant_id="tenant-a", auth_scheme="api_key")
+
+    def fake_multipart(path, fields=None, files=None):
+        calls.append({"path": path, "fields": fields, "files": files})
+        return {"status": "ok"}
+
+    monkeypatch.setattr(client, "_multipart", fake_multipart)
+
+    assert client.search(Path("query.jpg"), modality="face", top_k=3, threshold_profile="strict") == {"status": "ok"}
+    assert calls[-1] == {
+        "path": "/v1/gallery/search",
+        "fields": {"modality": "face", "top_k": 3, "threshold_profile": "strict"},
+        "files": [("file", Path("query.jpg"))],
+    }
+
+    assert client.search_batch(
+        [Path("query-a.jpg"), Path("query-b.jpg")],
+        modality="body",
+        top_k=10,
+        threshold_profile="normal",
+        async_mode=True,
+    ) == {"status": "ok"}
+    assert calls[-1] == {
+        "path": "/v1/gallery/search/batch",
+        "fields": {"modality": "body", "top_k": 10, "threshold_profile": "normal", "async_mode": True},
+        "files": [("files", Path("query-a.jpg")), ("files", Path("query-b.jpg"))],
+    }
+
+    assert client.compare_batch(
+        [Path("a1.jpg"), Path("a2.jpg")],
+        [Path("b1.jpg"), Path("b2.jpg")],
+        modality="appearance",
+        threshold_profile="loose",
+        include_vectors=True,
+        async_mode=True,
+    ) == {"status": "ok"}
+    assert calls[-1] == {
+        "path": "/v1/compare/batch",
+        "fields": {
+            "modality": "appearance",
+            "threshold_profile": "loose",
+            "include_vectors": True,
+            "async_mode": True,
+        },
+        "files": [
+            ("image_a", Path("a1.jpg")),
+            ("image_a", Path("a2.jpg")),
+            ("image_b", Path("b1.jpg")),
+            ("image_b", Path("b2.jpg")),
+        ],
+    }
 
 def test_python_sdk_escapes_multipart_header_values(monkeypatch, workspace_tmp_path: Path) -> None:
     captured = {}

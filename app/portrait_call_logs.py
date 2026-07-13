@@ -1,0 +1,122 @@
+from __future__ import annotations
+
+from collections import deque
+import threading
+from typing import Any
+
+
+_CALL_LOG_LIMIT = 2_000
+_CALL_LOGS: deque[dict[str, Any]] = deque(maxlen=_CALL_LOG_LIMIT)
+_CALL_LOGS_LOCK = threading.RLock()
+
+
+def clear_call_logs() -> None:
+    with _CALL_LOGS_LOCK:
+        _CALL_LOGS.clear()
+
+
+def application_id_from_api_key(tenant_id: str | None, api_key: str | None) -> str | None:
+    if not tenant_id or not api_key:
+        return None
+    from app.portrait_access import application_key_matches
+
+    application = application_key_matches(tenant_id, api_key)
+    if application is None:
+        return None
+    return str(application.get("app_id") or application.get("id") or "") or None
+
+
+def record_call_log(
+    *,
+    request_id: str,
+    tenant_id: str | None,
+    method: str,
+    path: str,
+    status_code: int,
+    latency_ms: int,
+    created_at: float,
+    application_id: str | None = None,
+    model_version: str | None = None,
+    worker: str | None = None,
+    error_code: str | None = None,
+) -> None:
+    status_text = "success" if status_code < 400 else "error"
+    normalized_error_code = (error_code or "").strip() or f"http_{status_code}"
+    row = {
+        "request_id": request_id,
+        "tenant_id": tenant_id or "default",
+        "application_id": application_id or "--",
+        "method": method,
+        "path": path,
+        "endpoint": path,
+        "status": status_text,
+        "http_status": status_code,
+        "error_code": None if status_text == "success" else normalized_error_code,
+        "latency_ms": latency_ms,
+        "model_version": model_version or "--",
+        "worker": worker or "--",
+        "created_at": created_at,
+    }
+    with _CALL_LOGS_LOCK:
+        _CALL_LOGS.append(row)
+    try:
+        from app.portrait_access import record_application_call
+
+        record_application_call(tenant_id, application_id, status_code, created_at)
+    except Exception:
+        # Call log persistence is best-effort telemetry and must not change the request outcome.
+        return
+
+
+def list_call_logs(
+    tenant_id: str,
+    *,
+    request_id: str | None = None,
+    endpoint: str | None = None,
+    status_text: str | None = None,
+    application_id: str | None = None,
+    error_code: str | None = None,
+    created_since: float | None = None,
+    created_until: float | None = None,
+    limit: int = 100,
+) -> list[dict[str, Any]]:
+    normalized_request = (request_id or "").strip().lower()
+    normalized_endpoint = (endpoint or "").strip().lower()
+    normalized_status = (status_text or "").strip().lower()
+    normalized_application = (application_id or "").strip().lower()
+    normalized_error_code = (error_code or "").strip().lower()
+    bounded_limit = max(1, min(int(limit), 500))
+    with _CALL_LOGS_LOCK:
+        rows = list(_CALL_LOGS)
+    filtered: list[dict[str, Any]] = []
+    for row in reversed(rows):
+        if row.get("tenant_id") != tenant_id:
+            continue
+        if normalized_request and normalized_request not in str(row.get("request_id") or "").lower():
+            continue
+        endpoint_text = f"{row.get('method', '')} {row.get('path', '')} {row.get('endpoint', '')}".lower()
+        if normalized_endpoint and normalized_endpoint not in endpoint_text:
+            continue
+        if normalized_status and row.get("status") != normalized_status:
+            continue
+        if normalized_application and normalized_application not in str(row.get("application_id") or "").lower():
+            continue
+        if normalized_error_code and normalized_error_code not in str(row.get("error_code") or "").lower():
+            continue
+        created_at = float(row.get("created_at") or 0.0)
+        if created_since is not None and created_at < float(created_since):
+            continue
+        if created_until is not None and created_at > float(created_until):
+            continue
+        filtered.append(dict(row))
+        if len(filtered) >= bounded_limit:
+            break
+    return filtered
+
+
+__all__ = [
+    "application_id_from_api_key",
+    "clear_call_logs",
+    "list_call_logs",
+    "record_call_log",
+]
