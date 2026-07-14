@@ -170,3 +170,23 @@ def test_call_logs_update_access_application_usage_summary() -> None:
     assert application["error_rate"] == 0.5
     assert application["last_called_at"] == 101.0
     assert application["last_error_at"] == 101.0
+
+
+def test_request_middleware_records_call_log_when_api_key_infers_tenant() -> None:
+    _, secret = portrait_access.create_application(
+        "tenant-a",
+        app_id="demo-app",
+        name="Demo App",
+        owner="integration-team",
+        status_value="active",
+        scopes=["models:read"],
+    )
+    client = TestClient(app)
+
+    response = client.get("/v1/models", headers={"X-API-Key": secret, "X-Request-ID": "req-inferred-tenant"})
+
+    assert response.status_code == 200
+    rows = list_call_logs("tenant-a", request_id="req-inferred-tenant")
+    assert rows
+    assert rows[0]["tenant_id"] == "tenant-a"
+    assert rows[0]["application_id"] == "demo-app"

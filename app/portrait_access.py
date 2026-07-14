@@ -32,6 +32,10 @@ _APPLICATION_SCOPES = {
     "thresholds:write",
     "admin:status",
     "metrics:read",
+    "access:read",
+    "access:write",
+    "tenants:read",
+    "tenants:write",
 }
 _WEBHOOK_EVENTS = {
     "gallery.enrolled",
@@ -41,7 +45,7 @@ _WEBHOOK_EVENTS = {
     "stream.event",
     "model.rollout",
 }
-_ACCESS_STATE: dict[str, list[dict[str, Any]]] = {"applications": [], "webhooks": []}
+_ACCESS_STATE: dict[str, list[dict[str, Any]]] = {"tenants": [], "applications": [], "webhooks": []}
 _ACCESS_LOCK = threading.RLock()
 
 
@@ -85,6 +89,144 @@ def normalize_scopes(scopes: list[str] | None) -> list[str]:
     if unsupported:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="不支持的权限范围")
     return values
+
+
+def validate_tenant_id(value: str, *, field_name: str = "tenant_id") -> str:
+    cleaned = str(value or "").strip()
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,63}", cleaned):
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"{field_name} 无效")
+    return cleaned
+
+
+def normalize_tenant_name(value: str | None, *, fallback: str | None = None) -> str:
+    cleaned = str(value or "").strip()
+    if not cleaned and fallback is not None:
+        cleaned = str(fallback).strip()
+    if not cleaned:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="租户名称不能为空")
+    return cleaned[:256]
+
+
+def tenant_id_from_name(name: str) -> str:
+    source = normalize_tenant_name(name)
+    ascii_source = source.encode("ascii", "ignore").decode("ascii").lower()
+    slug_core = re.sub(r"[^a-z0-9._:-]+", "-", ascii_source).strip("-_.:")
+    digest = hashlib.sha256(source.encode("utf-8")).hexdigest()[:10]
+    base = f"tenant-{slug_core}" if slug_core else f"tenant-{digest}"
+    base = base[:64].rstrip("-_.:")
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,63}", base):
+        base = f"tenant-{digest}"
+    return base
+
+
+def _tenant_record(tenant_id: str) -> dict[str, Any] | None:
+    return next((item for item in _ACCESS_STATE["tenants"] if item.get("tenant_id") == tenant_id), None)
+
+
+def _tenant_name_exists(name: str) -> bool:
+    normalized = name.strip().casefold()
+    return any(str(item.get("name") or "").strip().casefold() == normalized for item in _ACCESS_STATE["tenants"])
+
+
+def _unique_tenant_id(base: str) -> str:
+    normalized_base = validate_tenant_id(base)
+    existing = {str(item.get("tenant_id") or "") for item in _ACCESS_STATE["tenants"]}
+    existing.update(str(item.get("tenant_id") or "") for item in _ACCESS_STATE["applications"])
+    existing.update(str(item.get("tenant_id") or "") for item in _ACCESS_STATE["webhooks"])
+    candidate = normalized_base
+    serial = 2
+    while candidate in existing:
+        suffix = f"-{serial}"
+        root = normalized_base[: 64 - len(suffix)].rstrip("-_.:") or "tenant"
+        candidate = f"{root}{suffix}"
+        serial += 1
+    return candidate
+
+
+def _ensure_tenant_record(tenant_id: str, *, name: str | None = None, status_value: str = "active") -> dict[str, Any]:
+    normalized_id = validate_tenant_id(tenant_id)
+    record = _tenant_record(normalized_id)
+    if record is not None:
+        return record
+    timestamp = now_seconds()
+    record = {
+        "tenant_id": normalized_id,
+        "name": normalize_tenant_name(name, fallback=normalized_id),
+        "status": normalize_status(status_value),
+        "created_at": timestamp,
+        "updated_at": timestamp,
+    }
+    _ACCESS_STATE["tenants"].append(record)
+    return record
+
+
+def _backfill_tenants_from_resources() -> None:
+    known = {str(item.get("tenant_id") or "") for item in _ACCESS_STATE["tenants"]}
+    tenant_ids: set[str] = set()
+    for collection_name in ("applications", "webhooks"):
+        for item in _ACCESS_STATE[collection_name]:
+            tenant_id = str(item.get("tenant_id") or "").strip()
+            if re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,63}", tenant_id) and tenant_id not in known:
+                tenant_ids.add(tenant_id)
+    for tenant_id in sorted(tenant_ids):
+        timestamp = now_seconds()
+        _ACCESS_STATE["tenants"].append(
+            {
+                "tenant_id": tenant_id,
+                "name": tenant_id,
+                "status": "active",
+                "created_at": timestamp,
+                "updated_at": timestamp,
+            }
+        )
+
+
+def public_tenant(record: dict[str, Any]) -> dict[str, Any]:
+    tenant_id = str(record.get("tenant_id") or "")
+    return {
+        "tenant_id": tenant_id,
+        "name": str(record.get("name") or tenant_id),
+        "status": str(record.get("status") or "active"),
+        "created_at": record.get("created_at"),
+        "updated_at": record.get("updated_at"),
+        "application_count": sum(1 for item in _ACCESS_STATE["applications"] if item.get("tenant_id") == tenant_id),
+        "webhook_count": sum(1 for item in _ACCESS_STATE["webhooks"] if item.get("tenant_id") == tenant_id),
+    }
+
+
+def list_tenants() -> list[dict[str, Any]]:
+    with _ACCESS_LOCK:
+        _backfill_tenants_from_resources()
+        rows = [public_tenant(item) for item in _ACCESS_STATE["tenants"]]
+        return sorted(rows, key=lambda item: str(item.get("tenant_id", "")))
+
+
+def find_tenant(tenant_id: str) -> dict[str, Any] | None:
+    with _ACCESS_LOCK:
+        normalized_id = validate_tenant_id(tenant_id)
+        record = _tenant_record(normalized_id)
+        return public_tenant(record) if record is not None else None
+
+
+def create_tenant(name: str, *, tenant_id: str | None = None, status_value: str = "active") -> dict[str, Any]:
+    with _ACCESS_LOCK:
+        tenant_name = normalize_tenant_name(name)
+        if _tenant_name_exists(tenant_name):
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="租户名称已存在")
+        normalized_id = validate_tenant_id(tenant_id) if tenant_id else _unique_tenant_id(tenant_id_from_name(tenant_name))
+        if _tenant_record(normalized_id) is not None:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="租户已存在")
+        record = _ensure_tenant_record(normalized_id, name=tenant_name, status_value=status_value)
+        save_access_state()
+        return public_tenant(record)
+
+
+def ensure_tenant(tenant_id: str, *, name: str | None = None, status_value: str = "active") -> dict[str, Any]:
+    with _ACCESS_LOCK:
+        record = _ensure_tenant_record(tenant_id, name=name, status_value=status_value)
+        save_access_state()
+        return public_tenant(record)
+
 
 def normalize_optional_limit(value: Any, *, field_name: str) -> int | None:
     if value is None or value == "":
@@ -148,10 +290,11 @@ def access_state_payload() -> dict[str, list[dict[str, Any]]]:
 
 def restore_access_state(snapshot: dict[str, list[dict[str, Any]]]) -> None:
     with _ACCESS_LOCK:
+        _ACCESS_STATE["tenants"] = copy.deepcopy(snapshot.get("tenants", []))
         _ACCESS_STATE["applications"] = copy.deepcopy(snapshot.get("applications", []))
         _ACCESS_STATE["webhooks"] = copy.deepcopy(snapshot.get("webhooks", []))
+        _backfill_tenants_from_resources()
         save_access_state()
-
 
 def save_access_state() -> None:
     with _ACCESS_LOCK:
@@ -160,17 +303,20 @@ def save_access_state() -> None:
 
 def load_access_state() -> None:
     with _ACCESS_LOCK:
-        payload = read_json_state(PORTRAIT_ACCESS_STATE_PATH, {"applications": [], "webhooks": []})
+        payload = read_json_state(PORTRAIT_ACCESS_STATE_PATH, {"tenants": [], "applications": [], "webhooks": []})
         if not isinstance(payload, dict):
             handle_state_read_error("access state 根节点必须是映射")
             return
+        tenants = payload.get("tenants", [])
         applications = payload.get("applications", [])
         webhooks = payload.get("webhooks", [])
-        if not isinstance(applications, list) or not isinstance(webhooks, list):
+        if not isinstance(tenants, list) or not isinstance(applications, list) or not isinstance(webhooks, list):
             handle_state_read_error("access state lists must be arrays")
             return
+        _ACCESS_STATE["tenants"] = [item for item in tenants if isinstance(item, dict)]
         _ACCESS_STATE["applications"] = [item for item in applications if isinstance(item, dict)]
         _ACCESS_STATE["webhooks"] = [item for item in webhooks if isinstance(item, dict)]
+        _backfill_tenants_from_resources()
 
 
 def public_application(record: dict[str, Any]) -> dict[str, Any]:
@@ -225,6 +371,7 @@ def create_application(
         normalized_id = validate_access_id(app_id, field_name="app_id")
         if find_application(tenant_id, normalized_id) is not None:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="接入应用已存在")
+        _ensure_tenant_record(tenant_id)
         secret = new_secret("phk")
         timestamp = now_seconds()
         record = {
@@ -304,6 +451,7 @@ def active_previous_api_key_hashes(record: dict[str, Any], timestamp: float) -> 
 def rotate_application_secret(tenant_id: str, app_id: str) -> tuple[dict[str, Any], str]:
     with _ACCESS_LOCK:
         record = require_application(tenant_id, app_id)
+        _ensure_tenant_record(tenant_id)
         secret = new_secret("phk")
         timestamp = now_seconds()
         previous_hashes = active_previous_api_key_hashes(record, timestamp)
@@ -341,6 +489,32 @@ def application_key_matches(tenant_id: str, api_key: str) -> dict[str, Any] | No
     record = application_record_for_key(tenant_id, api_key)
     return public_application(record) if record is not None else None
 
+
+def application_record_for_key_any_tenant(api_key: str, timestamp: float | None = None) -> dict[str, Any] | None:
+    with _ACCESS_LOCK:
+        if not api_key:
+            return None
+        digest = secret_hash(api_key)
+        current_time = now_seconds() if timestamp is None else timestamp
+        matches: list[dict[str, Any]] = []
+        for item in _ACCESS_STATE["applications"]:
+            if item.get("status") != "active":
+                continue
+            if hmac.compare_digest(str(item.get("api_key_hash") or ""), digest):
+                matches.append(item)
+                continue
+            for previous_hash in active_previous_api_key_hashes(item, current_time):
+                if hmac.compare_digest(str(previous_hash.get("hash") or ""), digest):
+                    matches.append(item)
+                    break
+        if len(matches) == 1:
+            return matches[0]
+        return None
+
+
+def application_key_matches_any_tenant(api_key: str) -> dict[str, Any] | None:
+    record = application_record_for_key_any_tenant(api_key)
+    return public_application(record) if record is not None else None
 
 def application_request_policy(tenant_id: str, api_key: str, timestamp: float | None = None) -> dict[str, Any] | None:
     with _ACCESS_LOCK:
@@ -549,6 +723,7 @@ def webhook_sample_delivery(tenant_id: str, webhook_id: str) -> dict[str, Any]:
 
 def clear_access_state() -> None:
     with _ACCESS_LOCK:
+        _ACCESS_STATE["tenants"] = []
         _ACCESS_STATE["applications"] = []
         _ACCESS_STATE["webhooks"] = []
 
@@ -556,12 +731,17 @@ def clear_access_state() -> None:
 __all__ = [
     "access_state_payload",
     "application_key_matches",
+    "application_key_matches_any_tenant",
     "application_request_policy",
     "application_scopes_allow_permission",
     "clear_access_state",
     "create_application",
+    "create_tenant",
+    "ensure_tenant",
+    "find_tenant",
     "create_webhook",
     "list_applications",
+    "list_tenants",
     "list_webhooks",
     "load_access_state",
     "restore_access_state",
@@ -570,5 +750,6 @@ __all__ = [
     "rotate_webhook_secret",
     "update_application",
     "update_webhook",
+    "tenant_id_from_name",
     "webhook_sample_delivery",
 ]

@@ -216,6 +216,42 @@ def test_v1_requires_tenant_header_when_enabled(monkeypatch) -> None:
     assert "缺少 x-tenant-id 请求头" in response.json()["detail"]
 
 
+def test_v1_infers_tenant_from_single_tenant_jwt_when_header_required(monkeypatch) -> None:
+    monkeypatch.setattr(security, "RBAC_ENABLED", True)
+    monkeypatch.setattr(security, "API_TOKEN", None)
+    monkeypatch.setattr(portrait_auth, "RBAC_ENABLED", True)
+    monkeypatch.setattr(portrait_auth, "JWT_SECRET", "test-secret")
+    monkeypatch.setattr(portrait_auth, "JWT_ISSUER", "portrait-hub")
+    monkeypatch.setattr(portrait_auth, "JWT_AUDIENCE", "portrait-hub-api")
+    monkeypatch.setattr(portrait_auth, "JWT_REQUIRE_TENANT", True)
+    monkeypatch.setattr(portrait_security, "TENANT_HEADER_REQUIRED", True)
+    token = hs256_token(valid_jwt_payload(roles=["operator"], tenant_id="tenant-a"))
+    client = TestClient(app)
+
+    response = client.get("/v1/admin/status", headers={"Authorization": f"Bearer {token}"})
+
+    assert response.status_code == 200, response.text
+    assert response.json()["data"]["tenant_id"] == "tenant-a"
+
+
+def test_v1_multi_tenant_jwt_requires_explicit_tenant_when_header_required(monkeypatch) -> None:
+    monkeypatch.setattr(security, "RBAC_ENABLED", True)
+    monkeypatch.setattr(security, "API_TOKEN", None)
+    monkeypatch.setattr(portrait_auth, "RBAC_ENABLED", True)
+    monkeypatch.setattr(portrait_auth, "JWT_SECRET", "test-secret")
+    monkeypatch.setattr(portrait_auth, "JWT_ISSUER", "portrait-hub")
+    monkeypatch.setattr(portrait_auth, "JWT_AUDIENCE", "portrait-hub-api")
+    monkeypatch.setattr(portrait_auth, "JWT_REQUIRE_TENANT", True)
+    monkeypatch.setattr(portrait_security, "TENANT_HEADER_REQUIRED", True)
+    token = hs256_token(valid_jwt_payload(roles=["operator"], tenants=["tenant-a", "tenant-b"]))
+    client = TestClient(app)
+
+    response = client.get("/v1/admin/status", headers={"Authorization": f"Bearer {token}"})
+
+    assert response.status_code == 400
+    assert "缺少 x-tenant-id 请求头" in response.json()["detail"]
+
+
 def test_legacy_model_management_reads_are_rbac_protected(monkeypatch) -> None:
     monkeypatch.setattr(security, "RBAC_ENABLED", True)
     monkeypatch.setattr(security, "API_TOKEN", None)

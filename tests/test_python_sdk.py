@@ -54,6 +54,22 @@ def test_python_sdk_can_send_application_api_key_header(monkeypatch) -> None:
     assert "authorization" not in captured["headers"]
 
 
+def test_python_sdk_can_omit_tenant_for_single_tenant_api_key(monkeypatch) -> None:
+    captured = {}
+
+    def fake_urlopen(request, timeout):
+        captured["headers"] = {key.lower(): value for key, value in request.header_items()}
+        return FakeOKResponse()
+
+    monkeypatch.setattr("sdk.python.portrait_hub_client.urllib_request.urlopen", fake_urlopen)
+    client = PortraitHubClient("http://testserver", api_token="phk_secret", auth_scheme="api_key")
+
+    assert client.health() == {"status": "ok"}
+    assert captured["headers"]["x-api-key"] == "phk_secret"
+    assert "x-tenant-id" not in captured["headers"]
+    assert "authorization" not in captured["headers"]
+
+
 def test_python_sdk_rejects_unknown_auth_scheme() -> None:
     with pytest.raises(ValueError, match="auth_scheme"):
         PortraitHubClient("http://testserver", auth_scheme="basic")

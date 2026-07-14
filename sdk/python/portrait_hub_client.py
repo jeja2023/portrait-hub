@@ -25,7 +25,7 @@ class PortraitHubClient:
         api_token: str | None = None,
         auth_scheme: str = "bearer",
         timeout: float = 30.0,
-        tenant_id: str = "default",
+        tenant_id: str | None = None,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.api_token = api_token
@@ -47,14 +47,14 @@ class PortraitHubClient:
 
     def _headers(self, extra: dict[str, str] | None = None) -> dict[str, str]:
         headers = dict(extra or {})
-        headers["X-Tenant-ID"] = self.tenant_id
+        if self.tenant_id:
+            headers["X-Tenant-ID"] = self.tenant_id
         if self.api_token:
             if self.auth_scheme == "api_key":
                 headers["X-API-Key"] = self.api_token
             else:
                 headers["Authorization"] = f"Bearer {self.api_token}"
         return headers
-
     def _path_with_query(self, path: str, params: dict[str, Any] | None = None) -> str:
         clean_params: dict[str, Any] = {}
         for key, value in (params or {}).items():

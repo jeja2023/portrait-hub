@@ -3,14 +3,17 @@ from __future__ import annotations
 import secrets
 from typing import Any
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.portrait_access import (
     access_state_payload,
     create_application,
+    create_tenant,
     create_webhook,
+    find_tenant,
     list_applications,
+    list_tenants,
     list_webhooks,
     restore_access_state,
     rotate_application_secret,
@@ -23,6 +26,7 @@ from app.portrait_call_logs import list_call_logs
 from app.portrait_errors import error_code_catalog
 from app.portrait_async import run_blocking_io
 from app.portrait_audit import audit_event
+from app.observability import request_id_from_headers
 from app.portrait_auth import permission_dependency
 from app.portrait_request_context import PortraitRequestContext, portrait_request_context
 from app.portrait_response import portrait_success
@@ -30,6 +34,34 @@ from app.security import require_api_token
 
 
 router = APIRouter(dependencies=[Depends(require_api_token)])
+
+
+
+class AccessTenantCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    tenant_id: str | None = Field(default=None, max_length=64)
+    name: str = Field(..., min_length=1, max_length=256)
+    status: str = Field(default="active", max_length=32)
+    create_default_application: bool = True
+    application_name: str | None = Field(default=None, max_length=256)
+    owner: str = Field(default="platform", max_length=256)
+    scopes: list[str] = Field(
+        default_factory=lambda: [
+            "infer",
+            "compare",
+            "gallery:read",
+            "gallery:write",
+            "jobs",
+            "jobs:read",
+            "streams",
+            "streams:read",
+            "models:read",
+        ]
+    )
+    rate_limit_per_minute: int | None = Field(default=None, ge=0, le=1_000_000_000)
+    rate_limit_burst: int | None = Field(default=None, ge=0, le=1_000_000_000)
+    daily_quota: int | None = Field(default=None, ge=0, le=1_000_000_000)
 
 
 class AccessApplicationCreateRequest(BaseModel):
@@ -96,6 +128,62 @@ async def audit_or_restore(event: str, snapshot: dict[str, list[dict[str, Any]]]
     except Exception:
         await run_blocking_io(restore_access_state, snapshot)
         raise
+
+
+
+@router.get("/v1/access/tenants", dependencies=[Depends(permission_dependency("tenants:read"))])
+async def v1_access_tenants(request: Request) -> dict[str, Any]:
+    request_id = request_id_from_headers(request)
+    tenants = await run_blocking_io(list_tenants)
+    return portrait_success(request_id, {"tenants": tenants, "count": len(tenants)})
+
+
+@router.post("/v1/access/tenants", dependencies=[Depends(permission_dependency("tenants:write"))])
+async def v1_access_create_tenant(payload: AccessTenantCreateRequest, request: Request) -> dict[str, Any]:
+    request_id = request_id_from_headers(request)
+    snapshot = await run_blocking_io(access_state_payload)
+    application = None
+    secret = None
+    try:
+        tenant = await run_blocking_io(
+            create_tenant,
+            payload.name,
+            tenant_id=payload.tenant_id,
+            status_value=payload.status,
+        )
+        if payload.create_default_application:
+            application, secret = await run_blocking_io(
+                create_application,
+                tenant["tenant_id"],
+                app_id=generated_id("app"),
+                name=payload.application_name or f"{payload.name} 接入应用",
+                owner=payload.owner,
+                status_value="active",
+                scopes=payload.scopes,
+                rate_limit_per_minute=payload.rate_limit_per_minute,
+                rate_limit_burst=payload.rate_limit_burst,
+                daily_quota=payload.daily_quota,
+            )
+        current_tenant = await run_blocking_io(find_tenant, tenant["tenant_id"])
+        if current_tenant is not None:
+            tenant = current_tenant
+    except Exception:
+        await run_blocking_io(restore_access_state, snapshot)
+        raise
+    await audit_or_restore(
+        "access_tenant_created",
+        snapshot,
+        request_id=request_id,
+        tenant_id=tenant["tenant_id"],
+        tenant_name=tenant.get("name"),
+        created_default_application=application is not None,
+        app_id=application.get("app_id") if application else None,
+    )
+    data: dict[str, Any] = {"tenant": tenant}
+    if application is not None:
+        data["application"] = application
+        data["one_time_secret"] = secret
+    return portrait_success(request_id, data)
 
 
 @router.get("/v1/access/applications", dependencies=[Depends(permission_dependency("access:read"))])

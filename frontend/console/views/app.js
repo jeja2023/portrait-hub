@@ -8,6 +8,8 @@ const state = {
   analysisResultsTab: localStorage.getItem("portraitHubAnalysisResultsTab") || "image",
   isLoggedIn: localStorage.getItem("portraitHubLoggedIn") === "true",
   accessApplications: loadAccessApplications(),
+  accessTenants: [],
+  accessTenantWarning: null,
   accessLastSecret: null,
   webhooks: loadWebhooks(),
   webhookLastSecret: null,
@@ -32,19 +34,104 @@ const state = {
 };
 
 const endpointMap = consoleConfig.endpointMap || {};
-const consoleModules = window.PortraitConsoleModules || {};
-const consoleNavigation = consoleModules.navigation || {};
+const fallbackNavigation = {
+  sections: [
+    { id: "overview", label: "\u603b\u89c8", standalone: true },
+    {
+      id: "analysis",
+      label: "\u667a\u80fd\u5206\u6790",
+      items: [
+        { view: "vision", label: "\u56fe\u7247\u89e3\u6790" },
+        { view: "video", label: "\u89c6\u9891\u4efb\u52a1" },
+        { view: "streams", label: "\u5b9e\u65f6\u89c6\u9891\u6d41" },
+        { view: "video-results", label: "\u89e3\u6790\u7ed3\u679c" },
+      ],
+    },
+    {
+      id: "retrieval",
+      label: "\u6bd4\u5bf9\u68c0\u7d22",
+      items: [
+        { view: "compare", label: "\u4eba\u50cf\u6bd4\u5bf9" },
+        { view: "multimodal-compare", label: "\u878d\u5408\u6bd4\u5bf9" },
+        { view: "gallery-search", label: "\u4ee5\u56fe\u641c\u4eba" },
+      ],
+    },
+    {
+      id: "gallery",
+      label: "\u4eba\u5458\u5e93",
+      items: [
+        { view: "gallery-enroll", label: "\u4eba\u5458\u6ce8\u518c" },
+        { view: "gallery-manage", label: "\u4eba\u5458\u7ba1\u7406" },
+        { view: "gallery-rebuild", label: "\u7279\u5f81\u91cd\u5efa" },
+      ],
+    },
+    {
+      id: "access",
+      label: "\u63a5\u5165\u4e2d\u5fc3",
+      items: [
+        { view: "access-credentials", label: "\u5e94\u7528\u51ed\u8bc1" },
+        { view: "sdk-examples", label: "SDK \u793a\u4f8b" },
+        { view: "api-playground", label: "\u63a5\u53e3\u8c03\u8bd5\u53f0" },
+        { view: "openapi-docs", label: "\u5f00\u653e\u63a5\u53e3\u5b9a\u4e49" },
+        { view: "error-codes", label: "\u9519\u8bef\u7801" },
+        { view: "webhooks", label: "\u4e8b\u4ef6\u56de\u8c03" },
+        { view: "call-logs", label: "\u8c03\u7528\u65e5\u5fd7" },
+      ],
+    },
+    {
+      id: "model-governance",
+      label: "\u6a21\u578b\u4e0e\u8bc4\u4f30",
+      items: [
+        { view: "models", label: "\u6a21\u578b\u7ba1\u7406" },
+        { view: "admin-threshold", label: "\u6bd4\u5bf9\u9608\u503c" },
+        { view: "track-review", label: "\u8f68\u8ff9\u5ba1\u9605" },
+        { view: "evaluation-center", label: "\u56de\u5f52\u8bc4\u4f30" },
+        { view: "release-center", label: "\u6a21\u578b\u53d1\u5e03" },
+      ],
+    },
+    {
+      id: "ops",
+      label: "\u8fd0\u7ef4\u5408\u89c4",
+      items: [
+        { view: "slo-panel", label: "SLO \u9762\u677f" },
+        { view: "alerts", label: "\u544a\u8b66\u8bc4\u4f30" },
+        { view: "admin-data", label: "\u6570\u636e\u4fdd\u7559\u4e0e\u5907\u4efd" },
+        { view: "audit-compliance", label: "\u5408\u89c4\u5ba1\u8ba1" },
+      ],
+    },
+  ],
+  overviewShortcuts: [
+    { view: "vision", title: "\u56fe\u7247\u89e3\u6790", description: "\u4eba\u8138\u3001\u4eba\u4f53\u3001\u59ff\u6001\u3001\u8863\u7740\u3001\u6b65\u6001\u548c ReID \u5411\u91cf\u3002" },
+    { view: "video", title: "\u89c6\u9891\u4efb\u52a1", description: "\u79bb\u7ebf\u89c6\u9891\u4efb\u52a1\u521b\u5efa\u3001\u72b6\u6001\u8ddf\u8e2a\u548c\u7ed3\u679c\u56de\u6536\u3002" },
+    { view: "streams", title: "\u5b9e\u65f6\u89c6\u9891\u6d41", description: "RTSP/HTTP \u6ce8\u518c\u3001\u542f\u52a8\u3001\u4e8b\u4ef6\u67e5\u8be2\u548c\u8ba2\u9605\u3002" },
+    { view: "compare", title: "\u4eba\u50cf\u6bd4\u5bf9", description: "1:1 \u4eba\u8138\u3001\u4eba\u4f53\u3001\u6b65\u6001\u548c\u6279\u91cf\u6210\u5bf9\u6bd4\u5bf9\u3002" },
+    { view: "gallery-search", title: "\u4ee5\u56fe\u641c\u4eba", description: "1:N \u68c0\u7d22\u3001\u5019\u9009\u6392\u5e8f\u548c\u4eba\u5458\u7ea7\u805a\u5408\u7ed3\u679c\u3002" },
+    { view: "gallery-enroll", title: "\u4eba\u5458\u6ce8\u518c", description: "\u591a\u56fe\u5165\u5e93\u3001\u91cd\u590d\u8df3\u8fc7\u548c\u7279\u5f81\u8d28\u91cf\u6821\u9a8c\u3002" },
+    { view: "gallery-rebuild", title: "\u7279\u5f81\u91cd\u5efa", description: "\u6309\u6a21\u6001\u548c\u6a21\u578b\u91cd\u5efa\u5e95\u5e93\u5411\u91cf\u7d22\u5f15\u3002" },
+    { view: "access-credentials", title: "\u63a5\u5165\u914d\u7f6e", description: "\u5e94\u7528\u51ed\u8bc1\u3001\u8c03\u7528\u6743\u9650\u548c\u5bc6\u94a5\u8f6e\u6362\u3002" },
+    { view: "models", title: "\u6a21\u578b\u7ba1\u7406", description: "\u6a21\u578b\u72b6\u6001\u3001\u52a0\u8f7d\u5378\u8f7d\u3001\u522b\u540d\u4e0e\u751f\u4ea7\u80fd\u529b\u68c0\u67e5\u3002" },
+  ],
+};
+
+function currentNavigation() {
+  const navigation = (window.PortraitConsoleModules || {}).navigation || {};
+  return {
+    sections: Array.isArray(navigation.sections) && navigation.sections.length
+      ? navigation.sections
+      : fallbackNavigation.sections,
+    overviewShortcuts: Array.isArray(navigation.overviewShortcuts) && navigation.overviewShortcuts.length
+      ? navigation.overviewShortcuts
+      : fallbackNavigation.overviewShortcuts,
+  };
+}
 
 function navigationSections() {
-  return Array.isArray(consoleNavigation.sections) && consoleNavigation.sections.length
-    ? consoleNavigation.sections
-    : [{ id: "overview", label: "总览", standalone: true }];
+  return currentNavigation().sections;
 }
 
 function overviewShortcuts() {
-  return Array.isArray(consoleNavigation.overviewShortcuts) ? consoleNavigation.overviewShortcuts : [];
+  return currentNavigation().overviewShortcuts;
 }
-
 function renderNavigation() {
   const items = navigationSections().map((section) => {
     if (section.standalone) {
@@ -594,11 +681,25 @@ const template = `
           </div>
           <button type="button" id="access-refresh-button">刷新接入清单</button>
         </div>
+        <div class="card">
+          <div class="section-title">
+            <h3>租户开通</h3>
+            <p>输入租户名称后生成租户标识和默认接入应用。</p>
+          </div>
+          <form id="access-tenant-form" class="form-grid compact">
+            <label>租户名称 <input id="access-tenant-name-input" placeholder="客户或业务项目名称" /></label>
+            <label>租户标识 <input id="access-tenant-id-input" placeholder="留空自动生成" /></label>
+            <label>默认应用名称 <input id="access-tenant-app-name-input" placeholder="留空使用租户名称" /></label>
+            <label class="field-inline"><input id="access-tenant-default-app-input" type="checkbox" checked /> 创建默认应用</label>
+            <button type="submit" class="primary">开通租户</button>
+          </form>
+          <div id="access-tenant-summary" class="result-summary"></div>
+        </div>
         <div class="split-grid">
           <div class="card">
             <div class="section-title">
               <h3>接入应用</h3>
-              <p>本清单用于接入规划、示例生成和租户级 接口密钥鉴权。</p>
+              <p>本清单用于接入规划、示例生成和租户级接口密钥鉴权。</p>
             </div>
             <form id="access-app-form" class="form-grid">
               <label>应用 ID <input id="access-app-id-input" placeholder="留空自动生成" /></label>
@@ -2275,16 +2376,13 @@ function openVisionLightbox(index) {
 }
 
 function requestSnippet(path, formFieldExamples = []) {
-  const lines = [
-    `curl -X POST "${window.location.origin}${path}"`,
-    `  -H "X-Tenant-ID: ${state.tenantId}"`,
-  ];
+  const lines = [`curl -X POST "${window.location.origin}${path}"`];
+  if (!state.apiKey) lines.push(`  -H "X-Tenant-ID: ${state.tenantId}"`);
   if (state.apiKey) lines.push('  -H "X-API-Key: ${PORTRAIT_HUB_API_TOKEN}"');
   if (state.bearer) lines.push('  -H "Authorization: Bearer ${PORTRAIT_HUB_BEARER_TOKEN}"');
   formFieldExamples.forEach((item) => lines.push(`  -F "${item}"`));
   return lines.join(" \\\n");
 }
-
 function renderIntegrationSnippet() {
   qs("#integration-code").textContent = requestSnippet("/v1/gallery/search", [
     "file=@query.jpg",
@@ -2486,6 +2584,10 @@ function normalizeAccessApplication(app) {
   return { ...app, id, app_id: app.app_id || id };
 }
 
+function normalizeAccessTenant(tenant) {
+  const id = tenant.tenant_id || tenant.id || "";
+  return { ...tenant, id, tenant_id: tenant.tenant_id || id };
+}
 function normalizeWebhook(webhook) {
   const id = webhook.id || webhook.webhook_id || "";
   return { ...webhook, id, webhook_id: webhook.webhook_id || id };
@@ -2517,10 +2619,32 @@ function accessPayload() {
     api_key_preview: maskToken(state.apiKey),
     bearer_preview: maskToken(state.bearer),
     last_secret_preview: state.accessLastSecret ? maskToken(state.accessLastSecret.secret) : null,
+    tenants: state.accessTenants,
+    tenant_catalog_warning: state.accessTenantWarning,
     applications: state.accessApplications,
   };
 }
 
+async function refreshAccessTenants() {
+  try {
+    const payload = await api("/v1/access/tenants");
+    state.accessTenants = (payload.tenants || []).map(normalizeAccessTenant);
+    state.accessTenantWarning = null;
+  } catch (error) {
+    state.accessTenantWarning = error.message || String(error);
+  }
+}
+
+function renderAccessTenantSummary() {
+  const activeCount = state.accessTenants.filter((item) => item.status !== "disabled").length;
+  const appCount = state.accessTenants.reduce((sum, item) => sum + Number(item.application_count || 0), 0);
+  renderSummary("#access-tenant-summary", [
+    { label: "租户数", value: state.accessTenants.length || "--" },
+    { label: "启用", value: state.accessTenants.length ? activeCount : "--" },
+    { label: "接入应用", value: state.accessTenants.length ? appCount : "--" },
+    { label: "目录状态", value: state.accessTenantWarning ? "需管理权限" : "可用" },
+  ]);
+}
 async function refreshAccessApplications() {
   try {
     const payload = await api("/v1/access/applications");
@@ -2529,6 +2653,7 @@ async function refreshAccessApplications() {
   } catch (error) {
     renderPayload("access-credentials", "#access-credentials-json", { ...accessPayload(), warning: error.message || String(error) });
   }
+  await refreshAccessTenants();
   renderAccessApplications();
 }
 
@@ -2540,6 +2665,7 @@ function renderAccessApplications() {
   const limitedCount = apps.filter((item) => Number(item.rate_limit_per_minute || 0) > 0 || Number(item.daily_quota || 0) > 0).length;
   const maxErrorRate = apps.reduce((max, item) => Math.max(max, Number(item.error_rate || 0)), 0);
   populateCallLogApplicationOptions();
+  renderAccessTenantSummary();
   renderSummary("#access-app-summary", [
     { label: "应用数", value: apps.length },
     { label: "启用", value: activeCount },
@@ -2572,6 +2698,43 @@ function renderAccessApplications() {
   renderPayload("access-credentials", "#access-credentials-json", accessPayload());
 }
 
+async function createAccessTenant(event) {
+  event.preventDefault();
+  const tenantName = qs("#access-tenant-name-input").value.trim();
+  if (!tenantName) throw new Error("请输入租户名称");
+  const payload = {
+    name: tenantName,
+    tenant_id: qs("#access-tenant-id-input").value.trim() || null,
+    create_default_application: qs("#access-tenant-default-app-input").checked,
+    application_name: qs("#access-tenant-app-name-input").value.trim() || null,
+  };
+  const data = await api("/v1/access/tenants", { method: "POST", json: payload });
+  const tenant = data.tenant ? normalizeAccessTenant(data.tenant) : null;
+  if (tenant?.id) {
+    const tenantIndex = state.accessTenants.findIndex((item) => item.id === tenant.id);
+    if (tenantIndex >= 0) state.accessTenants[tenantIndex] = tenant;
+    else state.accessTenants.push(tenant);
+    state.tenantId = tenant.id;
+    localStorage.setItem("portraitHubTenant", state.tenantId);
+    if (qs("#current-tenant-display")) qs("#current-tenant-display").textContent = state.tenantId;
+    if (qs("#tenant-input")) qs("#tenant-input").value = state.tenantId;
+  }
+  if (data.application) {
+    const app = normalizeAccessApplication(data.application);
+    const found = state.accessApplications.findIndex((item) => normalizeAccessApplication(item).id === app.id);
+    if (found >= 0) state.accessApplications[found] = app;
+    else state.accessApplications.push(app);
+    if (data.one_time_secret) state.accessLastSecret = { app_id: app.id, secret: data.one_time_secret, generated_at: Date.now() };
+    fillAccessAppForm(app);
+    saveAccessApplications();
+  }
+  qs("#access-tenant-name-input").value = "";
+  qs("#access-tenant-id-input").value = "";
+  qs("#access-tenant-app-name-input").value = "";
+  renderIntegrationSnippet();
+  renderAccessApplications();
+  renderPayload("access-credentials", "#access-credentials-json", data.one_time_secret ? { ...accessPayload(), tenant, one_time_secret: state.accessLastSecret } : { ...accessPayload(), tenant });
+}
 async function saveAccessApp(event) {
   event.preventDefault();
   const id = qs("#access-app-id-input").value.trim() || `app_${Date.now()}`;
@@ -2867,11 +3030,11 @@ async function renderWebhookSample(id = null) {
 function renderSdkExamples() {
   const baseUrl = window.location.origin;
   const app = selectedAccessApp() || state.accessApplications[0] || {};
-  const python = `import os\nfrom pathlib import Path\nfrom sdk.python.portrait_hub_client import PortraitHubClient\n\nclient = PortraitHubClient(\n    base_url="${baseUrl}",\n    tenant_id="${state.tenantId}",\n    api_token=os.getenv("PORTRAIT_HUB_API_TOKEN"),\n    auth_scheme="api_key",\n)\nresult = client.search(Path("query.jpg"), modality="body", top_k=5, threshold_profile="normal")\nprint(result["request_id"], result.get("data", {}).get("candidate_count"))`;
-  const nodeSnippet = `const { PortraitHubClient } = require("./sdk/node/portraitHubClient");\n\nconst client = new PortraitHubClient({\n  baseUrl: "${baseUrl}",\n  tenantId: "${state.tenantId}",\n  apiToken: process.env.PORTRAIT_HUB_API_TOKEN,\n  authScheme: "api_key",\n});\n\nconst result = await client.comparePersons("a.jpg", "b.jpg", "normal");\nconsole.log(result.request_id, result.data?.passed);`;
+  const python = `import os\nfrom pathlib import Path\nfrom sdk.python.portrait_hub_client import PortraitHubClient\n\nclient = PortraitHubClient(\n    base_url="${baseUrl}",\n    api_token=os.getenv("PORTRAIT_HUB_API_TOKEN"),\n    auth_scheme="api_key",\n)\nresult = client.search(Path("query.jpg"), modality="body", top_k=5, threshold_profile="normal")\nprint(result["request_id"], result.get("data", {}).get("candidate_count"))`;
+  const nodeSnippet = `const { PortraitHubClient } = require("./sdk/node/portraitHubClient");\n\nconst client = new PortraitHubClient({\n  baseUrl: "${baseUrl}",\n  apiToken: process.env.PORTRAIT_HUB_API_TOKEN,\n  authScheme: "api_key",\n});\n\nconst result = await client.comparePersons("a.jpg", "b.jpg", "normal");\nconsole.log(result.request_id, result.data?.passed);`;
   const curl = requestSnippet("/v1/gallery/search", ["file=@query.jpg", "modality=body", "top_k=5", "threshold_profile=normal"]);
-  const batch = `import os\nfrom pathlib import Path\nfrom sdk.python.portrait_hub_client import PortraitHubClient\n\nclient = PortraitHubClient(\n    base_url="${baseUrl}",\n    tenant_id="${state.tenantId}",\n    api_token=os.getenv("PORTRAIT_HUB_API_TOKEN"),\n    auth_scheme="api_key",\n)\nbatch = client.search_batch(\n    [Path("query-a.jpg"), Path("query-b.jpg")],\n    modality="body",\n    top_k=10,\n    threshold_profile="normal",\n    async_mode=True,\n)\nbatch_id = batch.get("data", {}).get("batch_id")\nprint(batch["request_id"], batch_id)`;
-  const video = `const { PortraitHubClient } = require("./sdk/node/portraitHubClient");\n\nconst wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));\nconst terminal = new Set(["completed", "failed", "cancelled"]);\nconst client = new PortraitHubClient({\n  baseUrl: "${baseUrl}",\n  tenantId: "${state.tenantId}",\n  apiToken: process.env.PORTRAIT_HUB_API_TOKEN,\n  authScheme: "api_key",\n});\n\nconst job = await client.createVideoJob("sample.mp4", { frameInterval: 5, maxFrames: 120 });\nconst jobId = job.data?.job?.job_id ?? job.data?.job_id;\nlet status = job;\nwhile (jobId && !terminal.has(status.data?.job?.status)) {\n  await wait(2000);\n  status = await client.getJob(jobId);\n}\nconst result = jobId ? await client.jobResult(jobId) : {};\nconsole.log(jobId, result.request_id);`;
+  const batch = `import os\nfrom pathlib import Path\nfrom sdk.python.portrait_hub_client import PortraitHubClient\n\nclient = PortraitHubClient(\n    base_url="${baseUrl}",\n    api_token=os.getenv("PORTRAIT_HUB_API_TOKEN"),\n    auth_scheme="api_key",\n)\nbatch = client.search_batch(\n    [Path("query-a.jpg"), Path("query-b.jpg")],\n    modality="body",\n    top_k=10,\n    threshold_profile="normal",\n    async_mode=True,\n)\nbatch_id = batch.get("data", {}).get("batch_id")\nprint(batch["request_id"], batch_id)`;
+  const video = `const { PortraitHubClient } = require("./sdk/node/portraitHubClient");\n\nconst wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));\nconst terminal = new Set(["completed", "failed", "cancelled"]);\nconst client = new PortraitHubClient({\n  baseUrl: "${baseUrl}",\n  apiToken: process.env.PORTRAIT_HUB_API_TOKEN,\n  authScheme: "api_key",\n});\n\nconst job = await client.createVideoJob("sample.mp4", { frameInterval: 5, maxFrames: 120 });\nconst jobId = job.data?.job?.job_id ?? job.data?.job_id;\nlet status = job;\nwhile (jobId && !terminal.has(status.data?.job?.status)) {\n  await wait(2000);\n  status = await client.getJob(jobId);\n}\nconst result = jobId ? await client.jobResult(jobId) : {};\nconsole.log(jobId, result.request_id);`;
   qs("#sdk-python-code").textContent = python;
   qs("#sdk-node-code").textContent = nodeSnippet;
   qs("#sdk-curl-code").textContent = curl;
@@ -4435,6 +4598,7 @@ function setupEvents() {
   }));
 
   qs("#access-refresh-button").addEventListener("click", wrapHandler(refreshAccessApplications));
+  qs("#access-tenant-form").addEventListener("submit", wrapHandler(createAccessTenant));
   qs("#access-app-form").addEventListener("submit", wrapHandler(saveAccessApp));
   qs("#access-rotate-button").addEventListener("click", wrapHandler(() => rotateAccessApp()));
   qs("#access-app-list").addEventListener("click", wrapHandler((event) => {

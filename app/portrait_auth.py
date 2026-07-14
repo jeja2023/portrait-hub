@@ -355,10 +355,10 @@ async def require_permission(
         return
     tenant_id = optional_header_value(x_tenant_id)
     api_key = optional_header_value(x_api_key)
-    if tenant_id and api_key:
-        from app.portrait_access import application_key_matches, application_scopes_allow_permission
+    if api_key:
+        from app.portrait_access import application_key_matches, application_key_matches_any_tenant, application_scopes_allow_permission
 
-        application = application_key_matches(tenant_id, api_key)
+        application = application_key_matches(tenant_id, api_key) if tenant_id else application_key_matches_any_tenant(api_key)
         if application is not None:
             if application_scopes_allow_permission(application.get("scopes"), permission):
                 return

@@ -2,7 +2,7 @@
 
 面向 Ubuntu + Docker + NVIDIA GPU 的 ONNX 推理服务。服务通过 FastAPI 暴露接口，按 GPU 拆成多个 worker，适合给人像识别、人像检索、ReID 等业务项目提供共享推理能力。
 
-当前版本：`0.6.2`。本版本在 `0.6.1` 中文化清理基础上完成控制台信息架构重规划与导航模块化，侧栏按业务工作流和使用角色组织，并补齐人员库“特征重建”独立入口；API 契约和后端业务逻辑保持兼容。
+当前版本：`0.7.1`。本版本在 `0.7.0` 单凭证优先基础上，正式收口租户目录与管理员一键开通体验：管理员可在控制台“接入中心”或 `/v1/access/tenants` 只填写租户名称，由后台生成稳定 `tenant_id`、默认接入应用和一次性 API Key；业务系统默认只携带单租户 API Key 即可完成租户、权限、限流、配额、调用日志和审计归属解析，多租户 JWT 或共享凭证场景仍保留显式 `X-Tenant-ID`。
 
 ## PortraitHub v1 平台接口
 
@@ -73,8 +73,9 @@ v1 已加入的生产加固：
 - `DEBUG_ENDPOINTS_ENABLED` 控制 `/debug/model-output`，默认 `false`。
 - `ENABLE_API_DOCS` 控制 `/docs`、`/redoc` 和 `/openapi.json`；Docker Compose 在生产环境默认设为 `false`。
 - `TRUSTED_HOSTS` 通过 `TrustedHostMiddleware` 执行 Host 头白名单；Docker Compose 默认允许回环地址和 worker 服务名。
-- `TENANT_HEADER_REQUIRED` 会让 v1 租户接口在 Compose 部署中默认拒绝不携带 `X-Tenant-ID` 的请求。
-- `JWT_REQUIRE_TENANT` 会让 RBAC JWT 默认通过 `tenant_id`、`tenant` 或 `tenants` claim 绑定请求租户。
+- `TENANT_HEADER_REQUIRED` 会让 v1 租户接口在 Compose 部署中默认拒绝无法确定租户的请求；若请求携带可唯一解析租户的应用 `X-API-Key` 或单租户 JWT，可不再额外传 `X-Tenant-ID`。
+- 接入中心新增 `/v1/access/tenants` 租户目录：系统管理员只需提交租户名称，后台会生成稳定 `tenant_id`，并可同时创建默认接入应用和一次性 API Key；默认业务应用不包含 `tenants:read` / `tenants:write` 管理权限。
+- `JWT_REQUIRE_TENANT` 会让 RBAC JWT 默认通过 `tenant_id`、`tenant` 或 `tenants` claim 绑定请求租户；只有一个租户 claim 时服务端可自动选中，多租户 claim 仍需显式 `X-Tenant-ID`。
 - `PORTRAIT_STORAGE_BACKEND`、`PORTRAIT_VECTOR_BACKEND` 和 `PORTRAIT_OBJECT_STORAGE_BACKEND` 提供 PostgreSQL、pgvector/Qdrant 以及 S3 兼容存储的生产后端适配器。
 - `REQUIRE_ENCRYPTION` 会在缺少 `ENCRYPTION_KEY` 时让敏感载荷保护失败关闭；Docker Compose 默认设为 `true`。
 - `ENCRYPTION_KEY_ID` 用于标记新加密载荷，而 `ENCRYPTION_KEYRING` 会在密钥轮换期间保留已退役密钥，供只读解密使用。
@@ -516,7 +517,7 @@ python tools/validate_model_package.py --config models.yml --models-root models 
 - `tools/validate_model_package.py` 用于上线前校验算法侧交付的模型包。生产上线建议加 `--strict-hash --strict-sidecars`，要求 sha256、模型卡和 labels 齐全。
 - `tools/regression_check.py` 用于固定样例回归检查，可以对运行中的服务发起 HTTP 请求，并按期望输出子集和浮点容忍阈值比对。
 - `tools/portrait_migrate.py`、`tools/portrait_backup_scheduler.py` 和 `tools/load_test.py` 分别用于数据迁移、备份调度和 HTTP 压测；`tools/portrait_migrate.py gallery-to-vector --dry-run --skip-load-state` 可用于快速验证本地向量迁移路径。
-- 对外接入应用密钥使用 `X-API-Key`，`service_smoke_test.py`、`regression_check.py` 和 `load_test.py` 均支持 `--auth-scheme api-key`；内部运维 JWT/全局 token 继续使用默认 Bearer。Postman 集合位于 `tools/portrait_hub_postman_collection.json`，变量为 `base_url`、`tenant_id` 和 `api_key`。
+- 对外接入应用密钥使用 `X-API-Key`，新推荐模式只发送应用密钥即可，服务端会从密钥反查租户、应用、scope、配额和审计归属；显式 `X-Tenant-ID + X-API-Key` 仍兼容，用于多租户凭证或迁移期。`service_smoke_test.py`、`regression_check.py` 和 `load_test.py` 均支持 `--auth-scheme api-key`；内部运维 JWT/全局 token 继续使用默认 Bearer。
 - 两个业务 demo client 位于 `examples/demo-clients/`：Python 默认 `tenant-a`，Node 默认 `tenant-b`，均通过 SDK 使用应用 API Key，可用 `--dry-run` 验证接入步骤。
 
 服务启动后可以执行 HTTP 冒烟测试：
@@ -771,14 +772,14 @@ http://gpu-worker-1:8000/predict
 - `DEBUG_ENDPOINTS_ENABLED`: 是否启用 `/debug/model-output`；默认 `false`。
 - `ENABLE_API_DOCS`: 是否启用 `/docs`、`/redoc` 和 `/openapi.json`；Compose 默认 `false`，本地直接运行默认 `true`。
 - `TRUSTED_HOSTS`: 允许的 HTTP Host header 列表，逗号分隔；Compose 默认允许 `127.0.0.1,localhost,gpu-worker-0,gpu-worker-1`，本地直接运行默认 `*`。
-- `TENANT_HEADER_REQUIRED`: v1 多租户接口是否必须携带 `X-Tenant-ID`；Compose 默认 `true`，本地直接运行默认 `false`。
+- `TENANT_HEADER_REQUIRED`: v1 多租户接口是否必须能确定租户；Compose 默认 `true`。请求可通过显式 `X-Tenant-ID`、单租户应用 `X-API-Key` 或单租户 JWT 自动满足，本地直接运行默认 `false`。
 - `SECURITY_HEADERS_ENABLED` / `CONTENT_SECURITY_POLICY`: 是否启用安全响应头以及默认 CSP；Compose 默认启用。
 - `HSTS_ENABLED` / `HSTS_MAX_AGE_SECONDS` / `HSTS_INCLUDE_SUBDOMAINS` / `HSTS_PRELOAD`: HTTPS 部署的 HSTS 响应头配置；Compose 默认启用，本地直接运行默认关闭。
 - `JWT_AUDIENCE`: RBAC JWT 的目标受众，默认 `portrait-hub-api`。
 - `JWT_ALGORITHM`: JWT 验签算法，默认 `HS256`，可配置 `RS256`/`ES256` 等非对称算法。
 - `JWT_SECRET_ID` / `JWT_SECRET_KEYRING`: 当前 HS256 JWT secret 的 `kid` 以及旧 secret keyring，格式为 `kid=secret`，用于平滑轮换 JWT 签名密钥。
 - `JWT_PUBLIC_KEY` / `JWT_PUBLIC_KEY_PATH` / `JWT_PUBLIC_KEYRING`: RS/ES JWT 的公钥或公钥环配置。
-- `JWT_REQUIRE_TENANT`: RBAC JWT 是否必须通过 `tenant_id`、`tenant` 或 `tenants` claim 绑定请求租户；默认 `true`。
+- `JWT_REQUIRE_TENANT`: RBAC JWT 是否必须通过 `tenant_id`、`tenant` 或 `tenants` claim 绑定请求租户；默认 `true`。单租户 claim 可自动解析，多租户 claim 需要请求头显式选择。
 - `JWT_REQUIRE_EXP` / `JWT_REQUIRE_ISS` / `JWT_REQUIRE_AUD`: RBAC JWT 是否必须携带过期时间、签发方和受众；默认 `true`。
 - `API_TOKEN`: 简单接口令牌；设置后业务接口、调试接口、模型管理接口和深度 ready 需要携带令牌。若 `AUTH_REQUIRED=true`，生产/容器启动前应设置 `API_TOKEN` 或启用可用 RBAC。
 - `MAX_PUBLIC_METADATA_BYTES` / `MAX_PUBLIC_METADATA_DEPTH` / `MAX_PUBLIC_METADATA_KEYS` / `MAX_PUBLIC_METADATA_STRING_LENGTH`: 用户可写 metadata/settings 的大小和复杂度限制。

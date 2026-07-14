@@ -3,7 +3,7 @@ from collections.abc import Iterator
 from fastapi.testclient import TestClient
 import pytest
 
-from app import portrait_access, portrait_auth, routes_portrait_access, security
+from app import portrait_access, portrait_auth, portrait_security, routes_portrait_access, security
 from main import app
 
 
@@ -46,6 +46,71 @@ def create_application(
     assert response.status_code == 200, response.text
     data = response.json()["data"]
     return data["application"], data["one_time_secret"]
+
+def test_access_tenant_catalog_creates_default_application() -> None:
+    client = TestClient(app)
+
+    response = client.post(
+        "/v1/access/tenants",
+        json={"name": "客户 A", "application_name": "客户 A 业务系统", "daily_quota": 500},
+    )
+
+    assert response.status_code == 200, response.text
+    data = response.json()["data"]
+    tenant = data["tenant"]
+    application = data["application"]
+    secret = data["one_time_secret"]
+    assert tenant["name"] == "客户 A"
+    assert tenant["tenant_id"].startswith("tenant-")
+    assert tenant["application_count"] == 1
+    assert application["tenant_id"] == tenant["tenant_id"]
+    assert application["name"] == "客户 A 业务系统"
+    assert application["daily_quota"] == 500
+    assert "tenants:read" not in application["scopes"]
+    assert "tenants:write" not in application["scopes"]
+    assert secret.startswith("phk_")
+    assert portrait_access.application_key_matches_any_tenant(secret)["tenant_id"] == tenant["tenant_id"]
+
+    listed = client.get("/v1/access/tenants").json()["data"]
+    assert listed["count"] == 1
+    assert listed["tenants"][0]["tenant_id"] == tenant["tenant_id"]
+    assert listed["tenants"][0]["application_count"] == 1
+
+def test_access_tenant_catalog_rejects_duplicate_names() -> None:
+    client = TestClient(app)
+
+    first = client.post("/v1/access/tenants", json={"name": "重复客户", "create_default_application": False})
+    duplicate = client.post("/v1/access/tenants", json={"name": "重复客户", "create_default_application": False})
+
+    assert first.status_code == 200, first.text
+    assert duplicate.status_code == 409
+    tenants = client.get("/v1/access/tenants").json()["data"]
+    assert tenants["count"] == 1
+
+
+def test_access_application_creation_backfills_tenant_catalog() -> None:
+    client = TestClient(app)
+
+    create_application(client, tenant_id="legacy-tenant")
+
+    tenants = portrait_access.list_tenants()
+    assert [item["tenant_id"] for item in tenants] == ["legacy-tenant"]
+    assert tenants[0]["application_count"] == 1
+
+
+def test_default_tenant_application_cannot_manage_tenant_catalog(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = TestClient(app)
+    created = client.post("/v1/access/tenants", json={"name": "业务客户"})
+    secret = created.json()["data"]["one_time_secret"]
+    monkeypatch.setattr(security, "RBAC_ENABLED", True)
+    monkeypatch.setattr(security, "AUTH_REQUIRED", True)
+    monkeypatch.setattr(security, "API_TOKEN", None)
+    monkeypatch.setattr(portrait_auth, "RBAC_ENABLED", True)
+
+    response = client.get("/v1/access/tenants", headers={"X-API-Key": secret})
+
+    assert response.status_code == 403
+    assert "tenants:read" in response.text
 
 
 def test_access_applications_are_tenant_scoped_and_hide_secret_hashes() -> None:
@@ -229,3 +294,33 @@ def test_access_application_api_key_rejects_missing_scope(monkeypatch: pytest.Mo
 
     assert denied.status_code == 403
     assert "缺少权限" in denied.text
+
+def test_access_application_api_key_infers_tenant_without_header(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = TestClient(app)
+    _, secret = create_application(client, scopes=["access:read"])
+    monkeypatch.setattr(security, "RBAC_ENABLED", True)
+    monkeypatch.setattr(security, "AUTH_REQUIRED", True)
+    monkeypatch.setattr(security, "API_TOKEN", None)
+    monkeypatch.setattr(portrait_auth, "RBAC_ENABLED", True)
+    monkeypatch.setattr(portrait_security, "TENANT_HEADER_REQUIRED", True)
+
+    response = client.get("/v1/access/error-codes", headers={"X-API-Key": secret})
+
+    assert response.status_code == 200, response.text
+    assert response.json()["data"]["tenant_id"] == "tenant-a"
+    assert security.authenticated_request_identity(None, secret, None) == "access-app:tenant-a:demo-app"
+    assert portrait_access.application_key_matches_any_tenant(secret)["tenant_id"] == "tenant-a"
+
+
+def test_access_application_api_key_rejects_wrong_explicit_tenant(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = TestClient(app)
+    _, secret = create_application(client, scopes=["access:read"])
+    monkeypatch.setattr(security, "RBAC_ENABLED", True)
+    monkeypatch.setattr(security, "AUTH_REQUIRED", True)
+    monkeypatch.setattr(security, "API_TOKEN", None)
+    monkeypatch.setattr(portrait_auth, "RBAC_ENABLED", True)
+    monkeypatch.setattr(portrait_security, "TENANT_HEADER_REQUIRED", True)
+
+    response = client.get("/v1/access/error-codes", headers={"X-Tenant-ID": "tenant-b", "X-API-Key": secret})
+
+    assert response.status_code in {401, 403}

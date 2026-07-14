@@ -16,11 +16,11 @@ def clear_call_logs() -> None:
 
 
 def application_id_from_api_key(tenant_id: str | None, api_key: str | None) -> str | None:
-    if not tenant_id or not api_key:
+    if not api_key:
         return None
-    from app.portrait_access import application_key_matches
+    from app.portrait_access import application_key_matches, application_key_matches_any_tenant
 
-    application = application_key_matches(tenant_id, api_key)
+    application = application_key_matches(tenant_id, api_key) if tenant_id else application_key_matches_any_tenant(api_key)
     if application is None:
         return None
     return str(application.get("app_id") or application.get("id") or "") or None

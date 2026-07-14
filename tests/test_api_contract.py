@@ -184,6 +184,7 @@ def test_openapi_keeps_core_routes() -> None:
         "/v1/models/{model_id}/unload",
         "/v1/thresholds",
         "/v1/thresholds/{profile}",
+        "/v1/access/tenants",
         "/v1/access/applications",
         "/v1/access/applications/{app_id}",
         "/v1/access/applications/{app_id}/rotate",
@@ -222,6 +223,7 @@ def test_console_is_product_admin_shell_with_strict_inline_policy() -> None:
     assert "'unsafe-inline'" not in csp
     assert 'style="' not in body
     assert "onclick" not in body
+    assert "/assets/console/views/navigation.js" in body
 
 
 def test_console_assets_use_light_structured_response_panels() -> None:
@@ -231,22 +233,26 @@ def test_console_assets_use_light_structured_response_panels() -> None:
     js = client.get("/assets/console.js")
     runtime_js = client.get("/assets/console/views/app.js")
     data_viewer_js = client.get("/assets/console/renderers/data-viewer.js")
+    navigation_js = client.get("/assets/console/views/navigation.js")
     css = client.get("/assets/console.css")
 
     assert config_js.status_code == 200
     assert js.status_code == 200
     assert runtime_js.status_code == 200
     assert data_viewer_js.status_code == 200
+    assert navigation_js.status_code == 200
     assert css.status_code == 200
     config_body = config_js.text
     js_body = js.text
     runtime_body = runtime_js.text
     data_viewer_body = data_viewer_js.text
+    navigation_body = navigation_js.text
     css_body = css.text
     assert "PortraitConsoleConfig" in config_body
     assert "/v1/infer/faces" in config_body
     assert "PortraitConsoleRuntime" in js_body
     assert "const endpointMap = consoleConfig.endpointMap" in runtime_body
+    assert "fallbackNavigation" in runtime_body
     assert "data-viewer" in runtime_body
     assert "查看完整数据（JSON）" in runtime_body
     assert "复制数据" in runtime_body
@@ -281,8 +287,11 @@ def test_console_assets_use_light_structured_response_panels() -> None:
     assert "created_since" in runtime_body
     assert "created_until" in runtime_body
     assert "accessAppCallSummary" in runtime_body
+    assert "/v1/access/tenants" in runtime_body
+    assert "access-tenant-form" in runtime_body
+    assert "租户开通" in runtime_body
     assert "/v1/access/error-codes" in runtime_body
-    assert 'data-nav="error-codes"' in runtime_body
+    assert 'view: "error-codes"' in runtime_body
     assert "error-codes-table" in runtime_body
     assert "error-codes-json" in runtime_body
     assert "renderErrorCodes" in runtime_body
@@ -332,18 +341,21 @@ def test_console_assets_use_light_structured_response_panels() -> None:
     assert "X-API-Key: ${state.apiKey}" not in runtime_body
     assert 'class="json-view data-viewer"' in runtime_body
     assert "PortraitConsoleModules" in data_viewer_body
+    assert "modules.navigation" in navigation_body
+    assert "gallery-rebuild" in navigation_body
     assert '<pre id="dashboard-json"' not in runtime_body
     assert '<pre id="models-json"' not in runtime_body
     assert "--code" not in css_body
     assert "#111827" not in css_body
     assert "background: #fbfdff" in css_body
-    assert "解析处理" in runtime_body
-    assert "比对检索" in runtime_body
+    assert "智能分析" in navigation_body
+    assert "比对检索" in navigation_body
+    assert "特征重建" in navigation_body
     assert "视频解析结果" in runtime_body
     assert "视频流解析" in runtime_body
-    assert "人员库查询" not in runtime_body
-    assert "智能解析" not in runtime_body
-    assert "视频分析" not in runtime_body
+    assert "人员库查询" not in navigation_body
+    assert "智能解析" not in navigation_body
+    assert "视频分析" not in navigation_body
 
 
 def test_api_docs_can_be_disabled_in_production(monkeypatch) -> None:
@@ -1272,6 +1284,7 @@ def test_console_module_assets_are_served() -> None:
         "/assets/console/state/store.js",
         "/assets/console/renderers/data-viewer.js",
         "/assets/console/visuals/previews.js",
+        "/assets/console/views/navigation.js",
         "/assets/console/views/analysis.js",
         "/assets/console/views/gallery.js",
         "/assets/console/views/operations.js",

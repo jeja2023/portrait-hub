@@ -36,6 +36,7 @@ from app.settings import APP_VERSION, CONFIG_HOT_RELOAD_ENABLED, ENABLE_API_DOCS
 from app.metrics import observe_request_status
 from app.portrait_bootstrap import ensure_portrait_runtime_state_loaded
 from app.portrait_response import exception_log_summary
+from app.portrait_security import inferred_tenant_id_from_request
 from app.production_gates import validate_production_externalization
 
 
@@ -234,7 +235,7 @@ def create_app() -> FastAPI:
     async def request_logging_middleware(request: Request, call_next: Any) -> Response:
         request_id = request_id_from_headers(request)
         traceparent = traceparent_from_headers(request)
-        tenant_id = request.headers.get("x-tenant-id") or None
+        tenant_id = request.headers.get("x-tenant-id") or inferred_tenant_id_from_request(request) or None
         context_tokens = set_log_context(request_id=request_id, tenant_id=tenant_id, traceparent=traceparent)
         start = now()
         logged_error_code: str | None = None
@@ -267,6 +268,7 @@ def create_app() -> FastAPI:
             duration = now() - start
             observe_request_status(response.status_code)
             request_state = getattr(request, "state", None)
+            tenant_id = getattr(request_state, "portrait_tenant_id", None) or tenant_id
             logged_error_code = logged_error_code or getattr(request_state, "portrait_error_code", None)
             application_id = getattr(request_state, "portrait_application_id", None) or application_id_from_api_key(tenant_id, request.headers.get("x-api-key"))
             record_call_log(

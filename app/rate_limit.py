@@ -50,13 +50,19 @@ def positive_int(value: Any) -> int | None:
 def application_policy_from_request(request: Request, now: float) -> dict[str, Any] | None:
     tenant_id = request.headers.get("x-tenant-id")
     api_key = request.headers.get("x-api-key")
-    if not tenant_id or not api_key:
+    if not api_key:
         return None
-    from app.portrait_access import application_request_policy
+    from app.portrait_access import application_key_matches_any_tenant, application_request_policy
 
+    if not tenant_id:
+        application = application_key_matches_any_tenant(api_key)
+        tenant_id = str(application.get("tenant_id") or "") if application else ""
+    if not tenant_id:
+        return None
     policy = application_request_policy(tenant_id, api_key, now)
     state = getattr(request, "state", None)
     if state is not None:
+        setattr(state, "portrait_tenant_id", tenant_id)
         setattr(state, "portrait_application_id", str(policy.get("app_id") or "") if policy else None)
     return policy
 

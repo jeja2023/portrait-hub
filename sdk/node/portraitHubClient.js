@@ -11,7 +11,7 @@ class PortraitHubHTTPError extends Error {
 }
 
 class PortraitHubClient {
-  constructor({ baseUrl, apiToken = null, tenantId = "default", authScheme = "bearer" }) {
+  constructor({ baseUrl, apiToken = null, tenantId = null, authScheme = "bearer" }) {
     this.baseUrl = baseUrl.replace(/\/$/, "");
     this.apiToken = apiToken;
     this.tenantId = tenantId;
@@ -27,7 +27,8 @@ class PortraitHubClient {
   }
 
   headers(extra = {}) {
-    const headers = { "X-Tenant-ID": this.tenantId, ...extra };
+    const headers = { ...extra };
+    if (this.tenantId) headers["X-Tenant-ID"] = this.tenantId;
     if (this.apiToken) {
       if (this.authScheme === "api_key") headers["X-API-Key"] = this.apiToken;
       else headers.Authorization = `Bearer ${this.apiToken}`;

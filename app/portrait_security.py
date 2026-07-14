@@ -74,13 +74,54 @@ def redact_sensitive_fields(value: Any, key: str = "") -> Any:
     return deepcopy(value)
 
 
+
+def _tenant_id_from_claims(claims: dict[str, Any]) -> str | None:
+    tenant_claim = claims.get("tenant_id", claims.get("tenant"))
+    if isinstance(tenant_claim, str) and tenant_claim.strip():
+        return tenant_claim.strip()
+    tenants_claim = claims.get("tenants")
+    if isinstance(tenants_claim, list):
+        tenants = sorted({item.strip() for item in tenants_claim if isinstance(item, str) and item.strip()})
+        if len(tenants) == 1:
+            return tenants[0]
+    return None
+
+
+def _tenant_id_from_api_key(api_key: str | None) -> str | None:
+    if not api_key or not api_key.strip():
+        return None
+    from app.portrait_access import application_key_matches_any_tenant
+
+    application = application_key_matches_any_tenant(api_key.strip())
+    if application is None:
+        return None
+    tenant_id = application.get("tenant_id")
+    return tenant_id.strip() if isinstance(tenant_id, str) and tenant_id.strip() else None
+
+
+def _tenant_id_from_bearer(authorization: str | None) -> str | None:
+    if not authorization or not authorization.startswith("Bearer "):
+        return None
+    from app.portrait_auth import verify_hs256_jwt
+
+    try:
+        claims = verify_hs256_jwt(authorization.removeprefix("Bearer ").strip())
+    except HTTPException:
+        return None
+    return _tenant_id_from_claims(claims)
+
+
+def inferred_tenant_id_from_request(request: Request) -> str | None:
+    return _tenant_id_from_api_key(request.headers.get("x-api-key")) or _tenant_id_from_bearer(request.headers.get("authorization"))
 def tenant_id_from_request(request: Request) -> str:
     raw_tenant_id = request.headers.get("x-tenant-id")
+    if raw_tenant_id is None:
+        raw_tenant_id = inferred_tenant_id_from_request(request)
     if raw_tenant_id is None:
         if TENANT_HEADER_REQUIRED and request.url.path.startswith("/v1/"):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="缺少 x-tenant-id 请求头",
+                detail="缺少 x-tenant-id 请求头，或使用可唯一解析租户的 API Key/JWT",
             )
         raw_tenant_id = "default"
     tenant_id = raw_tenant_id.strip()
@@ -89,6 +130,9 @@ def tenant_id_from_request(request: Request) -> str:
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="x-tenant-id 必须为 1-64 个字符，且只能包含字母、数字、'_'、'.'、':'、'-'",
         )
+    state = getattr(request, "state", None)
+    if state is not None:
+        setattr(state, "portrait_tenant_id", tenant_id)
     return tenant_id
 
 

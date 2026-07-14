@@ -35,6 +35,15 @@ async function testHeadersSupportBearerAndApplicationApiKey() {
     "X-API-Key": "phk_secret",
   });
 
+  const inferredTenantApiKey = new PortraitHubClient({
+    baseUrl: "http://testserver",
+    apiToken: "phk_secret",
+    authScheme: "api_key",
+  });
+  assert.deepStrictEqual(inferredTenantApiKey.headers(), {
+    "X-API-Key": "phk_secret",
+  });
+
   assert.throws(
     () => new PortraitHubClient({ baseUrl: "http://testserver", authScheme: "basic" }),
     /authScheme/,

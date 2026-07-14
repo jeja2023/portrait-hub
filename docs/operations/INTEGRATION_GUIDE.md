@@ -26,36 +26,62 @@
 | 模型状态 | `GET /v1/models` |
 | 阈值 | `GET /v1/thresholds` |
 | 多模态融合 | `POST /v1/fusion/compare` |
+| 租户目录 | `GET /v1/access/tenants`、`POST /v1/access/tenants` |
 | 接入应用 | `GET /v1/access/applications`、`POST /v1/access/applications`、`PATCH /v1/access/applications/{app_id}`、`POST /v1/access/applications/{app_id}/rotate` |
 | Webhook | `GET /v1/access/webhooks`、`POST /v1/access/webhooks`、`PATCH /v1/access/webhooks/{webhook_id}`、`POST /v1/access/webhooks/{webhook_id}/rotate`、`POST /v1/access/webhooks/{webhook_id}/sample` |
 
 ## 鉴权与租户
 
-每个业务请求都应该携带：
+生产对接推荐使用“单凭证优先”模式。管理员在控制台“接入中心”或 `POST /v1/access/tenants` 中只填写租户名称，后台自动生成稳定 `tenant_id`、默认接入应用和一次性 API Key；业务系统调用时只需要携带：
 
 ```text
-X-Tenant-ID: <tenant-id>
-Authorization: Bearer <api-token-or-jwt>
+X-API-Key: <application-api-key>
 ```
 
-兼容 API Key 调用时也支持：
+服务端会自动完成：
+
+```text
+API Key -> 接入应用 -> 租户 -> scope 权限 -> 应用级限流/配额 -> 审计与调用日志归属
+```
+
+最小租户开通请求示例：
+
+```json
+{
+  "name": "客户 A",
+  "create_default_application": true
+}
+```
+
+JWT 对接同样支持单凭证：当 JWT 中只有一个 `tenant_id`、`tenant` 或 `tenants` claim 时，可以只发送：
+
+```text
+Authorization: Bearer <jwt>
+```
+
+如果一个 JWT 或系统凭证允许访问多个租户，调用方仍需显式选择本次请求租户：
 
 ```text
 X-Tenant-ID: <tenant-id>
-X-API-Key: <api-token>
+Authorization: Bearer <jwt>
+```
+
+旧版 `X-Tenant-ID + X-API-Key` 调用继续兼容，适合迁移期、排障或多租户共享凭证场景：
+
+```text
+X-Tenant-ID: <tenant-id>
+X-API-Key: <application-api-key>
 ```
 
 生产建议：
-
-- 网关层拒绝缺失 `X-Tenant-ID` 的 `/v1` 请求。
-- 业务项目使用独立租户或独立 scope，不共享同一个高权限 token。
-- JWT 模式需要校验 issuer、audience、exp 和租户 claim。
-- 控制台“接入中心”通过 `/v1/access/applications` 管理租户级应用密钥；密钥只在创建或轮换响应中显示一次，服务端仅保存哈希与短宽限期内的旧密钥哈希。
+- 管理员只维护租户名称、用户/角色和接入应用；`/v1/access/tenants` 会生成 `tenant_id`，并可一键创建默认接入应用、scope、限流、配额和审计归属。
+- 接入应用使用单租户 API Key；不要让多个业务系统共享同一个高权限密钥。
+- JWT 模式需要校验 issuer、audience、exp 和租户 claim；多租户 JWT 必须显式选择租户。
+- 控制台“接入中心”通过 `/v1/access/tenants` 开通租户，通过 `/v1/access/applications` 管理租户级应用密钥；密钥只在创建或轮换响应中显示一次，服务端仅保存哈希与短宽限期内的旧密钥哈希。
+- 默认租户接入应用只包含业务调用所需 scope，不包含 `tenants:read` / `tenants:write`；租户目录读写应由管理员 JWT 或显式授权的高权限接入应用完成。
 - 接入应用可配置 `rate_limit_per_minute`、`rate_limit_burst` 和 `daily_quota`；留空或 `0` 表示沿用平台默认/不限额，正整数会在入口限流中生效。
 - 调用日志可通过 `/v1/access/call-logs` 按 `request_id`、接口、状态、接入应用、`error_code`、`created_since` 和 `created_until` 筛选；日志只保存脱敏元数据，不记录请求体或响应体，并会回写接入应用的 `call_count`、`error_count`、`error_rate`、`last_called_at` 和 `last_error_at`。
-
 - 错误码目录可通过 `/v1/access/error-codes` 读取，返回 `code`、`http_status`、`retryable`、`category`、`description` 和 `operator_action`。接入方应把 `retryable=true` 视为可预算内退避重试，而不是无限重放。
-
 ## 接口调试台 受控调试
 
 控制台“接口调试台”用于开发或受控内网环境的最小联调，不应替代业务侧自动化测试。它覆盖单图检索、批量检索、单图比对、批量比对、融合比对、图片解析、离线视频、实时流创建、实时流事件查询、模型状态和阈值查询。
@@ -71,7 +97,6 @@ from sdk.python.portrait_hub_client import PortraitHubClient
 
 client = PortraitHubClient(
     base_url="https://portrait.internal.example",
-    tenant_id="tenant-a",
     api_token=os.getenv("PORTRAIT_HUB_API_TOKEN"),
     auth_scheme="api_key",
     timeout=30,
@@ -91,7 +116,6 @@ const { PortraitHubClient } = require("./sdk/node/portraitHubClient");
 
 const client = new PortraitHubClient({
   baseUrl: "https://portrait.internal.example",
-  tenantId: "tenant-a",
   apiToken: process.env.PORTRAIT_HUB_API_TOKEN,
   authScheme: "api_key",
 });
@@ -265,7 +289,7 @@ python tools/regression_check.py --manifest regression.yml --base-url https://po
 python tools/load_test.py --url https://portrait.internal.example/health --tenant-id tenant-a --token "$PORTRAIT_HUB_API_TOKEN" --auth-scheme api-key
 ```
 
-Postman 集合位于 `tools/portrait_hub_postman_collection.json`，默认变量为 `base_url`、`tenant_id` 和 `api_key`，请求头使用 `X-Tenant-ID` 与 `X-API-Key`。
+Postman 集合位于 `tools/portrait_hub_postman_collection.json`，默认变量为 `base_url`、`tenant_id` 和 `api_key`；新接入优先只发送 `X-API-Key`，需要多租户显式选择时再发送 `X-Tenant-ID`。
 
 两套 demo client 位于 `examples/demo-clients/`，分别代表两个业务项目接入同一服务：Python 默认 `tenant-a`，Node 默认 `tenant-b`。先执行 `--dry-run` 核对 `health/models/thresholds/enroll/search/compare/video job` 调用计划，再替换真实媒体样本进行联调。
 可从 [nginx-gateway.example.conf](../../ops/nginx-gateway.example.conf) 起步。生产网关至少应提供：

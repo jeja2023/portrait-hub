@@ -7,15 +7,16 @@ from app.settings import API_TOKEN, AUTH_REQUIRED, RBAC_ENABLED
 def access_application_identity(x_api_key: str | None, x_tenant_id: str | None) -> str | None:
     tenant_id = optional_header_value(x_tenant_id)
     api_key = optional_header_value(x_api_key)
-    if not tenant_id or not api_key:
+    if not api_key:
         return None
-    from app.portrait_access import application_key_matches
+    from app.portrait_access import application_key_matches, application_key_matches_any_tenant
 
-    application = application_key_matches(tenant_id, api_key)
+    application = application_key_matches(tenant_id, api_key) if tenant_id else application_key_matches_any_tenant(api_key)
     if application is None:
         return None
+    resolved_tenant_id = str(application.get("tenant_id") or tenant_id or "default")
     app_id = str(application.get("app_id") or application.get("id") or "application")
-    return f"access-app:{tenant_id}:{app_id}"
+    return f"access-app:{resolved_tenant_id}:{app_id}"
 
 
 def authenticated_request_identity(
