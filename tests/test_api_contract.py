@@ -287,6 +287,9 @@ def test_console_assets_use_light_structured_response_panels() -> None:
     assert "created_since" in runtime_body
     assert "created_until" in runtime_body
     assert "accessAppCallSummary" in runtime_body
+    assert "visionLightboxReturnFocus" in runtime_body
+    assert "trapVisionLightboxFocus" in runtime_body
+    assert 'node.querySelector(".vision-lightbox-close")?.focus()' in runtime_body
     assert "/v1/access/tenants" in runtime_body
     assert "access-tenant-form" in runtime_body
     assert "租户开通" in runtime_body

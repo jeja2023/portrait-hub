@@ -45,6 +45,10 @@ def production_externalization_failures() -> list[str]:
         return []
 
     failures: list[str] = []
+    if settings.API_TOKEN and not settings.API_TOKEN_TENANT_ID and not settings.API_TOKEN_ALLOW_TENANT_OVERRIDE:
+        failures.append("生产环境中的 API_TOKEN 必须配置 API_TOKEN_TENANT_ID，或显式允许平台跨租户访问")
+    if settings.VIDEO_JOB_WORKER_IN_PROCESS:
+        failures.append("生产环境中 VIDEO_JOB_WORKER_IN_PROCESS 必须为 false")
     if settings.PORTRAIT_STORAGE_BACKEND != "postgres":
         failures.append("生产环境中 PORTRAIT_STORAGE_BACKEND 必须为 postgres")
     if not settings.POSTGRES_DSN.strip():

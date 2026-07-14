@@ -48,7 +48,7 @@ def parse_csv_env(name: str, default: str = "") -> list[str]:
     return [item.strip() for item in os.getenv(name, default).split(",") if item.strip()]
 
 
-APP_VERSION = "0.7.1"
+APP_VERSION = "0.8.0"
 PORTRAIT_RUNTIME_PROFILE = os.getenv("PORTRAIT_RUNTIME_PROFILE", os.getenv("APP_ENV", "development")).strip().lower() or "development"
 PRODUCTION_EXTERNAL_SERVICES_REQUIRED = parse_bool_env("PRODUCTION_EXTERNAL_SERVICES_REQUIRED", True)
 MODELS_ROOT = Path(os.getenv("MODELS_ROOT", "models")).resolve()
@@ -61,6 +61,7 @@ MAX_PERSON_FRAMES = parse_int_env("MAX_PERSON_FRAMES", 16)
 MAX_EMBEDDING_IMAGES = parse_int_env("MAX_EMBEDDING_IMAGES", 64)
 MAX_PIPELINE_FRAMES = parse_int_env("MAX_PIPELINE_FRAMES", 16)
 MAX_VIDEO_BYTES = parse_int_env("MAX_VIDEO_BYTES", 100 * 1024 * 1024)
+VIDEO_UPLOAD_CHUNK_BYTES = parse_int_env("VIDEO_UPLOAD_CHUNK_BYTES", 1024 * 1024)
 VIDEO_FRAME_INTERVAL = parse_int_env("VIDEO_FRAME_INTERVAL", 15)
 MAX_VIDEO_FRAMES = parse_int_env("MAX_VIDEO_FRAMES", 64)
 VIDEO_JOB_MAX_RETRIES = parse_int_env("VIDEO_JOB_MAX_RETRIES", 2)
@@ -130,8 +131,10 @@ PORTRAIT_THRESHOLDS_STATE_PATH = Path(
 PORTRAIT_AUDIT_PATH = Path(os.getenv("PORTRAIT_AUDIT_PATH", str(RUNTIME_STATE_DIR / "portrait-audit.jsonl")))
 AUDIT_WRITE_FAIL_CLOSED = parse_bool_env("AUDIT_WRITE_FAIL_CLOSED", True)
 PORTRAIT_JOBS_STATE_PATH = Path(os.getenv("PORTRAIT_JOBS_STATE_PATH", str(RUNTIME_STATE_DIR / "portrait-jobs.json")))
+VIDEO_JOB_INPUT_DIR = Path(os.getenv("VIDEO_JOB_INPUT_DIR", str(RUNTIME_STATE_DIR / "video-job-inputs")))
 PORTRAIT_STREAMS_STATE_PATH = Path(os.getenv("PORTRAIT_STREAMS_STATE_PATH", str(RUNTIME_STATE_DIR / "portrait-streams.json")))
 PORTRAIT_ACCESS_STATE_PATH = Path(os.getenv("PORTRAIT_ACCESS_STATE_PATH", str(RUNTIME_STATE_DIR / "portrait-access.json")))
+ACCESS_STATS_FLUSH_INTERVAL_SECONDS = parse_float_env("ACCESS_STATS_FLUSH_INTERVAL_SECONDS", 5.0)
 PORTRAIT_REVIEW_STATE_PATH = Path(os.getenv("PORTRAIT_REVIEW_STATE_PATH", str(RUNTIME_STATE_DIR / "portrait-review-annotations.json")))
 PORTRAIT_ACCESS_KEY_ROTATION_GRACE_SECONDS = parse_float_env("PORTRAIT_ACCESS_KEY_ROTATION_GRACE_SECONDS", 300.0)
 STREAM_WORKER_LOCK_DIR = Path(os.getenv("STREAM_WORKER_LOCK_DIR", str(PORTRAIT_STREAMS_STATE_PATH.parent / "stream-worker-locks")))
@@ -147,6 +150,8 @@ WARMUP_MODELS = [
 # 严格部署可设为 true，要求所有预热模型必须成功才允许启动。
 WARMUP_FAIL_FAST = parse_bool_env("WARMUP_FAIL_FAST", False)
 API_TOKEN = os.getenv("API_TOKEN")
+API_TOKEN_TENANT_ID = os.getenv("API_TOKEN_TENANT_ID", "").strip()
+API_TOKEN_ALLOW_TENANT_OVERRIDE = parse_bool_env("API_TOKEN_ALLOW_TENANT_OVERRIDE", False)
 JWT_SECRET = os.getenv("JWT_SECRET")
 JWT_SECRET_ID = os.getenv("JWT_SECRET_ID", "primary").strip()
 JWT_SECRET_KEYRING = os.getenv("JWT_SECRET_KEYRING", "")
@@ -195,6 +200,10 @@ ENCRYPTION_PBKDF2_ITERATIONS = parse_int_env("ENCRYPTION_PBKDF2_ITERATIONS", 210
 REQUIRE_ENCRYPTION = parse_bool_env("REQUIRE_ENCRYPTION", True)
 TASK_QUEUE_BACKEND = os.getenv("TASK_QUEUE_BACKEND", "local").strip().lower()
 TASK_QUEUE_STATE_PATH = Path(os.getenv("TASK_QUEUE_STATE_PATH", str(RUNTIME_STATE_DIR / "portrait-task-queue.jsonl")))
+TASK_QUEUE_DIR = Path(os.getenv("TASK_QUEUE_DIR", str(RUNTIME_STATE_DIR / "task-queue")))
+TASK_QUEUE_VISIBILITY_TIMEOUT_SECONDS = parse_float_env("TASK_QUEUE_VISIBILITY_TIMEOUT_SECONDS", 300.0)
+TASK_QUEUE_POLL_INTERVAL_SECONDS = parse_float_env("TASK_QUEUE_POLL_INTERVAL_SECONDS", 0.5)
+VIDEO_JOB_WORKER_IN_PROCESS = parse_bool_env("VIDEO_JOB_WORKER_IN_PROCESS", TASK_QUEUE_BACKEND in {"", "local"})
 REDIS_URL = os.getenv("REDIS_URL", "")
 STREAM_EVENT_STATE_PATH = Path(os.getenv("STREAM_EVENT_STATE_PATH", str(RUNTIME_STATE_DIR / "portrait-stream-events.jsonl")))
 MODEL_CAPABILITIES_PATH = Path(os.getenv("MODEL_CAPABILITIES_PATH", "model-capabilities.yml"))

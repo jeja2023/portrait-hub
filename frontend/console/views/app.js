@@ -30,6 +30,7 @@ const state = {
   visionPreviewSignature: "",
   visionResultVisuals: [],
   visionLightboxIndex: null,
+  visionLightboxReturnFocus: null,
   comparePreviews: { A: [], B: [] },
 };
 
@@ -2341,13 +2342,18 @@ function renderVisionVisuals(payload, items) {
   });
 }
 function closeVisionLightbox() {
+  const returnFocus = state.visionLightboxReturnFocus;
   state.visionLightboxIndex = null;
+  state.visionLightboxReturnFocus = null;
   const node = qs("#vision-lightbox");
   if (!node) return;
   node.classList.add("hidden");
   node.setAttribute("aria-hidden", "true");
   node.innerHTML = "";
   document.body.classList.remove("lightbox-open");
+  if (returnFocus instanceof HTMLElement && returnFocus.isConnected) {
+    returnFocus.focus();
+  }
 }
 
 function renderVisionLightbox() {
@@ -2367,12 +2373,36 @@ function renderVisionLightbox() {
   node.classList.remove("hidden");
   node.setAttribute("aria-hidden", "false");
   document.body.classList.add("lightbox-open");
+  node.querySelector(".vision-lightbox-close")?.focus();
 }
 
-function openVisionLightbox(index) {
+function openVisionLightbox(index, trigger = document.activeElement) {
   if (!Number.isInteger(index) || index < 0 || index >= state.visionResultVisuals.length) return;
+  state.visionLightboxReturnFocus = trigger instanceof HTMLElement ? trigger : null;
   state.visionLightboxIndex = index;
   renderVisionLightbox();
+}
+
+function trapVisionLightboxFocus(event) {
+  if (event.key !== "Tab" || state.visionLightboxIndex === null) return;
+  const panel = qs("#vision-lightbox .vision-lightbox-panel");
+  if (!panel) return;
+  const focusable = qsa(
+    '#vision-lightbox button:not([disabled]), #vision-lightbox [href], #vision-lightbox [tabindex]:not([tabindex="-1"])',
+  ).filter((element) => element instanceof HTMLElement && !element.hidden);
+  if (!focusable.length) {
+    event.preventDefault();
+    return;
+  }
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
+  }
 }
 
 function requestSnippet(path, formFieldExamples = []) {
@@ -4675,7 +4705,7 @@ function setupEvents() {
     if (Number.isFinite(index)) {
       const visuals = Array.isArray(event.currentTarget.__visuals) ? event.currentTarget.__visuals : state.visionResultVisuals;
       state.visionResultVisuals = visuals;
-      openVisionLightbox(index);
+      openVisionLightbox(index, trigger);
     }
   }));
   qs("#vision-lightbox").addEventListener("click", (event) => {
@@ -4683,7 +4713,12 @@ function setupEvents() {
     if (target) closeVisionLightbox();
   });
   document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape" && state.visionLightboxIndex !== null) closeVisionLightbox();
+    if (event.key === "Escape" && state.visionLightboxIndex !== null) {
+      event.preventDefault();
+      closeVisionLightbox();
+      return;
+    }
+    trapVisionLightboxFocus(event);
   });
 
   qs("#vision-files-input").addEventListener("change", wrapHandler(() => renderPreviews(qs("#vision-files-input"), "#vision-preview")));

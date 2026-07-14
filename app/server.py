@@ -30,14 +30,17 @@ from app.config_hot_reload import ENV_PATH, reload_runtime_config
 from app.portrait_errors import PortraitError
 from app.rate_limit import check_rate_limit
 from app.portrait_call_logs import application_id_from_api_key, record_call_log
+from app.portrait_access import flush_access_call_stats
+from app.portrait_async import run_blocking_io
 from app.routes import router
 from app.security_headers import apply_security_headers
-from app.settings import APP_VERSION, CONFIG_HOT_RELOAD_ENABLED, ENABLE_API_DOCS, MAX_REQUEST_BODY_BYTES, MODEL_CONFIG_PATH, MODEL_CAPABILITIES_PATH, OPENTELEMETRY_ENABLED, OTEL_SERVICE_NAME, TRUSTED_HOSTS, WARMUP_FAIL_FAST
+from app.settings import ACCESS_STATS_FLUSH_INTERVAL_SECONDS, APP_VERSION, CONFIG_HOT_RELOAD_ENABLED, ENABLE_API_DOCS, MAX_REQUEST_BODY_BYTES, MODEL_CONFIG_PATH, MODEL_CAPABILITIES_PATH, OPENTELEMETRY_ENABLED, OTEL_SERVICE_NAME, TRUSTED_HOSTS, WARMUP_FAIL_FAST
 from app.metrics import observe_request_status
 from app.portrait_bootstrap import ensure_portrait_runtime_state_loaded
 from app.portrait_response import exception_log_summary
 from app.portrait_security import inferred_tenant_id_from_request
 from app.production_gates import validate_production_externalization
+from app.portrait_video_job_worker import start_in_process_worker
 
 
 def request_body_too_large_detail() -> str:
@@ -115,6 +118,26 @@ def install_config_reload_signal_handler() -> bool:
     return True
 
 
+async def access_stats_flush_loop() -> None:
+    interval = max(0.1, float(ACCESS_STATS_FLUSH_INTERVAL_SECONDS))
+    while True:
+        await asyncio.sleep(interval)
+        try:
+            await run_blocking_io(flush_access_call_stats)
+        except Exception as exc:
+            logger.warning("接入调用统计刷盘失败: %s", exception_log_summary(exc))
+
+
+async def cancel_background_task(task: asyncio.Task[Any] | None) -> None:
+    if task is None:
+        return
+    task.cancel()
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     if CONFIG_HOT_RELOAD_ENABLED:
@@ -125,15 +148,22 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     if CONFIG_HOT_RELOAD_ENABLED:
         install_config_reload_signal_handler()
     reload_task = asyncio.create_task(config_hot_reload_loop()) if CONFIG_HOT_RELOAD_ENABLED else None
+    access_stats_task = (
+        asyncio.create_task(access_stats_flush_loop())
+        if ACCESS_STATS_FLUSH_INTERVAL_SECONDS > 0
+        else None
+    )
+    video_job_worker_task = start_in_process_worker()
     try:
         yield
     finally:
-        if reload_task is not None:
-            reload_task.cancel()
-            try:
-                await reload_task
-            except asyncio.CancelledError:
-                pass
+        await cancel_background_task(video_job_worker_task)
+        await cancel_background_task(access_stats_task)
+        await cancel_background_task(reload_task)
+        try:
+            await run_blocking_io(flush_access_call_stats)
+        except Exception as exc:
+            logger.warning("关闭服务时刷盘接入调用统计失败: %s", exception_log_summary(exc))
 
 
 def limit_request_body(request: Request) -> Request:

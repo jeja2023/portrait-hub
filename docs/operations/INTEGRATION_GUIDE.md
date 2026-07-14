@@ -76,11 +76,12 @@ X-API-Key: <application-api-key>
 生产建议：
 - 管理员只维护租户名称、用户/角色和接入应用；`/v1/access/tenants` 会生成 `tenant_id`，并可一键创建默认接入应用、scope、限流、配额和审计归属。
 - 接入应用使用单租户 API Key；不要让多个业务系统共享同一个高权限密钥。
+- 不要把全局 `API_TOKEN` 当作普通多租户应用密钥。v1 使用该令牌时必须配置 `API_TOKEN_TENANT_ID`；只有受控平台运维才可显式开启 `API_TOKEN_ALLOW_TENANT_OVERRIDE=true`。
 - JWT 模式需要校验 issuer、audience、exp 和租户 claim；多租户 JWT 必须显式选择租户。
 - 控制台“接入中心”通过 `/v1/access/tenants` 开通租户，通过 `/v1/access/applications` 管理租户级应用密钥；密钥只在创建或轮换响应中显示一次，服务端仅保存哈希与短宽限期内的旧密钥哈希。
 - 默认租户接入应用只包含业务调用所需 scope，不包含 `tenants:read` / `tenants:write`；租户目录读写应由管理员 JWT 或显式授权的高权限接入应用完成。
 - 接入应用可配置 `rate_limit_per_minute`、`rate_limit_burst` 和 `daily_quota`；留空或 `0` 表示沿用平台默认/不限额，正整数会在入口限流中生效。
-- 调用日志可通过 `/v1/access/call-logs` 按 `request_id`、接口、状态、接入应用、`error_code`、`created_since` 和 `created_until` 筛选；日志只保存脱敏元数据，不记录请求体或响应体，并会回写接入应用的 `call_count`、`error_count`、`error_rate`、`last_called_at` 和 `last_error_at`。
+- 调用日志可通过 `/v1/access/call-logs` 按 `request_id`、接口、状态、接入应用、`error_code`、`created_since` 和 `created_until` 筛选；日志只保存脱敏元数据，不记录请求体或响应体，并会回写接入应用的 `call_count`、`error_count`、`error_rate`、`last_called_at` 和 `last_error_at`。高频计数先在内存聚合，再按 `ACCESS_STATS_FLUSH_INTERVAL_SECONDS` 批量落盘；服务关闭和接入配置变更会强制刷新。
 - 错误码目录可通过 `/v1/access/error-codes` 读取，返回 `code`、`http_status`、`retryable`、`category`、`description` 和 `operator_action`。接入方应把 `retryable=true` 视为可预算内退避重试，而不是无限重放。
 ## 接口调试台 受控调试
 
@@ -153,6 +154,8 @@ console.log(batch.request_id, batch.data?.batch_id);
 ```
 
 离线视频任务建议优先使用 Webhook 接收 `job.completed`，需要主动查询时按状态轮询，终态后再读取结果。
+
+上传请求会分块写入 `VIDEO_JOB_INPUT_DIR`，随后由持久化队列交给独立 worker。生产环境应设置 `TASK_QUEUE_BACKEND=redis`、`VIDEO_JOB_WORKER_IN_PROCESS=false`，运行 `python -m app.portrait_video_job_worker`，并让 API 与 worker 共享视频暂存目录；任务取消信号同样通过队列后端跨进程传播。
 
 ```javascript
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));

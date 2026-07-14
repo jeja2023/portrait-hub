@@ -190,3 +190,26 @@ def test_request_middleware_records_call_log_when_api_key_infers_tenant() -> Non
     assert rows
     assert rows[0]["tenant_id"] == "tenant-a"
     assert rows[0]["application_id"] == "demo-app"
+
+def test_application_call_stats_are_batched_until_flush(monkeypatch) -> None:
+    portrait_access.create_application(
+        "tenant-a",
+        app_id="demo-app",
+        name="Demo App",
+        owner="platform",
+        status_value="active",
+        scopes=["gallery:read"],
+    )
+    writes = []
+    monkeypatch.setattr(portrait_access, "write_json_state", lambda path, payload: writes.append((path, payload)))
+
+    portrait_access.record_application_call("tenant-a", "demo-app", 200, 100.0)
+    portrait_access.record_application_call("tenant-a", "demo-app", 500, 101.0)
+
+    assert writes == []
+    assert portrait_access.flush_access_call_stats() is True
+    assert len(writes) == 1
+    assert portrait_access.flush_access_call_stats() is False
+    application = portrait_access.list_applications("tenant-a")[0]
+    assert application["call_count"] == 2
+    assert application["error_count"] == 1

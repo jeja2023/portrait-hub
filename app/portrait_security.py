@@ -1,3 +1,4 @@
+import hmac
 import json
 import math
 import re
@@ -7,6 +8,8 @@ from typing import Any
 from fastapi import HTTPException, Request, status
 
 from app.settings import (
+    API_TOKEN,
+    API_TOKEN_TENANT_ID,
     MAX_PUBLIC_METADATA_BYTES,
     MAX_PUBLIC_METADATA_DEPTH,
     MAX_PUBLIC_METADATA_KEYS,
@@ -55,6 +58,7 @@ def is_sensitive_field(key: str) -> bool:
             "authorization",
             "ciphertext",
             "credential",
+            "input_ref",
             "password",
             "private_key",
             "secret",
@@ -90,9 +94,12 @@ def _tenant_id_from_claims(claims: dict[str, Any]) -> str | None:
 def _tenant_id_from_api_key(api_key: str | None) -> str | None:
     if not api_key or not api_key.strip():
         return None
+    normalized = api_key.strip()
+    if API_TOKEN and hmac.compare_digest(normalized, API_TOKEN):
+        return API_TOKEN_TENANT_ID or None
     from app.portrait_access import application_key_matches_any_tenant
 
-    application = application_key_matches_any_tenant(api_key.strip())
+    application = application_key_matches_any_tenant(normalized)
     if application is None:
         return None
     tenant_id = application.get("tenant_id")
@@ -102,10 +109,13 @@ def _tenant_id_from_api_key(api_key: str | None) -> str | None:
 def _tenant_id_from_bearer(authorization: str | None) -> str | None:
     if not authorization or not authorization.startswith("Bearer "):
         return None
+    token = authorization.removeprefix("Bearer ").strip()
+    if API_TOKEN and hmac.compare_digest(token, API_TOKEN):
+        return API_TOKEN_TENANT_ID or None
     from app.portrait_auth import verify_hs256_jwt
 
     try:
-        claims = verify_hs256_jwt(authorization.removeprefix("Bearer ").strip())
+        claims = verify_hs256_jwt(token)
     except HTTPException:
         return None
     return _tenant_id_from_claims(claims)
@@ -113,6 +123,8 @@ def _tenant_id_from_bearer(authorization: str | None) -> str | None:
 
 def inferred_tenant_id_from_request(request: Request) -> str | None:
     return _tenant_id_from_api_key(request.headers.get("x-api-key")) or _tenant_id_from_bearer(request.headers.get("authorization"))
+
+
 def tenant_id_from_request(request: Request) -> str:
     raw_tenant_id = request.headers.get("x-tenant-id")
     if raw_tenant_id is None:

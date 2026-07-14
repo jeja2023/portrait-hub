@@ -1,0 +1,18 @@
+[Unit]
+Description=PortraitHub durable video job worker
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/portrait-hub
+EnvironmentFile=-/etc/portrait-hub/portrait-hub.env
+Environment=VIDEO_JOB_WORKER_IN_PROCESS=false
+ExecStart=/usr/bin/python3 -m app.portrait_video_job_worker
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

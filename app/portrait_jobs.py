@@ -26,7 +26,7 @@ from app.settings import (
     VIDEO_JOB_PROGRESS_PERSIST_INTERVAL_SECONDS,
     VIDEO_JOB_RETRY_BACKOFF_SECONDS,
 )
-from app.video_io import public_video_metadata
+from app.video_io import extract_video_frames_from_path, public_video_metadata, resolve_video_job_input
 
 
 VIDEO_JOB_ERROR_MESSAGE = "视频任务失败"
@@ -93,7 +93,7 @@ def image_thumbnail_data_url(image: Any, max_side: int = 240) -> str | None:
     preview = image.copy()
     if preview.mode not in {"RGB", "L"}:
         preview = preview.convert("RGB")
-    preview.thumbnail((max_side, max_side))  # type: ignore[no-untyped-call]
+    preview.thumbnail((max_side, max_side))
     buffer = BytesIO()
     preview.save(buffer, format="JPEG", quality=78, optimize=True)
     data = base64.b64encode(buffer.getvalue()).decode("ascii")
@@ -403,10 +403,12 @@ async def run_batch_job(job_id: str, tenant_id: str, handler: Any) -> None:
 async def run_video_job(
     job_id: str,
     tenant_id: str,
-    data: bytes,
+    data: bytes | None,
     filename: str | None,
     frame_interval: int,
     max_frames: int,
+    *,
+    input_ref: str | None = None,
 ) -> None:
     job = get_video_job(job_id, tenant_id=tenant_id)
     if job is None:
@@ -416,6 +418,13 @@ async def run_video_job(
             video_job_identifier_fingerprint(job_id),
         )
         return
+
+    async def cancellation_requested() -> bool:
+        if job.cancel_requested:
+            return True
+        from app.portrait_task_queue import TASK_QUEUE
+
+        return await run_blocking_io(TASK_QUEUE.is_cancelled, "video_jobs", tenant_id, job_id)
 
     while True:
         job.status = JobStatus.RUNNING
@@ -427,13 +436,26 @@ async def run_video_job(
         job.updated_at = wall_time()
         await run_blocking_io(persist_video_job, job)
         try:
-            if job.cancel_requested:
+            if await cancellation_requested():
+                job.cancel_requested = True
                 job.status = JobStatus.CANCELLED
                 job.updated_at = wall_time()
                 await run_blocking_io(persist_video_job, job)
                 return
 
-            frames, metadata = await extract_video_frames_from_bytes(data, filename, frame_interval, max_frames)
+            if input_ref:
+                input_path = resolve_video_job_input(input_ref)
+                frames, metadata = await asyncio.to_thread(
+                    extract_video_frames_from_path,
+                    str(input_path),
+                    frame_interval,
+                    max_frames,
+                    None,
+                )
+            elif data is not None:
+                frames, metadata = await extract_video_frames_from_bytes(data, filename, frame_interval, max_frames)
+            else:
+                raise ValueError("视频任务缺少输入引用")
             frame_results: list[dict[str, Any]] = []
             total = max(1, len(frames))
             # 对中间进度写入做节流：每帧都持久化会每次重写整个任务状态文件（或整行 JSONB），
@@ -441,7 +463,8 @@ async def run_video_job(
             persist_interval = float(VIDEO_JOB_PROGRESS_PERSIST_INTERVAL_SECONDS)
             last_progress_persist_at = wall_time()
             for index, image in enumerate(frames):
-                if job.cancel_requested:
+                if await cancellation_requested():
+                    job.cancel_requested = True
                     job.status = JobStatus.CANCELLED
                     job.updated_at = wall_time()
                     await run_blocking_io(persist_video_job, job)
@@ -490,7 +513,8 @@ async def run_video_job(
                 job.attempts,
                 exception_log_summary(exc),
             )
-            if job.cancel_requested:
+            if await cancellation_requested():
+                job.cancel_requested = True
                 job.status = JobStatus.CANCELLED
                 job.updated_at = wall_time()
                 await run_blocking_io(persist_video_job, job)

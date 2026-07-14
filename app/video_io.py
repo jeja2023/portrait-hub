@@ -1,8 +1,10 @@
 import asyncio
+import hashlib
+import os
 from copy import deepcopy
 from pathlib import Path
 from tempfile import NamedTemporaryFile
-from typing import Any, cast
+from typing import Any, BinaryIO
 
 import cv2
 import numpy as np
@@ -16,7 +18,7 @@ from app.media.video_backends import decode_frames_at_indexes
 from app.media.quality import assess_image_quality, clamp01
 from app.media.stream_decode import revalidate_stream_url, validate_media_stream_url
 from app.observability import logger, now
-from app.settings import MAX_VIDEO_BYTES
+from app.settings import MAX_VIDEO_BYTES, VIDEO_JOB_INPUT_DIR, VIDEO_UPLOAD_CHUNK_BYTES
 
 
 SUPPORTED_VIDEO_EXTENSIONS = {".mp4", ".avi", ".mov", ".mkv", ".webm", ".m4v"}
@@ -68,7 +70,7 @@ def validate_video_content(data: bytes, filename: str | None = None) -> str:
     if container is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="上传视频的容器内容不受支持",
+            detail="上传视频包含不支持的容器内容",
         )
     if suffix and container not in VIDEO_EXTENSION_CONTAINERS.get(suffix, set()):
         raise HTTPException(
@@ -79,24 +81,88 @@ def validate_video_content(data: bytes, filename: str | None = None) -> str:
 
 
 async def read_video_file(file: UploadFile) -> bytes:
-    data = await file.read()
-    if not data:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="uploaded video is empty",
-        )
-    if len(data) > MAX_VIDEO_BYTES:
-        raise HTTPException(
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail=f"上传视频过大：最大 {MAX_VIDEO_BYTES} bytes",
-        )
-    validate_video_content(data, file.filename)
+    chunks: list[bytes] = []
+    total = 0
+    chunk_size = max(64 * 1024, int(VIDEO_UPLOAD_CHUNK_BYTES))
+    while True:
+        chunk = await file.read(chunk_size)
+        if not chunk:
+            break
+        total += len(chunk)
+        if total > MAX_VIDEO_BYTES:
+            raise HTTPException(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                detail=f"上传视频过大：最大 {MAX_VIDEO_BYTES} 字节",
+            )
+        chunks.append(chunk)
+    if not chunks:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="上传视频为空")
+    data = b"".join(chunks)
+    validate_video_content(data[:64], file.filename)
     return data
+
+
+def resolve_video_job_input(input_ref: str) -> Path:
+    normalized = str(input_ref).replace("\\", "/").strip("/")
+    target = (VIDEO_JOB_INPUT_DIR / normalized).resolve()
+    root = VIDEO_JOB_INPUT_DIR.resolve()
+    try:
+        target.relative_to(root)
+    except ValueError as exc:
+        raise ValueError("视频任务输入引用越界") from exc
+    return target
+
+
+def _copy_video_upload(source: BinaryIO, target: Path) -> tuple[int, bytes]:
+    total = 0
+    prefix = bytearray()
+    chunk_size = max(64 * 1024, int(VIDEO_UPLOAD_CHUNK_BYTES))
+    with target.open("wb") as output:
+        while True:
+            chunk = source.read(chunk_size)
+            if not chunk:
+                break
+            total += len(chunk)
+            if total > MAX_VIDEO_BYTES:
+                raise HTTPException(
+                    status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                    detail=f"上传视频过大：最大 {MAX_VIDEO_BYTES} 字节",
+                )
+            if len(prefix) < 64:
+                prefix.extend(chunk[: 64 - len(prefix)])
+            output.write(chunk)
+        output.flush()
+        os.fsync(output.fileno())
+    return total, bytes(prefix)
+
+
+async def stage_video_upload(file: UploadFile, tenant_id: str, job_id: str) -> str:
+    suffix = validate_video_filename(file.filename) or ".video"
+    tenant_segment = hashlib.sha256(str(tenant_id).encode("utf-8")).hexdigest()[:24]
+    input_ref = f"{tenant_segment}/{job_id}{suffix}"
+    target = resolve_video_job_input(input_ref)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    temporary = target.with_name(f".{target.name}.{os.getpid()}.part")
+    await file.seek(0)
+    try:
+        total, prefix = await asyncio.to_thread(_copy_video_upload, file.file, temporary)
+        if total <= 0:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="上传视频为空")
+        validate_video_content(prefix, file.filename)
+        await asyncio.to_thread(os.replace, temporary, target)
+        return input_ref
+    finally:
+        if temporary.exists():
+            await asyncio.to_thread(temporary.unlink, missing_ok=True)
+
+
+def delete_video_job_input(input_ref: str) -> None:
+    resolve_video_job_input(input_ref).unlink(missing_ok=True)
 
 
 def cv_frame_to_image(frame: Array) -> Image.Image:
     rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-    return cast(Image.Image, Image.fromarray(rgb))  # type: ignore[no-untyped-call]
+    return Image.fromarray(rgb)
 
 
 def frame_change_score(previous: Image.Image | None, current: Image.Image) -> float:
@@ -558,13 +624,16 @@ async def extract_video_frames_from_upload(
     frame_interval: int,
     max_frames: int,
 ) -> tuple[list[Image.Image], dict[str, Any]]:
-    data = await read_video_file(file)
-    suffix = Path(file.filename or "video.mp4").suffix or ".mp4"
+    suffix = validate_video_filename(file.filename) or ".mp4"
     temp_path = ""
     try:
         with NamedTemporaryFile(delete=False, suffix=suffix) as temp_file:
-            temp_file.write(data)
             temp_path = temp_file.name
+        await file.seek(0)
+        total, prefix = await asyncio.to_thread(_copy_video_upload, file.file, Path(temp_path))
+        if total <= 0:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="上传视频为空")
+        validate_video_content(prefix, file.filename)
         frames, meta = await asyncio.to_thread(
             extract_video_frames_from_path,
             temp_path,
@@ -572,7 +641,7 @@ async def extract_video_frames_from_upload(
             max_frames,
             None,
         )
-        meta["video_bytes"] = len(data)
+        meta["video_bytes"] = total
         return frames, meta
     finally:
         if temp_path:
@@ -591,6 +660,9 @@ __all__ = [
     "sniff_video_container",
     "validate_video_content",
     "read_video_file",
+    "stage_video_upload",
+    "resolve_video_job_input",
+    "delete_video_job_input",
     "cv_frame_to_image",
     "frame_change_score",
     "frame_hash_distance",

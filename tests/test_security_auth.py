@@ -6,11 +6,28 @@ import time
 from pathlib import Path
 
 import pytest
-from fastapi import HTTPException
+from fastapi import HTTPException, Request
 from fastapi.testclient import TestClient
 
-from app import model_package, portrait_auth, portrait_crypto, portrait_security, routes_health, runtime_sessions, security
+from app import model_package, portrait_access, portrait_auth, portrait_crypto, portrait_security, routes_health, runtime_sessions, security
 from main import app
+
+def api_request(path: str = "/v1/test") -> Request:
+    return Request(
+        {
+            "type": "http",
+            "http_version": "1.1",
+            "method": "GET",
+            "scheme": "http",
+            "path": path,
+            "raw_path": path.encode("ascii"),
+            "query_string": b"",
+            "headers": [],
+            "client": ("127.0.0.1", 12345),
+            "server": ("testserver", 80),
+            "root_path": "",
+        }
+    )
 
 
 def encode_segment(payload: dict | bytes) -> str:
@@ -123,7 +140,7 @@ async def test_require_api_token_rejects_unsigned_jwt_shape_when_rbac_is_enabled
     monkeypatch.setattr(portrait_auth, "JWT_SECRET", "test-secret")
 
     with pytest.raises(HTTPException) as exc_info:
-        await security.require_api_token(authorization="Bearer header.payload.signature")
+        await security.require_api_token(api_request(), authorization="Bearer header.payload.signature")
 
     assert exc_info.value.status_code == 401
 
@@ -134,7 +151,7 @@ async def test_require_api_token_fails_closed_when_rbac_has_no_credentials(monke
     monkeypatch.setattr(security, "API_TOKEN", None)
 
     with pytest.raises(HTTPException) as exc_info:
-        await security.require_api_token(authorization=None, x_api_key=None)
+        await security.require_api_token(api_request(), authorization=None, x_api_key=None)
 
     assert exc_info.value.status_code == 401
 
@@ -146,7 +163,7 @@ async def test_require_api_token_fails_closed_when_auth_is_required_without_back
     monkeypatch.setattr(security, "API_TOKEN", None)
 
     with pytest.raises(HTTPException) as exc_info:
-        await security.require_api_token(authorization=None, x_api_key=None)
+        await security.require_api_token(api_request(), authorization=None, x_api_key=None)
 
     assert exc_info.value.status_code == 401
     assert "no credential backend" in str(exc_info.value.detail)
@@ -157,8 +174,15 @@ async def test_require_api_token_accepts_api_key_when_auth_is_required(monkeypat
     monkeypatch.setattr(security, "RBAC_ENABLED", False)
     monkeypatch.setattr(security, "AUTH_REQUIRED", True)
     monkeypatch.setattr(security, "API_TOKEN", "test-token")
+    monkeypatch.setattr(security, "API_TOKEN_TENANT_ID", "tenant-a")
+    monkeypatch.setattr(security, "API_TOKEN_ALLOW_TENANT_OVERRIDE", False)
 
-    await security.require_api_token(authorization=None, x_api_key="test-token")
+    await security.require_api_token(
+        api_request(),
+        authorization=None,
+        x_api_key="test-token",
+        x_tenant_id="tenant-a",
+    )
 
 
 @pytest.mark.asyncio
@@ -170,7 +194,7 @@ async def test_require_api_token_accepts_signed_jwt_when_rbac_is_enabled(monkeyp
     monkeypatch.setattr(portrait_auth, "JWT_AUDIENCE", "portrait-hub-api")
     token = hs256_token(valid_jwt_payload())
 
-    await security.require_api_token(authorization=f"Bearer {token}")
+    await security.require_api_token(api_request(), authorization=f"Bearer {token}")
 
 
 @pytest.mark.asyncio
@@ -184,7 +208,7 @@ async def test_require_api_token_rejects_jwt_for_wrong_tenant(monkeypatch) -> No
     token = hs256_token(valid_jwt_payload(tenant_id="tenant-a"))
 
     with pytest.raises(HTTPException) as exc_info:
-        await security.require_api_token(authorization=f"Bearer {token}", x_tenant_id="tenant-b")
+        await security.require_api_token(api_request(), authorization=f"Bearer {token}", x_tenant_id="tenant-b")
 
     assert exc_info.value.status_code == 403
     assert "租户" in str(exc_info.value.detail)
@@ -757,3 +781,63 @@ def test_get_model_path_missing_model_does_not_echo_model_id(monkeypatch, worksp
     assert exc_info.value.detail == "模型构件不存在"
     assert "secret_project" not in str(exc_info.value.detail)
     assert "secret-model" not in str(exc_info.value.detail)
+
+@pytest.mark.asyncio
+async def test_global_api_token_requires_tenant_binding_for_v1(monkeypatch) -> None:
+    monkeypatch.setattr(security, "API_TOKEN", "platform-token")
+    monkeypatch.setattr(security, "API_TOKEN_TENANT_ID", "")
+    monkeypatch.setattr(security, "API_TOKEN_ALLOW_TENANT_OVERRIDE", False)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await security.require_api_token(
+            api_request(),
+            authorization=None,
+            x_api_key="platform-token",
+            x_tenant_id="tenant-a",
+        )
+
+    assert exc_info.value.status_code == 403
+    assert "未绑定" in str(exc_info.value.detail)
+
+
+@pytest.mark.asyncio
+async def test_global_api_token_rejects_wrong_bound_tenant(monkeypatch) -> None:
+    monkeypatch.setattr(security, "API_TOKEN", "platform-token")
+    monkeypatch.setattr(security, "API_TOKEN_TENANT_ID", "tenant-a")
+    monkeypatch.setattr(security, "API_TOKEN_ALLOW_TENANT_OVERRIDE", False)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await security.require_api_token(
+            api_request(),
+            authorization=None,
+            x_api_key="platform-token",
+            x_tenant_id="tenant-b",
+        )
+
+    assert exc_info.value.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_application_api_key_scopes_apply_without_rbac(monkeypatch) -> None:
+    monkeypatch.setattr(portrait_auth, "RBAC_ENABLED", False)
+    monkeypatch.setattr(portrait_auth, "API_TOKEN", None)
+    monkeypatch.setattr(
+        portrait_access,
+        "application_key_matches",
+        lambda tenant_id, api_key: {"tenant_id": tenant_id, "app_id": "reader", "scopes": ["gallery:read"]},
+    )
+
+    await portrait_auth.require_permission(
+        "gallery:read",
+        x_tenant_id="tenant-a",
+        x_api_key="application-key",
+    )
+    with pytest.raises(HTTPException) as exc_info:
+        await portrait_auth.require_permission(
+            "gallery:write",
+            x_tenant_id="tenant-a",
+            x_api_key="application-key",
+        )
+
+    assert exc_info.value.status_code == 403
+    assert "gallery:write" in str(exc_info.value.detail)

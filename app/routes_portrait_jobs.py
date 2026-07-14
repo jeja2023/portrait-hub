@@ -1,7 +1,7 @@
 from copy import deepcopy
 from typing import Any
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 
 from app.observability import logger
 from app.portrait_async import run_blocking_io
@@ -14,12 +14,12 @@ from app.portrait_jobs import (
     create_video_job,
     get_video_job,
     normalize_job_status,
+    load_video_jobs_state,
     public_video_job_result,
     persist_video_job,
     remove_video_job,
     request_cancel_video_job,
     restore_video_job,
-    run_video_job,
 )
 from app.portrait_response import exception_log_summary, portrait_success, raise_rollback_failure
 from app.portrait_request_context import PortraitRequestContext, portrait_request_context
@@ -28,11 +28,16 @@ from app.portrait_request_validation import validate_int_range
 from app.portrait_security import validate_job_id
 from app.portrait_task_queue import TASK_QUEUE
 from app.security import require_api_token
-from app.settings import MAX_VIDEO_FRAMES, VIDEO_FRAME_INTERVAL
-from app.video_io import read_video_file
+from app.settings import MAX_VIDEO_FRAMES, VIDEO_FRAME_INTERVAL, VIDEO_JOB_WORKER_IN_PROCESS
+from app.video_io import delete_video_job_input, stage_video_upload
 
 
 router = APIRouter(dependencies=[Depends(require_api_token)])
+
+
+async def refresh_video_job_view() -> None:
+    if not VIDEO_JOB_WORKER_IN_PROCESS:
+        await run_blocking_io(load_video_jobs_state)
 
 
 def rollback_video_job_snapshot(job: VideoJob, previous_job: VideoJob) -> list[str]:
@@ -51,7 +56,6 @@ def raise_job_rollback_failure(original_error: Exception, rollback_errors: list[
 
 @router.post("/v1/jobs/video", dependencies=[Depends(permission_dependency("jobs"))])
 async def v1_create_video_job(
-    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     frame_interval: int = Form(VIDEO_FRAME_INTERVAL),
     max_frames: int = Form(MAX_VIDEO_FRAMES),
@@ -61,29 +65,44 @@ async def v1_create_video_job(
     tenant_id = ctx.tenant_id
     frame_interval = validate_int_range("frame_interval", frame_interval, minimum=1)
     max_frames = validate_int_range("max_frames", max_frames, minimum=1, maximum=MAX_VIDEO_FRAMES)
-    data = await read_video_file(file)
     job = await run_blocking_io(create_video_job, None, tenant_id=tenant_id)
+    input_ref: str | None = None
+    queue_message: Any | None = None
     try:
-        queue_message = await run_blocking_io(TASK_QUEUE.enqueue, "video_jobs", {"job_id": job.job_id, "tenant_id": tenant_id})
+        input_ref = await stage_video_upload(file, tenant_id, job.job_id)
+        await run_blocking_io(
+            audit_event,
+            "video_job_created",
+            request_id=request_id,
+            tenant_id=tenant_id,
+            job_id=job.job_id,
+        )
+        queue_message = await run_blocking_io(
+            TASK_QUEUE.enqueue,
+            "video_jobs",
+            {
+                "job_id": job.job_id,
+                "tenant_id": tenant_id,
+                "input_ref": input_ref,
+                "frame_interval": frame_interval,
+                "max_frames": max_frames,
+            },
+        )
     except Exception:
+        if queue_message is not None:
+            try:
+                await run_blocking_io(TASK_QUEUE.remove, queue_message)
+            except Exception as exc:
+                logger.warning("移除回滚视频队列消息失败: %s", exception_log_summary(exc))
+        if input_ref is not None:
+            await run_blocking_io(delete_video_job_input, input_ref)
         await run_blocking_io(remove_video_job, job.job_id, tenant_id)
         raise
-    background_tasks.add_task(
-        run_video_job,
-        job.job_id,
-        tenant_id,
-        data,
-        file.filename,
-        frame_interval,
-        max_frames,
+    assert queue_message is not None
+    return portrait_success(
+        request_id,
+        {"job": job.public_dict(include_result=False), "queue_message": queue_message.public_dict()},
     )
-    try:
-        await run_blocking_io(audit_event, "video_job_created", request_id=request_id, tenant_id=tenant_id, job_id=job.job_id)
-    except Exception:
-        await run_blocking_io(remove_video_job, job.job_id, tenant_id)
-        raise
-    return portrait_success(request_id, {"job": job.public_dict(include_result=False), "queue_message": queue_message.public_dict()})
-
 
 @router.get("/v1/jobs/video/results", dependencies=[Depends(permission_dependency("jobs:read"))])
 async def v1_list_video_job_results(
@@ -94,6 +113,7 @@ async def v1_list_video_job_results(
 ) -> dict[str, Any]:
     request_id = ctx.request_id
     tenant_id = ctx.tenant_id
+    await refresh_video_job_view()
     pagination_request = normalize_list_pagination(limit, offset, cursor)
     items: list[dict[str, Any]] = []
     for job in video_jobs_snapshots(tenant_id):
@@ -124,6 +144,7 @@ async def v1_get_video_job(job_id: str, ctx: PortraitRequestContext = Depends(po
     request_id = ctx.request_id
     tenant_id = ctx.tenant_id
     job_id = validate_job_id(job_id)
+    await refresh_video_job_view()
     job = get_video_job(job_id, tenant_id=tenant_id)
     if job is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="任务不存在")
@@ -135,6 +156,7 @@ async def v1_get_video_job_result(job_id: str, ctx: PortraitRequestContext = Dep
     request_id = ctx.request_id
     tenant_id = ctx.tenant_id
     job_id = validate_job_id(job_id)
+    await refresh_video_job_view()
     job = get_video_job(job_id, tenant_id=tenant_id)
     if job is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="任务不存在")
@@ -148,14 +170,21 @@ async def v1_cancel_video_job(job_id: str, ctx: PortraitRequestContext = Depends
     request_id = ctx.request_id
     tenant_id = ctx.tenant_id
     job_id = validate_job_id(job_id)
+    await refresh_video_job_view()
     previous_job = deepcopy(get_video_job(job_id, tenant_id=tenant_id))
     cancelled = await run_blocking_io(request_cancel_video_job, job_id, tenant_id=tenant_id)
     if not cancelled:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="任务不存在")
     job = get_video_job(job_id, tenant_id=tenant_id)
+    cancellation_marked = False
     try:
+        if job is not None and job.cancel_requested:
+            await run_blocking_io(TASK_QUEUE.mark_cancelled, "video_jobs", tenant_id, job_id)
+            cancellation_marked = True
         await run_blocking_io(audit_event, "video_job_cancelled", request_id=request_id, tenant_id=tenant_id, job_id=job_id)
     except Exception as exc:
+        if cancellation_marked:
+            await run_blocking_io(TASK_QUEUE.clear_cancelled, "video_jobs", tenant_id, job_id)
         if job is not None and previous_job is not None:
             rollback_errors = rollback_video_job_snapshot(job, previous_job)
             if rollback_errors:

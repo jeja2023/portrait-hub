@@ -78,6 +78,8 @@ def local_dev_env_overrides(root_dir: Path) -> dict[str, str]:
         {
             "RUNTIME_STATE_DIR": str(runtime_state_dir),
             "OBJECT_STORAGE_DIR": str(runtime_state_dir / "objects"),
+            "VIDEO_JOB_INPUT_DIR": str(runtime_state_dir / "video-job-inputs"),
+            "TASK_QUEUE_DIR": str(runtime_state_dir / "task-queue"),
             "STREAM_WORKER_LOCK_DIR": str(runtime_state_dir / "stream-worker-locks"),
         }
     )

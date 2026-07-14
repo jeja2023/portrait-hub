@@ -47,6 +47,7 @@ _WEBHOOK_EVENTS = {
 }
 _ACCESS_STATE: dict[str, list[dict[str, Any]]] = {"tenants": [], "applications": [], "webhooks": []}
 _ACCESS_LOCK = threading.RLock()
+_ACCESS_STATS_DIRTY = False
 
 
 def now_seconds() -> float:
@@ -297,9 +298,26 @@ def restore_access_state(snapshot: dict[str, list[dict[str, Any]]]) -> None:
         save_access_state()
 
 def save_access_state() -> None:
+    global _ACCESS_STATS_DIRTY
     with _ACCESS_LOCK:
         write_json_state(PORTRAIT_ACCESS_STATE_PATH, access_state_payload())
+        _ACCESS_STATS_DIRTY = False
 
+
+def flush_access_call_stats() -> bool:
+    global _ACCESS_STATS_DIRTY
+    with _ACCESS_LOCK:
+        if not _ACCESS_STATS_DIRTY:
+            return False
+        payload = access_state_payload()
+        _ACCESS_STATS_DIRTY = False
+    try:
+        write_json_state(PORTRAIT_ACCESS_STATE_PATH, payload)
+    except Exception:
+        with _ACCESS_LOCK:
+            _ACCESS_STATS_DIRTY = True
+        raise
+    return True
 
 def load_access_state() -> None:
     with _ACCESS_LOCK:
@@ -544,6 +562,7 @@ def application_request_policy(tenant_id: str, api_key: str, timestamp: float | 
 
 
 def record_application_call(tenant_id: str | None, app_id: str | None, status_code: int, timestamp: float) -> None:
+    global _ACCESS_STATS_DIRTY
     if not tenant_id or not app_id or app_id == "--":
         return
     with _ACCESS_LOCK:
@@ -572,7 +591,7 @@ def record_application_call(tenant_id: str | None, app_id: str | None, status_co
         record["call_count"] = call_count
         record["error_count"] = error_count
         record["error_rate"] = round(error_count / call_count, 6) if call_count > 0 else 0.0
-        save_access_state()
+        _ACCESS_STATS_DIRTY = True
 
 
 def application_scopes_allow_permission(scopes: Any, permission: str) -> bool:
@@ -722,10 +741,12 @@ def webhook_sample_delivery(tenant_id: str, webhook_id: str) -> dict[str, Any]:
 
 
 def clear_access_state() -> None:
+    global _ACCESS_STATS_DIRTY
     with _ACCESS_LOCK:
         _ACCESS_STATE["tenants"] = []
         _ACCESS_STATE["applications"] = []
         _ACCESS_STATE["webhooks"] = []
+        _ACCESS_STATS_DIRTY = False
 
 
 __all__ = [
@@ -739,6 +760,7 @@ __all__ = [
     "create_tenant",
     "ensure_tenant",
     "find_tenant",
+    "flush_access_call_stats",
     "create_webhook",
     "list_applications",
     "list_tenants",

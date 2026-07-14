@@ -1,5 +1,6 @@
 import ipaddress
 from io import BytesIO
+from pathlib import Path
 
 import pytest
 from fastapi import HTTPException, UploadFile
@@ -8,12 +9,17 @@ from app.image_io import read_image_file as read_legacy_image_file
 from app.media import stream_decode
 from app.media.image_decode import read_limited_upload, validate_image_content
 from app.media.stream_decode import mask_stream_url
+from app import video_io
 from app.video_io import (
     consecutive_hash_distances,
     count_near_duplicate_fingerprints,
     frame_hash_distance,
     public_video_metadata,
+    delete_video_job_input,
+    extract_video_frames_from_upload,
     read_video_file,
+    resolve_video_job_input,
+    stage_video_upload,
     validate_stream_url,
     validate_video_content,
 )
@@ -75,6 +81,34 @@ async def test_upload_validation_errors_do_not_echo_filename() -> None:
 
         assert exc_info.value.status_code == 400
         assert "secret-token" not in exc_info.value.detail
+
+
+@pytest.mark.asyncio
+async def test_video_upload_extraction_streams_to_a_temporary_file(monkeypatch) -> None:
+    payload = b"\x00\x00\x00\x18ftypmp42" + b"x" * (128 * 1024)
+    read_sizes: list[int] = []
+    observed_path: Path | None = None
+
+    class TrackingBytesIO(BytesIO):
+        def read(self, size: int = -1) -> bytes:
+            read_sizes.append(size)
+            return super().read(size)
+
+    def fake_extract(source: str, frame_interval: int, max_frames: int, timeout: int | None):
+        nonlocal observed_path
+        observed_path = Path(source)
+        assert observed_path.read_bytes() == payload
+        return [], {"source_frame_indexes": []}
+
+    monkeypatch.setattr(video_io, "extract_video_frames_from_path", fake_extract)
+    upload = UploadFile(filename="clip.mp4", file=TrackingBytesIO(payload))
+
+    frames, metadata = await extract_video_frames_from_upload(upload, 15, 64)
+
+    assert frames == []
+    assert metadata["video_bytes"] == len(payload)
+    assert read_sizes and all(size > 0 for size in read_sizes)
+    assert observed_path is not None and observed_path.exists() is False
 
 
 @pytest.mark.asyncio
@@ -154,3 +188,32 @@ def test_public_video_metadata_omits_stable_fingerprints_and_source_file_details
     )
 
     assert public == {"source_frame_indexes": [0], "selected_frame_hash_distances": [0]}
+
+@pytest.mark.asyncio
+async def test_video_job_upload_is_streamed_to_private_staging(monkeypatch, workspace_tmp_path) -> None:
+    monkeypatch.setattr(video_io, "VIDEO_JOB_INPUT_DIR", workspace_tmp_path / "video-inputs")
+    monkeypatch.setattr(video_io, "VIDEO_UPLOAD_CHUNK_BYTES", 8)
+    payload = b"\x00\x00\x00\x18ftyp" + b"\x00" * 40
+    upload = UploadFile(filename="secret-person-name.mp4", file=BytesIO(payload))
+
+    input_ref = await stage_video_upload(upload, "tenant-a", "job_0123456789abcdef")
+
+    assert "secret-person-name" not in input_ref
+    assert resolve_video_job_input(input_ref).read_bytes() == payload
+    delete_video_job_input(input_ref)
+    assert not resolve_video_job_input(input_ref).exists()
+
+
+@pytest.mark.asyncio
+async def test_video_job_upload_rejects_limit_without_leaving_partial_file(monkeypatch, workspace_tmp_path) -> None:
+    input_dir = workspace_tmp_path / "video-inputs"
+    monkeypatch.setattr(video_io, "VIDEO_JOB_INPUT_DIR", input_dir)
+    monkeypatch.setattr(video_io, "VIDEO_UPLOAD_CHUNK_BYTES", 8)
+    monkeypatch.setattr(video_io, "MAX_VIDEO_BYTES", 16)
+    upload = UploadFile(filename="sample.mp4", file=BytesIO(b"\x00\x00\x00\x18ftyp" + b"\x00" * 40))
+
+    with pytest.raises(HTTPException) as exc_info:
+        await stage_video_upload(upload, "tenant-a", "job_0123456789abcdef")
+
+    assert exc_info.value.status_code == 413
+    assert list(input_dir.rglob("*.part")) == []

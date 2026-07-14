@@ -38,6 +38,7 @@ def check_templates(root: Path) -> list[dict[str, Any]]:
         "app/routes_portrait_access.py",
         "app/routes_portrait_review.py",
         "app/production_gates.py",
+        "app/portrait_video_job_worker.py",
         "app/tracking_state.py",
         "app/tracking_association.py",
         "app/runtime_face.py",
@@ -80,6 +81,8 @@ def check_templates(root: Path) -> list[dict[str, Any]]:
         "examples/demo-clients/node_demo_client.js",
         "deploy/portrait-stream-worker.service",
         "deploy/k8s-stream-worker.yaml",
+        "deploy/portrait-video-job-worker.service",
+        "deploy/k8s-video-job-worker.yaml",
         "deploy/portrait-governance-scheduler.service",
         "deploy/portrait-governance-scheduler.timer",
         "deploy/k8s-governance-cronjob.yaml",
@@ -215,6 +218,7 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
     stream_decode = (root / "app" / "media" / "stream_decode.py").read_text(encoding="utf-8") if (root / "app" / "media" / "stream_decode.py").is_file() else ""
     portrait_job_routes = (root / "app" / "routes_portrait_jobs.py").read_text(encoding="utf-8") if (root / "app" / "routes_portrait_jobs.py").is_file() else ""
     portrait_task_queue = (root / "app" / "portrait_task_queue.py").read_text(encoding="utf-8") if (root / "app" / "portrait_task_queue.py").is_file() else ""
+    portrait_video_job_worker = (root / "app" / "portrait_video_job_worker.py").read_text(encoding="utf-8") if (root / "app" / "portrait_video_job_worker.py").is_file() else ""
     portrait_runtime_store = (root / "app" / "portrait_runtime_store.py").read_text(encoding="utf-8") if (root / "app" / "portrait_runtime_store.py").is_file() else ""
     portrait_gallery_orchestration = (root / "app" / "portrait_gallery_orchestration.py").read_text(encoding="utf-8") if (root / "app" / "portrait_gallery_orchestration.py").is_file() else ""
     production_gates = (root / "app" / "production_gates.py").read_text(encoding="utf-8") if (root / "app" / "production_gates.py").is_file() else ""
@@ -311,7 +315,7 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
                 and "discover_default_targets" in type_check_tool
                 and "DEFAULT_TARGET_ROOTS" in type_check_tool
                 and "--fallback-ok" in type_check_tool
-                and "未安装 mypy；请安装 requirements/dev.txt" in type_check_tool
+                and "mypy is not installed; install requirements/dev.txt" in type_check_tool
                 and '"app"' in type_check_tool
                 and '"tools"' in type_check_tool
                 and '"sdk"' in type_check_tool
@@ -529,7 +533,7 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
                 and 'part in {".", ".."}' in worker_control
                 and '"/" in part' in worker_control
                 and '"\\\\" in part' in worker_control
-                and "model project and model name must not contain path separators" in worker_control
+                and "模型项目和模型名称不能包含路径分隔符" in worker_control
             ),
         },
         {
@@ -983,7 +987,8 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
                 and "portrait_error_code" in server
                 and "portrait_application_id" in rate_limit
                 and "portrait_application_id" in server
-                and "must not change the request outcome" in portrait_call_logs
+                and "flush_access_call_stats" in portrait_access
+                and "_ACCESS_STATS_DIRTY" in portrait_access
             ),
         },
         {
@@ -1000,7 +1005,7 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
                 and '@router.get("/v1/access/error-codes", dependencies=[Depends(permission_dependency("access:read"))])' in portrait_access_routes
                 and '"error_codes": error_codes' in portrait_access_routes
                 and "/v1/access/error-codes" in console_module_sources
-                and 'data-nav="error-codes"' in console_module_sources
+                and 'view: "error-codes"' in console_module_sources
                 and "error-codes-table" in console_module_sources
                 and "error-codes-json" in console_module_sources
                 and "renderErrorCodes" in console_module_sources
@@ -1807,12 +1812,9 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
                 and 'payload["metadata"] = public_video_metadata(metadata)' in portrait_jobs
                 and '"filename": self.filename' not in portrait_jobs
                 and "return self.public_dict(include_result=True)" not in portrait_jobs
-                and (
-                    'queue_message = TASK_QUEUE.enqueue("video_jobs", {"job_id": job.job_id, "tenant_id": tenant_id})'
-                    in portrait_job_routes
-                    or 'queue_message = await run_blocking_io(TASK_QUEUE.enqueue, "video_jobs", {"job_id": job.job_id, "tenant_id": tenant_id})'
-                    in portrait_job_routes
-                )
+                and "TASK_QUEUE.enqueue" in portrait_job_routes
+                and '"input_ref": input_ref' in portrait_job_routes
+                and "stage_video_upload" in portrait_job_routes
                 and '"filename": file.filename' not in portrait_job_routes
                 and 'metadata["filename"] = filename' not in media_video_decode
                 and '"filename": payload.get("filename")' not in portrait_postgres
@@ -2047,7 +2049,9 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
                     "remove_video_job(job.job_id, tenant_id)" in portrait_job_routes
                     or "run_blocking_io(remove_video_job, job.job_id, tenant_id)" in portrait_job_routes
                 )
-                and ('TASK_QUEUE.enqueue("video_jobs"' in portrait_job_routes or 'run_blocking_io(TASK_QUEUE.enqueue, "video_jobs"' in portrait_job_routes)
+                and "TASK_QUEUE.enqueue" in portrait_job_routes
+                and '"input_ref": input_ref' in portrait_job_routes
+                and "TASK_QUEUE.remove" in portrait_job_routes
                 and ('audit_event("video_job_created"' in portrait_job_routes or '"video_job_created"' in portrait_job_routes)
             ),
         },
@@ -2067,19 +2071,21 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
         {
             "name": "security:tenant_scoped_background_jobs",
             "ok": (
-                '{"job_id": job.job_id, "tenant_id": tenant_id' in portrait_job_routes
-                and "background_tasks.add_task(" in portrait_job_routes
-                and "tenant_id," in portrait_job_routes
-                and "async def run_video_job(" in portrait_jobs
-                and "tenant_id: str" in portrait_jobs
+                '"tenant_id": tenant_id' in portrait_job_routes
+                and '"input_ref": input_ref' in portrait_job_routes
+                and "stage_video_upload" in portrait_job_routes
+                and "background_tasks.add_task(" not in portrait_job_routes
+                and "portrait-video-job-worker:" in compose
+                and "class RedisTaskQueue" in portrait_task_queue
+                and "xreadgroup" in portrait_task_queue
+                and "xautoclaim" in portrait_task_queue
+                and "async def process_video_job_message" in portrait_video_job_worker
+                and "validate_video_job_message" in portrait_video_job_worker
+                and "input_ref=task[" in portrait_video_job_worker
                 and "job = get_video_job(job_id, tenant_id=tenant_id)" in portrait_jobs
-                and "video 任务不存在 for background execution: tenant_hash=%s job_hash=%s" in portrait_jobs
                 and "tenant_hash=%s job_hash=%s attempt=%s error=%s" in portrait_jobs
-                and "video 任务不存在 for background execution: %s/%s" not in portrait_jobs
-                and "tenant_hash=%s job_id=%s error=%s" not in portrait_jobs
             ),
-        },
-        {
+        },        {
             "name": "security:video_job_error_redaction",
             "ok": (
                 'VIDEO_JOB_ERROR_MESSAGE = "视频任务失败"' in portrait_jobs

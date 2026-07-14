@@ -108,6 +108,7 @@ def check_required_files(root: Path, report: DeployReport) -> None:
         "app/portrait_review.py",
         "app/portrait_gallery_orchestration.py",
         "app/production_gates.py",
+        "app/portrait_video_job_worker.py",
         "app/rollout_audit.py",
         "frontend/console/console.html",
         "frontend/console/console.css",
@@ -148,6 +149,8 @@ def check_required_files(root: Path, report: DeployReport) -> None:
         "examples/demo-clients/node_demo_client.js",
         "deploy/portrait-stream-worker.service",
         "deploy/k8s-stream-worker.yaml",
+        "deploy/portrait-video-job-worker.service",
+        "deploy/k8s-video-job-worker.yaml",
         "deploy/portrait-governance-scheduler.service",
         "deploy/portrait-governance-scheduler.timer",
         "deploy/k8s-governance-cronjob.yaml",
@@ -230,7 +233,7 @@ def check_code_quality(root: Path, report: DeployReport) -> None:
         and "discover_default_targets" in type_check
         and "DEFAULT_TARGET_ROOTS" in type_check
         and "--fallback-ok" in type_check
-        and "未安装 mypy；请安装 requirements/dev.txt" in type_check,
+        and "mypy is not installed; install requirements/dev.txt" in type_check,
         None,
     )
     report.add(
@@ -442,6 +445,14 @@ def check_docker_files(root: Path, report: DeployReport) -> None:
         and stream_worker.get("healthcheck", {}).get("disable") is True,
         {"service": stream_worker},
     )
+    video_job_worker = services.get("portrait-video-job-worker") if isinstance(services, dict) else None
+    report.add(
+        "compose_video_job_worker_service",
+        isinstance(video_job_worker, dict)
+        and "app.portrait_video_job_worker" in str(video_job_worker.get("command", ""))
+        and str(video_job_worker.get("environment", {}).get("VIDEO_JOB_WORKER_IN_PROCESS", "")).lower() == "false",
+        {"service": video_job_worker},
+    )
     gpu_like = [
         name
         for name, service in services.items()
@@ -465,7 +476,7 @@ def check_docker_files(root: Path, report: DeployReport) -> None:
     ) if isinstance(cpu_services, dict) else True
     report.add(
         "cpu_compose_services",
-        cpu_service_names == ["cpu-worker-0", "portrait-stream-worker"],
+        cpu_service_names == ["cpu-worker-0", "portrait-stream-worker", "portrait-video-job-worker"],
         {"services": cpu_service_names},
     )
     report.add(

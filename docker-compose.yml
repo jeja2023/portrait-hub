@@ -8,6 +8,8 @@ x-worker-environment: &worker-environment
   TRUSTED_HOSTS: ${TRUSTED_HOSTS:-127.0.0.1,localhost,gpu-worker-0,gpu-worker-1}
   TENANT_HEADER_REQUIRED: ${TENANT_HEADER_REQUIRED:-true}
   API_TOKEN: ${API_TOKEN:-}
+  API_TOKEN_TENANT_ID: ${API_TOKEN_TENANT_ID:-}
+  API_TOKEN_ALLOW_TENANT_OVERRIDE: ${API_TOKEN_ALLOW_TENANT_OVERRIDE:-false}
   RBAC_ENABLED: ${RBAC_ENABLED:-false}
   JWT_SECRET: ${JWT_SECRET:-}
   JWT_SECRET_ID: ${JWT_SECRET_ID:-primary}
@@ -33,6 +35,10 @@ x-worker-environment: &worker-environment
   PORTRAIT_REQUIRE_PRODUCTION_MODEL_CAPABILITIES: ${PORTRAIT_REQUIRE_PRODUCTION_MODEL_CAPABILITIES:-false}
   PORTRAIT_OBJECT_STORAGE_BACKEND: ${PORTRAIT_OBJECT_STORAGE_BACKEND:-local}
   TASK_QUEUE_BACKEND: ${TASK_QUEUE_BACKEND:-local}
+  TASK_QUEUE_DIR: ${TASK_QUEUE_DIR:-/workspace/runtime-state/task-queue}
+  TASK_QUEUE_VISIBILITY_TIMEOUT_SECONDS: ${TASK_QUEUE_VISIBILITY_TIMEOUT_SECONDS:-300}
+  TASK_QUEUE_POLL_INTERVAL_SECONDS: ${TASK_QUEUE_POLL_INTERVAL_SECONDS:-0.5}
+  VIDEO_JOB_WORKER_IN_PROCESS: ${VIDEO_JOB_WORKER_IN_PROCESS:-false}
   RATE_LIMIT_PER_MINUTE: ${RATE_LIMIT_PER_MINUTE:-120}
   RATE_LIMIT_BURST: ${RATE_LIMIT_BURST:-240}
   RATE_LIMIT_MAX_BUCKETS: ${RATE_LIMIT_MAX_BUCKETS:-10000}
@@ -59,6 +65,9 @@ x-worker-environment: &worker-environment
   STREAM_EVENT_LIST_DEFAULT_LIMIT: ${STREAM_EVENT_LIST_DEFAULT_LIMIT:-100}
   MAX_STREAM_EVENT_LIST_LIMIT: ${MAX_STREAM_EVENT_LIST_LIMIT:-200}
   PORTRAIT_JOBS_STATE_PATH: ${PORTRAIT_JOBS_STATE_PATH:-/workspace/runtime-state/portrait-jobs.json}
+  VIDEO_JOB_INPUT_DIR: ${VIDEO_JOB_INPUT_DIR:-/workspace/runtime-state/video-job-inputs}
+  VIDEO_UPLOAD_CHUNK_BYTES: ${VIDEO_UPLOAD_CHUNK_BYTES:-1048576}
+  ACCESS_STATS_FLUSH_INTERVAL_SECONDS: ${ACCESS_STATS_FLUSH_INTERVAL_SECONDS:-5}
   PORTRAIT_STREAMS_STATE_PATH: ${PORTRAIT_STREAMS_STATE_PATH:-/workspace/runtime-state/portrait-streams.json}
   POSTGRES_DSN: ${POSTGRES_DSN:-}
   POSTGRES_CONNECT_TIMEOUT_SECONDS: ${POSTGRES_CONNECT_TIMEOUT_SECONDS:-3}
@@ -148,6 +157,19 @@ services:
               device_ids: ["${GPU_WORKER_1_DEVICE:-1}"]
               capabilities: ["gpu"]
 
+  portrait-video-job-worker:
+    <<: *gpu-worker-common
+    container_name: portrait-video-job-worker
+    hostname: portrait-video-job-worker
+    command: ["python", "-m", "app.portrait_video_job_worker"]
+    ports: []
+    healthcheck:
+      disable: true
+    environment:
+      <<: *worker-environment
+      VIDEO_JOB_WORKER_IN_PROCESS: "false"
+      NVIDIA_VISIBLE_DEVICES: ${VIDEO_JOB_WORKER_GPU_DEVICES:-0}
+      NVIDIA_DRIVER_CAPABILITIES: "compute,utility"
   portrait-stream-worker:
     <<: *gpu-worker-common
     container_name: portrait-stream-worker

@@ -2,7 +2,7 @@
 
 面向 Ubuntu + Docker + NVIDIA GPU 的 ONNX 推理服务。服务通过 FastAPI 暴露接口，按 GPU 拆成多个 worker，适合给人像识别、人像检索、ReID 等业务项目提供共享推理能力。
 
-当前版本：`0.7.1`。本版本在 `0.7.0` 单凭证优先基础上，正式收口租户目录与管理员一键开通体验：管理员可在控制台“接入中心”或 `/v1/access/tenants` 只填写租户名称，由后台生成稳定 `tenant_id`、默认接入应用和一次性 API Key；业务系统默认只携带单租户 API Key 即可完成租户、权限、限流、配额、调用日志和审计归属解析，多租户 JWT 或共享凭证场景仍保留显式 `X-Tenant-ID`。
+当前版本：`0.8.0`。本版本在租户目录与单凭证接入基础上，完成持久化视频任务、租户令牌边界、分块上传、批量统计落盘、严格生产门禁和结果灯箱可访问性升级；业务系统仍优先使用单租户应用 API Key，多租户 JWT 或平台运维场景保留显式 `X-Tenant-ID`。
 
 ## PortraitHub v1 平台接口
 
@@ -24,14 +24,14 @@
 - 当你想要最简单的生产拓扑时，`pgvector` 是首选向量后端。
 - 当特征规模、QPS、过滤需求或运维隔离要求超过 PostgreSQL 时，推荐改用 Qdrant。
 - MinIO 或其他 S3 兼容服务用于存放上传的底库图片、快照以及视频/对象载荷，数据库只保存对象 key 和元数据。
-- Redis 只作为分布式任务队列的可选转交通道，本地默认队列仍适合单进程开发。
+- Redis Streams 是生产视频任务的持久化队列；本地开发使用磁盘 spool，同样支持进程重启后恢复、可见性超时重新认领和显式确认，不再依赖 API 进程内的后台任务。
 
 算法流水线升级：
 
 - 图像质量评分现在包含模糊、曝光、过曝/欠曝裁剪、对比度、尺寸、宽高比、色彩丰富度和噪声信号。
 - 图像解码增加了内容 SHA-256 以及感知平均哈希/差异哈希；批量图像解码会把完全重复和近重复输入标记为 `duplicate_of`。
 - 图像上传现在通过同一条共享路径校验扩展名、文件签名、解码格式和像素上限，供旧接口和 v1 接口共用。`decode_upload_images()`、图库批量检索和批量人像/衣着比对均采用有界并发，分别由 `MAX_IMAGE_DECODE_CONCURRENCY`、`MAX_GALLERY_SEARCH_BATCH_CONCURRENCY` 和 `MAX_COMPARE_BATCH_CONCURRENCY` 控制，失败时会取消进行中任务并停止启动后续项。
-- 视频上传会先用容器签名校验支持的扩展名，再进行 OpenCV 解码，从而降低伪装媒体的注入风险。
+- 视频上传以 `VIDEO_UPLOAD_CHUNK_BYTES` 分块写入私有暂存目录，并在写入过程中执行大小上限与容器签名校验；worker 直接从暂存文件解码，避免整段视频在请求进程中重复驻留内存。
 - 离线视频抽帧采用“区间 + 均匀”混合过采样，并结合质量、多样性、时间覆盖和场景片段选择，让受限帧数仍能覆盖整段视频、覆盖不同镜头，并避免低价值近重复帧。
 - 视频和视频流抽帧现在会增加感知帧指纹和 MMR 风格的帧选择，抑制近重复候选，同时保留高质量且多样的证据。
 - 视频流和不可 seek 视频抽帧在质量/多样性选择之前也会使用有界的顺序候选池，同时继续遵守读取超时。
@@ -70,6 +70,7 @@ v1 已加入的生产加固：
 - `RBAC_ENABLED`、`JWT_ALGORITHM`、`JWT_SECRET`、`JWT_SECRET_ID`、`JWT_SECRET_KEYRING`、`JWT_PUBLIC_KEY`、`JWT_PUBLIC_KEY_PATH`、`JWT_PUBLIC_KEYRING`、`JWT_ISSUER`、`JWT_AUDIENCE`、`JWT_REQUIRE_EXP`、`JWT_REQUIRE_ISS` 和 `JWT_REQUIRE_AUD` 用于开启可选 JWT 角色校验；默认兼容 HS256，生产可切换 RS256/ES256 并使用公钥验签。
 - RBAC 角色采用最小权限：`viewer` 只能读底库/任务/流/模型元数据；`operator` 可以推理/比对、读取管理状态和指标；`auditor` 可以读取管理状态、导出和指标，但没有修改权限；生物特征推理/比对要求 `operator`、`algorithm` 或 `admin`；调试模型输出需要模型写权限；管理导出/保留使用独立的管理权限。
 - `AUTH_REQUIRED` 会在既没有 `API_TOKEN` 也没有 RBAC 凭证时让受保护接口失败关闭；Docker Compose 默认设为 `true`。
+- 全局 `API_TOKEN` 用于 v1 时必须通过 `API_TOKEN_TENANT_ID` 绑定单一租户；只有明确承担平台级跨租户运维时才可设置 `API_TOKEN_ALLOW_TENANT_OVERRIDE=true`。业务接入仍优先使用带 scope 的应用 API Key。
 - `DEBUG_ENDPOINTS_ENABLED` 控制 `/debug/model-output`，默认 `false`。
 - `ENABLE_API_DOCS` 控制 `/docs`、`/redoc` 和 `/openapi.json`；Docker Compose 在生产环境默认设为 `false`。
 - `TRUSTED_HOSTS` 通过 `TrustedHostMiddleware` 执行 Host 头白名单；Docker Compose 默认允许回环地址和 worker 服务名。
@@ -79,7 +80,7 @@ v1 已加入的生产加固：
 - `PORTRAIT_STORAGE_BACKEND`、`PORTRAIT_VECTOR_BACKEND` 和 `PORTRAIT_OBJECT_STORAGE_BACKEND` 提供 PostgreSQL、pgvector/Qdrant 以及 S3 兼容存储的生产后端适配器。
 - `REQUIRE_ENCRYPTION` 会在缺少 `ENCRYPTION_KEY` 时让敏感载荷保护失败关闭；Docker Compose 默认设为 `true`。
 - `ENCRYPTION_KEY_ID` 用于标记新加密载荷，而 `ENCRYPTION_KEYRING` 会在密钥轮换期间保留已退役密钥，供只读解密使用。
-- `TASK_QUEUE_BACKEND`、`REDIS_URL` 和 `STREAM_EVENT_STATE_PATH` 定义了外部 worker 的任务队列和流事件契约。
+- `TASK_QUEUE_BACKEND`、`REDIS_URL`、`TASK_QUEUE_DIR`、`TASK_QUEUE_VISIBILITY_TIMEOUT_SECONDS` 和 `STREAM_EVENT_STATE_PATH` 定义持久化 worker 的队列、重试认领和流事件契约；生产要求 Redis 且 API 进程设置 `VIDEO_JOB_WORKER_IN_PROCESS=false`。
 - `model-capabilities.yml` 记录哪些模态是真实模型驱动，哪些仍是兜底或占位。
 - `MODEL_CONFIG_READ_FAIL_CLOSED` 会让缺失、不可读或格式错误的 `models.yml` 在启动/重载时默认失败关闭，而不是静默以空配置运行。
 - `RATE_LIMIT_PER_MINUTE` 和 `RATE_LIMIT_BURST` 开启按租户/路径的令牌桶限流；Docker Compose 默认每分钟 `120`，突发 `240`。
@@ -106,6 +107,7 @@ v1 已加入的生产加固：
 - `tools/portrait_cutover_check.py --regression-manifest <held-out.yml> --validate-onnx --json` 是最终的真实模型门禁。它要求生产能力状态、非兜底模型 ID、匹配的产物 SHA-256、可选的 ONNXRuntime 加载检查，以及通过回归门禁。
 - 精度回归门禁可直接参考 `python tools/portrait_model_regression.py --manifest examples/portrait-model-regression.example.yml --json`；上线前把示例分数替换成留出集评估结果。
 - 长期运行的流拉取应在 API 进程外执行：`python -m app.portrait_stream_worker_daemon`；Docker Compose 已包含对应的 `portrait-stream-worker` 服务。
+- 离线视频任务应由 `python -m app.portrait_video_job_worker` 独立消费；Compose、`deploy/portrait-video-job-worker.service` 和 `deploy/k8s-video-job-worker.yaml` 已提供部署入口。API 与 worker 必须共享 `VIDEO_JOB_INPUT_DIR`，生产队列使用 Redis Streams。
 - 流 daemon 会先通过每个 stream 的原子 lock 文件做进程级兜底，再写入可过期的 stream worker lease，避免多个 daemon 进程重复拉取同一条流。
 - `deploy/portrait-stream-worker.service` 和 `deploy/k8s-stream-worker.yaml` 提供流 worker 进程的 systemd 和 Kubernetes 部署模板，而 `tools/portrait_stream_worker_health.py --json` 会报告进程内 worker 心跳是否过期。
 - `.github/workflows/ci.yml` 运行 Python 测试、Node SDK 契约测试、部署检查和示例回归门禁；`.github/workflows/security-audit.yml` 会在依赖变更时以及每周运行 `pip-audit`。
@@ -284,6 +286,8 @@ GET /model-package
 ```
 
 控制台 `/console` 的侧栏按「总览 / 智能分析 / 比对检索 / 人员库 / 接入中心 / 模型与评估 / 运维合规」组织，导航配置由 `frontend/console/views/navigation.js` 统一维护。总览页提供图片解析、视频任务、实时视频流、人像比对、以图搜人、人员注册、接入配置和模型管理等主流程快捷入口。“解析结果”视图会集中展示图片解析、视频解析和视频流解析输出：图片解析保留当前会话最近结果，视频解析汇总已完成任务的人像帧缩略图，视频流解析展示流状态、worker 会话和最近事件快照。人员库入库生成的底库特征缩略图会随人员详情返回，并在人员管理页的“特征图片列表”中按模态、质量分和模型信息展示；人员库还提供独立“特征重建”页，复用 `/v1/gallery/reindex` 按模态和模型重建向量索引，默认以预演模式核验影响范围。
+
+解析结果灯箱打开后会将焦点移到关闭按钮，在弹窗内循环 Tab 焦点，并在 Escape 或点击遮罩关闭后把焦点还给原缩略图。
 
 通用图像识别接口：
 
@@ -749,6 +753,10 @@ http://gpu-worker-1:8000/predict
 - `MAX_PIPELINE_FRAMES`: `/infer/person-tracks` 单次请求帧数量上限，默认 `16`。
 - `MAX_VIDEO_BYTES`: `/infer/video/person-tracks` 单个视频文件大小上限，默认 `104857600`。
 - `VIDEO_FRAME_INTERVAL`: 离线视频默认抽帧间隔，默认 `15`。
+- `VIDEO_UPLOAD_CHUNK_BYTES` / `VIDEO_JOB_INPUT_DIR`: 视频上传分块大小和私有暂存目录；API 与独立视频 worker 必须共享该目录。
+- `TASK_QUEUE_DIR` / `TASK_QUEUE_VISIBILITY_TIMEOUT_SECONDS` / `TASK_QUEUE_POLL_INTERVAL_SECONDS`: 本地持久化 spool、失联任务重新认领和 worker 轮询参数。
+- `VIDEO_JOB_WORKER_IN_PROCESS`: 本地开发可启用内置 worker；生产必须设为 `false` 并运行独立 worker。
+- `ACCESS_STATS_FLUSH_INTERVAL_SECONDS`: 应用调用统计批量落盘周期；配置变更和服务关闭仍会立即刷新。
 - `MAX_VIDEO_FRAMES`: 离线视频单次最多抽取帧数，默认 `64`。
 - `MAX_REQUEST_BODY_BYTES`: 全局 HTTP 请求体大小上限，默认 `805306368`；设为 `0` 可关闭。
 - `STREAM_FRAME_INTERVAL`: 视频流默认抽帧间隔，默认 `15`。
@@ -782,6 +790,7 @@ http://gpu-worker-1:8000/predict
 - `JWT_REQUIRE_TENANT`: RBAC JWT 是否必须通过 `tenant_id`、`tenant` 或 `tenants` claim 绑定请求租户；默认 `true`。单租户 claim 可自动解析，多租户 claim 需要请求头显式选择。
 - `JWT_REQUIRE_EXP` / `JWT_REQUIRE_ISS` / `JWT_REQUIRE_AUD`: RBAC JWT 是否必须携带过期时间、签发方和受众；默认 `true`。
 - `API_TOKEN`: 简单接口令牌；设置后业务接口、调试接口、模型管理接口和深度 ready 需要携带令牌。若 `AUTH_REQUIRED=true`，生产/容器启动前应设置 `API_TOKEN` 或启用可用 RBAC。
+- `API_TOKEN_TENANT_ID` / `API_TOKEN_ALLOW_TENANT_OVERRIDE`: v1 全局令牌的租户边界。默认必须绑定单租户；显式 override 仅用于受控的平台级跨租户运维。
 - `MAX_PUBLIC_METADATA_BYTES` / `MAX_PUBLIC_METADATA_DEPTH` / `MAX_PUBLIC_METADATA_KEYS` / `MAX_PUBLIC_METADATA_STRING_LENGTH`: 用户可写 metadata/settings 的大小和复杂度限制。
 - `MAX_AUDIT_PAYLOAD_BYTES` / `MAX_AUDIT_DEPTH` / `MAX_AUDIT_KEYS` / `MAX_AUDIT_LIST_ITEMS` / `MAX_AUDIT_STRING_LENGTH`: 脱敏审计 payload 的大小和复杂度限制。
 - `API_LIST_DEFAULT_LIMIT` / `MAX_API_LIST_LIMIT` / `STREAM_EVENT_LIST_DEFAULT_LIMIT` / `MAX_STREAM_EVENT_LIST_LIMIT`: 列表、导出和流事件响应的分页大小限制。

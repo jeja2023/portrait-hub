@@ -1,0 +1,63 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: portrait-video-job-worker
+  labels:
+    app: portrait-video-job-worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: portrait-video-job-worker
+  template:
+    metadata:
+      labels:
+        app: portrait-video-job-worker
+    spec:
+      containers:
+        - name: video-job-worker
+          image: portrait-hub:latest
+          command: ["python", "-m", "app.portrait_video_job_worker"]
+          env:
+            - name: VIDEO_JOB_WORKER_IN_PROCESS
+              value: "false"
+          envFrom:
+            - secretRef:
+                name: portrait-hub-secrets
+            - configMapRef:
+                name: portrait-hub-config
+          volumeMounts:
+            - name: models
+              mountPath: /models
+              readOnly: true
+            - name: model-config
+              mountPath: /workspace/models.yml
+              subPath: models.yml
+              readOnly: true
+            - name: model-capabilities
+              mountPath: /workspace/model-capabilities.yml
+              subPath: model-capabilities.yml
+              readOnly: true
+            - name: runtime-state
+              mountPath: /workspace/runtime-state
+          resources:
+            requests:
+              cpu: "1"
+              memory: "1Gi"
+            limits:
+              cpu: "4"
+              memory: "8Gi"
+              nvidia.com/gpu: "1"
+      volumes:
+        - name: models
+          persistentVolumeClaim:
+            claimName: portrait-models
+        - name: model-config
+          configMap:
+            name: portrait-hub-models
+        - name: model-capabilities
+          configMap:
+            name: portrait-hub-capabilities
+        - name: runtime-state
+          persistentVolumeClaim:
+            claimName: portrait-runtime-state

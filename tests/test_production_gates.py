@@ -4,6 +4,9 @@ from app import production_gates, settings
 def test_production_profile_requires_external_services(monkeypatch) -> None:
     monkeypatch.setattr(settings, "PORTRAIT_RUNTIME_PROFILE", "production")
     monkeypatch.setattr(settings, "PRODUCTION_EXTERNAL_SERVICES_REQUIRED", True)
+    monkeypatch.setattr(settings, "API_TOKEN", "platform-token")
+    monkeypatch.setattr(settings, "API_TOKEN_TENANT_ID", "")
+    monkeypatch.setattr(settings, "API_TOKEN_ALLOW_TENANT_OVERRIDE", False)
     monkeypatch.setattr(settings, "PORTRAIT_STORAGE_BACKEND", "json")
     monkeypatch.setattr(settings, "POSTGRES_DSN", "")
     monkeypatch.setattr(settings, "PORTRAIT_VECTOR_BACKEND", "local")
@@ -12,6 +15,7 @@ def test_production_profile_requires_external_services(monkeypatch) -> None:
     monkeypatch.setattr(settings, "S3_BUCKET", "")
     monkeypatch.setattr(settings, "S3_REGION", "")
     monkeypatch.setattr(settings, "TASK_QUEUE_BACKEND", "local")
+    monkeypatch.setattr(settings, "VIDEO_JOB_WORKER_IN_PROCESS", True)
     monkeypatch.setattr(settings, "REDIS_URL", "")
     monkeypatch.setattr(settings, "OPENTELEMETRY_ENABLED", False)
     monkeypatch.setattr(settings, "OTEL_EXPORTER_OTLP_ENDPOINT", "")
@@ -28,12 +32,17 @@ def test_production_profile_requires_external_services(monkeypatch) -> None:
     assert "生产环境中 PORTRAIT_VECTOR_BACKEND 必须为 pgvector 或 qdrant" in failures
     assert "生产环境中 PORTRAIT_OBJECT_STORAGE_BACKEND 必须为 s3" in failures
     assert "生产环境中 TASK_QUEUE_BACKEND 必须为 redis" in failures
+    assert any("API_TOKEN_TENANT_ID" in failure for failure in failures)
+    assert "生产环境中 VIDEO_JOB_WORKER_IN_PROCESS 必须为 false" in failures
     assert "生产环境中 OPENTELEMETRY_ENABLED 必须为 true" in failures
 
 
 def test_production_profile_accepts_externalized_pgvector_stack(monkeypatch) -> None:
     monkeypatch.setattr(settings, "PORTRAIT_RUNTIME_PROFILE", "prod")
     monkeypatch.setattr(settings, "PRODUCTION_EXTERNAL_SERVICES_REQUIRED", True)
+    monkeypatch.setattr(settings, "API_TOKEN", "platform-token")
+    monkeypatch.setattr(settings, "API_TOKEN_TENANT_ID", "tenant-a")
+    monkeypatch.setattr(settings, "API_TOKEN_ALLOW_TENANT_OVERRIDE", False)
     monkeypatch.setattr(settings, "PORTRAIT_STORAGE_BACKEND", "postgres")
     monkeypatch.setattr(settings, "POSTGRES_DSN", "postgresql://portrait:secret@db/portrait")
     monkeypatch.setattr(settings, "PORTRAIT_VECTOR_BACKEND", "pgvector")
@@ -42,6 +51,7 @@ def test_production_profile_accepts_externalized_pgvector_stack(monkeypatch) -> 
     monkeypatch.setattr(settings, "S3_BUCKET", "portrait-prod")
     monkeypatch.setattr(settings, "S3_REGION", "us-east-1")
     monkeypatch.setattr(settings, "TASK_QUEUE_BACKEND", "redis")
+    monkeypatch.setattr(settings, "VIDEO_JOB_WORKER_IN_PROCESS", False)
     monkeypatch.setattr(settings, "REDIS_URL", "redis://redis:6379/0")
     monkeypatch.setattr(settings, "OPENTELEMETRY_ENABLED", True)
     monkeypatch.setattr(settings, "OTEL_EXPORTER_OTLP_ENDPOINT", "http://otel:4318/v1/traces")

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, cast
+from typing import Any
 
 import cv2
 import numpy as np
@@ -273,7 +273,7 @@ def arcface_aligned_crop(
         return crop
     rgb = np.asarray(image.convert("RGB"), dtype=np.uint8)
     aligned = cv2.warpAffine(rgb, matrix, (output_width, output_height), flags=cv2.INTER_LINEAR, borderValue=(0, 0, 0))
-    return cast(Image.Image, Image.fromarray(aligned))  # type: ignore[no-untyped-call]
+    return Image.fromarray(aligned)
 
 
 async def apply_arcface_embeddings(image: Image.Image, faces: list[dict[str, Any]]) -> bool:

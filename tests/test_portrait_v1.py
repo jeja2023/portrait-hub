@@ -683,11 +683,11 @@ def test_v1_video_job_create_rolls_back_job_when_queue_fails(monkeypatch) -> Non
         def enqueue(self, queue, payload):
             raise HTTPException(status_code=503, detail="任务队列写入失败")
 
-    async def fake_read_video_file(file):
-        return b"video"
+    async def fake_stage_video_upload(file, tenant_id, job_id):
+        return f"test/{job_id}.mp4"
 
     monkeypatch.setattr(routes_portrait_jobs, "TASK_QUEUE", FailingTaskQueue())
-    monkeypatch.setattr(routes_portrait_jobs, "read_video_file", fake_read_video_file)
+    monkeypatch.setattr(routes_portrait_jobs, "stage_video_upload", fake_stage_video_upload)
 
     response = client.post(
         "/v1/jobs/video",
@@ -710,14 +710,14 @@ def test_v1_video_job_create_rolls_back_job_when_audit_fails(monkeypatch) -> Non
 
             return Message()
 
-    async def fake_read_video_file(file):
-        return b"video"
+    async def fake_stage_video_upload(file, tenant_id, job_id):
+        return f"test/{job_id}.mp4"
 
     def fail_audit(*args, **kwargs):
         raise HTTPException(status_code=503, detail="状态写入失败")
 
     monkeypatch.setattr(routes_portrait_jobs, "TASK_QUEUE", CapturingTaskQueue())
-    monkeypatch.setattr(routes_portrait_jobs, "read_video_file", fake_read_video_file)
+    monkeypatch.setattr(routes_portrait_jobs, "stage_video_upload", fake_stage_video_upload)
     monkeypatch.setattr(routes_portrait_jobs, "audit_event", fail_audit)
     monkeypatch.setattr("app.portrait_jobs.delete_video_job", lambda tenant_id, job_id: None)
 
@@ -745,15 +745,12 @@ def test_v1_video_job_create_response_does_not_echo_source_filename(monkeypatch)
 
             return Message()
 
-    async def fake_read_video_file(file):
-        return b"video"
+    async def fake_stage_video_upload(file, tenant_id, job_id):
+        return f"test/{job_id}.mp4"
 
-    async def fake_run_video_job(*args, **kwargs):
-        return None
 
     monkeypatch.setattr(routes_portrait_jobs, "TASK_QUEUE", CapturingTaskQueue())
-    monkeypatch.setattr(routes_portrait_jobs, "read_video_file", fake_read_video_file)
-    monkeypatch.setattr(routes_portrait_jobs, "run_video_job", fake_run_video_job)
+    monkeypatch.setattr(routes_portrait_jobs, "stage_video_upload", fake_stage_video_upload)
     monkeypatch.setattr(routes_portrait_jobs, "audit_event", lambda *args, **kwargs: None)
 
     response = client.post(
@@ -890,10 +887,10 @@ def test_v1_video_job_rejects_out_of_range_numeric_controls(monkeypatch) -> None
     client = TestClient(app)
     VIDEO_JOBS.clear()
 
-    async def fake_read_video_file(file):
-        return b"video"
+    async def fake_stage_video_upload(file, tenant_id, job_id):
+        return f"test/{job_id}.mp4"
 
-    monkeypatch.setattr(routes_portrait_jobs, "read_video_file", fake_read_video_file)
+    monkeypatch.setattr(routes_portrait_jobs, "stage_video_upload", fake_stage_video_upload)
 
     bad_interval = client.post(
         "/v1/jobs/video",

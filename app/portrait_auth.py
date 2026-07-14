@@ -11,6 +11,7 @@ from typing import Any
 from fastapi import Header, HTTPException, status
 
 from app.settings import (
+    API_TOKEN,
     JWT_AUDIENCE,
     JWT_ALGORITHM,
     JWT_ISSUER,
@@ -351,8 +352,6 @@ async def require_permission(
     x_tenant_id: str | None = Header(default=None),
     x_api_key: str | None = Header(default=None),
 ) -> None:
-    if not RBAC_ENABLED:
-        return
     tenant_id = optional_header_value(x_tenant_id)
     api_key = optional_header_value(x_api_key)
     if api_key:
@@ -363,6 +362,13 @@ async def require_permission(
             if application_scopes_allow_permission(application.get("scopes"), permission):
                 return
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=f"缺少权限：{permission}")
+        if API_TOKEN and hmac.compare_digest(api_key, API_TOKEN):
+            return
+
+    if API_TOKEN and authorization and hmac.compare_digest(authorization, f"Bearer {API_TOKEN}"):
+        return
+    if not RBAC_ENABLED:
+        return
     if not authorization or not authorization.startswith("Bearer "):
         raise unauthorized("missing bearer JWT")
     claims = verify_hs256_jwt(authorization.removeprefix("Bearer ").strip())
@@ -370,7 +376,6 @@ async def require_permission(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="JWT 与租户不匹配")
     if not has_permission(roles_from_claims(claims), permission):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=f"缺少权限：{permission}")
-
 
 def permission_dependency(permission: str) -> Callable[..., Any]:
     async def dependency(

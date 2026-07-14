@@ -1,5 +1,7 @@
 import asyncio
 import json
+import os
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -16,6 +18,7 @@ from app import portrait_model_capabilities
 from app import portrait_state
 from app import portrait_stream_worker
 from app import portrait_stream_worker_daemon
+from app import portrait_video_job_worker
 from tools import portrait_stream_worker_health
 from app import portrait_streams
 from app import portrait_thresholds
@@ -28,7 +31,7 @@ from app.portrait_jobs import run_video_job
 from app.portrait_object_storage import LocalObjectStore, S3ObjectStore, object_key_for
 from app.portrait_postgres import postgres_health, vector_literal
 from app.portrait_streams import STREAMS, create_stream, start_stream, stop_stream, stream_key
-from app.portrait_task_queue import TASK_MESSAGES, LocalTaskQueue, RedisTaskQueue
+from app.portrait_task_queue import TASK_MESSAGES, LocalTaskQueue, QueueMessage, RedisTaskQueue
 from app.portrait_vector_store import PgvectorVectorStore, QdrantVectorStore
 
 
@@ -1570,6 +1573,7 @@ def test_audit_chain_verifier_detects_tampering(workspace_tmp_path) -> None:
 def test_local_task_queue_rolls_back_message_when_state_write_fails(monkeypatch, workspace_tmp_path) -> None:
     TASK_MESSAGES.clear()
     monkeypatch.setattr("app.portrait_task_queue.TASK_QUEUE_STATE_PATH", workspace_tmp_path / "queue.jsonl")
+    monkeypatch.setattr("app.portrait_task_queue.TASK_QUEUE_DIR", workspace_tmp_path / "queue-spool")
 
     def fail_append(path, payload, *, fail_closed=False):
         raise HTTPException(status_code=503, detail="状态写入失败")
@@ -1582,14 +1586,17 @@ def test_local_task_queue_rolls_back_message_when_state_write_fails(monkeypatch,
     assert TASK_MESSAGES == []
 
 
-def test_redis_task_queue_falls_back_locally_when_enqueue_fails(monkeypatch, workspace_tmp_path, caplog) -> None:
+def test_redis_task_queue_fails_closed_when_enqueue_fails(monkeypatch, workspace_tmp_path, caplog) -> None:
     caplog.set_level("WARNING")
     TASK_MESSAGES.clear()
     monkeypatch.setattr("app.portrait_task_queue.REDIS_URL", "redis://:secret-token@redis.internal/0")
     monkeypatch.setattr("app.portrait_task_queue.TASK_QUEUE_STATE_PATH", workspace_tmp_path / "queue.jsonl")
 
     class FailingRedisClient:
-        def lpush(self, *args, **kwargs):
+        def xgroup_create(self, *args, **kwargs):
+            return True
+
+        def xadd(self, *args, **kwargs):
             raise RuntimeError("redis://:secret-token@redis.internal/0 unavailable")
 
     class FailingRedisModule:
@@ -1600,11 +1607,76 @@ def test_redis_task_queue_falls_back_locally_when_enqueue_fails(monkeypatch, wor
 
     monkeypatch.setattr("app.portrait_task_queue.redis", FailingRedisModule())
 
-    message = RedisTaskQueue().enqueue("video_jobs", {"job_id": "job_fallback"})
+    with pytest.raises(RuntimeError):
+        RedisTaskQueue().enqueue("video_jobs", {"job_id": "job_failed"})
 
-    assert message.status == "queued_local_fallback"
-    assert TASK_MESSAGES == [message]
-    assert "task_enqueued_local_fallback" in (workspace_tmp_path / "queue.jsonl").read_text(encoding="utf-8")
+    assert TASK_MESSAGES == []
     assert "RuntimeError" in caplog.text
     for secret in ["secret-token", "redis.internal"]:
         assert secret not in caplog.text
+
+def test_local_task_queue_claim_ack_and_release_are_durable(monkeypatch, workspace_tmp_path) -> None:
+    TASK_MESSAGES.clear()
+    queue_dir = workspace_tmp_path / "queue-spool"
+    monkeypatch.setattr("app.portrait_task_queue.TASK_QUEUE_DIR", queue_dir)
+    monkeypatch.setattr("app.portrait_task_queue.TASK_QUEUE_STATE_PATH", workspace_tmp_path / "queue.jsonl")
+
+    producer = LocalTaskQueue()
+    first = producer.enqueue("video_jobs", {"job_id": "job_0123456789abcdef", "tenant_id": "tenant-a"})
+    claimed = LocalTaskQueue().claim("video_jobs", "worker-a")
+
+    assert claimed is not None
+    assert claimed.message_id == first.message_id
+    assert claimed.payload["tenant_id"] == "tenant-a"
+    lease_path = Path(str(claimed.receipt))
+    os.utime(lease_path, (1, 1))
+    LocalTaskQueue().heartbeat(claimed, "worker-a")
+    assert lease_path.stat().st_mtime > 1
+    LocalTaskQueue().release(claimed)
+
+    reclaimed = LocalTaskQueue().claim("video_jobs", "worker-b")
+    assert reclaimed is not None
+    assert reclaimed.message_id == first.message_id
+    LocalTaskQueue().ack(reclaimed)
+    assert list(queue_dir.rglob("msg_*.json")) == []
+
+
+@pytest.mark.asyncio
+async def test_video_worker_acknowledges_invalid_queue_messages(monkeypatch) -> None:
+    message = QueueMessage(message_id="msg_0123456789abcdef", queue="video_jobs", payload={"tenant_id": "tenant-a"})
+
+    class FakeQueue:
+        acknowledged = False
+        released = False
+
+        def claim(self, queue: str, consumer_id: str, block_seconds: float):
+            return message
+
+        def ack(self, claimed: QueueMessage) -> None:
+            assert claimed is message
+            self.acknowledged = True
+
+        def release(self, claimed: QueueMessage) -> None:
+            self.released = True
+
+    queue = FakeQueue()
+    monkeypatch.setattr(portrait_video_job_worker, "TASK_QUEUE", queue)
+
+    result = await portrait_video_job_worker.run_worker_once()
+
+    assert result["status"] == "discarded"
+    assert result["processed_count"] == 1
+    assert queue.acknowledged is True
+    assert queue.released is False
+
+
+def test_local_task_queue_cancellation_marker_is_durable(monkeypatch, workspace_tmp_path) -> None:
+    queue_dir = workspace_tmp_path / "queue-spool"
+    monkeypatch.setattr("app.portrait_task_queue.TASK_QUEUE_DIR", queue_dir)
+
+    LocalTaskQueue().mark_cancelled("video_jobs", "tenant-a", "job_0123456789abcdef")
+
+    assert LocalTaskQueue().is_cancelled("video_jobs", "tenant-a", "job_0123456789abcdef") is True
+    assert LocalTaskQueue().is_cancelled("video_jobs", "tenant-b", "job_0123456789abcdef") is False
+    LocalTaskQueue().clear_cancelled("video_jobs", "tenant-a", "job_0123456789abcdef")
+    assert LocalTaskQueue().is_cancelled("video_jobs", "tenant-a", "job_0123456789abcdef") is False
