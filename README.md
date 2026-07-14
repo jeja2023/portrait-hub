@@ -8,7 +8,7 @@
 
 服务现在还提供 PortraitHub v1 接口，用于人像中台方案：
 
-- `/v1/infer/faces`、`/v1/infer/persons`、`/v1/infer/pose`、`/v1/infer/appearance`、`/v1/infer/gait`
+- `/v1/vision/infer`、`/v1/vision/results`、`/v1/infer/tracks`、`/v1/infer/faces`、`/v1/infer/persons`、`/v1/infer/pose`、`/v1/infer/appearance`、`/v1/infer/gait`
 - `/v1/compare/faces`、`/v1/compare/persons`、`/v1/compare/gait`、`/v1/fusion/compare`
 - `/v1/gallery/enroll`、`/v1/gallery/search`、`/v1/gallery/{person_id}`、`/v1/gallery/reindex`
 - `/v1/jobs/video`、`/v1/jobs/{job_id}`、`/v1/jobs/{job_id}/result`、`/v1/jobs/{job_id}/cancel`
@@ -30,7 +30,7 @@
 
 - 图像质量评分现在包含模糊、曝光、过曝/欠曝裁剪、对比度、尺寸、宽高比、色彩丰富度和噪声信号。
 - 图像解码增加了内容 SHA-256 以及感知平均哈希/差异哈希；批量图像解码会把完全重复和近重复输入标记为 `duplicate_of`。
-- 图像上传现在通过同一条共享路径校验扩展名、文件签名、解码格式和像素上限，供旧接口和 v1 接口共用。`decode_upload_images()`、图库批量检索和批量人像/衣着比对均采用有界并发，分别由 `MAX_IMAGE_DECODE_CONCURRENCY`、`MAX_GALLERY_SEARCH_BATCH_CONCURRENCY` 和 `MAX_COMPARE_BATCH_CONCURRENCY` 控制，失败时会取消进行中任务并停止启动后续项。
+- 图像上传现在通过同一条共享路径校验扩展名、文件签名、解码格式和像素上限，供所有 v1 图片接口共用。`decode_upload_images()`、图库批量检索和批量人像/衣着比对均采用有界并发，分别由 `MAX_IMAGE_DECODE_CONCURRENCY`、`MAX_GALLERY_SEARCH_BATCH_CONCURRENCY` 和 `MAX_COMPARE_BATCH_CONCURRENCY` 控制，失败时会取消进行中任务并停止启动后续项。
 - 视频上传以 `VIDEO_UPLOAD_CHUNK_BYTES` 分块写入私有暂存目录，并在写入过程中执行大小上限与容器签名校验；worker 直接从暂存文件解码，避免整段视频在请求进程中重复驻留内存。
 - 离线视频抽帧采用“区间 + 均匀”混合过采样，并结合质量、多样性、时间覆盖和场景片段选择，让受限帧数仍能覆盖整段视频、覆盖不同镜头，并避免低价值近重复帧。
 - 视频和视频流抽帧现在会增加感知帧指纹和 MMR 风格的帧选择，抑制近重复候选，同时保留高质量且多样的证据。
@@ -223,10 +223,9 @@ curl http://127.0.0.1:9001/ready
 GET /health
 GET /ready
 GET /ready/deep
-GET /models
-GET /model-configs
 GET /metrics
-GET /model-info?project_name=portrait_hub&model_name=yolov8n.onnx
+GET /v1/models
+GET /v1/models/{model_id}
 ```
 
 推理：
@@ -265,48 +264,45 @@ curl -X POST http://127.0.0.1:9001/predict \
 运维接口：
 
 ```bash
-POST /infer/persons
-POST /infer/person-embeddings
-POST /infer/person-tracks
-POST /infer/video/person-tracks
-POST /infer/stream/person-tracks
-POST /vision/infer
-POST /vision/batch-infer
+POST /v1/vision/infer
+POST /v1/infer/tracks
+POST /v1/jobs/video
+POST /v1/streams
 POST /v1/compare/batch
 POST /v1/gallery/search/batch
 POST /v1/admin/backup
 WS   /ws/jobs/{job_id}
 WS   /ws/streams/{stream_id}
 POST /debug/model-output
-POST /warmup
-POST /reload
-POST /unload
-POST /reload-config
-GET /model-package
+POST /v1/admin/models/warmup
+POST /v1/admin/models/reload
+POST /v1/admin/models/reload-config
+POST /v1/models/{model_id}/unload
+GET  /v1/models/{model_id}
 ```
 
-控制台 `/console` 的侧栏按「总览 / 智能分析 / 比对检索 / 人员库 / 接入中心 / 模型与评估 / 运维合规」组织，导航配置由 `frontend/console/views/navigation.js` 统一维护。总览页提供图片解析、视频任务、实时视频流、人像比对、以图搜人、人员注册、接入配置和模型管理等主流程快捷入口。“解析结果”视图会集中展示图片解析、视频解析和视频流解析输出：图片解析保留当前会话最近结果，视频解析汇总已完成任务的人像帧缩略图，视频流解析展示流状态、worker 会话和最近事件快照。人员库入库生成的底库特征缩略图会随人员详情返回，并在人员管理页的“特征图片列表”中按模态、质量分和模型信息展示；人员库还提供独立“特征重建”页，复用 `/v1/gallery/reindex` 按模态和模型重建向量索引，默认以预演模式核验影响范围。
+控制台 `/console` 的侧栏按「总览 / 智能分析 / 比对检索 / 人员库 / 接入中心 / 模型与评估 / 运维合规」组织，导航配置由 `frontend/console/views/navigation.js` 统一维护。总览页提供图片解析、视频任务、实时视频流、人像比对、以图搜人、人员注册、接入配置和模型管理等主流程快捷入口。“解析结果”视图会集中展示图片解析、视频解析和视频流解析输出：图片解析会从 `/v1/vision/results` 读取当前租户最近结果，视频解析汇总已完成任务的人像帧缩略图，视频流解析展示流状态、worker 会话和最近事件快照。人员库入库生成的底库特征缩略图会随人员详情返回，并在人员管理页的“特征图片列表”中按模态、质量分和模型信息展示；人员库还提供独立“特征重建”页，复用 `/v1/gallery/reindex` 按模态和模型重建向量索引，默认以预演模式核验影响范围。
 
 解析结果灯箱打开后会将焦点移到关闭按钮，在弹窗内循环 Tab 焦点，并在 Escape 或点击遮罩关闭后把焦点还给原缩略图。
 
 通用图像识别接口：
 
 ```bash
-curl -X POST http://127.0.0.1:9001/vision/infer \
+curl -X POST http://127.0.0.1:9001/v1/vision/infer \
   -F "model_id=person_detector_default" \
   -F "files=@frame-001.jpg" \
   -F "confidence=0.25" \
   -F "iou=0.45"
 ```
 
-`/vision/infer` 和 `/vision/batch-infer` 会按照 `models.yml` 中的 `task` 自动分派到检测、分类或 ReID 后处理。`model_id` 可以是 `aliases` 中的稳定别名，也可以直接使用 `project_name/model_name.onnx`。如果不使用别名，也可以传 `project_name` 和 `model_name`。单次请求默认最多 16 张图，可通过 `MAX_VISION_IMAGES` 调整。
+`/v1/vision/infer` 会按照 `models.yml` 中的 `task` 自动分派到检测、分类或 ReID 后处理。`model_id` 可以是 `aliases` 中的稳定别名，也可以直接使用 `project_name/model_name.onnx`。如果不使用别名，也可以传 `project_name` 和 `model_name`。单次请求默认最多 16 张图，可通过 `MAX_VISION_IMAGES` 调整。
 
 v1 业务层也提供批量能力：`/v1/compare/batch` 支持同数量的 `image_a[]` / `image_b[]` 成对比对，`/v1/gallery/search/batch` 支持多张查询图批量检索。批量接口支持 `async_mode=true`：服务会立即返回 `batch_id` 和 Jobs 摘要，后台执行批量比对或图库检索，调用方可以继续通过 `/v1/jobs/{batch_id}` 和 `/v1/jobs/{batch_id}/result` 查询进度与结果。视频任务和流事件可分别通过 `/ws/jobs/{job_id}` 与 `/ws/streams/{stream_id}` 获得实时快照推送。
 
 多人检测接口：
 
 ```bash
-curl -X POST http://127.0.0.1:9001/infer/persons \
+curl -X POST http://127.0.0.1:9001/v1/vision/infer \
   -F "project_name=portrait_hub" \
   -F "model_name=yolov8n.onnx" \
   -F "confidence=0.25" \
@@ -315,40 +311,44 @@ curl -X POST http://127.0.0.1:9001/infer/persons \
   -F "files=@frame-002.jpg"
 ```
 
-`/infer/persons` 会在服务内完成图片解码、letterbox 预处理、YOLO 推理、person 类过滤和 NMS，只返回每帧的人体框，不再要求调用方解析 YOLO 原始 tensor。单次请求默认最多 16 张图，每张图默认最大 10MB，可通过 `MAX_PERSON_FRAMES` 和 `MAX_IMAGE_BYTES` 调整。
+`/v1/vision/infer` 会在服务内完成图片解码、letterbox 预处理、YOLO 推理、person 类过滤和 NMS，只返回每帧的人体框，不再要求调用方解析 YOLO 原始 tensor。单次请求默认最多 16 张图，每张图默认最大 10MB，可通过 `MAX_PERSON_FRAMES` 和 `MAX_IMAGE_BYTES` 调整。
 
 响应示例：
 
 ```json
 {
   "status": "success",
-  "model": "portrait_hub/yolov8n.onnx",
-  "frame_count": 2,
-  "person_count": 3,
-  "frames": [
-    {
-      "frame_index": 0,
-      "filename": "frame-001.jpg",
-      "width": 1920,
-      "height": 1080,
-      "person_count": 2,
-      "persons": [
-        {
-          "box": [100.5, 80.2, 230.1, 420.9],
-          "score": 0.91,
-          "class_id": 0,
-          "class_name": "person"
-        }
-      ]
-    }
-  ]
+  "request_id": "req_...",
+  "data": {
+    "model": {
+      "id": "person_detector_default",
+      "key": "portrait_hub/yolov8n.onnx",
+      "task": "detection"
+    },
+    "results": [
+      {
+        "image_index": 0,
+        "width": 1920,
+        "height": 1080,
+        "detections": [
+          {
+            "box": [100.5, 80.2, 230.1, 420.9],
+            "score": 0.91,
+            "class_id": 0,
+            "class_name": "person"
+          }
+        ]
+      }
+    ],
+    "image_count": 1,
+    "result_count": 1
+  }
 }
-```
 
 ReID 向量接口：
 
 ```bash
-curl -X POST http://127.0.0.1:9001/infer/person-embeddings \
+curl -X POST http://127.0.0.1:9001/v1/vision/infer \
   -F "project_name=portrait_hub" \
   -F "model_name=osnet_ibn_x1_0.onnx" \
   -F "include_vectors=true" \
@@ -359,7 +359,7 @@ curl -X POST http://127.0.0.1:9001/infer/person-embeddings \
 组合检测 + ReID 接口：
 
 ```bash
-curl -X POST http://127.0.0.1:9001/infer/person-tracks \
+curl -X POST http://127.0.0.1:9001/v1/infer/tracks \
   -F "detector_project_name=portrait_hub" \
   -F "detector_model_name=yolov8n.onnx" \
   -F "reid_project_name=portrait_hub" \
@@ -369,32 +369,31 @@ curl -X POST http://127.0.0.1:9001/infer/person-tracks \
   -F "files=@frame-002.jpg"
 ```
 
-`/infer/person-tracks` 会先检测每帧人体，再裁剪人体并生成 ReID embedding。它不会伪造跨帧 `track_id`；调用方可以用返回的 `embedding_index`、`embedding_dim` 和可选 `embedding` 做自己的轨迹关联。
+`/v1/infer/tracks` 会先检测每帧人体，再裁剪人体并生成 ReID embedding。它会基于检测框与 ReID 向量执行跨帧关联，并返回稳定的 `track_id`、轨迹摘要和可选 embedding。
 
 离线视频解析接口：
 
 ```bash
-curl -X POST http://127.0.0.1:9001/infer/video/person-tracks \
+curl -X POST http://127.0.0.1:9001/v1/jobs/video \
   -F "file=@clip.mp4" \
   -F "frame_interval=15" \
   -F "max_frames=64" \
   -F "include_embeddings=false"
 ```
 
-`/infer/video/person-tracks` 会上传视频文件、按帧间隔抽帧，再复用检测 + ReID 流水线。响应中的每帧会包含 `source_frame_index` 和可推导的 `source_seconds`。
+`/v1/jobs/video` 会创建异步视频解析任务；worker 完成抽帧、检测、ReID 和跨帧关联。通过 `/v1/jobs/{job_id}` 查询状态，通过 `/v1/jobs/{job_id}/result` 获取包含 `frames`、`tracks`、`person_count` 和 `track_count` 的结果。
 
-视频流解析接口：
+视频流解析统一使用 /v1/streams 资源，不再提供旧版同步流推理接口。先注册流并在 settings 中配置抽帧和推理参数：
 
 ```bash
-curl -X POST http://127.0.0.1:9001/infer/stream/person-tracks \
-  -F "stream_url=rtsp://user:password@camera-host/stream1" \
-  -F "frame_interval=15" \
-  -F "max_frames=32" \
-  -F "read_timeout_seconds=10"
+curl -X POST http://127.0.0.1:9001/v1/streams \
+  -H "Content-Type: application/json" \
+  -d '{"stream_url":"rtsp://user:password@camera-host/stream1","name":"camera-1","settings":{"frame_interval":15,"max_frames":32,"read_timeout_seconds":10,"include_embeddings":false}}'
 ```
 
-`/infer/stream/person-tracks` 默认关闭，需要设置 `ALLOW_STREAM_URLS=true` 后才允许服务端主动拉取 RTSP/RTMP/HTTP/HTTPS 视频流。生产环境建议仅在可信内网启用，并通过网关限制可访问的摄像头地址。
+随后调用 POST /v1/streams/{stream_id}/start 启动分析，通过 GET /v1/streams/{stream_id}/events 或 WS /ws/streams/{stream_id} 读取结果。worker 完成拉流、抽帧、人体检测、ReID 和轨迹关联后会发布 stream_analysis_completed 事件，载荷包含 frames、tracks、person_count 和 track_count。
 
+服务端拉流默认关闭，需要设置 ALLOW_STREAM_URLS=true；私网开发流还需显式设置 ALLOW_PRIVATE_STREAM_HOSTS=true。生产环境应仅在可信网络启用，并通过 STREAM_ALLOWED_HOSTS 限制可访问的摄像头地址。
 模型输出调试接口：
 
 ```bash
@@ -412,7 +411,7 @@ curl -X POST http://127.0.0.1:9001/debug/model-output \
 预热示例：
 
 ```bash
-curl -X POST http://127.0.0.1:9001/warmup \
+curl -X POST http://127.0.0.1:9001/v1/admin/models/warmup \
   -H "Content-Type: application/json" \
   -d '{"models":[{"project_name":"portrait_hub","model_name":"yolov8n.onnx"}]}'
 ```
@@ -420,10 +419,10 @@ curl -X POST http://127.0.0.1:9001/warmup \
 模型元信息示例：
 
 ```bash
-curl "http://127.0.0.1:9001/model-info?project_name=portrait_hub&model_name=yolov8n.onnx"
+curl "http://127.0.0.1:9001/v1/models/portrait_hub/yolov8n.onnx"
 ```
 
-`/model-info` 会返回输入名、输入 shape、输入 dtype、输出名、输出 shape、provider、模型 hash、文件大小、加载时间和推理次数。
+`/v1/models/{model_id}` 会返回输入名、输入 shape、输入 dtype、输出名、输出 shape、provider、模型 hash、文件大小、加载时间和推理次数。
 
 ## 运行机制与容量规划
 
@@ -444,7 +443,7 @@ curl "http://127.0.0.1:9001/model-info?project_name=portrait_hub&model_name=yolo
 - 首次并发请求同一个模型时有加载锁，只有一个请求执行加载，其它请求等待加载完成后复用缓存。
 - `MAX_LOADED_MODELS=0` 表示不限制缓存模型数量。设置为正整数后会启用 LRU 淘汰，超过上限时卸载最久未使用的模型。
 - 可以通过 `WARMUP_MODELS` 在容器启动时预热模型，格式为逗号分隔的 `project/model.onnx`，例如 `portrait_hub/yolov8n.onnx,portrait_hub/osnet_ibn_x1_0.onnx`。
-- `/unload` 可以手动卸载单个模型，`/reload` 可以在替换 ONNX 文件后强制重新加载。
+- `/v1/models/{model_id}/unload` 可以手动卸载单个模型，`/v1/admin/models/reload` 可以在替换 ONNX 文件后强制重新加载。
 - 如果替换了共享模型目录里的 ONNX 文件，已加载 worker 不会自动热更新。需要重启对应 worker 才能加载新模型：
 
 ```bash
@@ -501,7 +500,7 @@ models:
 
 `model-capabilities.yml` 中可以把 `person_detection` 指向 `person_detector_default`，把 `body_embedding` 指向 `portrait_hub/osnet_ibn_x1_0.onnx` 并设置 `adapter: reid`。v1 的 persons、compare 和 gallery body 链路会优先使用 YOLO 裁剪人体，再生成 OSNet 512 维 ReID 向量；模型不可用时回退到本地 64 维图像指纹。appearance 能力可以在补齐真实衣着属性/attribute ReID ONNX 后切到 `adapter: attribute_reid`，`/v1/infer/appearance`、`/v1/fusion/compare`、gallery appearance 入库和视频任务帧级 appearance 会统一走该生产入口，未就绪时继续回退到颜色直方图。
 
-可以通过 `/model-configs` 查看当前加载的配置和别名，通过 `/reload-config` 在不重启容器的情况下重新读取配置，通过 `/model-package` 查看模型卡、labels、sha256 匹配状态等模型包信息。
+可以通过 `/v1/models` 查看当前加载的配置和别名，通过 `/v1/admin/models/reload-config` 在不重启容器的情况下重新读取配置，通过 `/v1/models/{model_id}` 查看模型卡、labels、sha256 匹配状态等模型包信息。
 
 ### 测试与上线校验
 
@@ -552,7 +551,7 @@ cases:
 
   - name: detector_sample
     method: POST
-    path: /vision/infer
+    path: /v1/vision/infer
     form:
       model_id: person_detector_default
       confidence: "0.25"
@@ -593,13 +592,13 @@ python tools/worker_control.py --action warmup --token "$API_TOKEN" --model port
 
 ```bash
 curl -H "Authorization: Bearer $API_TOKEN" \
-  http://127.0.0.1:9001/rollout/aliases
+  http://127.0.0.1:9001/v1/admin/models/rollout/aliases
 ```
 
 dry-run 切换：
 
 ```bash
-curl -X POST http://127.0.0.1:9001/rollout/aliases/switch \
+curl -X POST http://127.0.0.1:9001/v1/admin/models/rollout/aliases/switch \
   -H "Authorization: Bearer $API_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -613,7 +612,7 @@ curl -X POST http://127.0.0.1:9001/rollout/aliases/switch \
 确认后把 `dry_run` 改为 `false`。服务会写回宿主机挂载的 `models.yml`，并重新加载当前 worker 的配置；其它 worker 可通过 `tools/worker_control.py --action reload-config` 同步新配置。回滚到上一个目标：
 
 ```bash
-curl -X POST http://127.0.0.1:9001/rollout/aliases/rollback \
+curl -X POST http://127.0.0.1:9001/v1/admin/models/rollout/aliases/rollback \
   -H "Authorization: Bearer $API_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"alias_name":"person_detector_default","dry_run":false}'
@@ -622,7 +621,7 @@ curl -X POST http://127.0.0.1:9001/rollout/aliases/rollback \
 按权重灰度时，可以把同一个别名配置成多目标分流。`traffic_key` 相同的请求会稳定命中同一个目标；如果不传 `traffic_key`，服务会使用请求 ID：
 
 ```bash
-curl -X POST http://127.0.0.1:9001/rollout/aliases/weighted \
+curl -X POST http://127.0.0.1:9001/v1/admin/models/rollout/aliases/weighted \
   -H "Authorization: Bearer $API_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -648,13 +647,13 @@ curl -X POST http://127.0.0.1:9001/rollout/aliases/weighted \
 
 ```bash
 curl -H "Authorization: Bearer $API_TOKEN" \
-  "http://127.0.0.1:9001/rollout/aliases/preview?alias_name=person_detector_default&traffic_key=customer-001"
+  "http://127.0.0.1:9001/v1/admin/models/rollout/aliases/preview?alias_name=person_detector_default&traffic_key=customer-001"
 ```
 
-业务调用 `/vision/infer` 时也可以传 `traffic_key`：
+业务调用 `/v1/vision/infer` 时也可以传 `traffic_key`：
 
 ```bash
-curl -X POST http://127.0.0.1:9001/vision/infer \
+curl -X POST http://127.0.0.1:9001/v1/vision/infer \
   -H "Authorization: Bearer $API_TOKEN" \
   -F "model_id=person_detector_default" \
   -F "traffic_key=customer-001" \
@@ -692,7 +691,7 @@ curl -X POST http://127.0.0.1:9001/vision/infer \
 - `/metrics` 还暴露模型维度指标，例如 `gpu_worker_model_config_info`、`gpu_worker_model_loaded_info`、`gpu_worker_model_inference_count_total`，标签包含 `model`、`task`、`version` 和 `status`。
 - 设置 `OPENTELEMETRY_ENABLED=true` 且安装 optional 依赖后，服务会自动为 FastAPI 请求生成 OpenTelemetry span，并通过 OTLP HTTP exporter 输出。
 - 别名切换、weighted rollout 和 rollback 会追加写入 `ROLLOUT_AUDIT_PATH` 指向的 JSONL 文件。Docker Compose 默认把审计文件放在宿主机 `./runtime-state/` 中，便于容器重建后继续保留。
-- 管理员可通过 `GET /rollout/audit?limit=20` 查看最近非 dry-run 发布、灰度和回滚记录；接口只返回时间、事件、别名、目标、灰度权重和写入状态等白名单字段。
+- 管理员可通过 `GET /v1/admin/models/rollout/audit?limit=20` 查看最近非 dry-run 发布、灰度和回滚记录；接口只返回时间、事件、别名、目标、灰度权重和写入状态等白名单字段。
 
 ## 业务容器接入
 
@@ -721,7 +720,7 @@ http://gpu-worker-1:8000/predict
 业务项目正式接入 `/v1` 人像中台接口时，建议从以下交付物起步：
 
 - [PortraitHub 接入指南](docs/operations/INTEGRATION_GUIDE.md)：稳定 API、SDK 示例、错误处理、SLO 和接入验收清单。
-- 接入中心提供 `GET /v1/access/error-codes`，控制台“错误码”页可直接查看稳定 `detail.code`、HTTP 状态和重试建议。
+- 接入中心提供 `GET /v1/access/error-codes`，控制台“错误码”页可直接查看稳定 `error.code`、HTTP 状态和重试建议。
 - [Nginx 网关模板](ops/nginx-gateway.example.conf)：内网 TLS、租户限流、请求体大小、`X-Request-ID` 透传和受保护指标入口示例。
 
 ## 配置项
@@ -747,11 +746,11 @@ http://gpu-worker-1:8000/predict
 - `RUNTIME_STATE_HOST_DIR`: 宿主机运行期状态目录，默认 `./runtime-state`。
 - `ROLLOUT_AUDIT_PATH`: 灰度/别名变更审计 JSONL 文件路径，默认 `/workspace/runtime-state/rollout-audit.jsonl`。
 - `PORTRAIT_REVIEW_STATE_PATH`: 轨迹审阅人工标注状态文件路径，默认 `/workspace/runtime-state/portrait-review-annotations.json`；这些标注进入评估数据池，不直接修改线上模型；评估中心会通过 `/v1/evaluation/track-reviews/summary` 展示租户内汇总、最近样本和证据索引，通过 `/v1/evaluation/datasets` 展示由标注池派生的动态数据集列表，并通过 `/v1/evaluation/threshold-recommendations` 给出只读阈值推荐；推荐不会自动写入阈值配置。
-- `MAX_IMAGE_BYTES`: `/infer/persons` 单张上传图片大小上限，默认 `10485760`。
-- `MAX_PERSON_FRAMES`: `/infer/persons` 单次请求图片数量上限，默认 `16`。
-- `MAX_EMBEDDING_IMAGES`: `/infer/person-embeddings` 单次请求图片数量上限，默认 `64`。
-- `MAX_PIPELINE_FRAMES`: `/infer/person-tracks` 单次请求帧数量上限，默认 `16`。
-- `MAX_VIDEO_BYTES`: `/infer/video/person-tracks` 单个视频文件大小上限，默认 `104857600`。
+- `MAX_IMAGE_BYTES`: `/v1/vision/infer` 单张上传图片大小上限，默认 `10485760`。
+- `MAX_PERSON_FRAMES`: `/v1/vision/infer` 单次请求图片数量上限，默认 `16`。
+- `MAX_EMBEDDING_IMAGES`: `/v1/vision/infer` 单次请求图片数量上限，默认 `64`。
+- `MAX_PIPELINE_FRAMES`: `/v1/infer/tracks` 单次请求帧数量上限，默认 `16`。
+- `MAX_VIDEO_BYTES`: `/v1/jobs/video` 单个视频文件大小上限，默认 `104857600`。
 - `VIDEO_FRAME_INTERVAL`: 离线视频默认抽帧间隔，默认 `15`。
 - `VIDEO_UPLOAD_CHUNK_BYTES` / `VIDEO_JOB_INPUT_DIR`: 视频上传分块大小和私有暂存目录；API 与独立视频 worker 必须共享该目录。
 - `TASK_QUEUE_DIR` / `TASK_QUEUE_VISIBILITY_TIMEOUT_SECONDS` / `TASK_QUEUE_POLL_INTERVAL_SECONDS`: 本地持久化 spool、失联任务重新认领和 worker 轮询参数。

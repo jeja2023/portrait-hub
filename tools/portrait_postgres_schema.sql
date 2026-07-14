@@ -109,6 +109,21 @@ CREATE TABLE IF NOT EXISTS portrait_video_jobs (
   PRIMARY KEY (tenant_id, job_id)
 );
 
+CREATE TABLE IF NOT EXISTS portrait_image_results (
+  tenant_id TEXT NOT NULL,
+  result_id TEXT NOT NULL,
+  request_id TEXT NOT NULL,
+  mode TEXT NOT NULL,
+  endpoint TEXT NOT NULL,
+  payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+  previews JSONB NOT NULL DEFAULT '[]'::jsonb,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (tenant_id, result_id)
+);
+
+CREATE INDEX IF NOT EXISTS portrait_image_results_tenant_created_idx
+  ON portrait_image_results (tenant_id, created_at DESC);
+
 CREATE TABLE IF NOT EXISTS portrait_streams (
   tenant_id TEXT NOT NULL,
   stream_id TEXT NOT NULL,

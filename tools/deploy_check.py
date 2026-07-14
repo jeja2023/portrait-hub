@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import ast
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -26,7 +27,9 @@ class DeployReport:
     checks: list[dict[str, Any]] = field(default_factory=list)
 
     def add(self, name: str, ok: bool, detail: Any = None) -> None:
-        self.checks.append({"name": name, "ok": ok, "detail": redact_for_report(detail)})
+        self.checks.append(
+            {"name": name, "ok": ok, "detail": redact_for_report(detail)}
+        )
 
     @property
     def ok(self) -> bool:
@@ -36,8 +39,37 @@ class DeployReport:
 def read_text(path: Path) -> str:
     return path.read_text(encoding="utf-8-sig")
 
-SOURCE_ENCODING_ROOTS = ("app", "tools", "sdk", "tests", "frontend", ".github", "deploy", "docs", "ops", "requirements", "examples", "package.json")
-SOURCE_ENCODING_SUFFIXES = (".bat", ".css", ".html", ".in", ".js", ".json", ".lock", ".md", ".py", ".sql", ".txt", ".yaml", ".yml", ".example")
+
+SOURCE_ENCODING_ROOTS = (
+    "app",
+    "tools",
+    "sdk",
+    "tests",
+    "frontend",
+    ".github",
+    "deploy",
+    "docs",
+    "ops",
+    "requirements",
+    "examples",
+    "package.json",
+)
+SOURCE_ENCODING_SUFFIXES = (
+    ".bat",
+    ".css",
+    ".html",
+    ".in",
+    ".js",
+    ".json",
+    ".lock",
+    ".md",
+    ".py",
+    ".sql",
+    ".txt",
+    ".yaml",
+    ".yml",
+    ".example",
+)
 
 
 def source_files_for_encoding(root: Path) -> list[Path]:
@@ -51,7 +83,10 @@ def source_files_for_encoding(root: Path) -> list[Path]:
         else:
             continue
         for candidate in candidates:
-            if candidate.is_file() and candidate.suffix.lower() in SOURCE_ENCODING_SUFFIXES:
+            if (
+                candidate.is_file()
+                and candidate.suffix.lower() in SOURCE_ENCODING_SUFFIXES
+            ):
                 files.append(candidate)
     return sorted(dict.fromkeys(files))
 
@@ -63,11 +98,17 @@ def check_source_encoding(root: Path, report: DeployReport) -> None:
         try:
             prefix = path.read_bytes()[:3]
         except OSError as exc:
-            bom_files.append(f"{path.relative_to(root)}: 读取失败：{exc.__class__.__name__}")
+            bom_files.append(
+                f"{path.relative_to(root)}: 读取失败：{exc.__class__.__name__}"
+            )
             continue
         if prefix == b"\xef\xbb\xbf":
             bom_files.append(str(path.relative_to(root)).replace("\\", "/"))
-    report.add("source_files_utf8_no_bom", not bom_files, {"bom_files": bom_files, "file_count": len(source_files)})
+    report.add(
+        "source_files_utf8_no_bom",
+        not bom_files,
+        {"bom_files": bom_files, "file_count": len(source_files)},
+    )
 
 
 def check_required_files(root: Path, report: DeployReport) -> None:
@@ -165,17 +206,34 @@ def check_required_files(root: Path, report: DeployReport) -> None:
 
 def check_python_syntax(root: Path, report: DeployReport) -> None:
     errors = []
-    for path in [root / "main.py", *sorted((root / "app").glob("*.py")), *sorted((root / "tools").glob("*.py")), *sorted((root / "examples").rglob("*.py"))]:
+    for path in [
+        root / "main.py",
+        *sorted((root / "app").glob("*.py")),
+        *sorted((root / "tools").glob("*.py")),
+        *sorted((root / "examples").rglob("*.py")),
+    ]:
         try:
             ast.parse(read_text(path), filename=str(path))
         except SyntaxError as exc:
             errors.append(f"{path}: {exc}")
-    report.add("python_syntax", not errors, {"errors": errors, "file_count": len(list((root / "app").glob("*.py"))) + len(list((root / "tools").glob("*.py"))) + len(list((root / "examples").rglob("*.py"))) + 1})
+    report.add(
+        "python_syntax",
+        not errors,
+        {
+            "errors": errors,
+            "file_count": len(list((root / "app").glob("*.py")))
+            + len(list((root / "tools").glob("*.py")))
+            + len(list((root / "examples").rglob("*.py")))
+            + 1,
+        },
+    )
 
 
 def check_code_quality(root: Path, report: DeployReport) -> None:
     core = read_text(root / "app" / "core.py")
-    route_modules = "\n".join(read_text(path) for path in sorted((root / "app").glob("routes*.py")))
+    route_modules = "\n".join(
+        read_text(path) for path in sorted((root / "app").glob("routes*.py"))
+    )
     pyproject = read_text(root / "pyproject.toml")
     dev_requirements = read_text(root / "requirements" / "dev.txt")
     ci = read_text(root / ".github" / "workflows" / "ci.yml")
@@ -195,24 +253,9 @@ def check_code_quality(root: Path, report: DeployReport) -> None:
     postgres_core = read_text(root / "app" / "postgres_core.py")
     config_hot_reload = read_text(root / "app" / "config_hot_reload.py")
     websocket_routes = read_text(root / "app" / "routes_portrait_ws.py")
-    console_html = read_text(root / "frontend" / "console" / "console.html")
     console_js = read_text(root / "frontend" / "console" / "console.js")
     console_config_js = read_text(root / "frontend" / "console" / "console.config.js")
     console_runtime_js = read_text(root / "frontend" / "console" / "views" / "app.js")
-    console_module_sources = "\n".join(
-        read_text(root / "frontend" / "console" / item)
-        for item in [
-            "api/client.js",
-            "state/store.js",
-            "views/analysis.js",
-            "views/gallery.js",
-            "views/operations.js",
-            "views/app.js",
-            "renderers/data-viewer.js",
-            "visuals/previews.js",
-        ]
-    )
-    production_gates = read_text(root / "app" / "production_gates.py")
     report.add(
         "core_explicit_imports",
         "import *" not in core and "__all__" in core,
@@ -238,8 +281,8 @@ def check_code_quality(root: Path, report: DeployReport) -> None:
     )
     report.add(
         "expanded_type_check_targets",
-        all(item in type_check for item in ["\"app\"", "\"tools\"", "\"sdk\"", "main.py"])
-        and "rglob(\"*.py\")" in type_check,
+        all(item in type_check for item in ['"app"', '"tools"', '"sdk"', "main.py"])
+        and 'rglob("*.py")' in type_check,
         None,
     )
     report.add(
@@ -270,7 +313,7 @@ def check_code_quality(root: Path, report: DeployReport) -> None:
         "config_sighup_hot_reload",
         "def install_config_reload_signal_handler" in server
         and 'getattr(signal, "SIGHUP"' in server
-        and "reload_runtime_config(source=\"sighup\"" in server
+        and 'reload_runtime_config(source="sighup"' in server
         and "ENV_PATH" in server
         and "def reload_runtime_config" in config_hot_reload
         and "audit_event(" in config_hot_reload,
@@ -307,7 +350,11 @@ def check_code_quality(root: Path, report: DeployReport) -> None:
 
 
 def requirement_lines(text: str) -> list[str]:
-    return [line.strip() for line in text.splitlines() if line.strip() and not line.strip().startswith("#")]
+    return [
+        line.strip()
+        for line in text.splitlines()
+        if line.strip() and not line.strip().startswith("#")
+    ]
 
 
 def has_version_range(line: str) -> bool:
@@ -332,11 +379,31 @@ def check_dependency_lock(root: Path, report: DeployReport) -> None:
     requirements_lock = read_text(root / "requirements.lock")
     requirements_cpu = read_text(root / "requirements-cpu.txt")
     requirements_cpu_lock = read_text(root / "requirements-cpu.lock")
-    lock_ranges = [line for line in requirement_lines(base_lock) if has_version_range(line) or "==" not in line]
-    root_lock_ranges = [line for line in requirement_lines(requirements_lock) if has_version_range(line) or "==" not in line]
-    runtime_ranges = [line for line in requirement_lines(requirements) if has_version_range(line) or "==" not in line]
-    cpu_ranges = [line for line in requirement_lines(requirements_cpu) if has_version_range(line) or "==" not in line]
-    cpu_lock_ranges = [line for line in requirement_lines(requirements_cpu_lock) if has_version_range(line) or "==" not in line]
+    lock_ranges = [
+        line
+        for line in requirement_lines(base_lock)
+        if has_version_range(line) or "==" not in line
+    ]
+    root_lock_ranges = [
+        line
+        for line in requirement_lines(requirements_lock)
+        if has_version_range(line) or "==" not in line
+    ]
+    runtime_ranges = [
+        line
+        for line in requirement_lines(requirements)
+        if has_version_range(line) or "==" not in line
+    ]
+    cpu_ranges = [
+        line
+        for line in requirement_lines(requirements_cpu)
+        if has_version_range(line) or "==" not in line
+    ]
+    cpu_lock_ranges = [
+        line
+        for line in requirement_lines(requirements_cpu_lock)
+        if has_version_range(line) or "==" not in line
+    ]
     report.add(
         "dependency_lock_exact",
         not lock_ranges
@@ -405,11 +472,25 @@ def check_models_config(root: Path, report: DeployReport) -> None:
     aliases = raw.get("aliases", {})
     model_ok = isinstance(models, dict) and bool(models)
     alias_ok = isinstance(aliases, dict)
-    report.add("models_yml_models", model_ok, {"model_count": len(models) if isinstance(models, dict) else 0})
-    report.add("models_yml_aliases", alias_ok, {"alias_count": len(aliases) if isinstance(aliases, dict) else 0})
+    report.add(
+        "models_yml_models",
+        model_ok,
+        {"model_count": len(models) if isinstance(models, dict) else 0},
+    )
+    report.add(
+        "models_yml_aliases",
+        alias_ok,
+        {"alias_count": len(aliases) if isinstance(aliases, dict) else 0},
+    )
     if isinstance(models, dict):
-        missing_task = [str(key) for key, value in models.items() if isinstance(value, dict) and not (value.get("task") or value.get("type"))]
-        report.add("models_yml_task_fields", not missing_task, {"missing_task": missing_task})
+        missing_task = [
+            str(key)
+            for key, value in models.items()
+            if isinstance(value, dict) and not (value.get("task") or value.get("type"))
+        ]
+        report.add(
+            "models_yml_task_fields", not missing_task, {"missing_task": missing_task}
+        )
 
 
 def check_docker_files(root: Path, report: DeployReport) -> None:
@@ -419,15 +500,33 @@ def check_docker_files(root: Path, report: DeployReport) -> None:
     cpu_compose_text = read_text(root / "docker-compose.cpu.yml")
     cpu_compose = yaml.safe_load(cpu_compose_text) or {}
     services = compose.get("services", {}) if isinstance(compose, dict) else {}
-    cpu_services = cpu_compose.get("services", {}) if isinstance(cpu_compose, dict) else {}
+    cpu_services = (
+        cpu_compose.get("services", {}) if isinstance(cpu_compose, dict) else {}
+    )
     service_names = sorted(services) if isinstance(services, dict) else []
     cpu_service_names = sorted(cpu_services) if isinstance(cpu_services, dict) else []
     report.add("dockerfile_copies_app", "COPY app /workspace/app" in dockerfile, None)
-    report.add("dockerfile_copies_frontend", "COPY frontend /workspace/frontend" in dockerfile, None)
-    report.add("dockerfile_copies_main", "COPY main.py /workspace/main.py" in dockerfile, None)
-    report.add("dockerfile_copies_capabilities", "COPY model-capabilities.yml /workspace/model-capabilities.yml" in dockerfile, None)
-    report.add("dockerfile_copies_prod_optional", "COPY requirements/prod-optional.txt" in dockerfile, None)
-    report.add("dockerfile_prod_optional_arg", "INSTALL_PROD_OPTIONAL" in dockerfile, None)
+    report.add(
+        "dockerfile_copies_frontend",
+        "COPY frontend /workspace/frontend" in dockerfile,
+        None,
+    )
+    report.add(
+        "dockerfile_copies_main", "COPY main.py /workspace/main.py" in dockerfile, None
+    )
+    report.add(
+        "dockerfile_copies_capabilities",
+        "COPY model-capabilities.yml /workspace/model-capabilities.yml" in dockerfile,
+        None,
+    )
+    report.add(
+        "dockerfile_copies_prod_optional",
+        "COPY requirements/prod-optional.txt" in dockerfile,
+        None,
+    )
+    report.add(
+        "dockerfile_prod_optional_arg", "INSTALL_PROD_OPTIONAL" in dockerfile, None
+    )
     report.add(
         "cpu_dockerfile_uses_cpu_runtime",
         "FROM python:3.12-slim-bookworm" in cpu_dockerfile
@@ -437,7 +536,9 @@ def check_docker_files(root: Path, report: DeployReport) -> None:
         None,
     )
     report.add("compose_services", bool(service_names), {"services": service_names})
-    stream_worker = services.get("portrait-stream-worker") if isinstance(services, dict) else None
+    stream_worker = (
+        services.get("portrait-stream-worker") if isinstance(services, dict) else None
+    )
     report.add(
         "compose_stream_worker_service",
         isinstance(stream_worker, dict)
@@ -445,38 +546,63 @@ def check_docker_files(root: Path, report: DeployReport) -> None:
         and stream_worker.get("healthcheck", {}).get("disable") is True,
         {"service": stream_worker},
     )
-    video_job_worker = services.get("portrait-video-job-worker") if isinstance(services, dict) else None
+    video_job_worker = (
+        services.get("portrait-video-job-worker")
+        if isinstance(services, dict)
+        else None
+    )
     report.add(
         "compose_video_job_worker_service",
         isinstance(video_job_worker, dict)
         and "app.portrait_video_job_worker" in str(video_job_worker.get("command", ""))
-        and str(video_job_worker.get("environment", {}).get("VIDEO_JOB_WORKER_IN_PROCESS", "")).lower() == "false",
+        and str(
+            video_job_worker.get("environment", {}).get(
+                "VIDEO_JOB_WORKER_IN_PROCESS", ""
+            )
+        ).lower()
+        == "false",
         {"service": video_job_worker},
     )
-    gpu_like = [
-        name
-        for name, service in services.items()
-        if isinstance(service, dict)
-        and ("NVIDIA_VISIBLE_DEVICES" in str(service.get("environment", "")) or "gpus" in service)
-    ] if isinstance(services, dict) else []
+    gpu_like = (
+        [
+            name
+            for name, service in services.items()
+            if isinstance(service, dict)
+            and (
+                "NVIDIA_VISIBLE_DEVICES" in str(service.get("environment", ""))
+                or "gpus" in service
+            )
+        ]
+        if isinstance(services, dict)
+        else []
+    )
     report.add("compose_gpu_configuration", bool(gpu_like), {"gpu_services": gpu_like})
     cpu_env_text = json.dumps(
-        [service.get("environment", {}) for service in cpu_services.values() if isinstance(service, dict)],
+        [
+            service.get("environment", {})
+            for service in cpu_services.values()
+            if isinstance(service, dict)
+        ],
         ensure_ascii=False,
     )
-    cpu_has_gpu_reservation = any(
-        isinstance(service, dict)
-        and (
-            "deploy" in service
-            or "gpus" in service
-            or "driver: nvidia" in str(yaml.safe_dump(service, sort_keys=True))
-            or "capabilities: [gpu]" in str(yaml.safe_dump(service, sort_keys=True))
+    cpu_has_gpu_reservation = (
+        any(
+            isinstance(service, dict)
+            and (
+                "deploy" in service
+                or "gpus" in service
+                or "driver: nvidia" in str(yaml.safe_dump(service, sort_keys=True))
+                or "capabilities: [gpu]" in str(yaml.safe_dump(service, sort_keys=True))
+            )
+            for service in cpu_services.values()
         )
-        for service in cpu_services.values()
-    ) if isinstance(cpu_services, dict) else True
+        if isinstance(cpu_services, dict)
+        else True
+    )
     report.add(
         "cpu_compose_services",
-        cpu_service_names == ["cpu-worker-0", "portrait-stream-worker", "portrait-video-job-worker"],
+        cpu_service_names
+        == ["cpu-worker-0", "portrait-stream-worker", "portrait-video-job-worker"],
         {"services": cpu_service_names},
     )
     report.add(
@@ -502,21 +628,31 @@ def check_docker_files(root: Path, report: DeployReport) -> None:
     )
     report.add(
         "cpu_compose_uses_cpu_dockerfile",
-        all(isinstance(service, dict) and service.get("build", {}).get("dockerfile") == "Dockerfile.cpu" for service in cpu_services.values())
+        all(
+            isinstance(service, dict)
+            and service.get("build", {}).get("dockerfile") == "Dockerfile.cpu"
+            for service in cpu_services.values()
+        )
         if isinstance(cpu_services, dict) and cpu_services
         else False,
         {"services": cpu_service_names},
     )
-    volumes = [
-        volume
-        for service in services.values()
-        if isinstance(service, dict)
-        for volume in service.get("volumes", [])
-    ] if isinstance(services, dict) else []
+    volumes = (
+        [
+            volume
+            for service in services.values()
+            if isinstance(service, dict)
+            for volume in service.get("volumes", [])
+        ]
+        if isinstance(services, dict)
+        else []
+    )
     volume_targets = [
         str(volume.get("target"))
         if isinstance(volume, dict)
-        else str(volume).split(":")[1] if ":" in str(volume) else str(volume)
+        else str(volume).split(":")[1]
+        if ":" in str(volume)
+        else str(volume)
         for volume in volumes
     ]
     report.add(
@@ -541,7 +677,11 @@ def check_docker_files(root: Path, report: DeployReport) -> None:
         {"volumes": volumes},
     )
     env_text = json.dumps(
-        [service.get("environment", {}) for service in services.values() if isinstance(service, dict)],
+        [
+            service.get("environment", {})
+            for service in services.values()
+            if isinstance(service, dict)
+        ],
         ensure_ascii=False,
     )
     report.add(
@@ -613,33 +753,40 @@ def check_docker_files(root: Path, report: DeployReport) -> None:
     )
     report.add(
         "compose_auth_required_default",
-        "AUTH_REQUIRED: ${AUTH_REQUIRED:-true}" in read_text(root / "docker-compose.yml"),
+        "AUTH_REQUIRED: ${AUTH_REQUIRED:-true}"
+        in read_text(root / "docker-compose.yml"),
         None,
     )
     report.add(
         "compose_debug_disabled_default",
-        "DEBUG_ENDPOINTS_ENABLED: ${DEBUG_ENDPOINTS_ENABLED:-false}" in read_text(root / "docker-compose.yml"),
+        "DEBUG_ENDPOINTS_ENABLED: ${DEBUG_ENDPOINTS_ENABLED:-false}"
+        in read_text(root / "docker-compose.yml"),
         None,
     )
     report.add(
         "compose_api_docs_disabled_default",
-        "ENABLE_API_DOCS: ${ENABLE_API_DOCS:-false}" in read_text(root / "docker-compose.yml"),
+        "ENABLE_API_DOCS: ${ENABLE_API_DOCS:-false}"
+        in read_text(root / "docker-compose.yml"),
         None,
     )
     report.add(
         "compose_trusted_hosts_default",
-        "TRUSTED_HOSTS: ${TRUSTED_HOSTS:-127.0.0.1,localhost,gpu-worker-0,gpu-worker-1}" in read_text(root / "docker-compose.yml"),
+        "TRUSTED_HOSTS: ${TRUSTED_HOSTS:-127.0.0.1,localhost,gpu-worker-0,gpu-worker-1}"
+        in read_text(root / "docker-compose.yml"),
         None,
     )
     report.add(
         "compose_rate_limit_enabled_default",
-        "RATE_LIMIT_PER_MINUTE: ${RATE_LIMIT_PER_MINUTE:-120}" in read_text(root / "docker-compose.yml")
-        and "RATE_LIMIT_BURST: ${RATE_LIMIT_BURST:-240}" in read_text(root / "docker-compose.yml"),
+        "RATE_LIMIT_PER_MINUTE: ${RATE_LIMIT_PER_MINUTE:-120}"
+        in read_text(root / "docker-compose.yml")
+        and "RATE_LIMIT_BURST: ${RATE_LIMIT_BURST:-240}"
+        in read_text(root / "docker-compose.yml"),
         None,
     )
     report.add(
         "compose_request_body_limit_default",
-        "MAX_REQUEST_BODY_BYTES: ${MAX_REQUEST_BODY_BYTES:-805306368}" in read_text(root / "docker-compose.yml"),
+        "MAX_REQUEST_BODY_BYTES: ${MAX_REQUEST_BODY_BYTES:-805306368}"
+        in read_text(root / "docker-compose.yml"),
         None,
     )
     report.add(
@@ -659,7 +806,8 @@ def check_docker_files(root: Path, report: DeployReport) -> None:
     )
     report.add(
         "compose_tenant_header_required_default",
-        "TENANT_HEADER_REQUIRED: ${TENANT_HEADER_REQUIRED:-true}" in read_text(root / "docker-compose.yml"),
+        "TENANT_HEADER_REQUIRED: ${TENANT_HEADER_REQUIRED:-true}"
+        in read_text(root / "docker-compose.yml"),
         None,
     )
     report.add(
@@ -680,30 +828,43 @@ def check_docker_files(root: Path, report: DeployReport) -> None:
     )
     report.add(
         "compose_require_encryption_default",
-        "REQUIRE_ENCRYPTION: ${REQUIRE_ENCRYPTION:-true}" in read_text(root / "docker-compose.yml"),
+        "REQUIRE_ENCRYPTION: ${REQUIRE_ENCRYPTION:-true}"
+        in read_text(root / "docker-compose.yml"),
         None,
     )
     report.add(
         "compose_audit_fail_closed_default",
-        "AUDIT_WRITE_FAIL_CLOSED: ${AUDIT_WRITE_FAIL_CLOSED:-true}" in read_text(root / "docker-compose.yml"),
+        "AUDIT_WRITE_FAIL_CLOSED: ${AUDIT_WRITE_FAIL_CLOSED:-true}"
+        in read_text(root / "docker-compose.yml"),
         None,
     )
     report.add(
         "compose_state_read_fail_closed_default",
-        "STATE_READ_FAIL_CLOSED: ${STATE_READ_FAIL_CLOSED:-true}" in read_text(root / "docker-compose.yml"),
+        "STATE_READ_FAIL_CLOSED: ${STATE_READ_FAIL_CLOSED:-true}"
+        in read_text(root / "docker-compose.yml"),
         None,
     )
     report.add(
         "compose_model_config_read_fail_closed_default",
-        "MODEL_CONFIG_READ_FAIL_CLOSED: ${MODEL_CONFIG_READ_FAIL_CLOSED:-true}" in read_text(root / "docker-compose.yml"),
+        "MODEL_CONFIG_READ_FAIL_CLOSED: ${MODEL_CONFIG_READ_FAIL_CLOSED:-true}"
+        in read_text(root / "docker-compose.yml"),
         None,
     )
-    ready_healthchecks = [
-        name
-        for name, service in services.items()
-        if isinstance(service, dict) and "/ready" in str(service.get("healthcheck", ""))
-    ] if isinstance(services, dict) else []
-    report.add("compose_ready_healthcheck", bool(ready_healthchecks), {"services": ready_healthchecks})
+    ready_healthchecks = (
+        [
+            name
+            for name, service in services.items()
+            if isinstance(service, dict)
+            and "/ready" in str(service.get("healthcheck", ""))
+        ]
+        if isinstance(services, dict)
+        else []
+    )
+    report.add(
+        "compose_ready_healthcheck",
+        bool(ready_healthchecks),
+        {"services": ready_healthchecks},
+    )
 
 
 def check_ci_workflows(root: Path, report: DeployReport) -> None:
@@ -727,7 +888,9 @@ def check_ci_workflows(root: Path, report: DeployReport) -> None:
     )
     report.add(
         "ci_security_audit_scheduled",
-        "pip-audit" in audit and "python tools/security_audit.py" in audit and "cron:" in audit,
+        "pip-audit" in audit
+        and "python tools/security_audit.py" in audit
+        and "cron:" in audit,
         {"path": str(audit_path)},
     )
 
@@ -737,19 +900,24 @@ def check_import_app(root: Path, report: DeployReport) -> None:
         sys.path.insert(0, str(root))
         import main
 
-        paths = {path for route in main.app.routes if isinstance((path := getattr(route, "path", None)), str)}
+        paths = set(main.app.openapi().get("paths", {}))
         required = {
             "/health",
             "/ready",
-            "/models",
             "/predict",
-            "/vision/infer",
-            "/vision/batch-infer",
-            "/rollout/aliases",
-            "/rollout/aliases/preview",
-            "/rollout/aliases/switch",
-            "/rollout/aliases/weighted",
-            "/rollout/aliases/rollback",
+            "/v1/vision/infer",
+            "/v1/infer/tracks",
+            "/v1/jobs/video",
+            "/v1/streams",
+            "/v1/models",
+            "/v1/admin/models/warmup",
+            "/v1/admin/models/reload",
+            "/v1/admin/models/reload-config",
+            "/v1/admin/models/rollout/aliases",
+            "/v1/admin/models/rollout/aliases/preview",
+            "/v1/admin/models/rollout/aliases/switch",
+            "/v1/admin/models/rollout/aliases/weighted",
+            "/v1/admin/models/rollout/aliases/rollback",
             "/v1/evaluation/datasets",
             "/v1/evaluation/threshold-recommendations",
             "/v1/evaluation/track-reviews",
@@ -758,9 +926,44 @@ def check_import_app(root: Path, report: DeployReport) -> None:
             "/v1/admin/audit/verify",
             "/v1/admin/backups",
         }
+        removed = {
+            "/infer/stream/person-tracks",
+            "/infer/persons",
+            "/infer/person-embeddings",
+            "/infer/person-tracks",
+            "/infer/video/person-tracks",
+            "/vision/infer",
+            "/vision/batch-infer",
+            "/models",
+            "/model-configs",
+            "/model-info",
+            "/model-package",
+            "/warmup",
+            "/reload",
+            "/unload",
+            "/reload-config",
+            "/rollout/aliases",
+        }
         missing = sorted(required - paths)
+        removed_routes_present = sorted(removed & paths)
         report.add("app_import", True, {"route_count": len(paths)})
         report.add("app_required_routes", not missing, {"missing": missing})
+        report.add(
+            "app_removed_routes",
+            not removed_routes_present,
+            {"present": removed_routes_present},
+        )
+        console_source = (root / "frontend" / "console" / "views" / "app.js").read_text(
+            encoding="utf-8"
+        )
+        duplicate_v1_prefixes = sorted(
+            set(re.findall(r"/v1(?:/[a-z0-9_-]+)*/v1/", console_source))
+        )
+        report.add(
+            "console_no_duplicate_v1_prefixes",
+            not duplicate_v1_prefixes,
+            {"present": duplicate_v1_prefixes},
+        )
     except Exception as exc:
         report.add("app_import", False, str(exc))
 
@@ -769,7 +972,11 @@ def check_production_integrations(root: Path, report: DeployReport) -> None:
     optional = read_text(root / "requirements" / "prod-optional.txt")
     required_packages = ["psycopg", "pgvector", "qdrant-client", "boto3", "redis"]
     missing_packages = [item for item in required_packages if item not in optional]
-    report.add("prod_optional_dependencies", not missing_packages, {"missing": missing_packages})
+    report.add(
+        "prod_optional_dependencies",
+        not missing_packages,
+        {"missing": missing_packages},
+    )
 
     schema = read_text(root / "tools" / "portrait_postgres_schema.sql")
     schema_required = [
@@ -784,7 +991,9 @@ def check_production_integrations(root: Path, report: DeployReport) -> None:
         "audit_prev_hash TEXT",
     ]
     missing_schema = [item for item in schema_required if item not in schema]
-    report.add("postgres_pgvector_schema", not missing_schema, {"missing": missing_schema})
+    report.add(
+        "postgres_pgvector_schema", not missing_schema, {"missing": missing_schema}
+    )
 
 
 def check_node_sdk_tests(root: Path, report: DeployReport) -> None:
@@ -794,7 +1003,9 @@ def check_node_sdk_tests(root: Path, report: DeployReport) -> None:
         return
     node = shutil.which("node")
     if not node:
-        report.add("node_sdk_contract_tests", True, {"skipped": "未找到 node 可执行文件"})
+        report.add(
+            "node_sdk_contract_tests", True, {"skipped": "未找到 node 可执行文件"}
+        )
         return
     completed = subprocess.run(
         [node, str(test_path)],
@@ -837,9 +1048,13 @@ def run_checks(args: argparse.Namespace) -> DeployReport:
 def main() -> int:
     parser = argparse.ArgumentParser(description="运行 gpu-services 静态部署检查。")
     parser.add_argument("--root", default=".", help="项目根目录。")
-    parser.add_argument("--import-app", action="store_true", help="导入 main.app 并校验关键路由。")
+    parser.add_argument(
+        "--import-app", action="store_true", help="导入 main.app 并校验关键路由。"
+    )
     parser.add_argument("--json", action="store_true", help="输出机器可读 JSON。")
-    parser.add_argument("--skip-node", action="store_true", help="跳过 Node.js 契约检查。")
+    parser.add_argument(
+        "--skip-node", action="store_true", help="跳过 Node.js 契约检查。"
+    )
     args = parser.parse_args()
 
     report = run_checks(args)

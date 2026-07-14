@@ -73,7 +73,7 @@
 - `frontend/console/views/operations.js` 同步注册 OpenAPI、Webhook、SLO、多模态、评估、发布和审计相关视图目标，避免模块化控制台漏挂新增页面。
 - `docs/operations/INTEGRATION_GUIDE.md` 补充 OpenAPI 契约快照要求、Webhook 外层事件体、签名头、幂等去重和重试规则。
 - 接入中心二次优化：接入状态读写增加线程锁，调用日志回写应用 `call_count`/`error_count`/`error_rate`/最近调用时间，限流阶段缓存应用 ID 供调用日志复用；控制台应用列表与日志页展示这些排障信号，复制示例改用环境变量占位，Python SDK 示例统一使用 `os.getenv("PORTRAIT_HUB_API_TOKEN")`，避免泄露真实 API Key。
-- 模型发布中心补齐 rollout 审计读回：新增 `GET /rollout/audit` 返回最近非 dry-run 切换/灰度/回滚记录，控制台发布中心展示审计表；readiness 新增 `security:rollout_audit_readback`，确保发布审计不再只写不可查。
+- 模型发布中心补齐 rollout 审计读回：新增 `GET /v1/admin/models/rollout/audit` 返回最近非 dry-run 切换/灰度/回滚记录，控制台发布中心展示审计表；readiness 新增 `security:rollout_audit_readback`，确保发布审计不再只写不可查。
 - 轨迹审阅补齐人工标注与评估数据池：新增 `GET/POST /v1/evaluation/track-reviews`，支持误检、错配、低质量、确认正确和待复核标注；状态按租户隔离并写入 `PORTRAIT_REVIEW_STATE_PATH`，控制台轨迹审阅页可直接录入和查看，评估中心通过 `/v1/evaluation/track-reviews/summary` 展示标注汇总、最近样本和证据索引，通过 `/v1/evaluation/datasets` 展示由标注池派生的动态数据集列表，并通过 `/v1/evaluation/threshold-recommendations` 基于标注池生成只读阈值推荐且不自动应用，readiness 新增 `security:track_review_annotation_pool`。
 
 本轮验收：

@@ -9,8 +9,23 @@ import pytest
 from fastapi import HTTPException, Request
 from fastapi.testclient import TestClient
 
-from app import model_package, portrait_access, portrait_auth, portrait_crypto, portrait_security, routes_health, runtime_sessions, security
+from app import (
+    model_package,
+    portrait_access,
+    portrait_auth,
+    portrait_crypto,
+    portrait_security,
+    routes_health,
+    runtime_sessions,
+    security,
+)
 from main import app
+
+
+def api_error_message(response):
+    payload = response.json()
+    return payload.get("error", {}).get("message", payload.get("detail"))
+
 
 def api_request(path: str = "/v1/test") -> Request:
     return Request(
@@ -31,17 +46,25 @@ def api_request(path: str = "/v1/test") -> Request:
 
 
 def encode_segment(payload: dict | bytes) -> str:
-    data = payload if isinstance(payload, bytes) else json.dumps(payload, separators=(",", ":")).encode("utf-8")
+    data = (
+        payload
+        if isinstance(payload, bytes)
+        else json.dumps(payload, separators=(",", ":")).encode("utf-8")
+    )
     return base64.urlsafe_b64encode(data).decode("ascii").rstrip("=")
 
 
-def hs256_token(payload: dict, secret: str = "test-secret", kid: str | None = None) -> str:
+def hs256_token(
+    payload: dict, secret: str = "test-secret", kid: str | None = None
+) -> str:
     header_payload = {"alg": "HS256", "typ": "JWT"}
     if kid is not None:
         header_payload["kid"] = kid
     header = encode_segment(header_payload)
     body = encode_segment(payload)
-    signature = hmac.new(secret.encode("utf-8"), f"{header}.{body}".encode("ascii"), hashlib.sha256).digest()
+    signature = hmac.new(
+        secret.encode("utf-8"), f"{header}.{body}".encode("ascii"), hashlib.sha256
+    ).digest()
     return f"{header}.{body}.{encode_segment(signature)}"
 
 
@@ -134,43 +157,57 @@ def test_encrypt_bytes_fails_closed_when_required_without_key(monkeypatch) -> No
 
 
 @pytest.mark.asyncio
-async def test_require_api_token_rejects_unsigned_jwt_shape_when_rbac_is_enabled(monkeypatch) -> None:
+async def test_require_api_token_rejects_unsigned_jwt_shape_when_rbac_is_enabled(
+    monkeypatch,
+) -> None:
     monkeypatch.setattr(security, "RBAC_ENABLED", True)
     monkeypatch.setattr(security, "API_TOKEN", None)
     monkeypatch.setattr(portrait_auth, "JWT_SECRET", "test-secret")
 
     with pytest.raises(HTTPException) as exc_info:
-        await security.require_api_token(api_request(), authorization="Bearer header.payload.signature")
+        await security.require_api_token(
+            api_request(), authorization="Bearer header.payload.signature"
+        )
 
     assert exc_info.value.status_code == 401
 
 
 @pytest.mark.asyncio
-async def test_require_api_token_fails_closed_when_rbac_has_no_credentials(monkeypatch) -> None:
+async def test_require_api_token_fails_closed_when_rbac_has_no_credentials(
+    monkeypatch,
+) -> None:
     monkeypatch.setattr(security, "RBAC_ENABLED", True)
     monkeypatch.setattr(security, "API_TOKEN", None)
 
     with pytest.raises(HTTPException) as exc_info:
-        await security.require_api_token(api_request(), authorization=None, x_api_key=None)
+        await security.require_api_token(
+            api_request(), authorization=None, x_api_key=None
+        )
 
     assert exc_info.value.status_code == 401
 
 
 @pytest.mark.asyncio
-async def test_require_api_token_fails_closed_when_auth_is_required_without_backend(monkeypatch) -> None:
+async def test_require_api_token_fails_closed_when_auth_is_required_without_backend(
+    monkeypatch,
+) -> None:
     monkeypatch.setattr(security, "RBAC_ENABLED", False)
     monkeypatch.setattr(security, "AUTH_REQUIRED", True)
     monkeypatch.setattr(security, "API_TOKEN", None)
 
     with pytest.raises(HTTPException) as exc_info:
-        await security.require_api_token(api_request(), authorization=None, x_api_key=None)
+        await security.require_api_token(
+            api_request(), authorization=None, x_api_key=None
+        )
 
     assert exc_info.value.status_code == 401
     assert "no credential backend" in str(exc_info.value.detail)
 
 
 @pytest.mark.asyncio
-async def test_require_api_token_accepts_api_key_when_auth_is_required(monkeypatch) -> None:
+async def test_require_api_token_accepts_api_key_when_auth_is_required(
+    monkeypatch,
+) -> None:
     monkeypatch.setattr(security, "RBAC_ENABLED", False)
     monkeypatch.setattr(security, "AUTH_REQUIRED", True)
     monkeypatch.setattr(security, "API_TOKEN", "test-token")
@@ -186,7 +223,9 @@ async def test_require_api_token_accepts_api_key_when_auth_is_required(monkeypat
 
 
 @pytest.mark.asyncio
-async def test_require_api_token_accepts_signed_jwt_when_rbac_is_enabled(monkeypatch) -> None:
+async def test_require_api_token_accepts_signed_jwt_when_rbac_is_enabled(
+    monkeypatch,
+) -> None:
     monkeypatch.setattr(security, "RBAC_ENABLED", True)
     monkeypatch.setattr(security, "API_TOKEN", None)
     monkeypatch.setattr(portrait_auth, "JWT_SECRET", "test-secret")
@@ -208,7 +247,9 @@ async def test_require_api_token_rejects_jwt_for_wrong_tenant(monkeypatch) -> No
     token = hs256_token(valid_jwt_payload(tenant_id="tenant-a"))
 
     with pytest.raises(HTTPException) as exc_info:
-        await security.require_api_token(api_request(), authorization=f"Bearer {token}", x_tenant_id="tenant-b")
+        await security.require_api_token(
+            api_request(), authorization=f"Bearer {token}", x_tenant_id="tenant-b"
+        )
 
     assert exc_info.value.status_code == 403
     assert "租户" in str(exc_info.value.detail)
@@ -221,7 +262,9 @@ async def test_permission_dependency_accepts_tenant_list_claim(monkeypatch) -> N
     monkeypatch.setattr(portrait_auth, "JWT_ISSUER", "portrait-hub")
     monkeypatch.setattr(portrait_auth, "JWT_AUDIENCE", "portrait-hub-api")
     monkeypatch.setattr(portrait_auth, "JWT_REQUIRE_TENANT", True)
-    token = hs256_token(valid_jwt_payload(roles=["viewer"], tenants=["tenant-a", "tenant-b"]))
+    token = hs256_token(
+        valid_jwt_payload(roles=["viewer"], tenants=["tenant-a", "tenant-b"])
+    )
 
     await portrait_auth.require_permission(
         "gallery:read",
@@ -237,10 +280,12 @@ def test_v1_requires_tenant_header_when_enabled(monkeypatch) -> None:
     response = client.get("/v1/admin/status")
 
     assert response.status_code == 400
-    assert "缺少 x-tenant-id 请求头" in response.json()["detail"]
+    assert "缺少 x-tenant-id 请求头" in api_error_message(response)
 
 
-def test_v1_infers_tenant_from_single_tenant_jwt_when_header_required(monkeypatch) -> None:
+def test_v1_infers_tenant_from_single_tenant_jwt_when_header_required(
+    monkeypatch,
+) -> None:
     monkeypatch.setattr(security, "RBAC_ENABLED", True)
     monkeypatch.setattr(security, "API_TOKEN", None)
     monkeypatch.setattr(portrait_auth, "RBAC_ENABLED", True)
@@ -252,13 +297,17 @@ def test_v1_infers_tenant_from_single_tenant_jwt_when_header_required(monkeypatc
     token = hs256_token(valid_jwt_payload(roles=["operator"], tenant_id="tenant-a"))
     client = TestClient(app)
 
-    response = client.get("/v1/admin/status", headers={"Authorization": f"Bearer {token}"})
+    response = client.get(
+        "/v1/admin/status", headers={"Authorization": f"Bearer {token}"}
+    )
 
     assert response.status_code == 200, response.text
     assert response.json()["data"]["tenant_id"] == "tenant-a"
 
 
-def test_v1_multi_tenant_jwt_requires_explicit_tenant_when_header_required(monkeypatch) -> None:
+def test_v1_multi_tenant_jwt_requires_explicit_tenant_when_header_required(
+    monkeypatch,
+) -> None:
     monkeypatch.setattr(security, "RBAC_ENABLED", True)
     monkeypatch.setattr(security, "API_TOKEN", None)
     monkeypatch.setattr(portrait_auth, "RBAC_ENABLED", True)
@@ -267,13 +316,17 @@ def test_v1_multi_tenant_jwt_requires_explicit_tenant_when_header_required(monke
     monkeypatch.setattr(portrait_auth, "JWT_AUDIENCE", "portrait-hub-api")
     monkeypatch.setattr(portrait_auth, "JWT_REQUIRE_TENANT", True)
     monkeypatch.setattr(portrait_security, "TENANT_HEADER_REQUIRED", True)
-    token = hs256_token(valid_jwt_payload(roles=["operator"], tenants=["tenant-a", "tenant-b"]))
+    token = hs256_token(
+        valid_jwt_payload(roles=["operator"], tenants=["tenant-a", "tenant-b"])
+    )
     client = TestClient(app)
 
-    response = client.get("/v1/admin/status", headers={"Authorization": f"Bearer {token}"})
+    response = client.get(
+        "/v1/admin/status", headers={"Authorization": f"Bearer {token}"}
+    )
 
     assert response.status_code == 400
-    assert "缺少 x-tenant-id 请求头" in response.json()["detail"]
+    assert "缺少 x-tenant-id 请求头" in api_error_message(response)
 
 
 def test_legacy_model_management_reads_are_rbac_protected(monkeypatch) -> None:
@@ -286,7 +339,7 @@ def test_legacy_model_management_reads_are_rbac_protected(monkeypatch) -> None:
     token = hs256_token(valid_jwt_payload(roles=["viewer"]))
     client = TestClient(app)
 
-    response = client.get("/models", headers={"Authorization": f"Bearer {token}"})
+    response = client.get("/v1/models", headers={"Authorization": f"Bearer {token}"})
 
     assert response.status_code == 200
 
@@ -301,10 +354,12 @@ def test_legacy_model_management_writes_require_models_write(monkeypatch) -> Non
     token = hs256_token(valid_jwt_payload(roles=["viewer"]))
     client = TestClient(app)
 
-    response = client.post("/reload-config", headers={"Authorization": f"Bearer {token}"})
+    response = client.post(
+        "/v1/admin/models/reload-config", headers={"Authorization": f"Bearer {token}"}
+    )
 
     assert response.status_code == 403
-    assert "models:write" in response.json()["detail"]
+    assert "models:write" in api_error_message(response)
 
 
 def test_rollout_writes_require_models_write(monkeypatch) -> None:
@@ -318,13 +373,16 @@ def test_rollout_writes_require_models_write(monkeypatch) -> None:
     client = TestClient(app)
 
     response = client.post(
-        "/rollout/aliases/switch",
+        "/v1/admin/models/rollout/aliases/switch",
         headers={"Authorization": f"Bearer {token}"},
-        json={"alias_name": "detector_default", "target_model_id": "portrait_hub/yolov8n.onnx"},
+        json={
+            "alias_name": "detector_default",
+            "target_model_id": "portrait_hub/yolov8n.onnx",
+        },
     )
 
     assert response.status_code == 403
-    assert "models:write" in response.json()["detail"]
+    assert "models:write" in api_error_message(response)
 
 
 def test_legacy_predict_requires_infer_permission(monkeypatch) -> None:
@@ -340,11 +398,15 @@ def test_legacy_predict_requires_infer_permission(monkeypatch) -> None:
     response = client.post(
         "/predict",
         headers={"Authorization": f"Bearer {token}"},
-        json={"project_name": "portrait_hub", "model_name": "yolov8n.onnx", "tensor_data": [0.0]},
+        json={
+            "project_name": "portrait_hub",
+            "model_name": "yolov8n.onnx",
+            "tensor_data": [0.0],
+        },
     )
 
     assert response.status_code == 403
-    assert "infer" in response.json()["detail"]
+    assert "infer" in api_error_message(response)
 
 
 def test_viewer_role_cannot_run_inference_or_compare(monkeypatch) -> None:
@@ -360,7 +422,11 @@ def test_viewer_role_cannot_run_inference_or_compare(monkeypatch) -> None:
     infer = client.post(
         "/predict",
         headers={"Authorization": f"Bearer {token}"},
-        json={"project_name": "portrait_hub", "model_name": "yolov8n.onnx", "tensor_data": [0.0]},
+        json={
+            "project_name": "portrait_hub",
+            "model_name": "yolov8n.onnx",
+            "tensor_data": [0.0],
+        },
     )
     compare = client.post(
         "/v1/compare/persons",
@@ -372,9 +438,9 @@ def test_viewer_role_cannot_run_inference_or_compare(monkeypatch) -> None:
     )
 
     assert infer.status_code == 403
-    assert "infer" in infer.json()["detail"]
+    assert "infer" in api_error_message(infer)
     assert compare.status_code == 403
-    assert "compare" in compare.json()["detail"]
+    assert "compare" in api_error_message(compare)
 
 
 def test_algorithm_role_can_run_inference(monkeypatch) -> None:
@@ -384,7 +450,9 @@ def test_algorithm_role_can_run_inference(monkeypatch) -> None:
     monkeypatch.setattr(portrait_auth, "JWT_AUDIENCE", "portrait-hub-api")
     token = hs256_token(valid_jwt_payload(roles=["algorithm"]))
 
-    assert portrait_auth.has_permission(portrait_auth.roles_from_claims(portrait_auth.verify_hs256_jwt(token)), "infer")
+    assert portrait_auth.has_permission(
+        portrait_auth.roles_from_claims(portrait_auth.verify_hs256_jwt(token)), "infer"
+    )
 
 
 def test_legacy_vision_requires_infer_permission(monkeypatch) -> None:
@@ -398,13 +466,13 @@ def test_legacy_vision_requires_infer_permission(monkeypatch) -> None:
     client = TestClient(app)
 
     response = client.post(
-        "/vision/infer",
+        "/v1/vision/infer",
         headers={"Authorization": f"Bearer {token}"},
         files={"files": ("frame.png", b"not-an-image", "image/png")},
     )
 
     assert response.status_code == 403
-    assert "infer" in response.json()["detail"]
+    assert "infer" in api_error_message(response)
 
 
 def test_debug_model_output_requires_models_write_permission(monkeypatch) -> None:
@@ -428,7 +496,7 @@ def test_debug_model_output_requires_models_write_permission(monkeypatch) -> Non
     )
 
     assert response.status_code == 403
-    assert "models:write" in response.json()["detail"]
+    assert "models:write" in api_error_message(response)
 
 
 def test_ready_deep_requires_models_read_permission(monkeypatch) -> None:
@@ -444,14 +512,16 @@ def test_ready_deep_requires_models_read_permission(monkeypatch) -> None:
     response = client.get("/ready/deep", headers={"Authorization": f"Bearer {token}"})
 
     assert response.status_code == 403
-    assert "models:read" in response.json()["detail"]
+    assert "models:read" in api_error_message(response)
 
 
 def test_ready_deep_redacts_model_readiness_errors(monkeypatch, caplog) -> None:
     caplog.set_level("WARNING")
     from app import routes_health
 
-    monkeypatch.setattr(routes_health.ort, "get_available_providers", lambda: ["CUDAExecutionProvider"])
+    monkeypatch.setattr(
+        routes_health.ort, "get_available_providers", lambda: ["CUDAExecutionProvider"]
+    )
     monkeypatch.setattr(
         routes_health,
         "MODEL_CONFIGS",
@@ -467,7 +537,7 @@ def test_ready_deep_redacts_model_readiness_errors(monkeypatch, caplog) -> None:
     response = client.get("/ready/deep")
 
     assert response.status_code == 503
-    payload = response.json()["detail"]
+    payload = api_error_message(response)
     assert payload["status"] == "not_ready"
     assert payload["checks"][0]["error"] == "模型就绪检查失败"
     assert "secret" not in response.text
@@ -494,7 +564,7 @@ def test_metrics_requires_metrics_read_permission(monkeypatch) -> None:
     allowed = client.get("/metrics", headers={"Authorization": f"Bearer {operator}"})
 
     assert denied.status_code == 403
-    assert "metrics:read" in denied.json()["detail"]
+    assert "metrics:read" in api_error_message(denied)
     assert allowed.status_code == 200
     assert "gpu_worker_model_config_info" in allowed.text
 
@@ -512,16 +582,26 @@ def test_admin_namespace_uses_dedicated_rbac_permissions(monkeypatch) -> None:
     operator = hs256_token(valid_jwt_payload(roles=["operator"]))
     auditor = hs256_token(valid_jwt_payload(roles=["auditor"]))
 
-    viewer_export = client.get("/v1/admin/export", headers={"Authorization": f"Bearer {viewer}"})
+    viewer_export = client.get(
+        "/v1/admin/export", headers={"Authorization": f"Bearer {viewer}"}
+    )
     algorithm_cleanup = client.post(
         "/v1/admin/retention/cleanup",
         headers={"Authorization": f"Bearer {algorithm}"},
         json={"retention_days": 0},
     )
-    operator_status = client.get("/v1/admin/status", headers={"Authorization": f"Bearer {operator}"})
-    operator_console = client.get("/console", headers={"Authorization": f"Bearer {operator}"})
-    viewer_console = client.get("/console", headers={"Authorization": f"Bearer {viewer}"})
-    auditor_export = client.get("/v1/admin/export", headers={"Authorization": f"Bearer {auditor}"})
+    operator_status = client.get(
+        "/v1/admin/status", headers={"Authorization": f"Bearer {operator}"}
+    )
+    operator_console = client.get(
+        "/console", headers={"Authorization": f"Bearer {operator}"}
+    )
+    viewer_console = client.get(
+        "/console", headers={"Authorization": f"Bearer {viewer}"}
+    )
+    auditor_export = client.get(
+        "/v1/admin/export", headers={"Authorization": f"Bearer {auditor}"}
+    )
     auditor_cleanup = client.post(
         "/v1/admin/retention/cleanup",
         headers={"Authorization": f"Bearer {auditor}"},
@@ -529,16 +609,16 @@ def test_admin_namespace_uses_dedicated_rbac_permissions(monkeypatch) -> None:
     )
 
     assert viewer_export.status_code == 403
-    assert "admin:export" in viewer_export.json()["detail"]
+    assert "admin:export" in api_error_message(viewer_export)
     assert algorithm_cleanup.status_code == 403
-    assert "admin:retention" in algorithm_cleanup.json()["detail"]
+    assert "admin:retention" in api_error_message(algorithm_cleanup)
     assert operator_status.status_code == 200
     assert operator_console.status_code == 200
     assert viewer_console.status_code == 403
-    assert "admin:status" in viewer_console.json()["detail"]
+    assert "admin:status" in api_error_message(viewer_console)
     assert auditor_export.status_code == 200
     assert auditor_cleanup.status_code == 403
-    assert "admin:retention" in auditor_cleanup.json()["detail"]
+    assert "admin:retention" in api_error_message(auditor_cleanup)
 
 
 def test_public_health_does_not_require_tenant_header_when_enabled(monkeypatch) -> None:
@@ -562,11 +642,15 @@ def test_public_health_and_ready_do_not_expose_runtime_details(monkeypatch) -> N
     assert "loaded_models" not in health.json()
     assert "available_providers" not in health.json()
     assert ready.status_code == 503
-    assert ready.json()["detail"] == {"status": "not_ready"}
+    assert api_error_message(ready) == {"status": "not_ready"}
 
 
-def test_public_ready_accepts_cpu_fallback_without_exposing_runtime_details(monkeypatch) -> None:
-    monkeypatch.setattr(routes_health.ort, "get_available_providers", lambda: ["CPUExecutionProvider"])
+def test_public_ready_accepts_cpu_fallback_without_exposing_runtime_details(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        routes_health.ort, "get_available_providers", lambda: ["CPUExecutionProvider"]
+    )
     monkeypatch.setattr(runtime_sessions, "CPU_FALLBACK_ENABLED", True)
     client = TestClient(app)
 
@@ -595,8 +679,12 @@ def test_verify_hs256_jwt_accepts_rotated_keyring_secret_with_kid(monkeypatch) -
     monkeypatch.setattr(portrait_auth, "JWT_SECRET_KEYRING", "v1=old-secret")
     monkeypatch.setattr(portrait_auth, "JWT_ISSUER", "portrait-hub")
     monkeypatch.setattr(portrait_auth, "JWT_AUDIENCE", "portrait-hub-api")
-    old_token = hs256_token(valid_jwt_payload(roles=["viewer"]), secret="old-secret", kid="v1")
-    new_token = hs256_token(valid_jwt_payload(roles=["operator"]), secret="new-secret", kid="v2")
+    old_token = hs256_token(
+        valid_jwt_payload(roles=["viewer"]), secret="old-secret", kid="v1"
+    )
+    new_token = hs256_token(
+        valid_jwt_payload(roles=["operator"]), secret="new-secret", kid="v2"
+    )
 
     assert portrait_auth.verify_hs256_jwt(old_token)["roles"] == ["viewer"]
     assert portrait_auth.verify_hs256_jwt(new_token)["roles"] == ["operator"]
@@ -732,12 +820,16 @@ async def test_permission_dependency_still_checks_roles(monkeypatch) -> None:
     token = hs256_token(valid_jwt_payload())
 
     with pytest.raises(HTTPException) as exc_info:
-        await portrait_auth.require_permission("models:write", authorization=f"Bearer {token}")
+        await portrait_auth.require_permission(
+            "models:write", authorization=f"Bearer {token}"
+        )
 
     assert exc_info.value.status_code == 403
 
 
-def test_get_model_path_uses_configured_artifact_path(monkeypatch, workspace_tmp_path: Path) -> None:
+def test_get_model_path_uses_configured_artifact_path(
+    monkeypatch, workspace_tmp_path: Path
+) -> None:
     models_root = workspace_tmp_path / "models"
     models_root.mkdir(parents=True)
     model_path = models_root / "detector.onnx"
@@ -749,10 +841,15 @@ def test_get_model_path_uses_configured_artifact_path(monkeypatch, workspace_tmp
         lambda key: {"artifact": {"path": "detector.onnx"}},
     )
 
-    assert model_package.get_model_path("portrait_hub", "detector.onnx") == model_path.resolve()
+    assert (
+        model_package.get_model_path("portrait_hub", "detector.onnx")
+        == model_path.resolve()
+    )
 
 
-def test_get_model_path_rejects_escaping_artifact_path(monkeypatch, workspace_tmp_path: Path) -> None:
+def test_get_model_path_rejects_escaping_artifact_path(
+    monkeypatch, workspace_tmp_path: Path
+) -> None:
     models_root = workspace_tmp_path / "models"
     models_root.mkdir(parents=True)
     monkeypatch.setattr(model_package, "MODELS_ROOT", models_root.resolve())
@@ -768,7 +865,9 @@ def test_get_model_path_rejects_escaping_artifact_path(monkeypatch, workspace_tm
     assert exc_info.value.status_code == 400
 
 
-def test_get_model_path_missing_model_does_not_echo_model_id(monkeypatch, workspace_tmp_path: Path) -> None:
+def test_get_model_path_missing_model_does_not_echo_model_id(
+    monkeypatch, workspace_tmp_path: Path
+) -> None:
     models_root = workspace_tmp_path / "models"
     models_root.mkdir(parents=True)
     monkeypatch.setattr(model_package, "MODELS_ROOT", models_root.resolve())
@@ -781,6 +880,7 @@ def test_get_model_path_missing_model_does_not_echo_model_id(monkeypatch, worksp
     assert exc_info.value.detail == "模型构件不存在"
     assert "secret_project" not in str(exc_info.value.detail)
     assert "secret-model" not in str(exc_info.value.detail)
+
 
 @pytest.mark.asyncio
 async def test_global_api_token_requires_tenant_binding_for_v1(monkeypatch) -> None:
@@ -824,7 +924,11 @@ async def test_application_api_key_scopes_apply_without_rbac(monkeypatch) -> Non
     monkeypatch.setattr(
         portrait_access,
         "application_key_matches",
-        lambda tenant_id, api_key: {"tenant_id": tenant_id, "app_id": "reader", "scopes": ["gallery:read"]},
+        lambda tenant_id, api_key: {
+            "tenant_id": tenant_id,
+            "app_id": "reader",
+            "scopes": ["gallery:read"],
+        },
     )
 
     await portrait_auth.require_permission(

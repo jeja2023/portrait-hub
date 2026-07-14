@@ -154,7 +154,7 @@
             "value": "{{api_key}}"
           }
         ],
-        "url": "{{base_url}}/rollout/audit?limit=20"
+        "url": "{{base_url}}/v1/admin/models/rollout/audit?limit=20"
       }
     }
   ],

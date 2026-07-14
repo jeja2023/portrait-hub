@@ -1,17 +1,42 @@
 import logging
 from typing import Any
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Query,
+    UploadFile,
+    status,
+)
 
 from app.image_io import load_images
-from app.inference import infer_classification_images, infer_detection_images, infer_reid_images
+from app.inference import (
+    infer_classification_images,
+    infer_detection_images,
+    infer_reid_images,
+)
 from app.metrics import observe
 from app.model_config import model_config, model_task, resolve_model_reference
 from app.model_package import get_model_path, model_package_info
-from app.observability import log_json, now, request_id_from_headers
+from app.observability import log_json, now
+from app.portrait_async import run_blocking_io
 from app.portrait_auth import permission_dependency
+from app.portrait_image_results import (
+    create_image_analysis_result,
+    image_analysis_results_snapshot,
+)
+from app.portrait_pagination import normalize_list_pagination, page_items_keyset
+from app.portrait_response import portrait_success
+from app.portrait_request_context import PortraitRequestContext, portrait_request_context
 from app.portrait_request_validation import validate_int_range
-from app.routes_inference_common import inference_error_boundary, validate_detection_parameters, validate_image_files
+from app.routes_inference_common import (
+    inference_error_boundary,
+    validate_detection_parameters,
+    validate_image_files,
+)
 from app.runtime import get_or_load_model, touch_model
 from app.schemas import ModelBundle
 from app.security import require_api_token
@@ -57,7 +82,9 @@ async def _run_classification_task(
     *,
     top_k: int | None,
 ) -> tuple[list[dict[str, Any]], dict[str, Any], int]:
-    results, infer_meta = await infer_classification_images(bundle, key, images, filenames, top_k=top_k)
+    results, infer_meta = await infer_classification_images(
+        bundle, key, images, filenames, top_k=top_k
+    )
     return results, infer_meta, sum(item["prediction_count"] for item in results)
 
 
@@ -79,15 +106,54 @@ async def _run_reid_task(
             "embedding_dim": infer_meta["embedding_dim"],
         }
         if include_vectors:
-            item["embedding"] = [round(float(value), 8) for value in embeddings[index].tolist()]
+            item["embedding"] = [
+                round(float(value), 8) for value in embeddings[index].tolist()
+            ]
         results.append(item)
     return results, infer_meta, len(results)
 
 
-@router.post("/vision/infer", dependencies=[Depends(require_api_token), Depends(permission_dependency("infer"))])
-@router.post("/vision/batch-infer", dependencies=[Depends(require_api_token), Depends(permission_dependency("infer"))])
+@router.get(
+    "/v1/vision/results",
+    dependencies=[Depends(require_api_token), Depends(permission_dependency("infer"))],
+)
+async def v1_list_image_analysis_results(
+    limit: int | None = Query(None),
+    offset: int | None = Query(None),
+    cursor: str | None = Query(None),
+    ctx: PortraitRequestContext = Depends(portrait_request_context),
+) -> dict[str, Any]:
+    pagination_request = normalize_list_pagination(limit, offset, cursor)
+    items = [
+        {
+            "sort_key": -float(record.created_at),
+            "result_id": record.result_id,
+            "record": record,
+        }
+        for record in image_analysis_results_snapshot(ctx.tenant_id)
+    ]
+    items.sort(key=lambda item: (item["sort_key"], item["result_id"]))
+    page, pagination = page_items_keyset(
+        items,
+        limit=pagination_request.limit,
+        offset=pagination_request.offset,
+        cursor=pagination_request.cursor,
+        key_fields=["sort_key", "result_id"],
+    )
+    return portrait_success(
+        ctx.request_id,
+        {
+            "results": [item["record"].public_dict() for item in page],
+            **pagination,
+        },
+    )
+
+
+@router.post(
+    "/v1/vision/infer",
+    dependencies=[Depends(require_api_token), Depends(permission_dependency("infer"))],
+)
 async def vision_infer(
-    request: Request,
     files: list[UploadFile] = File(...),
     requested_model_id: str | None = Form(None, alias="model_id"),
     project_name: str | None = Form(None),
@@ -99,13 +165,16 @@ async def vision_infer(
     top_k: int | None = Form(None),
     include_vectors: bool = Form(False),
     traffic_key: str | None = Form(None),
+    ctx: PortraitRequestContext = Depends(portrait_request_context),
 ) -> dict[str, Any]:
-    request_id = request_id_from_headers(request)
+    request_id = ctx.request_id
     observe("vision_requests_total")
     total_start = now()
 
     validate_image_files(files, max_images=MAX_VISION_IMAGES)
-    validate_detection_parameters(confidence=confidence, iou=iou, max_detections=max_detections)
+    validate_detection_parameters(
+        confidence=confidence, iou=iou, max_detections=max_detections
+    )
     if top_k is not None:
         validate_int_range("top_k", top_k, minimum=1, maximum=MAX_TOP_K)
 
@@ -131,11 +200,19 @@ async def vision_infer(
         if task_name in DETECTION_TASKS:
             task_name = "detection"
             results, infer_meta, result_count = await _run_detection_task(
-                bundle, key, images, filenames, confidence=confidence, iou=iou, max_detections=max_detections
+                bundle,
+                key,
+                images,
+                filenames,
+                confidence=confidence,
+                iou=iou,
+                max_detections=max_detections,
             )
         elif task_name in CLASSIFICATION_TASKS:
             task_name = "classification"
-            results, infer_meta, result_count = await _run_classification_task(bundle, key, images, filenames, top_k=top_k)
+            results, infer_meta, result_count = await _run_classification_task(
+                bundle, key, images, filenames, top_k=top_k
+            )
         elif task_name in REID_TASKS:
             task_name = "reid"
             results, infer_meta, result_count = await _run_reid_task(
@@ -178,9 +255,7 @@ async def vision_infer(
             total_seconds=round(total_seconds, 6),
         )
 
-    return {
-        "status": "success",
-        "request_id": request_id,
+    response_data = {
         "model": {
             "id": alias_name or requested_model_id or key,
             "alias": alias_name,
@@ -213,3 +288,14 @@ async def vision_infer(
         "image_count": len(results),
         "result_count": result_count,
     }
+    await run_blocking_io(
+        create_image_analysis_result,
+        tenant_id=ctx.tenant_id,
+        request_id=request_id,
+        mode=task_name,
+        endpoint="/v1/vision/infer",
+        payload=response_data,
+        images=images,
+        filenames=filenames,
+    )
+    return portrait_success(request_id, response_data)

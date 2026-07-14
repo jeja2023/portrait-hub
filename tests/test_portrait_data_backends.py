@@ -14,6 +14,7 @@ from app import portrait_gallery
 from app import portrait_bootstrap
 from app import portrait_object_storage
 from app import portrait_jobs
+from app import portrait_image_results
 from app import portrait_model_capabilities
 from app import portrait_state
 from app import portrait_stream_worker
@@ -25,14 +26,82 @@ from app import portrait_thresholds
 from app import portrait_crypto
 from app import portrait_vector_store
 from app import server
-from app.portrait_gallery import GALLERY, add_feature, gallery_key, patch_person, reindex_gallery_vectors, upsert_person
-from app.portrait_jobs import VIDEO_JOBS, VideoJob, create_video_job, job_key, request_cancel_video_job
+from app.portrait_gallery import (
+    GALLERY,
+    add_feature,
+    gallery_key,
+    patch_person,
+    reindex_gallery_vectors,
+    upsert_person,
+)
+from app.portrait_jobs import (
+    VIDEO_JOBS,
+    VideoJob,
+    create_video_job,
+    job_key,
+    request_cancel_video_job,
+)
 from app.portrait_jobs import run_video_job
 from app.portrait_object_storage import LocalObjectStore, S3ObjectStore, object_key_for
 from app.portrait_postgres import postgres_health, vector_literal
-from app.portrait_streams import STREAMS, create_stream, start_stream, stop_stream, stream_key
-from app.portrait_task_queue import TASK_MESSAGES, LocalTaskQueue, QueueMessage, RedisTaskQueue
+from app.portrait_streams import (
+    STREAMS,
+    create_stream,
+    start_stream,
+    stop_stream,
+    stream_key,
+)
+from app.portrait_task_queue import (
+    TASK_MESSAGES,
+    LocalTaskQueue,
+    QueueMessage,
+    RedisTaskQueue,
+)
 from app.portrait_vector_store import PgvectorVectorStore, QdrantVectorStore
+
+
+def test_local_image_analysis_results_are_capped_and_reloadable(
+    monkeypatch, workspace_tmp_path
+) -> None:
+    state_path = workspace_tmp_path / "image-results.json"
+    monkeypatch.setattr(
+        portrait_image_results, "PORTRAIT_IMAGE_RESULTS_STATE_PATH", state_path
+    )
+    monkeypatch.setattr(portrait_image_results, "PORTRAIT_STORAGE_BACKEND", "local")
+    monkeypatch.setattr(
+        portrait_image_results, "MAX_IMAGE_ANALYSIS_RESULTS_PER_TENANT", 2
+    )
+    monkeypatch.setattr(portrait_image_results, "IMAGE_ANALYSIS_THUMBNAIL_MAX_SIDE", 16)
+    portrait_image_results.IMAGE_ANALYSIS_RESULTS.clear()
+
+    try:
+        for index, color in enumerate(["red", "green", "blue"]):
+            portrait_image_results.create_image_analysis_result(
+                tenant_id="tenant-a",
+                request_id=f"req-{index}",
+                mode="detection",
+                endpoint="/v1/vision/infer",
+                payload={"index": index},
+                images=[Image.new("RGB", (32, 24), color=color)],
+                filenames=[f"input-{index}.png"],
+            )
+
+        snapshot = portrait_image_results.image_analysis_results_snapshot("tenant-a")
+        assert len(snapshot) == 2
+        assert {record.request_id for record in snapshot} == {"req-1", "req-2"}
+        assert all(record.previews[0]["src"].startswith("data:image/jpeg;base64,") for record in snapshot)
+
+        raw_state = json.loads(state_path.read_text(encoding="utf-8"))
+        assert raw_state["version"] == 1
+        assert len(raw_state["results"]) == 2
+
+        portrait_image_results.IMAGE_ANALYSIS_RESULTS.clear()
+        portrait_image_results.load_image_analysis_results_state()
+        restored = portrait_image_results.image_analysis_results_snapshot("tenant-a")
+        assert len(restored) == 2
+        assert {record.payload["index"] for record in restored} == {1, 2}
+    finally:
+        portrait_image_results.IMAGE_ANALYSIS_RESULTS.clear()
 
 
 def test_postgres_health_is_safe_without_external_database() -> None:
@@ -90,12 +159,20 @@ def test_model_capability_normalization_exposes_real_model_adapter_contract() ->
     assert capabilities["body_embedding"]["input_size"] == [256, 128]
 
 
-def test_object_store_health_redacts_backend_locations(monkeypatch, workspace_tmp_path) -> None:
-    monkeypatch.setattr(portrait_object_storage, "OBJECT_STORAGE_DIR", workspace_tmp_path / "secret-objects")
+def test_object_store_health_redacts_backend_locations(
+    monkeypatch, workspace_tmp_path
+) -> None:
+    monkeypatch.setattr(
+        portrait_object_storage,
+        "OBJECT_STORAGE_DIR",
+        workspace_tmp_path / "secret-objects",
+    )
     local = LocalObjectStore().health()
 
     monkeypatch.setattr(portrait_object_storage, "S3_BUCKET", "secret-bucket")
-    monkeypatch.setattr(portrait_object_storage, "S3_ENDPOINT_URL", "https://storage.internal")
+    monkeypatch.setattr(
+        portrait_object_storage, "S3_ENDPOINT_URL", "https://storage.internal"
+    )
     monkeypatch.setattr(portrait_object_storage, "S3_REGION", "us-test-1")
     s3 = S3ObjectStore().health()
 
@@ -131,10 +208,18 @@ def test_object_store_delete_failures_are_redacted(monkeypatch, caplog) -> None:
     monkeypatch.setattr(portrait_object_storage, "S3_BUCKET", "secret-bucket")
     monkeypatch.setattr(portrait_object_storage, "boto3", FailingBoto3())
 
-    local = LocalObjectStore().delete_object({"object_key": "tenant-a/gallery-image/secret-face.png"})
-    s3 = S3ObjectStore().delete_object({"object_key": "tenant-a/gallery-image/secret-face.png"})
+    local = LocalObjectStore().delete_object(
+        {"object_key": "tenant-a/gallery-image/secret-face.png"}
+    )
+    s3 = S3ObjectStore().delete_object(
+        {"object_key": "tenant-a/gallery-image/secret-face.png"}
+    )
 
-    assert local == {"backend": "local_file", "deleted": False, "reason": "对象删除失败"}
+    assert local == {
+        "backend": "local_file",
+        "deleted": False,
+        "reason": "对象删除失败",
+    }
     assert s3 == {"backend": "s3", "deleted": False, "reason": "对象删除失败"}
     encoded = json.dumps({"local": local, "s3": s3}, ensure_ascii=False)
     assert "secret-face" not in encoded
@@ -146,7 +231,9 @@ def test_object_store_delete_failures_are_redacted(monkeypatch, caplog) -> None:
     assert "secret local object path" not in caplog.text
 
 
-def test_state_file_failure_logs_are_redacted(monkeypatch, workspace_tmp_path, caplog) -> None:
+def test_state_file_failure_logs_are_redacted(
+    monkeypatch, workspace_tmp_path, caplog
+) -> None:
     caplog.set_level("WARNING")
     monkeypatch.setattr(portrait_state, "STATE_READ_FAIL_CLOSED", False)
     monkeypatch.setattr(portrait_state, "STATE_WRITE_FAIL_CLOSED", False)
@@ -168,7 +255,9 @@ def test_state_file_failure_logs_are_redacted(monkeypatch, workspace_tmp_path, c
     monkeypatch.setattr(type(read_target), "open", fail_open)
 
     assert portrait_state.read_json_state(read_target, {"ok": False}) == {"ok": False}
-    portrait_state.handle_state_write_error(write_target, OSError(f"secret-write-token {write_target}"))
+    portrait_state.handle_state_write_error(
+        write_target, OSError(f"secret-write-token {write_target}")
+    )
     portrait_state.append_jsonl(append_target, {"event": "secret"}, fail_closed=False)
 
     assert "path_hash=" in caplog.text
@@ -206,9 +295,15 @@ def test_backend_health_errors_are_redacted(monkeypatch, caplog) -> None:
             def from_url(*args, **kwargs):
                 return FailingRedisClient()
 
-    monkeypatch.setattr(portrait_postgres, "POSTGRES_DSN", "postgres://user:secret-password@db.internal/app")
+    monkeypatch.setattr(
+        portrait_postgres,
+        "POSTGRES_DSN",
+        "postgres://user:secret-password@db.internal/app",
+    )
     monkeypatch.setattr(portrait_postgres, "psycopg", FailingPsycopg())
-    monkeypatch.setattr(portrait_task_queue, "REDIS_URL", "redis://:secret-token@redis.internal/0")
+    monkeypatch.setattr(
+        portrait_task_queue, "REDIS_URL", "redis://:secret-token@redis.internal/0"
+    )
     monkeypatch.setattr(portrait_task_queue, "redis", FailingRedisModule())
 
     postgres = portrait_postgres.postgres_health()
@@ -253,7 +348,9 @@ def test_audit_payload_redacts_reserved_fields_and_stays_bounded(monkeypatch) ->
             },
         },
     )
-    encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    encoded = json.dumps(
+        payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+    ).encode("utf-8")
 
     assert len(encoded) <= 1024
     assert payload["event"] == "gallery_update"
@@ -299,16 +396,24 @@ def test_audit_payload_hash_chain_detects_tampering() -> None:
     assert portrait_audit.audit_payload_hash(tampered) != first["audit_hash"]
 
 
-def test_audit_event_writes_tamper_evident_jsonl_chain(monkeypatch, workspace_tmp_path) -> None:
+def test_audit_event_writes_tamper_evident_jsonl_chain(
+    monkeypatch, workspace_tmp_path
+) -> None:
     audit_path = workspace_tmp_path / "audit.jsonl"
     monkeypatch.setattr(portrait_audit, "PORTRAIT_AUDIT_PATH", audit_path)
     monkeypatch.setattr(portrait_audit, "PORTRAIT_STORAGE_BACKEND", "json")
     monkeypatch.setattr(portrait_audit, "AUDIT_WRITE_FAIL_CLOSED", True)
 
-    portrait_audit.audit_event("gallery_update", request_id="req-1", tenant_id="tenant-a")
-    portrait_audit.audit_event("gallery_delete", request_id="req-2", tenant_id="tenant-a")
+    portrait_audit.audit_event(
+        "gallery_update", request_id="req-1", tenant_id="tenant-a"
+    )
+    portrait_audit.audit_event(
+        "gallery_delete", request_id="req-2", tenant_id="tenant-a"
+    )
 
-    records = [json.loads(line) for line in audit_path.read_text(encoding="utf-8").splitlines()]
+    records = [
+        json.loads(line) for line in audit_path.read_text(encoding="utf-8").splitlines()
+    ]
 
     assert len(records) == 2
     assert records[0]["audit_prev_hash"] is None
@@ -318,7 +423,9 @@ def test_audit_event_writes_tamper_evident_jsonl_chain(monkeypatch, workspace_tm
     assert portrait_audit.last_audit_hash(audit_path) == records[1]["audit_hash"]
 
 
-def test_audit_event_fails_closed_when_existing_jsonl_chain_is_unreadable(monkeypatch, workspace_tmp_path) -> None:
+def test_audit_event_fails_closed_when_existing_jsonl_chain_is_unreadable(
+    monkeypatch, workspace_tmp_path
+) -> None:
     audit_path = workspace_tmp_path / "audit.jsonl"
     audit_path.write_text("{not-json}\n", encoding="utf-8")
     monkeypatch.setattr(portrait_audit, "PORTRAIT_AUDIT_PATH", audit_path)
@@ -326,7 +433,9 @@ def test_audit_event_fails_closed_when_existing_jsonl_chain_is_unreadable(monkey
     monkeypatch.setattr(portrait_audit, "AUDIT_WRITE_FAIL_CLOSED", True)
 
     with pytest.raises(HTTPException) as exc_info:
-        portrait_audit.audit_event("gallery_update", request_id="req-1", tenant_id="tenant-a")
+        portrait_audit.audit_event(
+            "gallery_update", request_id="req-1", tenant_id="tenant-a"
+        )
 
     assert exc_info.value.status_code == 503
     assert exc_info.value.detail == "审计链不可用"
@@ -342,7 +451,9 @@ def test_audit_event_fails_closed_when_jsonl_write_fails(monkeypatch) -> None:
     monkeypatch.setattr(portrait_audit, "append_jsonl", fail_append)
 
     with pytest.raises(HTTPException) as exc_info:
-        portrait_audit.audit_event("management_change", request_id="req-1", tenant_id="tenant-a")
+        portrait_audit.audit_event(
+            "management_change", request_id="req-1", tenant_id="tenant-a"
+        )
 
     assert exc_info.value.status_code == 503
 
@@ -350,7 +461,9 @@ def test_audit_event_fails_closed_when_jsonl_write_fails(monkeypatch) -> None:
 def test_audit_event_fails_closed_when_postgres_audit_fails(monkeypatch) -> None:
     monkeypatch.setattr(portrait_audit, "AUDIT_WRITE_FAIL_CLOSED", True)
     monkeypatch.setattr(portrait_audit, "PORTRAIT_STORAGE_BACKEND", "postgres")
-    monkeypatch.setattr(portrait_audit, "append_jsonl", lambda path, payload, *, fail_closed=False: None)
+    monkeypatch.setattr(
+        portrait_audit, "append_jsonl", lambda path, payload, *, fail_closed=False: None
+    )
 
     def fail_insert(payload):
         raise RuntimeError("postgres unavailable")
@@ -358,17 +471,23 @@ def test_audit_event_fails_closed_when_postgres_audit_fails(monkeypatch) -> None
     monkeypatch.setattr("app.portrait_postgres.insert_audit_event", fail_insert)
 
     with pytest.raises(RuntimeError):
-        portrait_audit.audit_event("management_change", request_id="req-1", tenant_id="tenant-a")
+        portrait_audit.audit_event(
+            "management_change", request_id="req-1", tenant_id="tenant-a"
+        )
 
 
 def test_audit_event_postgres_failure_logs_are_redacted(monkeypatch, caplog) -> None:
     caplog.set_level("WARNING")
     monkeypatch.setattr(portrait_audit, "AUDIT_WRITE_FAIL_CLOSED", False)
     monkeypatch.setattr(portrait_audit, "PORTRAIT_STORAGE_BACKEND", "postgres")
-    monkeypatch.setattr(portrait_audit, "append_jsonl", lambda path, payload, *, fail_closed=False: None)
+    monkeypatch.setattr(
+        portrait_audit, "append_jsonl", lambda path, payload, *, fail_closed=False: None
+    )
 
     def fail_insert(payload):
-        raise RuntimeError("postgres://user:secret-password@db.internal/app tenant-secret")
+        raise RuntimeError(
+            "postgres://user:secret-password@db.internal/app tenant-secret"
+        )
 
     monkeypatch.setattr("app.portrait_postgres.insert_audit_event", fail_insert)
 
@@ -396,7 +515,9 @@ def test_vector_backend_fallback_logs_are_redacted(monkeypatch, caplog) -> None:
 
     monkeypatch.setattr("app.portrait_postgres.search_pgvector", fail_pgvector)
     monkeypatch.setattr(portrait_vector_store, "qdrant_models", object())
-    monkeypatch.setattr(portrait_vector_store.QdrantVectorStore, "_client", fail_qdrant_client)
+    monkeypatch.setattr(
+        portrait_vector_store.QdrantVectorStore, "_client", fail_qdrant_client
+    )
 
     pgvector = PgvectorVectorStore().search(
         [1.0, 0.0],
@@ -436,7 +557,12 @@ async def test_batch_inference_fallback_log_is_redacted(monkeypatch, caplog) -> 
 
     monkeypatch.setattr(runtime_execution, "run_model_bundle", fake_run_model_bundle)
 
-    outputs, queue_seconds, inference_seconds, mode = await runtime_execution.run_yolo_frames(
+    (
+        outputs,
+        queue_seconds,
+        inference_seconds,
+        mode,
+    ) = await runtime_execution.run_yolo_frames(
         {},
         np.zeros((2, 1), dtype=np.float32),
     )
@@ -453,14 +579,24 @@ async def test_batch_inference_fallback_log_is_redacted(monkeypatch, caplog) -> 
 
 @pytest.mark.asyncio
 async def test_generic_batch_inference_counts_batched_items(monkeypatch) -> None:
-    bundle = {"session": object(), "lock": asyncio.Lock(), "inference_count": 0, "gpu_device_id": 0}
+    bundle = {
+        "session": object(),
+        "lock": asyncio.Lock(),
+        "inference_count": 0,
+        "gpu_device_id": 0,
+    }
 
     def fake_run_session(session, input_array):
         return [np.ones((input_array.shape[0], 2), dtype=np.float32)]
 
     monkeypatch.setattr(runtime_execution, "run_session", fake_run_session)
 
-    outputs, queue_seconds, inference_seconds, mode = await runtime_execution.run_model_bundle_batch(
+    (
+        outputs,
+        queue_seconds,
+        inference_seconds,
+        mode,
+    ) = await runtime_execution.run_model_bundle_batch(
         bundle,
         [np.zeros((1, 3), dtype=np.float32), np.zeros((1, 3), dtype=np.float32)],
     )
@@ -472,11 +608,15 @@ async def test_generic_batch_inference_counts_batched_items(monkeypatch) -> None
     assert bundle["inference_count"] == 2
 
 
-def test_local_object_store_escapes_path_segments(monkeypatch, workspace_tmp_path) -> None:
+def test_local_object_store_escapes_path_segments(
+    monkeypatch, workspace_tmp_path
+) -> None:
     object_root = workspace_tmp_path / "objects"
     monkeypatch.setattr(portrait_object_storage, "OBJECT_STORAGE_DIR", object_root)
 
-    info = LocalObjectStore().put_bytes("tenant/../../x", "../gallery", "../face.png", b"payload")
+    info = LocalObjectStore().put_bytes(
+        "tenant/../../x", "../gallery", "../face.png", b"payload"
+    )
 
     assert ".." not in info["object_key"]
     assert "/" in info["object_key"]
@@ -485,7 +625,9 @@ def test_local_object_store_escapes_path_segments(monkeypatch, workspace_tmp_pat
     assert stored_path.relative_to(object_root.resolve())
 
 
-def test_local_object_store_delete_removes_object(monkeypatch, workspace_tmp_path) -> None:
+def test_local_object_store_delete_removes_object(
+    monkeypatch, workspace_tmp_path
+) -> None:
     object_root = workspace_tmp_path / "objects"
     monkeypatch.setattr(portrait_object_storage, "OBJECT_STORAGE_DIR", object_root)
     store = LocalObjectStore()
@@ -501,22 +643,31 @@ def test_local_object_store_delete_removes_object(monkeypatch, workspace_tmp_pat
         assert stored_path.is_file()
 
 
-def test_object_store_records_do_not_include_source_filename(monkeypatch, workspace_tmp_path) -> None:
+def test_object_store_records_do_not_include_source_filename(
+    monkeypatch, workspace_tmp_path
+) -> None:
     object_root = workspace_tmp_path / "objects"
     recorded = []
 
     monkeypatch.setattr(portrait_object_storage, "OBJECT_STORAGE_DIR", object_root)
     monkeypatch.setattr(portrait_object_storage, "PORTRAIT_STORAGE_BACKEND", "postgres")
-    monkeypatch.setattr("app.portrait_postgres.insert_object_record", lambda tenant_id, info, metadata: recorded.append(metadata))
+    monkeypatch.setattr(
+        "app.portrait_postgres.insert_object_record",
+        lambda tenant_id, info, metadata: recorded.append(metadata),
+    )
 
-    LocalObjectStore().put_bytes("tenant-a", "gallery-image", "secret-person-name.png", b"payload")
+    LocalObjectStore().put_bytes(
+        "tenant-a", "gallery-image", "secret-person-name.png", b"payload"
+    )
 
     assert recorded == [{"object_type": "gallery-image", "filename_provided": True}]
     assert "secret-person-name" not in json.dumps(recorded, ensure_ascii=False)
     assert "filename" not in recorded[0]
 
 
-def test_local_object_store_falls_back_when_atomic_replace_is_unavailable(monkeypatch, workspace_tmp_path) -> None:
+def test_local_object_store_falls_back_when_atomic_replace_is_unavailable(
+    monkeypatch, workspace_tmp_path
+) -> None:
     object_root = workspace_tmp_path / "objects"
     monkeypatch.setattr(portrait_object_storage, "OBJECT_STORAGE_DIR", object_root)
 
@@ -525,7 +676,9 @@ def test_local_object_store_falls_back_when_atomic_replace_is_unavailable(monkey
 
     monkeypatch.setattr(portrait_object_storage.os, "replace", fail_replace)
 
-    info = LocalObjectStore().put_bytes("tenant-a", "gallery-image", "face.png", b"payload")
+    info = LocalObjectStore().put_bytes(
+        "tenant-a", "gallery-image", "face.png", b"payload"
+    )
     stored_path = (object_root / info["object_key"]).resolve()
     payload = json.loads(stored_path.read_text(encoding="utf-8"))
 
@@ -533,7 +686,9 @@ def test_local_object_store_falls_back_when_atomic_replace_is_unavailable(monkey
     assert payload["data"] == "cGF5bG9hZA=="
 
 
-def test_local_object_store_encrypts_payload_when_key_is_configured(monkeypatch, workspace_tmp_path) -> None:
+def test_local_object_store_encrypts_payload_when_key_is_configured(
+    monkeypatch, workspace_tmp_path
+) -> None:
     object_root = workspace_tmp_path / "objects"
     monkeypatch.setattr(portrait_object_storage, "OBJECT_STORAGE_DIR", object_root)
     monkeypatch.setattr(portrait_crypto, "ENCRYPTION_KEY", "test-encryption-key")
@@ -541,7 +696,9 @@ def test_local_object_store_encrypts_payload_when_key_is_configured(monkeypatch,
     monkeypatch.setattr(portrait_crypto, "ENCRYPTION_KEYRING", "")
     monkeypatch.setattr(portrait_crypto, "REQUIRE_ENCRYPTION", True)
 
-    info = LocalObjectStore().put_bytes("tenant-a", "gallery-image", "face.png", b"secret-image-bytes")
+    info = LocalObjectStore().put_bytes(
+        "tenant-a", "gallery-image", "face.png", b"secret-image-bytes"
+    )
     stored_path = (object_root / info["object_key"]).resolve()
     payload = json.loads(stored_path.read_text(encoding="utf-8"))
 
@@ -558,7 +715,9 @@ def test_object_key_for_is_backend_stable_and_encoded() -> None:
     assert key == f"tenant%3Aone/gallery%2Fimage/aa/{'a' * 64}.png.json"
 
 
-def test_json_state_write_fails_closed_by_default(monkeypatch, workspace_tmp_path) -> None:
+def test_json_state_write_fails_closed_by_default(
+    monkeypatch, workspace_tmp_path
+) -> None:
     monkeypatch.setattr(portrait_state, "STATE_WRITE_FAIL_CLOSED", True)
 
     def fail_open(*args, **kwargs):
@@ -574,7 +733,9 @@ def test_json_state_write_fails_closed_by_default(monkeypatch, workspace_tmp_pat
     assert "状态写入失败" in str(exc_info.value.detail)
 
 
-def test_json_state_write_can_remain_best_effort(monkeypatch, workspace_tmp_path) -> None:
+def test_json_state_write_can_remain_best_effort(
+    monkeypatch, workspace_tmp_path
+) -> None:
     monkeypatch.setattr(portrait_state, "STATE_WRITE_FAIL_CLOSED", False)
 
     def fail_open(*args, **kwargs):
@@ -586,7 +747,9 @@ def test_json_state_write_can_remain_best_effort(monkeypatch, workspace_tmp_path
     portrait_state.write_json_state(target, {"ok": True})
 
 
-def test_json_state_read_fails_closed_when_existing_state_is_malformed(monkeypatch, workspace_tmp_path) -> None:
+def test_json_state_read_fails_closed_when_existing_state_is_malformed(
+    monkeypatch, workspace_tmp_path
+) -> None:
     monkeypatch.setattr(portrait_state, "STATE_READ_FAIL_CLOSED", True)
     target = workspace_tmp_path / "state.json"
     target.write_text("{", encoding="utf-8")
@@ -598,7 +761,9 @@ def test_json_state_read_fails_closed_when_existing_state_is_malformed(monkeypat
     assert exc_info.value.detail == "状态读取失败"
 
 
-def test_json_state_read_can_remain_best_effort(monkeypatch, workspace_tmp_path) -> None:
+def test_json_state_read_can_remain_best_effort(
+    monkeypatch, workspace_tmp_path
+) -> None:
     monkeypatch.setattr(portrait_state, "STATE_READ_FAIL_CLOSED", False)
     target = workspace_tmp_path / "state.json"
     target.write_text("{", encoding="utf-8")
@@ -606,10 +771,14 @@ def test_json_state_read_can_remain_best_effort(monkeypatch, workspace_tmp_path)
     assert portrait_state.read_json_state(target, {"ok": False}) == {"ok": False}
 
 
-def test_json_state_read_missing_file_still_uses_default(monkeypatch, workspace_tmp_path) -> None:
+def test_json_state_read_missing_file_still_uses_default(
+    monkeypatch, workspace_tmp_path
+) -> None:
     monkeypatch.setattr(portrait_state, "STATE_READ_FAIL_CLOSED", True)
 
-    assert portrait_state.read_json_state(workspace_tmp_path / "missing.json", {"ok": True}) == {"ok": True}
+    assert portrait_state.read_json_state(
+        workspace_tmp_path / "missing.json", {"ok": True}
+    ) == {"ok": True}
 
 
 def test_gallery_state_shape_fails_closed(monkeypatch, workspace_tmp_path) -> None:
@@ -625,7 +794,9 @@ def test_gallery_state_shape_fails_closed(monkeypatch, workspace_tmp_path) -> No
     assert exc_info.value.status_code == 503
 
 
-def test_invalid_runtime_state_logs_are_redacted(monkeypatch, workspace_tmp_path, caplog) -> None:
+def test_invalid_runtime_state_logs_are_redacted(
+    monkeypatch, workspace_tmp_path, caplog
+) -> None:
     caplog.set_level("WARNING")
     gallery_path = workspace_tmp_path / "gallery.json"
     jobs_path = workspace_tmp_path / "jobs.json"
@@ -636,7 +807,13 @@ def test_invalid_runtime_state_logs_are_redacted(monkeypatch, workspace_tmp_path
                 "people": [
                     {
                         "person_id": "p_bad",
-                        "features": [{"feature_id": "f1", "modality": "body", "embedding": ["secret-token"]}],
+                        "features": [
+                            {
+                                "feature_id": "f1",
+                                "modality": "body",
+                                "embedding": ["secret-token"],
+                            }
+                        ],
                     }
                 ]
             }
@@ -697,7 +874,9 @@ async def test_lifespan_loads_portrait_state_once_before_warmup(monkeypatch) -> 
 
     monkeypatch.setattr(portrait_bootstrap, "_STATE_LOADED", False)
     monkeypatch.setattr(portrait_bootstrap, "_STATE_LOAD_LOCK", None)
-    monkeypatch.setattr(portrait_bootstrap, "load_portrait_runtime_state", fake_load_state)
+    monkeypatch.setattr(
+        portrait_bootstrap, "load_portrait_runtime_state", fake_load_state
+    )
     monkeypatch.setattr(server, "reload_runtime_config", fake_reload_runtime_config)
     monkeypatch.setattr(server, "warmup_models", fake_warmup_models)
 
@@ -705,7 +884,13 @@ async def test_lifespan_loads_portrait_state_once_before_warmup(monkeypatch) -> 
         assert calls == ["config:startup:True", "state", "warmup"]
 
     async with server.lifespan(server.create_app()):
-        assert calls == ["config:startup:True", "state", "warmup", "config:startup:True", "warmup"]
+        assert calls == [
+            "config:startup:True",
+            "state",
+            "warmup",
+            "config:startup:True",
+            "warmup",
+        ]
 
 
 def test_video_jobs_state_shape_fails_closed(monkeypatch, workspace_tmp_path) -> None:
@@ -759,7 +944,9 @@ def test_gallery_vector_failure_logs_are_redacted(monkeypatch, caplog) -> None:
         assert secret not in caplog.text
 
 
-def test_gallery_feature_state_keeps_private_object_info_but_public_output_redacts() -> None:
+def test_gallery_feature_state_keeps_private_object_info_but_public_output_redacts() -> (
+    None
+):
     feature = portrait_gallery.FeatureRecord(
         feature_id="f_object",
         modality="body",
@@ -784,9 +971,16 @@ def test_gallery_feature_state_keeps_private_object_info_but_public_output_redac
     state_payload = feature.state_dict()
     restored = portrait_gallery.FeatureRecord.from_state(state_payload)
 
-    assert public_payload["object"] == {"backend": "s3", "stored": True, "encrypted": True}
+    assert public_payload["object"] == {
+        "backend": "s3",
+        "stored": True,
+        "encrypted": True,
+    }
     assert "object_key" not in json.dumps(public_payload, ensure_ascii=False)
-    assert state_payload["object_info"]["object_key"] == "tenant/gallery/secret-object.json"
+    assert (
+        state_payload["object_info"]["object_key"]
+        == "tenant/gallery/secret-object.json"
+    )
     assert restored.object_info == state_payload["object_info"]
 
 
@@ -808,7 +1002,9 @@ def test_threshold_state_shape_fails_closed(monkeypatch, workspace_tmp_path) -> 
     state_path.write_text('{"thresholds": []}', encoding="utf-8")
     monkeypatch.setattr(portrait_state, "STATE_READ_FAIL_CLOSED", True)
     monkeypatch.setattr(portrait_thresholds, "PORTRAIT_STORAGE_BACKEND", "json")
-    monkeypatch.setattr(portrait_thresholds, "PORTRAIT_THRESHOLDS_STATE_PATH", state_path)
+    monkeypatch.setattr(
+        portrait_thresholds, "PORTRAIT_THRESHOLDS_STATE_PATH", state_path
+    )
 
     with pytest.raises(HTTPException) as exc_info:
         portrait_thresholds.load_threshold_state()
@@ -830,7 +1026,9 @@ def test_gallery_upsert_rolls_back_memory_when_persist_fails(monkeypatch) -> Non
     assert gallery_key("tenant-a", "p_rollback") not in GALLERY
 
 
-def test_gallery_json_wal_replays_incremental_mutations(monkeypatch, workspace_tmp_path) -> None:
+def test_gallery_json_wal_replays_incremental_mutations(
+    monkeypatch, workspace_tmp_path
+) -> None:
     GALLERY.clear()
     state_path = workspace_tmp_path / "gallery.json"
     monkeypatch.setattr(portrait_gallery, "PORTRAIT_STORAGE_BACKEND", "json")
@@ -857,7 +1055,9 @@ def test_gallery_json_wal_replays_incremental_mutations(monkeypatch, workspace_t
     assert len(restored.features) == 1
 
 
-def test_gallery_feature_wal_entry_is_incremental(monkeypatch, workspace_tmp_path) -> None:
+def test_gallery_feature_wal_entry_is_incremental(
+    monkeypatch, workspace_tmp_path
+) -> None:
     GALLERY.clear()
     state_path = workspace_tmp_path / "gallery.json"
     monkeypatch.setattr(portrait_gallery, "PORTRAIT_STORAGE_BACKEND", "json")
@@ -878,7 +1078,9 @@ def test_gallery_feature_wal_entry_is_incremental(monkeypatch, workspace_tmp_pat
 
     wal_entries = [
         json.loads(line)
-        for line in state_path.with_suffix(state_path.suffix + ".wal.jsonl").read_text(encoding="utf-8").splitlines()
+        for line in state_path.with_suffix(state_path.suffix + ".wal.jsonl")
+        .read_text(encoding="utf-8")
+        .splitlines()
     ]
     feature_entry = wal_entries[-1]
     assert feature_entry["op"] == "upsert_feature"
@@ -895,7 +1097,9 @@ def test_gallery_feature_wal_entry_is_incremental(monkeypatch, workspace_tmp_pat
 
 def test_gallery_patch_rolls_back_memory_when_persist_fails(monkeypatch) -> None:
     GALLERY.clear()
-    person = upsert_person("p_patch", "Before", metadata={"note": "old"}, tenant_id="tenant-a")
+    person = upsert_person(
+        "p_patch", "Before", metadata={"note": "old"}, tenant_id="tenant-a"
+    )
 
     def fail_persist(updated_person):
         raise HTTPException(status_code=503, detail="状态写入失败")
@@ -903,7 +1107,11 @@ def test_gallery_patch_rolls_back_memory_when_persist_fails(monkeypatch) -> None
     monkeypatch.setattr("app.portrait_gallery.persist_person", fail_persist)
 
     with pytest.raises(HTTPException):
-        patch_person("p_patch", {"display_name": "After", "metadata": {"note": "new"}}, tenant_id="tenant-a")
+        patch_person(
+            "p_patch",
+            {"display_name": "After", "metadata": {"note": "new"}},
+            tenant_id="tenant-a",
+        )
 
     stored = GALLERY[gallery_key("tenant-a", "p_patch")]
     assert stored.display_name == "Before"
@@ -988,12 +1196,18 @@ def test_gallery_reindex_vectors_counts_partial_failures(monkeypatch) -> None:
         def upsert_feature(self, person_payload, feature_payload):
             if feature_payload["feature_id"] == "f_reindex_fail":
                 raise RuntimeError("向量写入失败")
-            upserted.append((person_payload["person_id"], feature_payload["feature_id"]))
+            upserted.append(
+                (person_payload["person_id"], feature_payload["feature_id"])
+            )
             return {"backend": self.backend_name, "status": "upserted"}
 
-    monkeypatch.setattr(portrait_vector_store, "VECTOR_STORE", PartiallyFailingVectorStore())
+    monkeypatch.setattr(
+        portrait_vector_store, "VECTOR_STORE", PartiallyFailingVectorStore()
+    )
 
-    result = reindex_gallery_vectors(tenant_id="tenant-a", modality="body", model_id="model-a")
+    result = reindex_gallery_vectors(
+        tenant_id="tenant-a", modality="body", model_id="model-a"
+    )
 
     assert result["status"] == "partial_failure"
     assert result["vector_backend"] == "partial"
@@ -1038,7 +1252,9 @@ def test_video_job_create_rolls_back_memory_when_persist_fails(monkeypatch) -> N
 
 def test_video_job_cancel_rolls_back_memory_when_persist_fails(monkeypatch) -> None:
     VIDEO_JOBS.clear()
-    job = VideoJob(job_id="job_cancel", tenant_id="tenant-a", filename="video.mp4", status="queued")
+    job = VideoJob(
+        job_id="job_cancel", tenant_id="tenant-a", filename="video.mp4", status="queued"
+    )
     VIDEO_JOBS[job_key("tenant-a", "job_cancel")] = job
 
     def fail_persist(updated_job):
@@ -1054,7 +1270,9 @@ def test_video_job_cancel_rolls_back_memory_when_persist_fails(monkeypatch) -> N
     assert stored.cancel_requested is False
 
 
-def test_video_jobs_json_state_round_trip_omits_source_filename(monkeypatch, workspace_tmp_path) -> None:
+def test_video_jobs_json_state_round_trip_omits_source_filename(
+    monkeypatch, workspace_tmp_path
+) -> None:
     state_path = workspace_tmp_path / "jobs.json"
     monkeypatch.setattr(portrait_jobs, "PORTRAIT_STORAGE_BACKEND", "json")
     monkeypatch.setattr(portrait_jobs, "PORTRAIT_JOBS_STATE_PATH", state_path)
@@ -1082,7 +1300,9 @@ def test_video_job_public_error_redacts_legacy_state() -> None:
     assert job.public_dict()["error"] == "视频任务失败"
     assert job.state_dict()["error"] == "视频任务失败"
 
-    restored = VideoJob.from_state(job.state_dict() | {"error": "secret-token from old state"})
+    restored = VideoJob.from_state(
+        job.state_dict() | {"error": "secret-token from old state"}
+    )
     assert restored.error == "视频任务失败"
     assert restored.public_dict()["error"] == "视频任务失败"
 
@@ -1115,57 +1335,138 @@ def test_video_job_public_and_state_payloads_do_not_include_filename() -> None:
     assert "filename" not in public_payload["result"]["metadata"]
     assert "filename" not in state_payload
     assert "filename" not in state_payload["result"]["metadata"]
-    assert "legacy-secret-person-name" not in json.dumps(restored.public_dict(include_result=True), ensure_ascii=False)
-    assert "legacy-secret-person-name" not in json.dumps(restored.state_dict(), ensure_ascii=False)
+    assert "legacy-secret-person-name" not in json.dumps(
+        restored.public_dict(include_result=True), ensure_ascii=False
+    )
+    assert "legacy-secret-person-name" not in json.dumps(
+        restored.state_dict(), ensure_ascii=False
+    )
+
+
+async def fake_video_track_analysis(images, filenames, *args, **kwargs):
+    frames = [
+        {
+            "frame_index": index,
+            "width": image.width,
+            "height": image.height,
+            "persons": [{"embedding_dim": 64, "track_id": "track_0001"}],
+            "person_count": 1,
+        }
+        for index, image in enumerate(images)
+    ]
+    timing = {
+        "preprocess_seconds": 0.0,
+        "queue_seconds": 0.0,
+        "inference_seconds": 0.0,
+        "postprocess_seconds": 0.0,
+    }
+    return {
+        "detector_key": "portrait_hub/yolov8n.onnx",
+        "reid_key": "portrait_hub/osnet_ibn_x1_0.onnx",
+        "detector_load_seconds": 0.0,
+        "reid_load_seconds": 0.0,
+        "detector_meta": {"timing": timing},
+        "embedding_meta": {"timing": timing},
+        "frames": frames,
+        "tracks": [{"track_id": "track_0001", "frame_count": len(frames)}],
+        "tracker": {"algorithm": "test"},
+        "person_count": len(frames),
+        "track_count": 1 if frames else 0,
+        "embedding_count": len(frames),
+    }
 
 
 @pytest.mark.asyncio
 async def test_run_video_job_is_tenant_scoped(monkeypatch) -> None:
     VIDEO_JOBS.clear()
-    VIDEO_JOBS[job_key("tenant-a", "job_same")] = VideoJob(job_id="job_same", tenant_id="tenant-a", filename="a.mp4")
-    VIDEO_JOBS[job_key("tenant-b", "job_same")] = VideoJob(job_id="job_same", tenant_id="tenant-b", filename="b.mp4")
+    VIDEO_JOBS[job_key("tenant-a", "job_same")] = VideoJob(
+        job_id="job_same", tenant_id="tenant-a", filename="a.mp4"
+    )
+    VIDEO_JOBS[job_key("tenant-b", "job_same")] = VideoJob(
+        job_id="job_same", tenant_id="tenant-b", filename="b.mp4"
+    )
 
-    async def fake_extract_video_frames_from_bytes(data, filename, frame_interval, max_frames):
+    async def fake_extract_video_frames_from_bytes(
+        data, filename, frame_interval, max_frames
+    ):
         return [Image.new("RGB", (8, 8), (20, 40, 60))], {
             "source_frame_indexes": [0],
             "filename": "secret-person-name.mp4",
             "video_bytes": 12345,
-            "frame_fingerprints": [{"sha256": "secret-sha", "average_hash": "secret-average"}],
+            "frame_fingerprints": [
+                {"sha256": "secret-sha", "average_hash": "secret-average"}
+            ],
         }
 
-    monkeypatch.setattr("app.portrait_jobs.extract_video_frames_from_bytes", fake_extract_video_frames_from_bytes)
-    monkeypatch.setattr("app.portrait_jobs.assess_image_quality", lambda image: {"score": 0.9})
-    monkeypatch.setattr("app.portrait_jobs.appearance_record", lambda image, include_embedding=False: {"quality": {"score": 0.9}})
-    monkeypatch.setattr("app.portrait_jobs.persist_video_job", lambda job: None)
+    monkeypatch.setattr(
+        "app.portrait_jobs.extract_video_frames_from_bytes",
+        fake_extract_video_frames_from_bytes,
+    )
+    monkeypatch.setattr(
+        "app.portrait_jobs.assess_image_quality", lambda image: {"score": 0.9}
+    )
+    monkeypatch.setattr(
+        "app.portrait_jobs.infer_tracks_for_images", fake_video_track_analysis
+    )
+    monkeypatch.setattr(
+        "app.portrait_jobs.persist_video_job", lambda job, **kwargs: None
+    )
 
     await run_video_job("job_same", "tenant-b", b"video", "b.mp4", 1, 1)
 
     assert VIDEO_JOBS[job_key("tenant-a", "job_same")].status == "queued"
     assert VIDEO_JOBS[job_key("tenant-b", "job_same")].status == "completed"
     frame = VIDEO_JOBS[job_key("tenant-b", "job_same")].result["frames"][0]
-    assert frame["embedding_dim"] == 64
+    assert frame["persons"][0]["embedding_dim"] == 64
     assert frame["thumbnail"].startswith("data:image/jpeg;base64,")
-    assert "embedding" not in frame
-    assert "filename" not in VIDEO_JOBS[job_key("tenant-b", "job_same")].result["metadata"]
-    assert "video_bytes" not in VIDEO_JOBS[job_key("tenant-b", "job_same")].result["metadata"]
-    assert "frame_fingerprints" not in VIDEO_JOBS[job_key("tenant-b", "job_same")].result["metadata"]
-    assert "secret-person-name" not in json.dumps(VIDEO_JOBS[job_key("tenant-b", "job_same")].result, ensure_ascii=False)
-    assert "secret-sha" not in json.dumps(VIDEO_JOBS[job_key("tenant-b", "job_same")].result, ensure_ascii=False)
+    assert "embedding" not in frame["persons"][0]
+    assert (
+        VIDEO_JOBS[job_key("tenant-b", "job_same")].result["analysis_mode"]
+        == "person_tracks"
+    )
+    assert VIDEO_JOBS[job_key("tenant-b", "job_same")].result["track_count"] == 1
+    assert (
+        "filename" not in VIDEO_JOBS[job_key("tenant-b", "job_same")].result["metadata"]
+    )
+    assert (
+        "video_bytes"
+        not in VIDEO_JOBS[job_key("tenant-b", "job_same")].result["metadata"]
+    )
+    assert (
+        "frame_fingerprints"
+        not in VIDEO_JOBS[job_key("tenant-b", "job_same")].result["metadata"]
+    )
+    assert "secret-person-name" not in json.dumps(
+        VIDEO_JOBS[job_key("tenant-b", "job_same")].result, ensure_ascii=False
+    )
+    assert "secret-sha" not in json.dumps(
+        VIDEO_JOBS[job_key("tenant-b", "job_same")].result, ensure_ascii=False
+    )
 
 
 @pytest.mark.asyncio
 async def test_run_video_job_failure_error_is_redacted(monkeypatch, caplog) -> None:
     caplog.set_level("WARNING")
     VIDEO_JOBS.clear()
-    job = VideoJob(job_id="job_failed", tenant_id="tenant-secret", filename="secret-video.mp4")
+    job = VideoJob(
+        job_id="job_failed", tenant_id="tenant-secret", filename="secret-video.mp4"
+    )
     VIDEO_JOBS[job_key(job.tenant_id, job.job_id)] = job
     persisted = []
 
-    async def fail_extract_video_frames_from_bytes(data, filename, frame_interval, max_frames):
+    async def fail_extract_video_frames_from_bytes(
+        data, filename, frame_interval, max_frames
+    ):
         raise RuntimeError(f"secret-token leaked through video decode for {filename}")
 
-    monkeypatch.setattr("app.portrait_jobs.extract_video_frames_from_bytes", fail_extract_video_frames_from_bytes)
-    monkeypatch.setattr("app.portrait_jobs.persist_video_job", lambda persisted_job: persisted.append(persisted_job.state_dict()))
+    monkeypatch.setattr(
+        "app.portrait_jobs.extract_video_frames_from_bytes",
+        fail_extract_video_frames_from_bytes,
+    )
+    monkeypatch.setattr(
+        "app.portrait_jobs.persist_video_job",
+        lambda persisted_job, **kwargs: persisted.append(persisted_job.state_dict()),
+    )
 
     await run_video_job(job.job_id, job.tenant_id, b"video", "secret-video.mp4", 1, 1)
 
@@ -1185,57 +1486,91 @@ async def test_run_video_job_failure_error_is_redacted(monkeypatch, caplog) -> N
 @pytest.mark.asyncio
 async def test_run_video_job_retries_and_persists_progress(monkeypatch) -> None:
     VIDEO_JOBS.clear()
-    job = VideoJob(job_id="job_retry", tenant_id="tenant-a", filename=None, max_retries=1)
+    job = VideoJob(
+        job_id="job_retry", tenant_id="tenant-a", filename=None, max_retries=1
+    )
     VIDEO_JOBS[job_key(job.tenant_id, job.job_id)] = job
     calls = {"count": 0}
     persisted = []
 
-    async def flaky_extract_video_frames_from_bytes(data, filename, frame_interval, max_frames):
+    async def flaky_extract_video_frames_from_bytes(
+        data, filename, frame_interval, max_frames
+    ):
         calls["count"] += 1
         if calls["count"] == 1:
             raise RuntimeError("临时解码失败")
         return [Image.new("RGB", (8, 8), (20, 40, 60))], {"source_frame_indexes": [0]}
 
     monkeypatch.setattr("app.portrait_jobs.VIDEO_JOB_RETRY_BACKOFF_SECONDS", 0)
-    monkeypatch.setattr("app.portrait_jobs.extract_video_frames_from_bytes", flaky_extract_video_frames_from_bytes)
-    monkeypatch.setattr("app.portrait_jobs.assess_image_quality", lambda image: {"score": 0.9})
-    monkeypatch.setattr("app.portrait_jobs.appearance_record", lambda image, include_embedding=False: {"quality": {"score": 0.9}})
-    monkeypatch.setattr("app.portrait_jobs.persist_video_job", lambda persisted_job: persisted.append(persisted_job.state_dict()))
+    monkeypatch.setattr(
+        "app.portrait_jobs.extract_video_frames_from_bytes",
+        flaky_extract_video_frames_from_bytes,
+    )
+    monkeypatch.setattr(
+        "app.portrait_jobs.assess_image_quality", lambda image: {"score": 0.9}
+    )
+    monkeypatch.setattr(
+        "app.portrait_jobs.infer_tracks_for_images", fake_video_track_analysis
+    )
+    monkeypatch.setattr(
+        "app.portrait_jobs.persist_video_job",
+        lambda persisted_job, **kwargs: persisted.append(persisted_job.state_dict()),
+    )
 
     await run_video_job(job.job_id, job.tenant_id, b"video", "video.mp4", 1, 1)
 
     assert calls["count"] == 2
     assert job.status == "completed"
     assert job.attempts == 2
-    assert any(item["status"] == "queued" and item["next_retry_at"] is not None for item in persisted)
+    assert any(
+        item["status"] == "queued" and item["next_retry_at"] is not None
+        for item in persisted
+    )
     assert persisted[-1]["progress"] == 1.0
 
 
 @pytest.mark.asyncio
-async def test_run_video_job_progress_persistence_stays_lightweight(monkeypatch) -> None:
+async def test_run_video_job_progress_persistence_stays_lightweight(
+    monkeypatch,
+) -> None:
     VIDEO_JOBS.clear()
     job = VideoJob(job_id="job_light_progress", tenant_id="tenant-a", filename=None)
     VIDEO_JOBS[job_key(job.tenant_id, job.job_id)] = job
     persisted = []
 
-    async def fake_extract_video_frames_from_bytes(data, filename, frame_interval, max_frames):
+    async def fake_extract_video_frames_from_bytes(
+        data, filename, frame_interval, max_frames
+    ):
         return [
             Image.new("RGB", (8, 8), (20, 40, 60)),
             Image.new("RGB", (8, 8), (30, 50, 70)),
         ], {"source_frame_indexes": [0, 1]}
 
     def capture_persist(persisted_job, *, lightweight_result=False):
-        persisted.append(persisted_job.state_dict(lightweight_result=lightweight_result))
+        persisted.append(
+            persisted_job.state_dict(lightweight_result=lightweight_result)
+        )
 
-    monkeypatch.setattr("app.portrait_jobs.VIDEO_JOB_PROGRESS_PERSIST_INTERVAL_SECONDS", 0)
-    monkeypatch.setattr("app.portrait_jobs.extract_video_frames_from_bytes", fake_extract_video_frames_from_bytes)
-    monkeypatch.setattr("app.portrait_jobs.assess_image_quality", lambda image: {"score": 0.9})
-    monkeypatch.setattr("app.portrait_jobs.appearance_record", lambda image, include_embedding=False: {"quality": {"score": 0.9}})
+    monkeypatch.setattr(
+        "app.portrait_jobs.VIDEO_JOB_PROGRESS_PERSIST_INTERVAL_SECONDS", 0
+    )
+    monkeypatch.setattr(
+        "app.portrait_jobs.extract_video_frames_from_bytes",
+        fake_extract_video_frames_from_bytes,
+    )
+    monkeypatch.setattr(
+        "app.portrait_jobs.assess_image_quality", lambda image: {"score": 0.9}
+    )
+    monkeypatch.setattr(
+        "app.portrait_jobs.infer_tracks_for_images", fake_video_track_analysis
+    )
     monkeypatch.setattr("app.portrait_jobs.persist_video_job", capture_persist)
 
     await run_video_job(job.job_id, job.tenant_id, b"video", "video.mp4", 1, 2)
 
-    running_payloads = [item for item in persisted if item["status"] == "running" and item.get("result")]
+    running_payloads = [
+        item for item in persisted if item["status"] == "running" and item.get("result")
+    ]
     assert running_payloads
     assert all(item["result"]["frames"] == [] for item in running_payloads)
     assert running_payloads[-1]["result"]["frames_available"] == 2
@@ -1290,7 +1625,9 @@ def test_streams_json_state_round_trip(monkeypatch, workspace_tmp_path) -> None:
     monkeypatch.setattr(portrait_streams, "PORTRAIT_STREAMS_STATE_PATH", state_path)
     STREAMS.clear()
 
-    created = create_stream("http://example.com/live", tenant_id="tenant-a", name="Lobby")
+    created = create_stream(
+        "http://example.com/live", tenant_id="tenant-a", name="Lobby"
+    )
     STREAMS.clear()
     portrait_streams.load_streams_state()
 
@@ -1299,7 +1636,9 @@ def test_streams_json_state_round_trip(monkeypatch, workspace_tmp_path) -> None:
     assert stored.stream_url == "http://example.com/live"
 
 
-def test_streams_json_state_protects_stream_url(monkeypatch, workspace_tmp_path) -> None:
+def test_streams_json_state_protects_stream_url(
+    monkeypatch, workspace_tmp_path
+) -> None:
     state_path = workspace_tmp_path / "streams.json"
     stream_url = "rtsp://user:secret@example.com/live?token=query-secret"
     monkeypatch.setattr(portrait_streams, "PORTRAIT_STORAGE_BACKEND", "json")
@@ -1321,7 +1660,9 @@ def test_streams_json_state_protects_stream_url(monkeypatch, workspace_tmp_path)
     assert stored.stream_url == stream_url
 
 
-def test_stream_sensitive_settings_and_metadata_are_protected_at_rest(monkeypatch, workspace_tmp_path) -> None:
+def test_stream_sensitive_settings_and_metadata_are_protected_at_rest(
+    monkeypatch, workspace_tmp_path
+) -> None:
     state_path = workspace_tmp_path / "streams-sensitive.json"
     monkeypatch.setattr(portrait_streams, "PORTRAIT_STORAGE_BACKEND", "json")
     monkeypatch.setattr(portrait_streams, "PORTRAIT_STREAMS_STATE_PATH", state_path)
@@ -1344,7 +1685,10 @@ def test_stream_sensitive_settings_and_metadata_are_protected_at_rest(monkeypatc
     payload = json.loads(raw_state)
     stream_state = payload["streams"][0]
     assert stream_state["settings"]["api_key"]["__portrait_protected_value__"] is True
-    assert stream_state["metadata"]["nested"]["token"]["__portrait_protected_value__"] is True
+    assert (
+        stream_state["metadata"]["nested"]["token"]["__portrait_protected_value__"]
+        is True
+    )
     assert stream_state["settings"]["safe"] == "visible"
 
     STREAMS.clear()
@@ -1387,12 +1731,18 @@ def test_stream_event_jsonl_payload_is_redacted(monkeypatch) -> None:
 def test_stream_worker_session_tracks_heartbeat_and_backpressure(monkeypatch) -> None:
     STREAMS.clear()
     portrait_stream_worker.STREAM_WORKER_SESSIONS.clear()
-    monkeypatch.setattr(portrait_stream_worker, "append_jsonl", lambda path, payload, fail_closed=False: None)
+    monkeypatch.setattr(
+        portrait_stream_worker,
+        "append_jsonl",
+        lambda path, payload, fail_closed=False: None,
+    )
     monkeypatch.setattr(portrait_stream_worker, "persist_stream", lambda stream: None)
     stream = create_stream("http://example.com/session", tenant_id="tenant-a")
 
     session = portrait_stream_worker.start_stream_worker_session(stream)
-    heartbeat = portrait_stream_worker.heartbeat_stream_worker_session(stream, frame_buffer_depth=1, frames_sampled=2)
+    heartbeat = portrait_stream_worker.heartbeat_stream_worker_session(
+        stream, frame_buffer_depth=1, frames_sampled=2
+    )
     dropped = portrait_stream_worker.record_stream_backpressure_drop(stream, count=3)
     status = portrait_stream_worker.stream_worker_status()
 
@@ -1418,7 +1768,9 @@ def test_stream_worker_health_detects_stale_sessions(monkeypatch) -> None:
         },
     )
 
-    report = portrait_stream_worker_health.evaluate_stream_worker_health(max_heartbeat_age_seconds=0.001)
+    report = portrait_stream_worker_health.evaluate_stream_worker_health(
+        max_heartbeat_age_seconds=0.001
+    )
 
     assert report["ok"] is False
     assert report["active_sessions"] == 1
@@ -1428,7 +1780,9 @@ def test_stream_worker_health_detects_stale_sessions(monkeypatch) -> None:
 @pytest.mark.asyncio
 async def test_stream_worker_daemon_once_runs_running_streams(monkeypatch) -> None:
     STREAMS.clear()
-    monkeypatch.setattr(portrait_stream_worker_daemon, "load_streams_state", lambda: None)
+    monkeypatch.setattr(
+        portrait_stream_worker_daemon, "load_streams_state", lambda: None
+    )
     stream = create_stream("http://example.com/daemon", tenant_id="tenant-a")
     stream.status = "running"
     calls = []
@@ -1443,10 +1797,22 @@ async def test_stream_worker_daemon_once_runs_running_streams(monkeypatch) -> No
 
     async def fake_run_stream_worker_session(stream, *, max_reconnects=3):
         calls.append((stream.tenant_id, stream.stream_id, max_reconnects))
-        return {"tenant_id": stream.tenant_id, "stream_id": stream.stream_id, "status": "running"}
+        return {
+            "tenant_id": stream.tenant_id,
+            "stream_id": stream.stream_id,
+            "status": "running",
+        }
 
-    monkeypatch.setattr(portrait_stream_worker_daemon, "acquire_stream_process_lock", lambda stream, owner_id: process_lock)
-    monkeypatch.setattr(portrait_stream_worker_daemon, "run_stream_worker_session", fake_run_stream_worker_session)
+    monkeypatch.setattr(
+        portrait_stream_worker_daemon,
+        "acquire_stream_process_lock",
+        lambda stream, owner_id: process_lock,
+    )
+    monkeypatch.setattr(
+        portrait_stream_worker_daemon,
+        "run_stream_worker_session",
+        fake_run_stream_worker_session,
+    )
 
     report = await portrait_stream_worker_daemon.run_daemon_once(max_reconnects=2)
 
@@ -1457,12 +1823,14 @@ async def test_stream_worker_daemon_once_runs_running_streams(monkeypatch) -> No
     assert process_lock.released is True
 
 
-
-
 @pytest.mark.asyncio
-async def test_stream_worker_daemon_process_lock_skips_duplicate_process(monkeypatch) -> None:
+async def test_stream_worker_daemon_process_lock_skips_duplicate_process(
+    monkeypatch,
+) -> None:
     STREAMS.clear()
-    monkeypatch.setattr(portrait_stream_worker_daemon, "load_streams_state", lambda: None)
+    monkeypatch.setattr(
+        portrait_stream_worker_daemon, "load_streams_state", lambda: None
+    )
     stream = create_stream("http://example.com/daemon-lock", tenant_id="tenant-a")
     stream.status = "running"
     calls = []
@@ -1472,23 +1840,41 @@ async def test_stream_worker_daemon_process_lock_skips_duplicate_process(monkeyp
         return None
 
     def fail_acquire_lease(*args, **kwargs):
-        raise AssertionError("state lease should not be attempted without the process lock")
+        raise AssertionError(
+            "state lease should not be attempted without the process lock"
+        )
 
-    monkeypatch.setattr(portrait_stream_worker_daemon, "acquire_stream_process_lock", fake_acquire_process_lock)
-    monkeypatch.setattr(portrait_stream_worker_daemon, "acquire_stream_worker_lease", fail_acquire_lease)
+    monkeypatch.setattr(
+        portrait_stream_worker_daemon,
+        "acquire_stream_process_lock",
+        fake_acquire_process_lock,
+    )
+    monkeypatch.setattr(
+        portrait_stream_worker_daemon, "acquire_stream_worker_lease", fail_acquire_lease
+    )
 
     report = await portrait_stream_worker_daemon.run_daemon_once(max_reconnects=1)
 
     assert report["status"] == "idle"
     assert report["selected_count"] == 1
     assert report["processed_count"] == 0
-    assert calls == [("tenant-a", stream.stream_id, portrait_stream_worker_daemon.STREAM_WORKER_OWNER_ID)]
+    assert calls == [
+        (
+            "tenant-a",
+            stream.stream_id,
+            portrait_stream_worker_daemon.STREAM_WORKER_OWNER_ID,
+        )
+    ]
 
 
-def test_stream_worker_process_lock_retries_after_stale_lock_cleanup(monkeypatch, workspace_tmp_path) -> None:
+def test_stream_worker_process_lock_retries_after_stale_lock_cleanup(
+    monkeypatch, workspace_tmp_path
+) -> None:
     STREAMS.clear()
     lock_dir = workspace_tmp_path / "stream-locks"
-    monkeypatch.setattr(portrait_stream_worker_daemon, "STREAM_WORKER_LOCK_DIR", lock_dir)
+    monkeypatch.setattr(
+        portrait_stream_worker_daemon, "STREAM_WORKER_LOCK_DIR", lock_dir
+    )
     stream = create_stream("http://example.com/daemon-stale-lock", tenant_id="tenant-a")
     attempts = []
     stale_checks = []
@@ -1502,8 +1888,16 @@ def test_stream_worker_process_lock_retries_after_stale_lock_cleanup(monkeypatch
         stale_checks.append(path)
         return True
 
-    monkeypatch.setattr(portrait_stream_worker_daemon, "create_stream_process_lock_file", fake_create_lock_file)
-    monkeypatch.setattr(portrait_stream_worker_daemon, "remove_stale_stream_process_lock", fake_remove_stale_lock)
+    monkeypatch.setattr(
+        portrait_stream_worker_daemon,
+        "create_stream_process_lock_file",
+        fake_create_lock_file,
+    )
+    monkeypatch.setattr(
+        portrait_stream_worker_daemon,
+        "remove_stale_stream_process_lock",
+        fake_remove_stale_lock,
+    )
 
     lock = portrait_stream_worker_daemon.acquire_stream_process_lock(stream, "owner-a")
 
@@ -1515,22 +1909,116 @@ def test_stream_worker_process_lock_retries_after_stale_lock_cleanup(monkeypatch
     assert lock.token == attempts[1][2]
 
 
-def test_stream_worker_process_lock_removes_stale_malformed_file(monkeypatch, workspace_tmp_path) -> None:
+def test_stream_worker_process_lock_removes_stale_malformed_file(
+    monkeypatch, workspace_tmp_path
+) -> None:
     lock_path = workspace_tmp_path / "stream-locks" / "bad.lock"
     removed = []
 
     monkeypatch.setattr(type(lock_path), "exists", lambda self: True)
-    monkeypatch.setattr(type(lock_path), "unlink", lambda self, missing_ok=False: removed.append(self))
-    monkeypatch.setattr(portrait_stream_worker_daemon, "read_stream_process_lock_payload", lambda path: None)
-    monkeypatch.setattr(portrait_stream_worker_daemon, "stream_process_lock_created_at", lambda path, payload: 1.0)
+    monkeypatch.setattr(
+        type(lock_path), "unlink", lambda self, missing_ok=False: removed.append(self)
+    )
+    monkeypatch.setattr(
+        portrait_stream_worker_daemon,
+        "read_stream_process_lock_payload",
+        lambda path: None,
+    )
+    monkeypatch.setattr(
+        portrait_stream_worker_daemon,
+        "stream_process_lock_created_at",
+        lambda path, payload: 1.0,
+    )
     monkeypatch.setattr(portrait_stream_worker_daemon, "wall_time", lambda: 100.0)
-    monkeypatch.setattr(portrait_stream_worker_daemon, "STREAM_WORKER_PROCESS_LOCK_STALE_SECONDS", 1.0)
+    monkeypatch.setattr(
+        portrait_stream_worker_daemon, "STREAM_WORKER_PROCESS_LOCK_STALE_SECONDS", 1.0
+    )
 
-    assert portrait_stream_worker_daemon.remove_stale_stream_process_lock(lock_path) is True
+    assert (
+        portrait_stream_worker_daemon.remove_stale_stream_process_lock(lock_path)
+        is True
+    )
     assert removed == [lock_path]
 
 
 @pytest.mark.asyncio
+@pytest.mark.asyncio
+async def test_stream_worker_runs_analysis_and_emits_result(monkeypatch) -> None:
+    STREAMS.clear()
+    portrait_stream_worker.STREAM_WORKER_SESSIONS.clear()
+    stream = create_stream(
+        "http://example.com/analysis",
+        tenant_id="tenant-a",
+        settings={"frame_interval": 1, "max_frames": 2},
+    )
+    stream.status = "running"
+    events = []
+    monkeypatch.setattr(
+        portrait_stream_worker, "validate_media_stream_url", lambda url: None
+    )
+    monkeypatch.setattr(
+        portrait_stream_worker,
+        "append_jsonl",
+        lambda path, payload, fail_closed=False: None,
+    )
+    monkeypatch.setattr(portrait_stream_worker, "persist_stream", lambda stream: None)
+    monkeypatch.setattr(
+        portrait_stream_worker,
+        "extract_video_frames_from_path",
+        lambda source, frame_interval, max_frames, timeout: (
+            [Image.new("RGB", (32, 48), "white")],
+            {
+                "source_frame_indexes": [7],
+                "fps": 25.0,
+                "extracted_frames": 1,
+                "source_frames_read": 8,
+            },
+        ),
+    )
+
+    async def fake_infer(*args, **kwargs):
+        return {
+            "detector_key": "portrait_hub/yolov8n.onnx",
+            "reid_key": "portrait_hub/osnet_ibn_x1_0.onnx",
+            "frames": [{"frame_index": 0, "person_count": 1, "persons": []}],
+            "tracks": [{"track_id": "track-1"}],
+            "tracker": {"algorithm": "test"},
+            "person_count": 1,
+            "track_count": 1,
+            "embedding_count": 0,
+        }
+
+    monkeypatch.setattr(portrait_stream_worker, "infer_tracks_for_images", fake_infer)
+    monkeypatch.setattr(
+        portrait_stream_worker,
+        "observe_video_sampling_metrics",
+        lambda metadata: None,
+    )
+    original_emit = portrait_stream_worker.emit_stream_event
+
+    def capture_emit(stream, event_type, message, payload=None):
+        events.append((event_type, payload or {}))
+        stream.add_event(event_type, message, payload or {})
+
+    monkeypatch.setattr(portrait_stream_worker, "emit_stream_event", capture_emit)
+
+    report = await portrait_stream_worker.run_stream_worker_session(
+        stream, max_reconnects=0
+    )
+
+    assert report["frames_processed"] == 1
+    assert report["last_person_count"] == 1
+    analysis = next(
+        payload
+        for event_type, payload in events
+        if event_type == "stream_analysis_completed"
+    )
+    assert analysis["frame_count"] == 1
+    assert analysis["person_count"] == 1
+    assert analysis["track_count"] == 1
+    assert analysis["frames"][0]["source_frame_index"] == 7
+
+
 async def test_stream_worker_revalidates_url_before_pull(monkeypatch) -> None:
     STREAMS.clear()
     stream = create_stream("http://example.com/rebind", tenant_id="tenant-a")
@@ -1539,15 +2027,23 @@ async def test_stream_worker_revalidates_url_before_pull(monkeypatch) -> None:
 
     def fail_validation(stream_url):
         calls.append(stream_url)
-        raise HTTPException(status_code=400, detail="stream_url 主机被 SSRF 防护策略拒绝")
+        raise HTTPException(
+            status_code=400, detail="stream_url 主机被 SSRF 防护策略拒绝"
+        )
 
     def fail_if_pulled(*args, **kwargs):
         raise AssertionError("stream pull should not run after validation failure")
 
-    monkeypatch.setattr(portrait_stream_worker, "validate_media_stream_url", fail_validation)
-    monkeypatch.setattr(portrait_stream_worker, "extract_video_frames_from_path", fail_if_pulled)
+    monkeypatch.setattr(
+        portrait_stream_worker, "validate_media_stream_url", fail_validation
+    )
+    monkeypatch.setattr(
+        portrait_stream_worker, "extract_video_frames_from_path", fail_if_pulled
+    )
 
-    report = await portrait_stream_worker.run_stream_worker_session(stream, max_reconnects=0)
+    report = await portrait_stream_worker.run_stream_worker_session(
+        stream, max_reconnects=0
+    )
 
     assert calls == ["http://example.com/rebind"]
     assert report["status"] in {"failed", "reconnecting"}
@@ -1560,7 +2056,10 @@ def test_audit_chain_verifier_detects_tampering(workspace_tmp_path) -> None:
     first["audit_hash"] = first_hash
     second = {"event": "two", "audit_prev_hash": first_hash}
     second["audit_hash"] = portrait_audit.audit_payload_hash(second)
-    audit_path.write_text(json.dumps(first) + "\n" + json.dumps(second | {"event": "tampered"}) + "\n", encoding="utf-8")
+    audit_path.write_text(
+        json.dumps(first) + "\n" + json.dumps(second | {"event": "tampered"}) + "\n",
+        encoding="utf-8",
+    )
 
     result = portrait_audit.verify_audit_chain(audit_path)
 
@@ -1570,10 +2069,17 @@ def test_audit_chain_verifier_detects_tampering(workspace_tmp_path) -> None:
     assert result["errors"][0]["reason"] == "audit_hash_mismatch"
 
 
-def test_local_task_queue_rolls_back_message_when_state_write_fails(monkeypatch, workspace_tmp_path) -> None:
+def test_local_task_queue_rolls_back_message_when_state_write_fails(
+    monkeypatch, workspace_tmp_path
+) -> None:
     TASK_MESSAGES.clear()
-    monkeypatch.setattr("app.portrait_task_queue.TASK_QUEUE_STATE_PATH", workspace_tmp_path / "queue.jsonl")
-    monkeypatch.setattr("app.portrait_task_queue.TASK_QUEUE_DIR", workspace_tmp_path / "queue-spool")
+    monkeypatch.setattr(
+        "app.portrait_task_queue.TASK_QUEUE_STATE_PATH",
+        workspace_tmp_path / "queue.jsonl",
+    )
+    monkeypatch.setattr(
+        "app.portrait_task_queue.TASK_QUEUE_DIR", workspace_tmp_path / "queue-spool"
+    )
 
     def fail_append(path, payload, *, fail_closed=False):
         raise HTTPException(status_code=503, detail="状态写入失败")
@@ -1586,11 +2092,18 @@ def test_local_task_queue_rolls_back_message_when_state_write_fails(monkeypatch,
     assert TASK_MESSAGES == []
 
 
-def test_redis_task_queue_fails_closed_when_enqueue_fails(monkeypatch, workspace_tmp_path, caplog) -> None:
+def test_redis_task_queue_fails_closed_when_enqueue_fails(
+    monkeypatch, workspace_tmp_path, caplog
+) -> None:
     caplog.set_level("WARNING")
     TASK_MESSAGES.clear()
-    monkeypatch.setattr("app.portrait_task_queue.REDIS_URL", "redis://:secret-token@redis.internal/0")
-    monkeypatch.setattr("app.portrait_task_queue.TASK_QUEUE_STATE_PATH", workspace_tmp_path / "queue.jsonl")
+    monkeypatch.setattr(
+        "app.portrait_task_queue.REDIS_URL", "redis://:secret-token@redis.internal/0"
+    )
+    monkeypatch.setattr(
+        "app.portrait_task_queue.TASK_QUEUE_STATE_PATH",
+        workspace_tmp_path / "queue.jsonl",
+    )
 
     class FailingRedisClient:
         def xgroup_create(self, *args, **kwargs):
@@ -1615,14 +2128,22 @@ def test_redis_task_queue_fails_closed_when_enqueue_fails(monkeypatch, workspace
     for secret in ["secret-token", "redis.internal"]:
         assert secret not in caplog.text
 
-def test_local_task_queue_claim_ack_and_release_are_durable(monkeypatch, workspace_tmp_path) -> None:
+
+def test_local_task_queue_claim_ack_and_release_are_durable(
+    monkeypatch, workspace_tmp_path
+) -> None:
     TASK_MESSAGES.clear()
     queue_dir = workspace_tmp_path / "queue-spool"
     monkeypatch.setattr("app.portrait_task_queue.TASK_QUEUE_DIR", queue_dir)
-    monkeypatch.setattr("app.portrait_task_queue.TASK_QUEUE_STATE_PATH", workspace_tmp_path / "queue.jsonl")
+    monkeypatch.setattr(
+        "app.portrait_task_queue.TASK_QUEUE_STATE_PATH",
+        workspace_tmp_path / "queue.jsonl",
+    )
 
     producer = LocalTaskQueue()
-    first = producer.enqueue("video_jobs", {"job_id": "job_0123456789abcdef", "tenant_id": "tenant-a"})
+    first = producer.enqueue(
+        "video_jobs", {"job_id": "job_0123456789abcdef", "tenant_id": "tenant-a"}
+    )
     claimed = LocalTaskQueue().claim("video_jobs", "worker-a")
 
     assert claimed is not None
@@ -1643,7 +2164,11 @@ def test_local_task_queue_claim_ack_and_release_are_durable(monkeypatch, workspa
 
 @pytest.mark.asyncio
 async def test_video_worker_acknowledges_invalid_queue_messages(monkeypatch) -> None:
-    message = QueueMessage(message_id="msg_0123456789abcdef", queue="video_jobs", payload={"tenant_id": "tenant-a"})
+    message = QueueMessage(
+        message_id="msg_0123456789abcdef",
+        queue="video_jobs",
+        payload={"tenant_id": "tenant-a"},
+    )
 
     class FakeQueue:
         acknowledged = False
@@ -1670,13 +2195,24 @@ async def test_video_worker_acknowledges_invalid_queue_messages(monkeypatch) -> 
     assert queue.released is False
 
 
-def test_local_task_queue_cancellation_marker_is_durable(monkeypatch, workspace_tmp_path) -> None:
+def test_local_task_queue_cancellation_marker_is_durable(
+    monkeypatch, workspace_tmp_path
+) -> None:
     queue_dir = workspace_tmp_path / "queue-spool"
     monkeypatch.setattr("app.portrait_task_queue.TASK_QUEUE_DIR", queue_dir)
 
     LocalTaskQueue().mark_cancelled("video_jobs", "tenant-a", "job_0123456789abcdef")
 
-    assert LocalTaskQueue().is_cancelled("video_jobs", "tenant-a", "job_0123456789abcdef") is True
-    assert LocalTaskQueue().is_cancelled("video_jobs", "tenant-b", "job_0123456789abcdef") is False
+    assert (
+        LocalTaskQueue().is_cancelled("video_jobs", "tenant-a", "job_0123456789abcdef")
+        is True
+    )
+    assert (
+        LocalTaskQueue().is_cancelled("video_jobs", "tenant-b", "job_0123456789abcdef")
+        is False
+    )
     LocalTaskQueue().clear_cancelled("video_jobs", "tenant-a", "job_0123456789abcdef")
-    assert LocalTaskQueue().is_cancelled("video_jobs", "tenant-a", "job_0123456789abcdef") is False
+    assert (
+        LocalTaskQueue().is_cancelled("video_jobs", "tenant-a", "job_0123456789abcdef")
+        is False
+    )

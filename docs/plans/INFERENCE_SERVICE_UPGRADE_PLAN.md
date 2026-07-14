@@ -193,7 +193,7 @@ models:
 
 - 不破坏当前 `type: yolo`、`type: reid` 配置。
 - 新字段可选，未配置时使用当前默认值。
-- `/model-configs` 返回完整解析后的配置，便于业务侧确认。
+- `/v1/models` 返回完整解析后的配置，便于业务侧确认。
 
 ## 6. 任务插件设计
 
@@ -223,8 +223,8 @@ class VisionTask:
 
 优先级：
 
-1. `yolo_detection`：兼容当前 `/infer/persons`。
-2. `reid`：兼容当前 `/infer/person-embeddings`。
+1. `yolo_detection`：兼容当前 `/v1/vision/infer`。
+2. `reid`：兼容当前 `/v1/vision/infer`。
 3. `classification`：图片分类、属性识别、质量判断。
 4. `segmentation`：语义/实例分割，返回 mask、polygon 或 RLE。
 5. `ocr`：文本检测 + 文本识别，可先支持单模型识别，再支持流水线。
@@ -237,32 +237,30 @@ class VisionTask:
 - `GET /health`
 - `GET /ready`
 - `GET /ready/deep`
-- `GET /models`
-- `GET /model-configs`
-- `GET /model-info`
+
+- `GET /v1/models`
+- `GET /v1/models/{model_id}`
 - `POST /predict`
-- `POST /infer/persons`
-- `POST /infer/person-embeddings`
-- `POST /infer/person-tracks`
-- `POST /infer/video/person-tracks`
-- `POST /infer/stream/person-tracks`
-- `POST /warmup`
-- `POST /reload`
-- `POST /unload`
+- `POST /v1/vision/infer`
+- `POST /v1/infer/tracks`
+- `POST /v1/jobs/video`
+- `POST /v1/streams 注册并启动视频流解析`
+- `POST /v1/admin/models/warmup`
+- `POST /v1/admin/models/reload`
+- `POST /v1/models/{model_id}/unload`
 
 新增通用视觉接口：
 
 ```text
-POST /vision/infer
-POST /vision/batch-infer
+POST /v1/vision/infer
 POST /vision/video-infer
 POST /vision/stream-infer
 ```
 
-`/vision/infer` 示例：
+`/v1/vision/infer` 示例：
 
 ```bash
-curl -X POST http://127.0.0.1:9001/vision/infer \
+curl -X POST http://127.0.0.1:9001/v1/vision/infer \
   -F "model_id=person_detector_default" \
   -F "file=@frame.jpg"
 ```
@@ -302,7 +300,7 @@ curl -X POST http://127.0.0.1:9001/vision/infer \
 迁移策略：
 
 - 现有业务继续使用旧接口。
-- 新业务优先接入 `/vision/infer`。
+- 新业务优先接入 `/v1/vision/infer`。
 - 旧接口内部逐步复用任务插件，避免维护两套逻辑。
 
 ## 8. 运行时策略
@@ -468,8 +466,8 @@ aliases:
 集成测试：
 
 - 使用小型 ONNX dummy 模型测试加载、推理、卸载、重载。
-- 测试 `/health`、`/ready`、`/models`、`/model-info`。
-- 测试 `/vision/infer` 的分类、检测、ReID 基础响应。
+- 测试 `/health`、`/ready`、`/v1/models`、`/v1/models/{model_id}`。
+- 测试 `/v1/vision/infer` 的分类、检测、ReID 基础响应。
 - 测试鉴权。
 
 模型上线测试：
@@ -557,7 +555,7 @@ aliases:
 - 扩展 `models.yml` 字段。
 - 支持模型卡和 labels 文件读取。
 - 增加模型包校验。
-- 增加 `/vision/infer` 和 `/vision/batch-infer`。
+- 增加 `/v1/vision/infer`。
 - 增加分类插件。
 
 验收：
@@ -569,9 +567,9 @@ aliases:
 当前进展：
 
 - `models.yml` 已扩展 `aliases`、`task`、`input`、`output`、`artifact` 和 `rollout` 字段。
-- 已支持模型卡、labels、sha256 配置和 `/model-package` 查询。
+- 已支持模型卡、labels、sha256 配置和 `/v1/models/{model_id}` 查询。
 - 已新增 `tools/validate_model_package.py`，可在上线前检查模型文件、模型卡、labels、sha256 和别名目标。
-- 已新增通用 `/vision/infer` 和 `/vision/batch-infer`，支持检测、分类和 ReID 分发。
+- 已新增通用 `/v1/vision/infer`，支持检测、分类和 ReID 分发。
 
 ### 第 3 阶段：上线治理
 
@@ -595,10 +593,10 @@ aliases:
 当前进展：
 
 - `models.yml` 已支持别名和 `rollout.status` 配置，能描述 active/candidate 等上线状态。
-- 已提供 `/reload-config`、`/warmup`、`/reload`、`/unload`，支持配置重载、预热、重载和手动回滚。
-- 已新增 `tools/service_smoke_test.py`，支持 `/health`、`/ready`、OpenAPI、`/metrics`、`/ready/deep` 和 `/model-package` 检查。
-- 已新增 `/rollout/aliases`、`/rollout/aliases/preview`、`/rollout/aliases/switch`、`/rollout/aliases/weighted`、`/rollout/aliases/rollback`，支持别名查看、灰度预览、dry-run 切换、按权重分流、乐观校验和回滚到 previous target。
-- `/vision/infer` 已支持 `traffic_key`，用于加权灰度时做稳定 hash 分流；不传时使用请求 ID。
+- 已提供 `/v1/admin/models/reload-config`、`/v1/admin/models/warmup`、`/v1/admin/models/reload`、`/v1/models/{model_id}/unload`，支持配置重载、预热、重载和手动回滚。
+- 已新增 `tools/service_smoke_test.py`，支持 `/health`、`/ready`、OpenAPI、`/metrics`、`/ready/deep` 和 `/v1/models/{model_id}` 检查。
+- 已新增 `/v1/admin/models/rollout/aliases`、`/v1/admin/models/rollout/aliases/preview`、`/v1/admin/models/rollout/aliases/switch`、`/v1/admin/models/rollout/aliases/weighted`、`/v1/admin/models/rollout/aliases/rollback`，支持别名查看、灰度预览、dry-run 切换、按权重分流、乐观校验和回滚到 previous target。
+- `/v1/vision/infer` 已支持 `traffic_key`，用于加权灰度时做稳定 hash 分流；不传时使用请求 ID。
 - `/metrics` 已增加模型维度指标，标签包含 `model`、`task`、`version` 和 `status`。
 - 已新增 `tools/regression_check.py`，支持固定回归集比对。
 - 多 worker 统一控制面、灰度审计记录和更细的模型指标 label 仍作为后续增强项。
@@ -628,7 +626,7 @@ aliases:
 - FP16 ONNX 输入会根据 session 输入 dtype 自动 cast。
 - 已支持 `runtime: tensorrt` + `ENABLE_TENSORRT=true` 时优先使用 ONNX Runtime `TensorrtExecutionProvider`，并支持 TensorRT engine cache 配置。
 - 已新增 `tools/worker_control.py`，支持对多个 worker 统一执行 health、ready、reload-config、aliases、warmup、reload 和 unload。
-- 当前 `/vision/infer` 已支持单请求内 batch；跨请求动态 batch/批处理窗口仍作为后续可选优化，需结合真实 QPS 和延迟目标单独压测。
+- 当前 `/v1/vision/infer` 已支持单请求内 batch；跨请求动态 batch/批处理窗口仍作为后续可选优化，需结合真实 QPS 和延迟目标单独压测。
 
 ## 15. 推荐优先级
 
@@ -637,7 +635,7 @@ aliases:
 1. 模块化拆分。
 2. 模型包契约。
 3. 模型配置 schema。
-4. 分类插件和通用 `/vision/infer`。
+4. 分类插件和通用 `/v1/vision/infer`。
 5. 模型上线前冒烟测试。
 
 暂缓做：

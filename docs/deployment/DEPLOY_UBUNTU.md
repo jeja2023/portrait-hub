@@ -450,7 +450,7 @@ python3 tools/regression_check.py \
 新模型通过校验后，可以用别名切换接口发布。先 dry-run：
 
 ```bash
-curl -X POST http://127.0.0.1:9001/rollout/aliases/switch \
+curl -X POST http://127.0.0.1:9001/v1/admin/models/rollout/aliases/switch \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -470,7 +470,7 @@ python3 tools/worker_control.py --action reload-config --token "$TOKEN"
 ```
 
 ```bash
-curl -X POST http://127.0.0.1:9001/rollout/aliases/rollback \
+curl -X POST http://127.0.0.1:9001/v1/admin/models/rollout/aliases/rollback \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"alias_name":"person_detector_default","dry_run":false}'
@@ -479,7 +479,7 @@ curl -X POST http://127.0.0.1:9001/rollout/aliases/rollback \
 如果需要按比例灰度，可以配置 weighted alias。下面示例表示 90% 旧模型、10% 新模型：
 
 ```bash
-curl -X POST http://127.0.0.1:9001/rollout/aliases/weighted \
+curl -X POST http://127.0.0.1:9001/v1/admin/models/rollout/aliases/weighted \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -497,7 +497,7 @@ curl -X POST http://127.0.0.1:9001/rollout/aliases/weighted \
 
 ```bash
 curl -H "Authorization: Bearer $TOKEN" \
-  "http://127.0.0.1:9001/rollout/aliases/preview?alias_name=person_detector_default&traffic_key=customer-001"
+  "http://127.0.0.1:9001/v1/admin/models/rollout/aliases/preview?alias_name=person_detector_default&traffic_key=customer-001"
 ```
 
 多个 worker 的健康检查、配置重载和预热可以用统一控制工具：
@@ -522,14 +522,14 @@ python3 tools/worker_control.py \
 
 ```bash
 curl -H "Authorization: Bearer $TOKEN" \
-  "http://127.0.0.1:9001/model-info?project_name=portrait_hub&model_name=yolov8n.onnx"
+  "http://127.0.0.1:9001/v1/models/portrait_hub/yolov8n.onnx"
 ```
 
 查看模型配置：
 
 ```bash
 curl -H "Authorization: Bearer $TOKEN" \
-  http://127.0.0.1:9001/model-configs
+  http://127.0.0.1:9001/v1/models
 ```
 
 深度 readiness 检查：
@@ -542,7 +542,7 @@ curl -H "Authorization: Bearer $TOKEN" \
 手动预热：
 
 ```bash
-curl -X POST http://127.0.0.1:9001/warmup \
+curl -X POST http://127.0.0.1:9001/v1/admin/models/warmup \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"models":[{"project_name":"portrait_hub","model_name":"yolov8n.onnx"}]}'
@@ -569,7 +569,7 @@ curl -X POST http://127.0.0.1:9001/predict \
 多人检测请求示例：
 
 ```bash
-curl -X POST http://127.0.0.1:9001/infer/persons \
+curl -X POST http://127.0.0.1:9001/v1/vision/infer \
   -H "Authorization: Bearer $TOKEN" \
   -H "X-Request-ID: persons-test-001" \
   -F "project_name=portrait_hub" \
@@ -580,12 +580,12 @@ curl -X POST http://127.0.0.1:9001/infer/persons \
   -F "files=@frame-002.jpg"
 ```
 
-`/infer/persons` 直接返回每张图里的 `persons` 列表，包含人体框、置信度和类别信息。业务侧处理视频时，建议先按固定间隔抽帧，再把多张帧图作为 `files` 批量提交。
+`/v1/vision/infer` 在统一 `data.results` 中返回每张图的检测、分类或 ReID 结果；检测任务包含人体框、置信度和类别信息。
 
 ReID 向量请求示例：
 
 ```bash
-curl -X POST http://127.0.0.1:9001/infer/person-embeddings \
+curl -X POST http://127.0.0.1:9001/v1/vision/infer \
   -H "Authorization: Bearer $TOKEN" \
   -F "project_name=portrait_hub" \
   -F "model_name=osnet_ibn_x1_0.onnx" \
@@ -596,7 +596,7 @@ curl -X POST http://127.0.0.1:9001/infer/person-embeddings \
 检测 + ReID 组合请求示例：
 
 ```bash
-curl -X POST http://127.0.0.1:9001/infer/person-tracks \
+curl -X POST http://127.0.0.1:9001/v1/infer/tracks \
   -H "Authorization: Bearer $TOKEN" \
   -F "detector_project_name=portrait_hub" \
   -F "detector_model_name=yolov8n.onnx" \
@@ -610,7 +610,7 @@ curl -X POST http://127.0.0.1:9001/infer/person-tracks \
 离线视频解析请求示例：
 
 ```bash
-curl -X POST http://127.0.0.1:9001/infer/video/person-tracks \
+curl -X POST http://127.0.0.1:9001/v1/jobs/video \
   -H "Authorization: Bearer $TOKEN" \
   -F "file=@clip.mp4" \
   -F "frame_interval=15" \
@@ -618,22 +618,22 @@ curl -X POST http://127.0.0.1:9001/infer/video/person-tracks \
   -F "include_embeddings=false"
 ```
 
+接口返回任务 ID；通过 `GET /v1/jobs/{job_id}` 查询状态，通过 `GET /v1/jobs/{job_id}/result` 获取检测、ReID 和轨迹结果。
+
 视频流解析请求示例：
 
 ```bash
-curl -X POST http://127.0.0.1:9001/infer/stream/person-tracks \
+curl -X POST http://127.0.0.1:9001/v1/streams \
   -H "Authorization: Bearer $TOKEN" \
-  -F "stream_url=rtsp://user:password@camera-host/stream1" \
-  -F "frame_interval=15" \
-  -F "max_frames=32" \
-  -F "read_timeout_seconds=10"
+  -H "Content-Type: application/json" \
+  -d '{"stream_url":"rtsp://user:password@camera-host/stream1","name":"camera-1","settings":{"frame_interval":15,"max_frames":32,"read_timeout_seconds":10,"include_embeddings":false}}'
 ```
 
-视频流解析默认关闭。需要在 `.env` 中设置 `ALLOW_STREAM_URLS=true` 并重建/重启容器后才会启用。生产环境建议只允许可信内网摄像头地址。
+随后调用 POST /v1/streams/{stream_id}/start 启动分析，通过 GET /v1/streams/{stream_id}/events 或 WS /ws/streams/{stream_id} 读取 stream_analysis_completed 事件。
 
-长驻视频流拉取推荐使用 `python -m app.portrait_stream_worker_daemon` 或 Compose 中的 `portrait-stream-worker` 服务。daemon 会为每条运行中的 stream 获取可过期的 state lease，并在 `STREAM_WORKER_LOCK_DIR` 下创建原子 lock 文件做进程级兜底，避免重复拉流。
+视频流解析默认关闭。需要在 .env 中设置 ALLOW_STREAM_URLS=true；开发机访问私网流时还需设置 ALLOW_PRIVATE_STREAM_HOSTS=true。生产环境建议只允许可信内网摄像头地址。
 
-模型输出调试：
+长驻视频流拉取推荐使用 python -m app.portrait_stream_worker_daemon 或 Compose 中的 portrait-stream-worker 服务。daemon 会为每条运行中的 stream 获取可过期的 state lease，并在 STREAM_WORKER_LOCK_DIR 下创建原子 lock 文件做进程级兜底，避免重复拉流。模型输出调试：
 
 ```bash
 curl -X POST http://127.0.0.1:9001/debug/model-output \
@@ -697,7 +697,7 @@ cp /opt/model-upload/portrait_hub/yolov8n.onnx ./models/yolov8n.onnx
 重载单个 worker 的模型：
 
 ```bash
-curl -X POST http://127.0.0.1:9001/reload \
+curl -X POST http://127.0.0.1:9001/v1/admin/models/reload \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"project_name":"portrait_hub","model_name":"yolov8n.onnx"}'
@@ -800,7 +800,7 @@ find ./models -maxdepth 2 -type f -print
 首次请求会加载 ONNX 模型并初始化 CUDA provider。可以使用：
 
 - `WARMUP_MODELS` 启动预热。
-- `/warmup` 手动预热。
+- `/v1/admin/models/warmup` 手动预热。
 
 ### 外部机器访问不到 9001/9002
 
@@ -819,8 +819,8 @@ Compose 默认绑定：
 - GPU 容器内 `nvidia-smi` 正常。
 - `docker compose ps` 显示 worker healthy。
 - `/ready/deep` 的 `runtime_provider.available_providers` 包含 `CUDAExecutionProvider`。
-- `/model-info` 能返回正确输入 shape 和 dtype。
-- `/warmup` 成功。
+- `/v1/models/{model_id}` 能返回正确输入 shape 和 dtype。
+- `/v1/admin/models/warmup` 成功。
 - 业务请求 tensor shape 与模型输入一致。
 - 已设置 `API_TOKEN`。
 - 已设置调用方超时、重试和日志 request id。

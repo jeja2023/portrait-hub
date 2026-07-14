@@ -21,8 +21,8 @@
 - 支持模型配置文件 `models.yml`。
 - 已有人体检测模型 `yolov8n.onnx`。
 - 已有人体 ReID 模型 `osnet_ibn_x1_0.onnx`。
-- 已有 `/infer/person-embeddings` 人体特征提取接口。
-- 已有 `/infer/person-tracks` 检测 + ReID 组合接口。
+- 已有 `/v1/vision/infer` 人体特征提取接口。
+- 已有 `/v1/infer/tracks` 检测 + ReID 组合接口。
 - 已有离线视频上传抽帧接口。
 - 已有 RTSP/RTMP/HTTP/HTTPS 视频流抽帧接口。
 - 已有基础指标、日志、模型加载和路径安全逻辑。

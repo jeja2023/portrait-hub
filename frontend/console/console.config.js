@@ -6,9 +6,9 @@
       pose: "/v1/infer/pose",
       appearance: "/v1/infer/appearance",
       gait: "/v1/infer/gait",
-      detect: "/infer/persons",
-      embeddings: "/infer/person-embeddings",
-      tracks: "/infer/person-tracks",
+      detect: "/v1/vision/infer",
+      embeddings: "/v1/vision/infer",
+      tracks: "/v1/infer/tracks",
     },
     compare: {
       faces: "/v1/compare/faces",

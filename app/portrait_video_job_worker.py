@@ -9,6 +9,7 @@ import socket
 from typing import Any
 from uuid import uuid4
 
+from app.model_refs import validate_model_reference_parts
 from app.observability import logger
 from app.portrait_async import run_blocking_io
 from app.portrait_jobs import (
@@ -21,7 +22,13 @@ from app.portrait_jobs import (
 )
 from app.portrait_response import exception_log_summary
 from app.portrait_task_queue import QueueMessage, TASK_QUEUE
+from app.routes_inference_common import validate_detection_parameters
 from app.settings import (
+    DEFAULT_CONFIDENCE,
+    DEFAULT_DETECTOR_ARTIFACT,
+    DEFAULT_DETECTOR_PROJECT,
+    DEFAULT_IOU,
+    DEFAULT_REID_ARTIFACT,
     MAX_VIDEO_FRAMES,
     TASK_QUEUE_POLL_INTERVAL_SECONDS,
     TASK_QUEUE_VISIBILITY_TIMEOUT_SECONDS,
@@ -56,12 +63,55 @@ def validate_video_job_message(message: QueueMessage) -> dict[str, Any]:
         raise ValueError("视频任务抽帧间隔无效")
     if max_frames < 1 or max_frames > MAX_VIDEO_FRAMES:
         raise ValueError("视频任务最大帧数无效")
+    detector_project_name = str(
+        message.payload.get("detector_project_name") or DEFAULT_DETECTOR_PROJECT
+    )
+    detector_model_name = str(
+        message.payload.get("detector_model_name") or DEFAULT_DETECTOR_ARTIFACT
+    )
+    reid_project_name = str(
+        message.payload.get("reid_project_name") or DEFAULT_DETECTOR_PROJECT
+    )
+    reid_model_name = str(
+        message.payload.get("reid_model_name") or DEFAULT_REID_ARTIFACT
+    )
+    detector_project_name, detector_model_name, reid_project_name, reid_model_name = (
+        validate_model_reference_parts(
+            detector_project_name,
+            detector_model_name,
+            reid_project_name,
+            reid_model_name,
+        )
+    )
+    confidence = float(message.payload.get("confidence", DEFAULT_CONFIDENCE))
+    iou = float(message.payload.get("iou", DEFAULT_IOU))
+    max_detections = int(message.payload.get("max_detections", 100))
+    raw_include_embeddings = message.payload.get("include_embeddings", False)
+    if isinstance(raw_include_embeddings, bool):
+        include_embeddings = raw_include_embeddings
+    elif isinstance(
+        raw_include_embeddings, str
+    ) and raw_include_embeddings.strip().lower() in {"true", "false"}:
+        include_embeddings = raw_include_embeddings.strip().lower() == "true"
+    else:
+        raise ValueError("视频任务 include_embeddings 无效")
+    validate_detection_parameters(
+        confidence=confidence, iou=iou, max_detections=max_detections
+    )
     return {
         "tenant_id": tenant_id,
         "job_id": job_id,
         "input_ref": input_ref,
         "frame_interval": frame_interval,
         "max_frames": max_frames,
+        "detector_project_name": detector_project_name,
+        "detector_model_name": detector_model_name,
+        "reid_project_name": reid_project_name,
+        "reid_model_name": reid_model_name,
+        "confidence": confidence,
+        "iou": iou,
+        "max_detections": max_detections,
+        "include_embeddings": include_embeddings,
     }
 
 
@@ -71,14 +121,29 @@ async def process_video_job_message(message: QueueMessage) -> dict[str, Any]:
     job = get_video_job(task["job_id"], tenant_id=task["tenant_id"])
     if job is None:
         await run_blocking_io(delete_video_job_input, task["input_ref"])
-        await run_blocking_io(TASK_QUEUE.clear_cancelled, "video_jobs", task["tenant_id"], task["job_id"])
+        await run_blocking_io(
+            TASK_QUEUE.clear_cancelled, "video_jobs", task["tenant_id"], task["job_id"]
+        )
         await run_blocking_io(TASK_QUEUE.ack, message)
-        return {"status": "orphan_removed", "job_id": task["job_id"], "tenant_id": task["tenant_id"]}
-    if job.cancel_requested or normalize_job_status(job.status) in TERMINAL_JOB_STATUSES:
+        return {
+            "status": "orphan_removed",
+            "job_id": task["job_id"],
+            "tenant_id": task["tenant_id"],
+        }
+    if (
+        job.cancel_requested
+        or normalize_job_status(job.status) in TERMINAL_JOB_STATUSES
+    ):
         await run_blocking_io(delete_video_job_input, task["input_ref"])
-        await run_blocking_io(TASK_QUEUE.clear_cancelled, "video_jobs", job.tenant_id, job.job_id)
+        await run_blocking_io(
+            TASK_QUEUE.clear_cancelled, "video_jobs", job.tenant_id, job.job_id
+        )
         await run_blocking_io(TASK_QUEUE.ack, message)
-        return {"status": str(normalize_job_status(job.status)), "job_id": job.job_id, "tenant_id": job.tenant_id}
+        return {
+            "status": str(normalize_job_status(job.status)),
+            "job_id": job.job_id,
+            "tenant_id": job.tenant_id,
+        }
 
     await run_video_job(
         job.job_id,
@@ -88,14 +153,31 @@ async def process_video_job_message(message: QueueMessage) -> dict[str, Any]:
         task["frame_interval"],
         task["max_frames"],
         input_ref=task["input_ref"],
+        detector_project_name=task["detector_project_name"],
+        detector_model_name=task["detector_model_name"],
+        reid_project_name=task["reid_project_name"],
+        reid_model_name=task["reid_model_name"],
+        confidence=task["confidence"],
+        iou=task["iou"],
+        max_detections=task["max_detections"],
+        include_embeddings=task["include_embeddings"],
     )
     final_job = get_video_job(job.job_id, tenant_id=job.tenant_id)
-    if final_job is None or normalize_job_status(final_job.status) not in TERMINAL_JOB_STATUSES:
+    if (
+        final_job is None
+        or normalize_job_status(final_job.status) not in TERMINAL_JOB_STATUSES
+    ):
         raise RuntimeError("视频任务执行后未进入终态")
     await run_blocking_io(delete_video_job_input, task["input_ref"])
-    await run_blocking_io(TASK_QUEUE.clear_cancelled, "video_jobs", final_job.tenant_id, final_job.job_id)
+    await run_blocking_io(
+        TASK_QUEUE.clear_cancelled, "video_jobs", final_job.tenant_id, final_job.job_id
+    )
     await run_blocking_io(TASK_QUEUE.ack, message)
-    return {"status": str(normalize_job_status(final_job.status)), "job_id": final_job.job_id, "tenant_id": final_job.tenant_id}
+    return {
+        "status": str(normalize_job_status(final_job.status)),
+        "job_id": final_job.job_id,
+        "tenant_id": final_job.tenant_id,
+    }
 
 
 async def maintain_message_lease(message: QueueMessage) -> None:
@@ -117,7 +199,9 @@ async def stop_message_lease(task: asyncio.Task[None]) -> None:
 
 
 async def run_worker_once(*, block_seconds: float = 0.0) -> dict[str, Any]:
-    message = await run_blocking_io(TASK_QUEUE.claim, "video_jobs", VIDEO_JOB_WORKER_ID, block_seconds)
+    message = await run_blocking_io(
+        TASK_QUEUE.claim, "video_jobs", VIDEO_JOB_WORKER_ID, block_seconds
+    )
     if message is None:
         return {"status": "idle", "processed_count": 0}
     try:
@@ -125,7 +209,11 @@ async def run_worker_once(*, block_seconds: float = 0.0) -> dict[str, Any]:
     except (TypeError, ValueError) as exc:
         await run_blocking_io(TASK_QUEUE.ack, message)
         logger.warning("已丢弃无效视频任务消息: error=%s", exception_log_summary(exc))
-        return {"status": "discarded", "processed_count": 1, "error": type(exc).__name__}
+        return {
+            "status": "discarded",
+            "processed_count": 1,
+            "error": type(exc).__name__,
+        }
 
     lease_task = asyncio.create_task(maintain_message_lease(message))
     try:
@@ -135,10 +223,14 @@ async def run_worker_once(*, block_seconds: float = 0.0) -> dict[str, Any]:
         try:
             await run_blocking_io(TASK_QUEUE.release, message)
         except Exception as release_exc:
-            logger.warning("视频任务释放失败: error=%s", exception_log_summary(release_exc))
+            logger.warning(
+                "视频任务释放失败: error=%s", exception_log_summary(release_exc)
+            )
         logger.warning(
             "视频任务 worker 执行失败: tenant_hash=%s job_hash=%s error=%s",
-            video_job_identifier_fingerprint(str(message.payload.get("tenant_id") or "")),
+            video_job_identifier_fingerprint(
+                str(message.payload.get("tenant_id") or "")
+            ),
             video_job_identifier_fingerprint(str(message.payload.get("job_id") or "")),
             exception_log_summary(exc),
         )
@@ -147,7 +239,9 @@ async def run_worker_once(*, block_seconds: float = 0.0) -> dict[str, Any]:
         await stop_message_lease(lease_task)
 
 
-async def run_worker_forever(*, poll_interval_seconds: float = TASK_QUEUE_POLL_INTERVAL_SECONDS) -> None:
+async def run_worker_forever(
+    *, poll_interval_seconds: float = TASK_QUEUE_POLL_INTERVAL_SECONDS
+) -> None:
     block_seconds = max(0.1, float(poll_interval_seconds))
     while True:
         await run_worker_once(block_seconds=block_seconds)
@@ -161,9 +255,13 @@ def start_in_process_worker() -> asyncio.Task[None] | None:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="运行 PortraitHub 持久视频任务 worker。")
+    parser = argparse.ArgumentParser(
+        description="运行 PortraitHub 持久视频任务 worker。"
+    )
     parser.add_argument("--once", action="store_true", help="最多处理一条任务后退出。")
-    parser.add_argument("--poll-interval", type=float, default=TASK_QUEUE_POLL_INTERVAL_SECONDS)
+    parser.add_argument(
+        "--poll-interval", type=float, default=TASK_QUEUE_POLL_INTERVAL_SECONDS
+    )
     parser.add_argument("--json", action="store_true", help="输出机器可读结果。")
     args = parser.parse_args()
     if args.once:

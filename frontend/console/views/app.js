@@ -340,9 +340,9 @@ const template = `
               <option value="appearance">衣着外观 /v1/infer/appearance</option>
               <option value="pose">姿态解析 /v1/infer/pose</option>
               <option value="gait">步态序列 /v1/infer/gait</option>
-              <option value="detect">YOLO 人体检测 /infer/persons</option>
-              <option value="embeddings">ReID 向量 /infer/person-embeddings</option>
-              <option value="tracks">图片序列轨迹 /infer/person-tracks</option>
+              <option value="detect">YOLO 人体检测 /v1/vision/infer</option>
+              <option value="embeddings">ReID 向量 /v1/vision/infer</option>
+              <option value="tracks">图片序列轨迹 /v1/infer/tracks</option>
             </select>
           </label>
           <label class="span-2">图片文件 <input id="vision-files-input" name="files" type="file" accept="image/*" multiple /></label>
@@ -614,7 +614,7 @@ const template = `
           <div class="result-panel">
             <div class="section-title">
               <h3>图片解析结果</h3>
-              <p>展示当前会话最近完成的图片解析结果。</p>
+              <p>展示当前租户最近完成的图片解析结果，刷新页面后仍可查看。</p>
             </div>
             <div id="image-results-summary" class="result-summary"></div>
             <div id="image-results-visuals" class="result-visual-grid"></div>
@@ -1992,7 +1992,7 @@ function wrapHandler(fn) {
       let msg = error.message || String(error);
       try {
         const parsed = JSON.parse(msg);
-        msg = parsed.detail || parsed.message || msg;
+        msg = parsed.error?.message || parsed.detail || parsed.message || msg;
       } catch {}
       setStatus(msg, true);
     }
@@ -2440,7 +2440,12 @@ function selectedCompareEndpoint() {
 function updateSnippetButtons() {
   const vision = selectedVisionEndpoint();
   const compare = selectedCompareEndpoint();
-  qs("#vision-copy-button").onclick = wrapHandler(() => copyText(requestSnippet(vision, ["files=@frame.jpg", "include_embeddings=false"]), "调用示例已复制"));
+  const mode = qs("#vision-mode-input").value;
+  const visionFields = ["files=@frame.jpg"];
+  if (mode === "detect") visionFields.push("model_id=person_detector_default", "confidence=0.25", "iou=0.45");
+  else if (mode === "embeddings") visionFields.push("model_id=person_reid_default", "include_vectors=false");
+  else visionFields.push("include_embeddings=false");
+  qs("#vision-copy-button").onclick = wrapHandler(() => copyText(requestSnippet(vision, visionFields), "调用示例已复制"));
   qs("#compare-copy-button").onclick = wrapHandler(() => copyText(requestSnippet(compare, ["image_a=@a.jpg", "image_b=@b.jpg", "threshold_profile=normal"]), "调用示例已复制"));
   qs("#gallery-copy-button").onclick = wrapHandler(() => copyText(requestSnippet("/v1/gallery/search", ["file=@query.jpg", "modality=body", "top_k=5"]), "调用示例已复制"));
   qs("#video-copy-button").onclick = wrapHandler(() => copyText(requestSnippet("/v1/jobs/video", ["file=@demo.mp4", "frame_interval=15", "max_frames=64"]), "调用示例已复制"));
@@ -3750,9 +3755,9 @@ function renderReleaseAuditRows(audit) {
 }
 async function refreshReleaseCenter(payload = null) {
   const [aliases, models, audit] = await Promise.all([
-    api("/rollout/aliases").catch((error) => ({ error: error.message || String(error), aliases: [] })),
+    api("/v1/admin/models/rollout/aliases").catch((error) => ({ error: error.message || String(error), aliases: [] })),
     api("/v1/models"),
-    api("/rollout/audit?limit=20").catch((error) => ({ error: error.message || String(error), records: [], count: 0, malformed_count: 0 })),
+    api("/v1/admin/models/rollout/audit?limit=20").catch((error) => ({ error: error.message || String(error), records: [], count: 0, malformed_count: 0 })),
   ]);
   const data = payload ? { action: payload.action, result: payload.result, aliases, models, audit } : { aliases, models, audit };
   renderSummary("#release-summary", [
@@ -3777,15 +3782,15 @@ async function submitReleaseAction(event) {
   let payload;
   if (action === "preview") {
     const key = encodeURIComponent(qs("#release-traffic-key-input").value.trim() || state.tenantId);
-    payload = await api(`/rollout/aliases/preview?alias_name=${encodeURIComponent(aliasName)}&traffic_key=${key}`);
+    payload = await api(`/v1/admin/models/rollout/aliases/preview?alias_name=${encodeURIComponent(aliasName)}&traffic_key=${key}`);
   } else if (action === "switch") {
     if (!target) throw new Error("请输入目标模型");
-    payload = await api("/rollout/aliases/switch", { method: "POST", json: { alias_name: aliasName, target_model_id: target, expected_current_target: expected || null, dry_run: dryRun } });
+    payload = await api("/v1/admin/models/rollout/aliases/switch", { method: "POST", json: { alias_name: aliasName, target_model_id: target, expected_current_target: expected || null, dry_run: dryRun } });
   } else if (action === "weighted") {
     if (!target) throw new Error("请输入目标模型");
-    payload = await api("/rollout/aliases/weighted", { method: "POST", json: { alias_name: aliasName, targets: [{ target_model_id: target, weight: Number(qs("#release-weight-input").value || 0), status: "candidate" }], expected_current_target: expected || null, dry_run: dryRun } });
+    payload = await api("/v1/admin/models/rollout/aliases/weighted", { method: "POST", json: { alias_name: aliasName, targets: [{ target_model_id: target, weight: Number(qs("#release-weight-input").value || 0), status: "candidate" }], expected_current_target: expected || null, dry_run: dryRun } });
   } else {
-    payload = await api("/rollout/aliases/rollback", { method: "POST", json: { alias_name: aliasName, dry_run: dryRun } });
+    payload = await api("/v1/admin/models/rollout/aliases/rollback", { method: "POST", json: { alias_name: aliasName, dry_run: dryRun } });
   }
   await refreshReleaseCenter({ action, result: payload });
 }
@@ -4269,15 +4274,39 @@ function visionModeLabel(mode) {
   return localizeValue(mode || "image") || "图片解析";
 }
 
-function addImageAnalysisResult(mode, endpoint, payload, previews) {
-  const visuals = visionVisualEntries(payload, previews).map((entry) => ({
+function imageAnalysisVisuals(mode, payload, previews) {
+  return visionVisualEntries(payload, previews).map((entry) => ({
     ...entry,
     item: {
       ...entry.item,
-      label: `图片 / ${visionModeLabel(mode)} / ${entry.item?.label || `第${(entry.frameIndex ?? 0) + 1}帧`}`,
-      name: entry.item?.name || entry.item?.label || "图片解析结果",
+      label: `\u56fe\u7247 / ${visionModeLabel(mode)} / ${entry.item?.label || `#${(entry.frameIndex ?? 0) + 1}`}`,
+      name: entry.item?.name || entry.item?.label || "\u56fe\u7247\u89e3\u6790\u7ed3\u679c",
     },
   }));
+}
+
+function imageAnalysisRecordFromServer(record) {
+  const payload = record?.payload || {};
+  const mode = record?.mode || payload?.model?.task || "image";
+  const previews = Array.isArray(record?.previews) ? record.previews : [];
+  const visuals = imageAnalysisVisuals(mode, payload, previews);
+  return {
+    id: record?.result_id || record?.request_id || `image_${Date.now()}`,
+    result_id: record?.result_id,
+    request_id: record?.request_id,
+    created_at: Number(record?.created_at || 0) * 1000 || Date.now(),
+    mode,
+    mode_label: visionModeLabel(mode),
+    endpoint: record?.endpoint || "/v1/vision/infer",
+    payload,
+    visual_count: visuals.length,
+    frame_count: visuals.length,
+    visuals,
+  };
+}
+
+function addImageAnalysisResult(mode, endpoint, payload, previews) {
+  const visuals = imageAnalysisVisuals(mode, payload, previews);
   state.analysisResults.image.unshift({
     id: payload?.request_id || payload?.data?.request_id || `image_${Date.now()}`,
     created_at: Date.now(),
@@ -4407,17 +4436,23 @@ function renderAnalysisResultsTab(tab = state.analysisResultsTab) {
   }
 }
 
-async function refreshAnalysisResults() {
+async function refreshImageResults() {
+  const payload = await api("/v1/vision/results?limit=24");
+  const records = Array.isArray(payload.results) ? payload.results : [];
+  state.analysisResults.image = records.map(imageAnalysisRecordFromServer);
   renderImageResults();
-  await Promise.allSettled([refreshVideoResults(), refreshStreamResults()]);
+  return payload;
+}
+
+async function refreshAnalysisResults() {
+  await Promise.allSettled([refreshImageResults(), refreshVideoResults(), refreshStreamResults()]);
   renderAnalysisResultsTab(state.analysisResultsTab);
 }
 
 async function refreshActiveAnalysisResults() {
   if (state.analysisResultsTab === "video") return refreshVideoResults();
   if (state.analysisResultsTab === "stream") return refreshStreamResults();
-  renderImageResults();
-  return state.analysisResults.image;
+  return refreshImageResults();
 }
 
 function renderJobSummary(payload) {
@@ -4453,8 +4488,10 @@ async function submitVision(event) {
   } else if (mode === "gait") {
     form.set("include_embedding", qs("#vision-include-embeddings-input").checked ? "true" : "false");
   } else if (mode === "embeddings") {
+    form.set("model_id", "person_reid_default");
     form.set("include_vectors", qs("#vision-include-embeddings-input").checked ? "true" : "false");
   } else if (["detect", "tracks"].includes(mode)) {
+    if (mode === "detect") form.set("model_id", "person_detector_default");
     form.set("confidence", qs("#vision-confidence-input").value);
     form.set("iou", qs("#vision-iou-input").value);
     form.set("max_detections", qs("#vision-max-detections-input").value);
@@ -4464,7 +4501,7 @@ async function submitVision(event) {
   renderVisionSummary(payload);
   renderVisionVisuals(payload, state.visionPreviews);
   renderPayload("vision", "#vision-json", payload);
-  addImageAnalysisResult(mode, endpoint, payload, state.visionPreviews);
+  await refreshImageResults().catch(() => addImageAnalysisResult(mode, endpoint, payload, state.visionPreviews));
 }
 
 async function submitCompare(event) {

@@ -5,6 +5,7 @@ import threading
 from app import postgres_audit as _audit
 from app import postgres_core as _core
 from app import postgres_gallery as _gallery
+from app import postgres_image_results as _image_results
 from app import postgres_jobs as _jobs
 from app import postgres_objects as _objects
 from app import postgres_streams as _streams
@@ -121,6 +122,22 @@ def insert_audit_event(payload: dict[str, object]) -> None:
         _audit.insert_audit_event(payload)
 
 
+def upsert_image_analysis_result(
+    payload: dict[str, object], *, max_results: int
+) -> None:
+    with _CORE_DEPENDENCY_LOCK:
+        _sync_core_dependencies()
+        _image_results.upsert_image_analysis_result(
+            payload, max_results=max_results
+        )
+
+
+def load_image_analysis_results_snapshot() -> list[dict[str, object]]:
+    with _CORE_DEPENDENCY_LOCK:
+        _sync_core_dependencies()
+        return _image_results.load_image_analysis_results_snapshot()
+
+
 def upsert_video_job(payload: dict[str, object]) -> None:
     with _CORE_DEPENDENCY_LOCK:
         _sync_core_dependencies()
@@ -181,6 +198,7 @@ __all__ = [
     "insert_object_record",
     "jsonb",
     "load_gallery_snapshot",
+    "load_image_analysis_results_snapshot",
     "load_streams_snapshot",
     "load_threshold_snapshot",
     "load_video_jobs_snapshot",
@@ -196,6 +214,7 @@ __all__ = [
     "search_pgvector",
     "upsert_gallery_feature",
     "upsert_gallery_person",
+    "upsert_image_analysis_result",
     "upsert_stream",
     "upsert_video_job",
     "vector_literal",

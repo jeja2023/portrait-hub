@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from tools.deploy_check import DeployReport, check_ci_workflows, check_dependency_lock, check_docker_files, check_source_encoding, onnxruntime_version
+from tools.deploy_check import DeployReport, check_ci_workflows, check_dependency_lock, check_docker_files, check_import_app, check_source_encoding, onnxruntime_version
 
 
 def test_deploy_report_redacts_sensitive_details() -> None:
@@ -22,6 +22,15 @@ def test_deploy_report_redacts_sensitive_details() -> None:
     assert "<redacted>" in encoded
     assert report.checks[0]["detail"]["nested"]["safe"] == "visible"
 
+
+def test_deploy_check_enforces_single_stream_api() -> None:
+    report = DeployReport()
+
+    check_import_app(Path("."), report)
+
+    checks = {item["name"]: item for item in report.checks}
+    assert checks["app_required_routes"]["ok"] is True
+    assert checks["app_removed_routes"]["ok"] is True
 
 def test_deploy_check_tracks_stream_worker_service() -> None:
     report = DeployReport()

@@ -12,11 +12,11 @@ import app.settings as settings
 from app import (
     portrait_audit,
     portrait_auth,
+    portrait_image_results,
     portrait_model_capabilities,
     routes_debug,
-    routes_model_lifecycle,
     routes_model_query,
-    routes_person_embeddings,
+    routes_vision,
     routes_portrait_models,
     routes_predict,
     rollout_audit,
@@ -26,16 +26,30 @@ from app.runtime_state import MODEL_REGISTRY
 from main import app
 
 
-def test_env_hot_reload_updates_loaded_settings_modules(monkeypatch, workspace_tmp_path) -> None:
+def v1_error_message(response) -> str:
+    return response.json()["error"]["message"]
+
+
+def v1_validation_issues(response) -> list[dict[str, object]]:
+    return response.json()["error"]["details"]["issues"]
+
+
+def test_env_hot_reload_updates_loaded_settings_modules(
+    monkeypatch, workspace_tmp_path
+) -> None:
     env_path = workspace_tmp_path / ".env"
     env_path.write_text("RATE_LIMIT_PER_MINUTE=37\n", encoding="utf-8")
     original_env = settings.RATE_LIMIT_PER_MINUTE
     original_rate_limit = rate_limit.RATE_LIMIT_PER_MINUTE
     monkeypatch.setattr(config_hot_reload, "ENV_PATH", env_path)
-    monkeypatch.setattr(config_hot_reload, "audit_config_reload", lambda source, result: None)
+    monkeypatch.setattr(
+        config_hot_reload, "audit_config_reload", lambda source, result: None
+    )
 
     try:
-        result = config_hot_reload.reload_runtime_config(source="test-env", include_env=True)
+        result = config_hot_reload.reload_runtime_config(
+            source="test-env", include_env=True
+        )
 
         assert result["env_loaded"] is True
         assert result["env_changed_key_count"] == 1
@@ -47,12 +61,16 @@ def test_env_hot_reload_updates_loaded_settings_modules(monkeypatch, workspace_t
         rate_limit.RATE_LIMIT_PER_MINUTE = original_rate_limit
 
 
-def test_dev_start_local_env_clears_api_token_for_browser_console(workspace_tmp_path) -> None:
+def test_dev_start_local_env_clears_api_token_for_browser_console(
+    workspace_tmp_path,
+) -> None:
     from app.runtime_defaults import parse_env_file
     from dev_start import write_local_dev_env
 
     env_path = workspace_tmp_path / ".env"
-    env_path.write_text("API_TOKEN=123456\nAUTH_REQUIRED=true\nRBAC_ENABLED=true\n", encoding="utf-8")
+    env_path.write_text(
+        "API_TOKEN=123456\nAUTH_REQUIRED=true\nRBAC_ENABLED=true\n", encoding="utf-8"
+    )
 
     local_env_file, overrides = write_local_dev_env(workspace_tmp_path, env_path)
     values = parse_env_file(local_env_file)
@@ -63,7 +81,9 @@ def test_dev_start_local_env_clears_api_token_for_browser_console(workspace_tmp_
     assert values["RBAC_ENABLED"] == "false"
 
 
-def test_env_hot_reload_updates_model_capabilities(monkeypatch, workspace_tmp_path) -> None:
+def test_env_hot_reload_updates_model_capabilities(
+    monkeypatch, workspace_tmp_path
+) -> None:
     capabilities_path = workspace_tmp_path / "model-capabilities.yml"
     capabilities_path.write_text(
         """
@@ -83,17 +103,31 @@ capabilities:
         encoding="utf-8",
     )
     original_env = os.environ.get("MODEL_CAPABILITIES_PATH")
-    original_require_env = os.environ.get("PORTRAIT_REQUIRE_PRODUCTION_MODEL_CAPABILITIES")
+    original_require_env = os.environ.get(
+        "PORTRAIT_REQUIRE_PRODUCTION_MODEL_CAPABILITIES"
+    )
     original_capabilities = dict(portrait_model_capabilities.MODEL_CAPABILITIES)
     monkeypatch.setattr(config_hot_reload, "ENV_PATH", env_path)
-    monkeypatch.setattr(config_hot_reload, "audit_config_reload", lambda source, result: None)
+    monkeypatch.setattr(
+        config_hot_reload, "audit_config_reload", lambda source, result: None
+    )
 
     try:
-        result = config_hot_reload.reload_runtime_config(source="test-capabilities", include_env=True)
+        result = config_hot_reload.reload_runtime_config(
+            source="test-capabilities", include_env=True
+        )
 
         assert result["model_capabilities_reloaded"] is True
-        assert portrait_model_capabilities.MODEL_CAPABILITIES["face_embedding"]["model_id"] == "portrait_hub/arcface_r100.onnx"
-        assert portrait_model_capabilities.MODEL_CAPABILITIES["face_embedding"]["embedding_dim"] == 512
+        assert (
+            portrait_model_capabilities.MODEL_CAPABILITIES["face_embedding"]["model_id"]
+            == "portrait_hub/arcface_r100.onnx"
+        )
+        assert (
+            portrait_model_capabilities.MODEL_CAPABILITIES["face_embedding"][
+                "embedding_dim"
+            ]
+            == 512
+        )
     finally:
         if original_env is None:
             os.environ.pop("MODEL_CAPABILITIES_PATH", None)
@@ -102,14 +136,20 @@ capabilities:
         if original_require_env is None:
             os.environ.pop("PORTRAIT_REQUIRE_PRODUCTION_MODEL_CAPABILITIES", None)
         else:
-            os.environ["PORTRAIT_REQUIRE_PRODUCTION_MODEL_CAPABILITIES"] = original_require_env
+            os.environ["PORTRAIT_REQUIRE_PRODUCTION_MODEL_CAPABILITIES"] = (
+                original_require_env
+            )
         config_hot_reload.reload_settings_modules()
         portrait_model_capabilities.MODEL_CAPABILITIES.clear()
         portrait_model_capabilities.MODEL_CAPABILITIES.update(original_capabilities)
 
 
 def test_production_capability_requirement_rejects_fallback(monkeypatch) -> None:
-    monkeypatch.setattr(portrait_model_capabilities, "PORTRAIT_REQUIRE_PRODUCTION_MODEL_CAPABILITIES", True)
+    monkeypatch.setattr(
+        portrait_model_capabilities,
+        "PORTRAIT_REQUIRE_PRODUCTION_MODEL_CAPABILITIES",
+        True,
+    )
 
     with pytest.raises(RuntimeError, match="face_embedding"):
         portrait_model_capabilities.validate_required_production_capabilities(
@@ -131,24 +171,19 @@ def test_openapi_keeps_core_routes() -> None:
         "/health",
         "/ready",
         "/ready/deep",
-        "/models",
-        "/model-configs",
-        "/model-package",
         "/predict",
-        "/infer/persons",
-        "/infer/person-embeddings",
-        "/infer/person-tracks",
-        "/infer/video/person-tracks",
-        "/infer/stream/person-tracks",
-        "/vision/infer",
-        "/vision/batch-infer",
         "/debug/model-output",
-        "/rollout/aliases",
-        "/rollout/audit",
-        "/rollout/aliases/preview",
-        "/rollout/aliases/switch",
-        "/rollout/aliases/weighted",
-        "/rollout/aliases/rollback",
+        "/v1/vision/infer",
+        "/v1/infer/tracks",
+        "/v1/admin/models/warmup",
+        "/v1/admin/models/reload",
+        "/v1/admin/models/reload-config",
+        "/v1/admin/models/rollout/aliases",
+        "/v1/admin/models/rollout/audit",
+        "/v1/admin/models/rollout/aliases/preview",
+        "/v1/admin/models/rollout/aliases/switch",
+        "/v1/admin/models/rollout/aliases/weighted",
+        "/v1/admin/models/rollout/aliases/rollback",
         "/v1/infer/faces",
         "/v1/infer/persons",
         "/v1/infer/pose",
@@ -205,6 +240,25 @@ def test_openapi_keeps_core_routes() -> None:
     }
 
     assert required_paths <= paths
+    removed_paths = {
+        "/infer/stream/person-tracks",
+        "/infer/persons",
+        "/infer/person-embeddings",
+        "/infer/person-tracks",
+        "/infer/video/person-tracks",
+        "/vision/infer",
+        "/vision/batch-infer",
+        "/models",
+        "/model-configs",
+        "/model-info",
+        "/model-package",
+        "/warmup",
+        "/reload",
+        "/unload",
+        "/reload-config",
+        "/rollout/aliases",
+    }
+    assert removed_paths.isdisjoint(paths)
 
 
 def test_console_is_product_admin_shell_with_strict_inline_policy() -> None:
@@ -267,7 +321,7 @@ def test_console_assets_use_light_structured_response_panels() -> None:
     assert "playground-async-mode-input" in runtime_body
     assert "function apiRaw" in runtime_body
     assert "function playgroundSelection" in runtime_body
-    assert "appendFiles(form, \"files\"" in runtime_body
+    assert 'appendFiles(form, "files"' in runtime_body
     assert "endpoint_template" in runtime_body
     assert "http_status" in runtime_body
     assert "controlled_use" in runtime_body
@@ -300,18 +354,20 @@ def test_console_assets_use_light_structured_response_panels() -> None:
     assert "renderErrorCodes" in runtime_body
     assert "最高错误率" in runtime_body
     assert "release-audit-table" in runtime_body
-    assert "/rollout/audit?limit=20" in runtime_body
+    assert "/v1/admin/models/rollout/audit?limit=20" in runtime_body
     assert "/v1/admin/audit/verify" in runtime_body
     assert "auditVerificationPayload" in runtime_body
     assert "audit_chain" in runtime_body
     assert "path_hash" in runtime_body
     assert "auditChainErrorCount" in runtime_body
     assert "/v1/admin/audit/events?limit=20" not in runtime_body
-    assert "/v1/admin/audit/events?${auditEventQueryParams().toString()}" in runtime_body
+    assert (
+        "/v1/admin/audit/events?${auditEventQueryParams().toString()}" in runtime_body
+    )
     assert "auditEventQueryParams" in runtime_body
     assert "audit-event-filter-button" in runtime_body
     assert "audit-category-filter-input" in runtime_body
-    assert "params.set(\"category\", categoryFilter)" in runtime_body
+    assert 'params.set("category", categoryFilter)' in runtime_body
     assert "audit-event-table" in runtime_body
     assert "renderAuditEventRows" in runtime_body
     assert "audit_events" in runtime_body
@@ -332,7 +388,7 @@ def test_console_assets_use_light_structured_response_panels() -> None:
     assert "/v1/evaluation/track-reviews/summary" in runtime_body
     assert "evaluation-review-summary" in runtime_body
     assert "import os" in runtime_body
-    assert "os.getenv(\"PORTRAIT_HUB_API_TOKEN\")" in runtime_body
+    assert 'os.getenv("PORTRAIT_HUB_API_TOKEN")' in runtime_body
     assert "sdk-batch-code" in runtime_body
     assert "sdk-video-code" in runtime_body
     assert "sdk-batch-copy-button" in runtime_body
@@ -374,14 +430,18 @@ def test_api_docs_can_be_disabled_in_production(monkeypatch) -> None:
     assert client.get("/health").status_code == 200
 
 
-def test_global_request_body_limit_rejects_oversized_content_length(monkeypatch) -> None:
+def test_global_request_body_limit_rejects_oversized_content_length(
+    monkeypatch,
+) -> None:
     from app import server
 
     monkeypatch.setattr(server, "MAX_REQUEST_BODY_BYTES", 10)
     limited_app = server.create_app()
     client = TestClient(limited_app)
 
-    response = client.post("/predict", content=b"x" * 11, headers={"content-type": "application/json"})
+    response = client.post(
+        "/predict", content=b"x" * 11, headers={"content-type": "application/json"}
+    )
 
     assert response.status_code == 413
     assert response.json()["detail"] == "请求体过大：最大 10 字节"
@@ -395,7 +455,7 @@ def test_http_exception_headers_survive_middleware(monkeypatch) -> None:
     monkeypatch.setattr(security, "API_TOKEN", "test-token")
     client = TestClient(app)
 
-    response = client.get("/models")
+    response = client.get("/v1/models")
 
     assert response.status_code == 401
     assert response.headers["WWW-Authenticate"] == "Bearer"
@@ -417,8 +477,9 @@ def test_trusted_host_allowlist_rejects_untrusted_hosts(monkeypatch) -> None:
     assert allowed.status_code == 200
 
 
-
-def test_trusted_host_allowlist_hot_reload_updates_existing_app(monkeypatch, workspace_tmp_path) -> None:
+def test_trusted_host_allowlist_hot_reload_updates_existing_app(
+    monkeypatch, workspace_tmp_path
+) -> None:
     from app import server
 
     env_path = workspace_tmp_path / ".env"
@@ -426,7 +487,9 @@ def test_trusted_host_allowlist_hot_reload_updates_existing_app(monkeypatch, wor
     original_env = os.environ.get("TRUSTED_HOSTS")
     original_server_hosts = list(server.TRUSTED_HOSTS)
     monkeypatch.setattr(config_hot_reload, "ENV_PATH", env_path)
-    monkeypatch.setattr(config_hot_reload, "audit_config_reload", lambda source, result: None)
+    monkeypatch.setattr(
+        config_hot_reload, "audit_config_reload", lambda source, result: None
+    )
 
     server.TRUSTED_HOSTS = ["*"]
     client = TestClient(server.create_app())
@@ -434,7 +497,9 @@ def test_trusted_host_allowlist_hot_reload_updates_existing_app(monkeypatch, wor
     assert before_reload.status_code == 200
 
     try:
-        result = config_hot_reload.reload_runtime_config(source="test-hosts", include_env=True)
+        result = config_hot_reload.reload_runtime_config(
+            source="test-hosts", include_env=True
+        )
 
         assert result["env_loaded"] is True
         assert server.TRUSTED_HOSTS == ["trusted.local"]
@@ -451,11 +516,16 @@ def test_trusted_host_allowlist_hot_reload_updates_existing_app(monkeypatch, wor
         config_hot_reload.reload_settings_modules()
         server.TRUSTED_HOSTS = original_server_hosts
 
+
 def test_request_id_is_normalized_and_reused_between_body_and_header() -> None:
     client = TestClient(app)
 
-    accepted = client.get("/v1/admin/status", headers={"x-request-id": "req-123.trace_A"})
-    rejected = client.get("/v1/admin/status", headers={"x-request-id": "bad request-id"})
+    accepted = client.get(
+        "/v1/admin/status", headers={"x-request-id": "req-123.trace_A"}
+    )
+    rejected = client.get(
+        "/v1/admin/status", headers={"x-request-id": "bad request-id"}
+    )
     too_long = client.get("/v1/admin/status", headers={"x-request-id": "r" * 129})
 
     assert accepted.status_code == 200
@@ -478,8 +548,14 @@ def test_json_logs_include_context_fields() -> None:
     import json
     import logging
 
-    record = logging.LogRecord("test", logging.INFO, __file__, 1, "hello %s", ("world",), None)
-    tokens = set_log_context(request_id="req-log", tenant_id="tenant-log", traceparent="00-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-bbbbbbbbbbbbbbbb-01")
+    record = logging.LogRecord(
+        "test", logging.INFO, __file__, 1, "hello %s", ("world",), None
+    )
+    tokens = set_log_context(
+        request_id="req-log",
+        tenant_id="tenant-log",
+        traceparent="00-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-bbbbbbbbbbbbbbbb-01",
+    )
     try:
         payload = json.loads(JsonLogFormatter().format(record))
     finally:
@@ -503,13 +579,13 @@ def test_validation_errors_do_not_echo_input_payloads() -> None:
 
     assert response.status_code == 422
     body = response.text
-    payload = response.json()
     assert "secret-token-value" not in body
     assert "unexpected" not in body
-    assert "input" not in payload["detail"][0]
-    assert "ctx" not in payload["detail"][0]
-    assert payload["detail"][0]["type"] == "extra_forbidden"
-    assert payload["detail"][0]["loc"] == ["body", "extra_field"]
+    issue = v1_validation_issues(response)[0]
+    assert "input" not in issue
+    assert "ctx" not in issue
+    assert issue["type"] == "extra_forbidden"
+    assert issue["loc"] == ["body", "extra_field"]
 
 
 def test_legacy_predict_rejects_unknown_body_fields() -> None:
@@ -537,7 +613,7 @@ def test_legacy_warmup_rejects_nested_unknown_body_fields() -> None:
     client = TestClient(app)
 
     response = client.post(
-        "/warmup",
+        "/v1/admin/models/warmup",
         json={
             "models": [
                 {
@@ -550,9 +626,9 @@ def test_legacy_warmup_rejects_nested_unknown_body_fields() -> None:
     )
 
     assert response.status_code == 422
-    payload = response.json()
-    assert payload["detail"][0]["type"] == "extra_forbidden"
-    assert payload["detail"][0]["loc"] == ["body", "models", 0, "extra_field"]
+    issue = v1_validation_issues(response)[0]
+    assert issue["type"] == "extra_forbidden"
+    assert issue["loc"] == ["body", "models", 0, "extra_field"]
     assert "bad-field" not in response.text
     assert "unexpected" not in response.text
 
@@ -561,7 +637,7 @@ def test_rollout_weighted_rejects_nested_unknown_body_fields() -> None:
     client = TestClient(app)
 
     response = client.post(
-        "/rollout/aliases/weighted",
+        "/v1/admin/models/rollout/aliases/weighted",
         json={
             "alias_name": "detector_default",
             "targets": [
@@ -575,9 +651,9 @@ def test_rollout_weighted_rejects_nested_unknown_body_fields() -> None:
     )
 
     assert response.status_code == 422
-    payload = response.json()
-    assert payload["detail"][0]["type"] == "extra_forbidden"
-    assert payload["detail"][0]["loc"] == ["body", "targets", 0, "extra_field"]
+    issue = v1_validation_issues(response)[0]
+    assert issue["type"] == "extra_forbidden"
+    assert issue["loc"] == ["body", "targets", 0, "extra_field"]
     assert "bad-field" not in response.text
     assert "unexpected" not in response.text
 
@@ -609,13 +685,19 @@ def test_legacy_predict_runtime_errors_are_redacted(monkeypatch, caplog) -> None
     async def fail_load(*args, **kwargs):
         raise RuntimeError("secret backend token leaked from runtime")
 
-    monkeypatch.setattr(routes_predict, "get_model_path", lambda project, model: "unused.onnx")
+    monkeypatch.setattr(
+        routes_predict, "get_model_path", lambda project, model: "unused.onnx"
+    )
     monkeypatch.setattr(routes_predict, "get_or_load_model", fail_load)
 
     response = client.post(
         "/predict",
         headers={"x-request-id": "req-runtime-redaction"},
-        json={"project_name": "portrait_hub", "model_name": "yolov8n.onnx", "tensor_data": [0.0]},
+        json={
+            "project_name": "portrait_hub",
+            "model_name": "yolov8n.onnx",
+            "tensor_data": [0.0],
+        },
     )
 
     assert response.status_code == 500
@@ -632,17 +714,18 @@ def test_legacy_predict_runtime_errors_are_redacted(monkeypatch, caplog) -> None
     assert "Traceback" not in caplog.text
 
 
-def test_legacy_person_embeddings_vectors_are_opt_in(monkeypatch) -> None:
+def test_v1_vision_reid_vectors_are_opt_in(monkeypatch) -> None:
     monkeypatch.setattr(security, "RBAC_ENABLED", False)
     monkeypatch.setattr(security, "AUTH_REQUIRED", False)
     monkeypatch.setattr(portrait_auth, "RBAC_ENABLED", False)
     client = TestClient(app, raise_server_exceptions=False)
 
     async def fake_get_or_load_model(*args, **kwargs):
-        return {}, False, 0.0
+        return {"model_hash": "test-hash"}, False, 0.0
 
     async def fake_load_images(files):
-        return [object()], ["secret-person-name.png"], 0.0
+        image = type("ImageStub", (), {"width": 8, "height": 8})()
+        return [image], ["secret-person-name.png"], 0.0
 
     async def fake_infer_reid_images(bundle, key, images):
         return (
@@ -664,34 +747,153 @@ def test_legacy_person_embeddings_vectors_are_opt_in(monkeypatch) -> None:
     async def fake_touch_model(*args, **kwargs):
         return None
 
-    monkeypatch.setattr(routes_person_embeddings, "get_model_path", lambda project, model: "unused.onnx")
-    monkeypatch.setattr(routes_person_embeddings, "get_or_load_model", fake_get_or_load_model)
-    monkeypatch.setattr(routes_person_embeddings, "load_images", fake_load_images)
-    monkeypatch.setattr(routes_person_embeddings, "infer_reid_images", fake_infer_reid_images)
-    monkeypatch.setattr(routes_person_embeddings, "touch_model", fake_touch_model)
+    monkeypatch.setattr(
+        routes_vision, "get_model_path", lambda project, model: "unused.onnx"
+    )
+    monkeypatch.setattr(routes_vision, "get_or_load_model", fake_get_or_load_model)
+    monkeypatch.setattr(routes_vision, "load_images", fake_load_images)
+    monkeypatch.setattr(routes_vision, "infer_reid_images", fake_infer_reid_images)
+    monkeypatch.setattr(routes_vision, "touch_model", fake_touch_model)
+    monkeypatch.setattr(
+        routes_vision, "model_package_info", lambda *args: {"type": "reid"}
+    )
 
     default_response = client.post(
-        "/infer/person-embeddings",
+        "/v1/vision/infer",
+        data={"model_id": "person_reid_default"},
         files={"files": ("secret-person-name.png", b"fake", "image/png")},
     )
     explicit_response = client.post(
-        "/infer/person-embeddings",
-        data={"include_vectors": "true"},
+        "/v1/vision/infer",
+        data={"model_id": "person_reid_default", "include_vectors": "true"},
         files={"files": ("secret-person-name.png", b"fake", "image/png")},
     )
 
     assert default_response.status_code == 200
     assert explicit_response.status_code == 200
-    assert default_response.json()["items"][0]["embedding_dim"] == 2
-    assert "embedding" not in default_response.json()["items"][0]
-    assert explicit_response.json()["items"][0]["embedding"] == [0.1, 0.2]
-    assert "filename" not in default_response.json()["items"][0]
+    default_item = default_response.json()["data"]["results"][0]
+    explicit_item = explicit_response.json()["data"]["results"][0]
+    assert default_item["embedding_dim"] == 2
+    assert "embedding" not in default_item
+    assert explicit_item["embedding"] == [0.1, 0.2]
+    assert "filename" not in default_item
     assert "secret-person-name" not in default_response.text
     assert "secret-person-name" not in explicit_response.text
 
 
+def test_v1_vision_results_are_persisted_and_tenant_scoped(
+    monkeypatch, workspace_tmp_path
+) -> None:
+    monkeypatch.setattr(security, "RBAC_ENABLED", False)
+    monkeypatch.setattr(security, "AUTH_REQUIRED", False)
+    monkeypatch.setattr(portrait_auth, "RBAC_ENABLED", False)
+    monkeypatch.setattr(
+        portrait_image_results,
+        "PORTRAIT_IMAGE_RESULTS_STATE_PATH",
+        workspace_tmp_path / "image-results.json",
+    )
+    monkeypatch.setattr(portrait_image_results, "PORTRAIT_STORAGE_BACKEND", "local")
+    monkeypatch.setattr(
+        portrait_image_results, "MAX_IMAGE_ANALYSIS_RESULTS_PER_TENANT", 4
+    )
+    portrait_image_results.IMAGE_ANALYSIS_RESULTS.clear()
+    client = TestClient(app, raise_server_exceptions=False)
 
-def test_admin_audit_verify_endpoint_redacts_path_and_reports_chain(monkeypatch, workspace_tmp_path) -> None:
+    async def fake_get_or_load_model(*args, **kwargs):
+        return {"model_hash": "test-hash"}, False, 0.0
+
+    async def fake_load_images(files):
+        from PIL import Image
+
+        return [Image.new("RGB", (16, 12), color="white")], ["secret.png"], 0.0
+
+    async def fake_infer_detection_images(
+        bundle, key, images, filenames, confidence=None, iou=None, max_detections=None
+    ):
+        return (
+            [
+                {
+                    "image_index": 0,
+                    "width": images[0].width,
+                    "height": images[0].height,
+                    "detections": [
+                        {
+                            "box": [1.0, 2.0, 8.0, 10.0],
+                            "score": 0.95,
+                            "class_id": 0,
+                            "class_name": "person",
+                        }
+                    ],
+                    "detection_count": 1,
+                }
+            ],
+            {
+                "input_shape": [1, 3, 16, 16],
+                "output_shapes": [[1, 1, 6]],
+                "inference_mode": "test",
+                "timing": {
+                    "preprocess_seconds": 0.0,
+                    "queue_seconds": 0.0,
+                    "inference_seconds": 0.0,
+                    "postprocess_seconds": 0.0,
+                },
+                "parameters": {"confidence": confidence},
+            },
+        )
+
+    async def fake_touch_model(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr(
+        routes_vision, "get_model_path", lambda project, model: "unused.onnx"
+    )
+    monkeypatch.setattr(routes_vision, "get_or_load_model", fake_get_or_load_model)
+    monkeypatch.setattr(routes_vision, "load_images", fake_load_images)
+    monkeypatch.setattr(
+        routes_vision, "infer_detection_images", fake_infer_detection_images
+    )
+    monkeypatch.setattr(routes_vision, "touch_model", fake_touch_model)
+    monkeypatch.setattr(
+        routes_vision, "model_package_info", lambda *args: {"type": "detection"}
+    )
+
+    try:
+        response = client.post(
+            "/v1/vision/infer",
+            headers={"x-tenant-id": "tenant-a", "x-request-id": "req-image-result"},
+            data={"model_id": "person_detector_default", "confidence": "0.42"},
+            files={"files": ("secret.png", b"fake", "image/png")},
+        )
+        listed = client.get(
+            "/v1/vision/results?limit=10",
+            headers={"x-tenant-id": "tenant-a"},
+        )
+        other_tenant = client.get(
+            "/v1/vision/results?limit=10",
+            headers={"x-tenant-id": "tenant-b"},
+        )
+
+        assert response.status_code == 200
+        assert listed.status_code == 200
+        payload = listed.json()["data"]
+        assert payload["count"] == 1
+        assert payload["total"] == 1
+        record = payload["results"][0]
+        assert record["request_id"] == "req-image-result"
+        assert record["mode"] == "detection"
+        assert record["endpoint"] == "/v1/vision/infer"
+        assert record["payload"]["result_count"] == 1
+        assert record["previews"][0]["src"].startswith("data:image/jpeg;base64,")
+        assert "secret.png" not in listed.text
+        assert other_tenant.status_code == 200
+        assert other_tenant.json()["data"]["total"] == 0
+    finally:
+        portrait_image_results.IMAGE_ANALYSIS_RESULTS.clear()
+
+
+def test_admin_audit_verify_endpoint_redacts_path_and_reports_chain(
+    monkeypatch, workspace_tmp_path
+) -> None:
     monkeypatch.setattr(security, "RBAC_ENABLED", False)
     monkeypatch.setattr(security, "AUTH_REQUIRED", False)
     monkeypatch.setattr(portrait_auth, "RBAC_ENABLED", False)
@@ -718,7 +920,10 @@ def test_admin_audit_verify_endpoint_redacts_path_and_reports_chain(monkeypatch,
     )
     second["event"] = "tampered_event"
     audit_path.write_text(
-        json.dumps(first, ensure_ascii=False, sort_keys=True) + "\n" + json.dumps(second, ensure_ascii=False, sort_keys=True) + "\n",
+        json.dumps(first, ensure_ascii=False, sort_keys=True)
+        + "\n"
+        + json.dumps(second, ensure_ascii=False, sort_keys=True)
+        + "\n",
         encoding="utf-8",
     )
     monkeypatch.setattr(portrait_audit, "PORTRAIT_AUDIT_PATH", audit_path)
@@ -740,7 +945,9 @@ def test_admin_audit_verify_endpoint_redacts_path_and_reports_chain(monkeypatch,
     assert audit_path.name not in response.text
 
 
-def test_admin_audit_events_endpoint_is_tenant_scoped_and_redacted(monkeypatch, workspace_tmp_path) -> None:
+def test_admin_audit_events_endpoint_is_tenant_scoped_and_redacted(
+    monkeypatch, workspace_tmp_path
+) -> None:
     monkeypatch.setattr(security, "RBAC_ENABLED", False)
     monkeypatch.setattr(security, "AUTH_REQUIRED", False)
     monkeypatch.setattr(portrait_auth, "RBAC_ENABLED", False)
@@ -798,7 +1005,11 @@ def test_admin_audit_events_endpoint_is_tenant_scoped_and_redacted(monkeypatch, 
     monkeypatch.setattr(portrait_audit, "PORTRAIT_AUDIT_PATH", audit_path)
     client = TestClient(app, raise_server_exceptions=False)
 
-    response = client.get("/v1/admin/audit/events", params={"limit": 10}, headers={"X-Tenant-ID": "tenant-a"})
+    response = client.get(
+        "/v1/admin/audit/events",
+        params={"limit": 10},
+        headers={"X-Tenant-ID": "tenant-a"},
+    )
 
     assert response.status_code == 200
     payload = response.json()["data"]
@@ -809,9 +1020,21 @@ def test_admin_audit_events_endpoint_is_tenant_scoped_and_redacted(monkeypatch, 
     assert payload["summary"]["category_counts"]["retention"] == 1
     assert payload["summary"]["outcome_counts"] == {"success": 2}
     assert payload["malformed_count"] == 1
-    assert [record["request_id"] for record in payload["records"]] == ["req-audit-a2", "req-audit-a1"]
+    assert [record["request_id"] for record in payload["records"]] == [
+        "req-audit-a2",
+        "req-audit-a1",
+    ]
     assert all(record["tenant_id"] == "tenant-a" for record in payload["records"])
-    assert {"event", "request_id", "tenant_id", "outcome", "created_at", "audit_hash", "audit_prev_hash", "category"} <= set(payload["records"][0])
+    assert {
+        "event",
+        "request_id",
+        "tenant_id",
+        "outcome",
+        "created_at",
+        "audit_hash",
+        "audit_prev_hash",
+        "category",
+    } <= set(payload["records"][0])
     assert payload["records"][0]["category"] == "retention"
     assert "people_count" not in payload["records"][0]
     assert "secret-token" not in response.text
@@ -819,7 +1042,14 @@ def test_admin_audit_events_endpoint_is_tenant_scoped_and_redacted(monkeypatch, 
     assert str(audit_path) not in response.text
     filtered = client.get(
         "/v1/admin/audit/events",
-        params={"limit": 10, "event": "export", "outcome": "success", "request_id": "a1", "category": "exports", "created_until": third["created_at"] - 0.000001},
+        params={
+            "limit": 10,
+            "event": "export",
+            "outcome": "success",
+            "request_id": "a1",
+            "category": "exports",
+            "created_until": third["created_at"] - 0.000001,
+        },
         headers={"X-Tenant-ID": "tenant-a"},
     )
     assert filtered.status_code == 200
@@ -828,12 +1058,18 @@ def test_admin_audit_events_endpoint_is_tenant_scoped_and_redacted(monkeypatch, 
     assert filtered_payload["records"][0]["request_id"] == "req-audit-a1"
     assert filtered_payload["filters"]["event"] == "export"
     assert filtered_payload["filters"]["category"] == "exports"
-    invalid_category = client.get("/v1/admin/audit/events", params={"category": "secret"}, headers={"X-Tenant-ID": "tenant-a"})
+    invalid_category = client.get(
+        "/v1/admin/audit/events",
+        params={"category": "secret"},
+        headers={"X-Tenant-ID": "tenant-a"},
+    )
     assert invalid_category.status_code == 400
-    assert invalid_category.json()["detail"] == "不支持的审计事件类别"
+    assert v1_error_message(invalid_category) == "不支持的审计事件类别"
 
 
-def test_admin_backups_endpoint_returns_recent_redacted_snapshots(monkeypatch, workspace_tmp_path) -> None:
+def test_admin_backups_endpoint_returns_recent_redacted_snapshots(
+    monkeypatch, workspace_tmp_path
+) -> None:
     monkeypatch.setattr(security, "RBAC_ENABLED", False)
     monkeypatch.setattr(security, "AUTH_REQUIRED", False)
     monkeypatch.setattr(portrait_auth, "RBAC_ENABLED", False)
@@ -862,7 +1098,12 @@ def test_admin_backups_endpoint_returns_recent_redacted_snapshots(monkeypatch, w
                 request_id="req-backup-b1",
                 tenant_id="tenant-b",
                 outcome="success",
-                fields={"updated_since": None, "object_backend": "local", "bytes": 11, "object_key": "tenant-b/private.json"},
+                fields={
+                    "updated_since": None,
+                    "object_backend": "local",
+                    "bytes": 11,
+                    "object_key": "tenant-b/private.json",
+                },
             ),
             None,
         ),
@@ -872,7 +1113,11 @@ def test_admin_backups_endpoint_returns_recent_redacted_snapshots(monkeypatch, w
                 request_id="req-export-a1",
                 tenant_id="tenant-a",
                 outcome="success",
-                fields={"object_backend": "s3", "bytes": 4096, "object_key": "tenant-a/export/private.json"},
+                fields={
+                    "object_backend": "s3",
+                    "bytes": 4096,
+                    "object_key": "tenant-a/export/private.json",
+                },
             ),
             None,
         ),
@@ -895,7 +1140,9 @@ def test_admin_backups_endpoint_returns_recent_redacted_snapshots(monkeypatch, w
         ),
     ]
     previous_hash = None
-    for record, created_at in zip(records, [1000.0, 1001.0, 1002.0, 1003.0], strict=True):
+    for record, created_at in zip(
+        records, [1000.0, 1001.0, 1002.0, 1003.0], strict=True
+    ):
         record["created_at"] = created_at
         record["audit_prev_hash"] = previous_hash
         record["audit_hash"] = portrait_audit.audit_payload_hash(record)
@@ -916,14 +1163,19 @@ def test_admin_backups_endpoint_returns_recent_redacted_snapshots(monkeypatch, w
     monkeypatch.setattr(portrait_audit, "PORTRAIT_AUDIT_PATH", audit_path)
     client = TestClient(app, raise_server_exceptions=False)
 
-    response = client.get("/v1/admin/backups", params={"limit": 10}, headers={"X-Tenant-ID": "tenant-a"})
+    response = client.get(
+        "/v1/admin/backups", params={"limit": 10}, headers={"X-Tenant-ID": "tenant-a"}
+    )
 
     assert response.status_code == 200
     payload = response.json()["data"]
     assert payload["tenant_id"] == "tenant-a"
     assert payload["count"] == 2
     assert payload["malformed_count"] == 1
-    assert [row["request_id"] for row in payload["snapshots"]] == ["req-backup-a2", "req-backup-a1"]
+    assert [row["request_id"] for row in payload["snapshots"]] == [
+        "req-backup-a2",
+        "req-backup-a1",
+    ]
     assert payload["snapshots"][0]["snapshot_id"] == records[3]["audit_hash"]
     assert payload["snapshots"][1]["updated_since"] == 998.5
     assert payload["snapshots"][1]["object_backend"] == "s3"
@@ -939,7 +1191,9 @@ def test_admin_backups_endpoint_returns_recent_redacted_snapshots(monkeypatch, w
     assert str(audit_path) not in response.text
 
 
-def test_rollout_audit_endpoint_returns_recent_public_records(monkeypatch, workspace_tmp_path) -> None:
+def test_rollout_audit_endpoint_returns_recent_public_records(
+    monkeypatch, workspace_tmp_path
+) -> None:
     monkeypatch.setattr(security, "RBAC_ENABLED", False)
     monkeypatch.setattr(security, "AUTH_REQUIRED", False)
     monkeypatch.setattr(portrait_auth, "RBAC_ENABLED", False)
@@ -959,17 +1213,22 @@ def test_rollout_audit_endpoint_returns_recent_public_records(monkeypatch, works
     monkeypatch.setattr(rollout_audit, "ROLLOUT_AUDIT_PATH", audit_path)
     client = TestClient(app, raise_server_exceptions=False)
 
-    response = client.get("/rollout/audit", params={"limit": 1})
+    response = client.get("/v1/admin/models/rollout/audit", params={"limit": 1})
 
     assert response.status_code == 200
-    payload = response.json()
+    payload = response.json()["data"]
     assert payload["count"] == 1
     assert payload["limit"] == 1
     assert payload["malformed_count"] == 1
     assert payload["records"][0]["event"] == "alias_weighted_rollout"
-    assert payload["records"][0]["rollout"][1] == {"target": "new/model.onnx", "weight": 10, "status": "candidate"}
+    assert payload["records"][0]["rollout"][1] == {
+        "target": "new/model.onnx",
+        "weight": 10,
+        "status": "candidate",
+    }
     assert "do-not-leak" not in response.text
     assert "nested" not in response.text
+
 
 def test_rollout_alias_preview_invalid_alias_returns_400(monkeypatch) -> None:
     monkeypatch.setattr(security, "RBAC_ENABLED", False)
@@ -978,32 +1237,29 @@ def test_rollout_alias_preview_invalid_alias_returns_400(monkeypatch) -> None:
     client = TestClient(app, raise_server_exceptions=False)
 
     response = client.get(
-        "/rollout/aliases/preview",
+        "/v1/admin/models/rollout/aliases/preview",
         params={"alias_name": "bad/alias", "traffic_key": "tenant-1"},
     )
 
     assert response.status_code == 400
-    assert response.json()["detail"] == "别名名称无效"
+    assert v1_error_message(response) == "别名名称无效"
     assert "bad/alias" not in response.text
     assert response.headers["X-Request-ID"]
 
 
-def test_legacy_model_reference_errors_are_fixed_and_redacted() -> None:
+def test_v1_model_reference_errors_are_fixed_and_redacted() -> None:
     client = TestClient(app, raise_server_exceptions=False)
 
     infer = client.post(
-        "/infer/persons",
+        "/v1/vision/infer",
         files={"files": ("frame.png", b"not-an-image", "image/png")},
-        data={"project_name": "secret/project", "model_name": "secret-model.onnx"},
+        data={"model_id": "secret/project/secret-model.onnx"},
     )
-    info = client.get(
-        "/model-info",
-        params={"project_name": "secret/project", "model_name": "secret-model.onnx"},
-    )
+    info = client.get("/v1/models/secret/project/secret-model.onnx")
 
     for response in [infer, info]:
         assert response.status_code == 400
-        assert response.json()["detail"] == "模型引用无效"
+        assert v1_error_message(response) == "模型引用无效"
         assert "secret/project" not in response.text
         assert "secret-model" not in response.text
 
@@ -1015,17 +1271,19 @@ def test_rollout_alias_preview_missing_alias_does_not_echo_alias(monkeypatch) ->
     client = TestClient(app, raise_server_exceptions=False)
 
     response = client.get(
-        "/rollout/aliases/preview",
+        "/v1/admin/models/rollout/aliases/preview",
         params={"alias_name": "secret_alias", "traffic_key": "tenant-1"},
     )
 
     assert response.status_code == 404
-    assert response.json()["detail"] == "别名不存在"
+    assert v1_error_message(response) == "别名不存在"
     assert "secret_alias" not in response.text
 
 
 @pytest.mark.asyncio
-async def test_global_request_body_limit_counts_streamed_body_without_content_length(monkeypatch) -> None:
+async def test_global_request_body_limit_counts_streamed_body_without_content_length(
+    monkeypatch,
+) -> None:
     from app import server
 
     monkeypatch.setattr(server, "MAX_REQUEST_BODY_BYTES", 10)
@@ -1054,7 +1312,11 @@ async def test_global_request_body_limit_counts_streamed_body_without_content_le
     )
     limited_request = server.limit_request_body(request)
 
-    assert await limited_request.receive() == {"type": "http.request", "body": b"12345", "more_body": True}
+    assert await limited_request.receive() == {
+        "type": "http.request",
+        "body": b"12345",
+        "more_body": True,
+    }
     with pytest.raises(HTTPException) as exc_info:
         await limited_request.receive()
     assert exc_info.value.status_code == 413
@@ -1086,7 +1348,9 @@ def test_debug_model_output_is_disabled_by_default(monkeypatch) -> None:
     assert response.status_code == 404
 
 
-def test_debug_model_output_requires_auth_when_enabled_and_auth_required(monkeypatch) -> None:
+def test_debug_model_output_requires_auth_when_enabled_and_auth_required(
+    monkeypatch,
+) -> None:
     monkeypatch.setattr(routes_debug, "DEBUG_ENDPOINTS_ENABLED", True)
     monkeypatch.setattr(security, "RBAC_ENABLED", False)
     monkeypatch.setattr(security, "AUTH_REQUIRED", True)
@@ -1102,38 +1366,52 @@ def test_debug_model_output_requires_auth_when_enabled_and_auth_required(monkeyp
     assert response.status_code == 401
 
 
-def test_legacy_model_lifecycle_writes_are_audited(monkeypatch) -> None:
+def test_v1_model_unload_is_audited(monkeypatch) -> None:
     client = TestClient(app)
     events = []
 
     async def fake_unload_model_by_key(key):
         return True
 
-    monkeypatch.setattr(routes_model_lifecycle, "unload_model_by_key", fake_unload_model_by_key)
-    monkeypatch.setattr(routes_model_lifecycle, "audit_event", lambda event, **fields: events.append((event, fields)))
+    monkeypatch.setattr(
+        routes_portrait_models, "unload_model_by_key", fake_unload_model_by_key
+    )
+    monkeypatch.setattr(
+        routes_portrait_models,
+        "audit_event",
+        lambda event, **fields: events.append((event, fields)),
+    )
 
-    response = client.post("/unload", json={"project_name": "portrait_hub", "model_name": "yolov8n.onnx"})
+    response = client.post("/v1/models/portrait_hub/yolov8n.onnx/unload")
 
     assert response.status_code == 200
-    assert events[0][0] == "model_unload"
-    assert events[0][1]["model"] == "portrait_hub/yolov8n.onnx"
+    assert events[0][0] == "model_unloaded"
+    assert events[0][1]["model_id"] == "portrait_hub/yolov8n.onnx"
 
 
 def test_legacy_reload_config_is_audited(monkeypatch) -> None:
     client = TestClient(app)
     events = []
 
-    monkeypatch.setattr(routes_model_query, "reload_model_config_state", lambda: ({"m": {}}, {"a": {}}))
-    monkeypatch.setattr(routes_model_query, "audit_event", lambda event, **fields: events.append((event, fields)))
+    monkeypatch.setattr(
+        routes_model_query, "reload_model_config_state", lambda: ({"m": {}}, {"a": {}})
+    )
+    monkeypatch.setattr(
+        routes_model_query,
+        "audit_event",
+        lambda event, **fields: events.append((event, fields)),
+    )
 
-    response = client.post("/reload-config")
+    response = client.post("/v1/admin/models/reload-config")
 
     assert response.status_code == 200
     assert events[0][0] == "model_config_reloaded"
     assert events[0][1]["model_count"] == 1
 
 
-def test_model_management_responses_do_not_expose_filesystem_paths(monkeypatch) -> None:
+def test_v1_model_management_responses_do_not_expose_filesystem_paths(
+    monkeypatch,
+) -> None:
     class FakeTensor:
         name = "input"
         type = "tensor(float)"
@@ -1185,42 +1463,51 @@ def test_model_management_responses_do_not_expose_filesystem_paths(monkeypatch) 
         },
     }
 
-    async def fake_get_or_load_model(key, model_path):
-        return fake_bundle, True, 0.01
-
-    monkeypatch.setattr(routes_model_query, "MODEL_CONFIGS", fake_configs)
-    monkeypatch.setattr(routes_model_query, "MODEL_ALIASES", {})
-    monkeypatch.setattr(routes_model_query, "MODEL_REGISTRY", fake_registry)
-    monkeypatch.setattr(routes_model_query, "model_config", lambda key: secret_config)
-    monkeypatch.setattr(routes_model_query, "get_model_path", lambda project, model: "E:/secret-models/tenant-a/secret.onnx")
-    monkeypatch.setattr(routes_model_query, "get_or_load_model", fake_get_or_load_model)
-    monkeypatch.setattr(routes_model_query, "model_hash", lambda model_path: "abc123")
-    monkeypatch.setattr(routes_model_query, "model_package_info", lambda key, model_path, digest: fake_package)
-    monkeypatch.setattr(routes_model_query, "resolve_model_reference", lambda *args, **kwargs: ("portrait_hub", "secret.onnx", "portrait_hub/secret.onnx", None))
     monkeypatch.setattr(routes_portrait_models, "MODEL_CONFIGS", fake_configs)
     monkeypatch.setattr(routes_portrait_models, "MODEL_ALIASES", {})
     monkeypatch.setattr(routes_portrait_models, "MODEL_REGISTRY", fake_registry)
+    monkeypatch.setattr(
+        routes_portrait_models, "model_config", lambda key: secret_config
+    )
+    monkeypatch.setattr(
+        routes_portrait_models,
+        "get_model_path",
+        lambda project, model: "E:/secret-models/tenant-a/secret.onnx",
+    )
+    monkeypatch.setattr(
+        routes_portrait_models,
+        "model_package_info",
+        lambda key, model_path, digest: fake_package,
+    )
+    monkeypatch.setattr(
+        routes_portrait_models,
+        "resolve_model_reference",
+        lambda *args, **kwargs: (
+            "portrait_hub",
+            "secret.onnx",
+            "portrait_hub/secret.onnx",
+            None,
+        ),
+    )
     client = TestClient(app)
 
-    responses = [
-        client.get("/models"),
-        client.get("/model-configs"),
-        client.get("/model-info?project_name=portrait_hub&model_name=secret.onnx"),
-        client.get("/model-package?model_id=portrait_hub/secret.onnx"),
-        client.get("/v1/models"),
-    ]
+    list_response = client.get("/v1/models")
+    detail_response = client.get("/v1/models/portrait_hub/secret.onnx")
 
-    for response in responses:
+    for response in [list_response, detail_response]:
         assert response.status_code == 200
         assert "secret-models" not in response.text
         assert "secret.labels.txt" not in response.text
         assert "secret-card.yml" not in response.text
         assert "config_path" not in response.text
-    assert responses[0].json()["loaded_models"][0]["artifact_resolved"] is True
-    assert responses[1].json()["models"]["portrait_hub/secret.onnx"]["artifact"]["path_configured"] is True
+    assert list_response.json()["data"]["loaded_models"][0]["artifact_resolved"] is True
+    assert (
+        detail_response.json()["data"]["config"]["artifact"]["path_configured"] is True
+    )
+    assert detail_response.json()["data"]["package"]["artifact"]["sha256_match"] is True
 
 
-def test_legacy_unload_rolls_back_when_audit_fails(monkeypatch) -> None:
+def test_v1_unload_rolls_back_when_audit_fails(monkeypatch) -> None:
     client = TestClient(app)
     registry_snapshot = dict(MODEL_REGISTRY)
     MODEL_REGISTRY.clear()
@@ -1232,11 +1519,13 @@ def test_legacy_unload_rolls_back_when_audit_fails(monkeypatch) -> None:
     def fail_audit(*args, **kwargs):
         raise HTTPException(status_code=503, detail="state write failed")
 
-    monkeypatch.setattr(routes_model_lifecycle, "unload_model_by_key", fake_unload_model_by_key)
-    monkeypatch.setattr(routes_model_lifecycle, "audit_event", fail_audit)
+    monkeypatch.setattr(
+        routes_portrait_models, "unload_model_by_key", fake_unload_model_by_key
+    )
+    monkeypatch.setattr(routes_portrait_models, "audit_event", fail_audit)
 
     try:
-        response = client.post("/unload", json={"project_name": "portrait_hub", "model_name": "yolov8n.onnx"})
+        response = client.post("/v1/models/portrait_hub/yolov8n.onnx/unload")
 
         assert response.status_code == 503
         assert MODEL_REGISTRY["portrait_hub/yolov8n.onnx"]["model_hash"] == "hash"
@@ -1258,26 +1547,33 @@ def test_legacy_reload_config_rolls_back_when_audit_fails(monkeypatch) -> None:
         routes_model_query.MODEL_CONFIGS.clear()
         routes_model_query.MODEL_CONFIGS.update({"new/model.onnx": {"task": "new"}})
         routes_model_query.MODEL_ALIASES.clear()
-        routes_model_query.MODEL_ALIASES.update({"new_alias": {"target": "new/model.onnx"}})
+        routes_model_query.MODEL_ALIASES.update(
+            {"new_alias": {"target": "new/model.onnx"}}
+        )
         return routes_model_query.MODEL_CONFIGS, routes_model_query.MODEL_ALIASES
 
     def fail_audit(*args, **kwargs):
         raise HTTPException(status_code=503, detail="state write failed")
 
-    monkeypatch.setattr(routes_model_query, "reload_model_config_state", fake_reload_model_config_state)
+    monkeypatch.setattr(
+        routes_model_query, "reload_model_config_state", fake_reload_model_config_state
+    )
     monkeypatch.setattr(routes_model_query, "audit_event", fail_audit)
 
     try:
-        response = client.post("/reload-config")
+        response = client.post("/v1/admin/models/reload-config")
 
         assert response.status_code == 503
         assert routes_model_query.MODEL_CONFIGS == {"old/model.onnx": {"task": "old"}}
-        assert routes_model_query.MODEL_ALIASES == {"old_alias": {"target": "old/model.onnx"}}
+        assert routes_model_query.MODEL_ALIASES == {
+            "old_alias": {"target": "old/model.onnx"}
+        }
     finally:
         routes_model_query.MODEL_CONFIGS.clear()
         routes_model_query.MODEL_CONFIGS.update(config_snapshot)
         routes_model_query.MODEL_ALIASES.clear()
         routes_model_query.MODEL_ALIASES.update(alias_snapshot)
+
 
 def test_console_module_assets_are_served() -> None:
     client = TestClient(app)

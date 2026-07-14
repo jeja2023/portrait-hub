@@ -1,21 +1,179 @@
 import asyncio
 import hashlib
+import math
 from copy import deepcopy
-from typing import Any, Callable
+from typing import Any
 
+from fastapi import HTTPException, status
+from PIL import Image
+
+from app.inference_tracks import infer_tracks_for_images
+from app.metrics import observe_video_sampling_metrics
+from app.model_refs import validate_model_reference_parts
 from app.observability import logger, wall_time
 from app.media.stream_decode import validate_media_stream_url
+from app.portrait_request_validation import validate_int_range
 from app.portrait_response import exception_log_summary
+from app.routes_inference_common import validate_detection_parameters
 from app.portrait_security import redact_sensitive_fields
 from app.portrait_state import append_jsonl
 from app.portrait_streams import StreamRecord, StreamStatus, persist_stream, restore_stream, restore_stream_snapshot_in_store
-from app.settings import MAX_STREAM_FRAMES, STREAM_EVENT_STATE_PATH, STREAM_FRAME_INTERVAL, STREAM_READ_TIMEOUT_SECONDS
-from app.video_io import extract_video_frames_from_path
+from app.settings import (
+    DEFAULT_CONFIDENCE,
+    DEFAULT_DETECTOR_ARTIFACT,
+    DEFAULT_DETECTOR_PROJECT,
+    DEFAULT_IOU,
+    DEFAULT_REID_ARTIFACT,
+    MAX_DETECTIONS,
+    MAX_STREAM_FRAMES,
+    STREAM_EVENT_STATE_PATH,
+    STREAM_FRAME_INTERVAL,
+    STREAM_READ_TIMEOUT_SECONDS,
+)
+from app.video_io import extract_video_frames_from_path, public_video_metadata
 
 
 STREAM_WORKER_SESSIONS: dict[tuple[str, str], dict[str, Any]] = {}
 STREAM_FRAME_BUFFER_LIMIT = 1
 
+
+STREAM_ANALYSIS_SETTING_KEYS = {
+    "confidence",
+    "detector_model_name",
+    "detector_project_name",
+    "frame_interval",
+    "include_embeddings",
+    "iou",
+    "max_detections",
+    "max_frames",
+    "read_timeout_seconds",
+    "reid_model_name",
+    "reid_project_name",
+}
+
+
+def _float_setting(settings: dict[str, Any], key: str, default: float) -> float:
+    raw = settings.get(key, default)
+    if isinstance(raw, bool):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"{key} 必须是数字")
+    try:
+        value = float(raw)
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"{key} 必须是数字") from exc
+    if not math.isfinite(value):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"{key} 必须是有限数字")
+    return value
+
+
+def _bool_setting(settings: dict[str, Any], key: str, default: bool) -> bool:
+    raw = settings.get(key, default)
+    if isinstance(raw, bool):
+        return raw
+    if isinstance(raw, str) and raw.strip().lower() in {"true", "false"}:
+        return raw.strip().lower() == "true"
+    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"{key} 必须是布尔值")
+
+
+def stream_analysis_parameters(settings: dict[str, Any]) -> dict[str, Any]:
+    detector_project_name = str(settings.get("detector_project_name", DEFAULT_DETECTOR_PROJECT))
+    detector_model_name = str(settings.get("detector_model_name", DEFAULT_DETECTOR_ARTIFACT))
+    reid_project_name = str(settings.get("reid_project_name", DEFAULT_DETECTOR_PROJECT))
+    reid_model_name = str(settings.get("reid_model_name", DEFAULT_REID_ARTIFACT))
+    detector_project_name, detector_model_name, reid_project_name, reid_model_name = validate_model_reference_parts(
+        detector_project_name,
+        detector_model_name,
+        reid_project_name,
+        reid_model_name,
+    )
+    confidence = _float_setting(settings, "confidence", DEFAULT_CONFIDENCE)
+    iou = _float_setting(settings, "iou", DEFAULT_IOU)
+    max_detections = validate_int_range(
+        "max_detections",
+        settings.get("max_detections", 100),
+        minimum=1,
+        maximum=MAX_DETECTIONS,
+    )
+    validate_detection_parameters(confidence=confidence, iou=iou, max_detections=max_detections)
+    return {
+        "detector_project_name": detector_project_name,
+        "detector_model_name": detector_model_name,
+        "reid_project_name": reid_project_name,
+        "reid_model_name": reid_model_name,
+        "confidence": confidence,
+        "iou": iou,
+        "max_detections": max_detections,
+        "include_embeddings": _bool_setting(settings, "include_embeddings", False),
+        "frame_interval": validate_int_range(
+            "frame_interval",
+            settings.get("frame_interval", STREAM_FRAME_INTERVAL),
+            minimum=1,
+        ),
+        "max_frames": validate_int_range(
+            "max_frames",
+            settings.get("max_frames", MAX_STREAM_FRAMES),
+            minimum=1,
+            maximum=MAX_STREAM_FRAMES,
+        ),
+        "read_timeout_seconds": validate_int_range(
+            "read_timeout_seconds",
+            settings.get("read_timeout_seconds", STREAM_READ_TIMEOUT_SECONDS),
+            minimum=1,
+            maximum=STREAM_READ_TIMEOUT_SECONDS,
+        ),
+    }
+
+
+def normalize_stream_analysis_settings(settings: dict[str, Any]) -> dict[str, Any]:
+    parameters = stream_analysis_parameters(settings)
+    normalized = dict(settings)
+    for key in STREAM_ANALYSIS_SETTING_KEYS & settings.keys():
+        normalized[key] = parameters[key]
+    return normalized
+
+
+async def analyze_stream_frames(
+    stream: StreamRecord,
+    images: list[Image.Image],
+    metadata: dict[str, Any],
+) -> dict[str, Any]:
+    if not images:
+        raise ValueError("视频流未读取到可解析帧")
+    parameters = stream_analysis_parameters(stream.settings)
+    result = await infer_tracks_for_images(
+        images,
+        [None] * len(images),
+        parameters["detector_project_name"],
+        parameters["detector_model_name"],
+        parameters["reid_project_name"],
+        parameters["reid_model_name"],
+        confidence=parameters["confidence"],
+        iou=parameters["iou"],
+        max_detections=parameters["max_detections"],
+        include_embeddings=parameters["include_embeddings"],
+    )
+    source_indexes = metadata.get("source_frame_indexes", [])
+    fps = float(metadata.get("fps") or 0.0)
+    for index, frame in enumerate(result["frames"]):
+        source_frame_index = source_indexes[index] if index < len(source_indexes) else index
+        frame["source_frame_index"] = source_frame_index
+        if fps:
+            frame["source_seconds"] = round(source_frame_index / fps, 6)
+    observe_video_sampling_metrics(metadata)
+    return {
+        "analysis_mode": "person_tracks",
+        "stream": public_video_metadata(metadata),
+        "frames": result["frames"],
+        "tracks": result["tracks"],
+        "tracker": result["tracker"],
+        "frame_count": len(result["frames"]),
+        "person_count": result["person_count"],
+        "track_count": result["track_count"],
+        "embedding_count": result["embedding_count"],
+        "models": {
+            "detector": result["detector_key"],
+            "reid": result["reid_key"],
+        },
+    }
 
 def stream_identifier_fingerprint(value: str) -> str:
     return hashlib.sha256(str(value).encode("utf-8")).hexdigest()[:16]
@@ -62,6 +220,9 @@ def public_stream_worker_session(session: dict[str, Any]) -> dict[str, Any]:
         "backpressure_drops": int(session.get("backpressure_drops", 0)),
         "frames_processed": int(session.get("frames_processed", 0)),
         "frames_sampled": int(session.get("frames_sampled", 0)),
+        "last_analysis_at": session.get("last_analysis_at"),
+        "last_person_count": int(session.get("last_person_count", 0)),
+        "last_track_count": int(session.get("last_track_count", 0)),
     }
 
 
@@ -205,32 +366,40 @@ def record_stream_worker_failure(stream: StreamRecord, error: Exception) -> dict
 async def run_stream_worker_session(
     stream: StreamRecord,
     *,
-    frame_handler: Callable[[Any, StreamRecord, int], Any] | None = None,
     max_reconnects: int = 3,
 ) -> dict[str, Any]:
-    """在每个重连窗口内拉取一次视频流，并暴露心跳/背压状态。"""
+    """在每个重连窗口内完成拉流、抽帧和人员轨迹解析。"""
     session = start_stream_worker_session(stream)
     attempts = 0
     while stream.status == StreamStatus.RUNNING and attempts <= max_reconnects:
         try:
             await asyncio.to_thread(validate_media_stream_url, stream.stream_url)
+            parameters = stream_analysis_parameters(stream.settings)
             frames, metadata = await asyncio.to_thread(
                 extract_video_frames_from_path,
                 stream.stream_url,
-                int(stream.settings.get("frame_interval", STREAM_FRAME_INTERVAL)),
-                int(stream.settings.get("max_frames", MAX_STREAM_FRAMES)),
-                int(stream.settings.get("read_timeout_seconds", STREAM_READ_TIMEOUT_SECONDS)),
+                parameters["frame_interval"],
+                parameters["max_frames"],
+                parameters["read_timeout_seconds"],
             )
-            heartbeat_stream_worker_session(stream, frame_buffer_depth=min(len(frames), STREAM_FRAME_BUFFER_LIMIT), frames_sampled=len(frames))
-            for index, image in enumerate(frames):
-                if index >= STREAM_FRAME_BUFFER_LIMIT:
-                    record_stream_backpressure_drop(stream)
-                elif frame_handler is not None:
-                    result = frame_handler(image, stream, index)
-                    if hasattr(result, "__await__"):
-                        await result
-                key = stream_session_key(stream)
-                STREAM_WORKER_SESSIONS[key]["frames_processed"] = int(STREAM_WORKER_SESSIONS[key].get("frames_processed", 0)) + 1
+            heartbeat_stream_worker_session(
+                stream,
+                frame_buffer_depth=min(len(frames), STREAM_FRAME_BUFFER_LIMIT),
+                frames_sampled=len(frames),
+            )
+            analysis = await analyze_stream_frames(stream, frames, metadata)
+            key = stream_session_key(stream)
+            worker_session = STREAM_WORKER_SESSIONS[key]
+            worker_session["frames_processed"] = int(worker_session.get("frames_processed", 0)) + len(frames)
+            worker_session["last_analysis_at"] = wall_time()
+            worker_session["last_person_count"] = int(analysis.get("person_count", 0))
+            worker_session["last_track_count"] = int(analysis.get("track_count", 0))
+            emit_stream_event(
+                stream,
+                "stream_analysis_completed",
+                "stream analysis completed",
+                analysis,
+            )
             emit_stream_event(
                 stream,
                 "stream_worker_heartbeat",

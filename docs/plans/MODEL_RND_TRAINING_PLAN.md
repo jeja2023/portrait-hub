@@ -459,7 +459,7 @@ tolerance: 0.001
 cases:
   - name: detector_frame_001
     method: POST
-    path: /vision/infer
+    path: /v1/vision/infer
     form:
       model_id: person_detector_candidate
       confidence: "0.25"

@@ -1,7 +1,6 @@
 import asyncio
 import base64
 import hashlib
-import inspect
 import threading
 from copy import deepcopy
 from dataclasses import dataclass, field
@@ -12,35 +11,39 @@ from uuid import uuid4
 
 from PIL import Image
 
+from app.inference_tracks import infer_tracks_for_images
 from app.media.quality import assess_image_quality
 from app.media.video_decode import extract_video_frames_from_bytes
+from app.model_refs import validate_model_reference_parts
 from app.observability import logger, wall_time
 from app.portrait_async import run_blocking_io
-from app.portrait_model_runtime import infer_appearance_record_for_image
 from app.portrait_response import exception_log_summary
-from app.portrait_state import handle_state_read_error, read_json_state, write_json_state
+from app.routes_inference_common import validate_detection_parameters
+from app.portrait_state import (
+    handle_state_read_error,
+    read_json_state,
+    write_json_state,
+)
 from app.settings import (
+    DEFAULT_CONFIDENCE,
+    DEFAULT_DETECTOR_ARTIFACT,
+    DEFAULT_DETECTOR_PROJECT,
+    DEFAULT_IOU,
+    DEFAULT_REID_ARTIFACT,
     PORTRAIT_JOBS_STATE_PATH,
     PORTRAIT_STORAGE_BACKEND,
     VIDEO_JOB_MAX_RETRIES,
     VIDEO_JOB_PROGRESS_PERSIST_INTERVAL_SECONDS,
     VIDEO_JOB_RETRY_BACKOFF_SECONDS,
 )
-from app.video_io import extract_video_frames_from_path, public_video_metadata, resolve_video_job_input
+from app.video_io import (
+    extract_video_frames_from_path,
+    public_video_metadata,
+    resolve_video_job_input,
+)
 
 
 VIDEO_JOB_ERROR_MESSAGE = "视频任务失败"
-
-
-async def appearance_record(image: Any, include_embedding: bool = True) -> dict[str, Any]:
-    return await infer_appearance_record_for_image(image, include_embedding=include_embedding)
-
-
-async def resolve_appearance_record(image: Any, *, include_embedding: bool = True) -> dict[str, Any]:
-    record: Any = appearance_record(image, include_embedding=include_embedding)
-    if inspect.isawaitable(record):
-        record = await record
-    return record if isinstance(record, dict) else {}
 
 
 class JobStatus(StrEnum):
@@ -85,8 +88,6 @@ def public_video_job_error(error: Any) -> str | None:
     return VIDEO_JOB_ERROR_MESSAGE if error else None
 
 
-
-
 def image_thumbnail_data_url(image: Any, max_side: int = 240) -> str | None:
     if not isinstance(image, Image.Image):
         return None
@@ -99,6 +100,7 @@ def image_thumbnail_data_url(image: Any, max_side: int = 240) -> str | None:
     data = base64.b64encode(buffer.getvalue()).decode("ascii")
     return f"data:image/jpeg;base64,{data}"
 
+
 def public_video_job_result(result: dict[str, Any] | None) -> dict[str, Any] | None:
     if not isinstance(result, dict):
         return None
@@ -109,7 +111,9 @@ def public_video_job_result(result: dict[str, Any] | None) -> dict[str, Any] | N
     return payload
 
 
-def lightweight_video_job_result(result: dict[str, Any] | None) -> dict[str, Any] | None:
+def lightweight_video_job_result(
+    result: dict[str, Any] | None,
+) -> dict[str, Any] | None:
     payload = public_video_job_result(result)
     if payload is None:
         return None
@@ -118,7 +122,9 @@ def lightweight_video_job_result(result: dict[str, Any] | None) -> dict[str, Any
     return payload
 
 
-def video_job_progress_result(metadata: dict[str, Any], frame_count: int, analysis_mode: str) -> dict[str, Any]:
+def video_job_progress_result(
+    metadata: dict[str, Any], frame_count: int, analysis_mode: str
+) -> dict[str, Any]:
     return {
         "metadata": public_video_metadata(metadata),
         "frame_count": frame_count,
@@ -156,7 +162,9 @@ class VideoJob:
             "error": public_video_job_error(self.error),
             "cancel_requested": self.cancel_requested,
             "attempts": normalize_retry_count(self.attempts),
-            "max_retries": normalize_retry_count(self.max_retries, VIDEO_JOB_MAX_RETRIES),
+            "max_retries": normalize_retry_count(
+                self.max_retries, VIDEO_JOB_MAX_RETRIES
+            ),
             "next_retry_at": self.next_retry_at,
         }
         if include_result:
@@ -164,7 +172,11 @@ class VideoJob:
         return payload
 
     def state_dict(self, *, lightweight_result: bool = False) -> dict[str, Any]:
-        result = lightweight_video_job_result(self.result) if lightweight_result else public_video_job_result(self.result)
+        result = (
+            lightweight_video_job_result(self.result)
+            if lightweight_result
+            else public_video_job_result(self.result)
+        )
         return {
             "job_id": self.job_id,
             "tenant_id": self.tenant_id,
@@ -175,7 +187,9 @@ class VideoJob:
             "error": public_video_job_error(self.error),
             "cancel_requested": self.cancel_requested,
             "attempts": normalize_retry_count(self.attempts),
-            "max_retries": normalize_retry_count(self.max_retries, VIDEO_JOB_MAX_RETRIES),
+            "max_retries": normalize_retry_count(
+                self.max_retries, VIDEO_JOB_MAX_RETRIES
+            ),
             "next_retry_at": self.next_retry_at,
             "result": result,
         }
@@ -191,10 +205,14 @@ class VideoJob:
             created_at=float(payload.get("created_at", wall_time())),
             updated_at=float(payload.get("updated_at", wall_time())),
             error=public_video_job_error(payload.get("error")),
-            result=payload.get("result") if isinstance(payload.get("result"), dict) else payload.get("result"),
+            result=payload.get("result")
+            if isinstance(payload.get("result"), dict)
+            else payload.get("result"),
             cancel_requested=bool(payload.get("cancel_requested", False)),
             attempts=normalize_retry_count(payload.get("attempts", 0)),
-            max_retries=normalize_retry_count(payload.get("max_retries", VIDEO_JOB_MAX_RETRIES), VIDEO_JOB_MAX_RETRIES),
+            max_retries=normalize_retry_count(
+                payload.get("max_retries", VIDEO_JOB_MAX_RETRIES), VIDEO_JOB_MAX_RETRIES
+            ),
             next_retry_at=normalize_retry_timestamp(payload.get("next_retry_at")),
         )
 
@@ -220,13 +238,18 @@ def video_jobs_state_payload(*, lightweight_result: bool = False) -> dict[str, A
             "version": 1,
             "jobs": [
                 job.state_dict(lightweight_result=lightweight_result)
-                for job in sorted(VIDEO_JOBS.values(), key=lambda item: (item.tenant_id, item.job_id))
+                for job in sorted(
+                    VIDEO_JOBS.values(), key=lambda item: (item.tenant_id, item.job_id)
+                )
             ],
         }
 
 
 def save_video_jobs_state(*, lightweight_result: bool = False) -> None:
-    write_json_state(PORTRAIT_JOBS_STATE_PATH, video_jobs_state_payload(lightweight_result=lightweight_result))
+    write_json_state(
+        PORTRAIT_JOBS_STATE_PATH,
+        video_jobs_state_payload(lightweight_result=lightweight_result),
+    )
 
 
 def restore_video_job(job: VideoJob, previous: VideoJob) -> None:
@@ -271,11 +294,15 @@ def load_video_jobs_state() -> None:
     else:
         payload = read_json_state(PORTRAIT_JOBS_STATE_PATH, {"jobs": []})
     if not isinstance(payload, dict):
-        handle_state_read_error(f"video jobs state 根节点必须是映射: {PORTRAIT_JOBS_STATE_PATH}")
+        handle_state_read_error(
+            f"video jobs state 根节点必须是映射: {PORTRAIT_JOBS_STATE_PATH}"
+        )
         return
     jobs = payload.get("jobs", [])
     if not isinstance(jobs, list):
-        handle_state_read_error(f"video jobs state jobs 必须是列表: {PORTRAIT_JOBS_STATE_PATH}")
+        handle_state_read_error(
+            f"video jobs state jobs 必须是列表: {PORTRAIT_JOBS_STATE_PATH}"
+        )
         return
     with VIDEO_JOBS_LOCK:
         VIDEO_JOBS.clear()
@@ -292,7 +319,9 @@ def load_video_jobs_state() -> None:
 
 def create_video_job(filename: str | None, tenant_id: str = "default") -> VideoJob:
     with VIDEO_JOBS_LOCK:
-        job = VideoJob(job_id=f"job_{uuid4().hex[:16]}", tenant_id=tenant_id, filename=filename)
+        job = VideoJob(
+            job_id=f"job_{uuid4().hex[:16]}", tenant_id=tenant_id, filename=filename
+        )
         key = job_key(job.tenant_id, job.job_id)
         VIDEO_JOBS[key] = job
         try:
@@ -303,10 +332,18 @@ def create_video_job(filename: str | None, tenant_id: str = "default") -> VideoJ
         return job
 
 
-def create_batch_job(job_type: str, tenant_id: str = "default", *, metadata: dict[str, Any] | None = None) -> VideoJob:
+def create_batch_job(
+    job_type: str, tenant_id: str = "default", *, metadata: dict[str, Any] | None = None
+) -> VideoJob:
     with VIDEO_JOBS_LOCK:
-        job = VideoJob(job_id=f"batch_{uuid4().hex[:16]}", tenant_id=tenant_id, filename=None)
-        job.result = {"type": job_type, "metadata": metadata or {}, "mode": "async_batch"}
+        job = VideoJob(
+            job_id=f"batch_{uuid4().hex[:16]}", tenant_id=tenant_id, filename=None
+        )
+        job.result = {
+            "type": job_type,
+            "metadata": metadata or {},
+            "mode": "async_batch",
+        }
         key = job_key(job.tenant_id, job.job_id)
         VIDEO_JOBS[key] = job
         try:
@@ -382,7 +419,10 @@ async def run_batch_job(job_id: str, tenant_id: str, handler: Any) -> None:
             await run_blocking_io(persist_video_job, job)
             return
         result = await handler(job)
-        job.result = {**base_result, **(result if isinstance(result, dict) else {"result": result})}
+        job.result = {
+            **base_result,
+            **(result if isinstance(result, dict) else {"result": result}),
+        }
         job.status = JobStatus.COMPLETED
         job.progress = 1.0
         job.updated_at = wall_time()
@@ -409,6 +449,14 @@ async def run_video_job(
     max_frames: int,
     *,
     input_ref: str | None = None,
+    detector_project_name: str = DEFAULT_DETECTOR_PROJECT,
+    detector_model_name: str = DEFAULT_DETECTOR_ARTIFACT,
+    reid_project_name: str = DEFAULT_DETECTOR_PROJECT,
+    reid_model_name: str = DEFAULT_REID_ARTIFACT,
+    confidence: float = DEFAULT_CONFIDENCE,
+    iou: float = DEFAULT_IOU,
+    max_detections: int = 100,
+    include_embeddings: bool = False,
 ) -> None:
     job = get_video_job(job_id, tenant_id=tenant_id)
     if job is None:
@@ -424,7 +472,9 @@ async def run_video_job(
             return True
         from app.portrait_task_queue import TASK_QUEUE
 
-        return await run_blocking_io(TASK_QUEUE.is_cancelled, "video_jobs", tenant_id, job_id)
+        return await run_blocking_io(
+            TASK_QUEUE.is_cancelled, "video_jobs", tenant_id, job_id
+        )
 
     while True:
         job.status = JobStatus.RUNNING
@@ -453,51 +503,103 @@ async def run_video_job(
                     None,
                 )
             elif data is not None:
-                frames, metadata = await extract_video_frames_from_bytes(data, filename, frame_interval, max_frames)
+                frames, metadata = await extract_video_frames_from_bytes(
+                    data, filename, frame_interval, max_frames
+                )
             else:
                 raise ValueError("视频任务缺少输入引用")
-            frame_results: list[dict[str, Any]] = []
-            total = max(1, len(frames))
-            # 对中间进度写入做节流：每帧都持久化会每次重写整个任务状态文件（或整行 JSONB），
-            # 开销随 任务数 × 帧数 增长。下方的终态仍会立即落盘，完成后的结果也在循环结束后持久化。
+            if not frames:
+                raise ValueError("视频任务未提取到可分析帧")
+            (
+                detector_project_name,
+                detector_model_name,
+                reid_project_name,
+                reid_model_name,
+            ) = validate_model_reference_parts(
+                detector_project_name,
+                detector_model_name,
+                reid_project_name,
+                reid_model_name,
+            )
+            validate_detection_parameters(
+                confidence=confidence, iou=iou, max_detections=max_detections
+            )
+            job.result = video_job_progress_result(metadata, 0, "person_tracks")
+            job.progress = 0.10
+            job.updated_at = wall_time()
+            await run_blocking_io(persist_video_job, job, lightweight_result=True)
+
+            analysis = await infer_tracks_for_images(
+                frames,
+                [None] * len(frames),
+                detector_project_name,
+                detector_model_name,
+                reid_project_name,
+                reid_model_name,
+                confidence=confidence,
+                iou=iou,
+                max_detections=max_detections,
+                include_embeddings=include_embeddings,
+            )
+            if await cancellation_requested():
+                job.cancel_requested = True
+                job.status = JobStatus.CANCELLED
+                job.updated_at = wall_time()
+                await run_blocking_io(persist_video_job, job)
+                return
+
+            source_indexes = metadata.get("source_frame_indexes", [])
+            fps = float(metadata.get("fps") or 0.0)
+            total = max(1, len(analysis["frames"]))
             persist_interval = float(VIDEO_JOB_PROGRESS_PERSIST_INTERVAL_SECONDS)
             last_progress_persist_at = wall_time()
-            for index, image in enumerate(frames):
-                if await cancellation_requested():
-                    job.cancel_requested = True
-                    job.status = JobStatus.CANCELLED
-                    job.updated_at = wall_time()
-                    await run_blocking_io(persist_video_job, job)
-                    return
-                quality = assess_image_quality(image)
-                appearance = await resolve_appearance_record(image, include_embedding=False)
-                frame_results.append(
-                    {
-                        "frame_index": index,
-                        "source_frame_index": metadata.get("source_frame_indexes", [index])[index]
-                        if index < len(metadata.get("source_frame_indexes", []))
-                        else index,
-                        "width": image.width,
-                        "height": image.height,
-                        "thumbnail": image_thumbnail_data_url(image),
-                        "quality": quality,
-                        "appearance": appearance,
-                        "embedding_dim": 64,
-                    }
+            for index, frame in enumerate(analysis["frames"]):
+                image = frames[index]
+                source_frame_index = (
+                    source_indexes[index] if index < len(source_indexes) else index
                 )
-                job.result = video_job_progress_result(metadata, len(frame_results), "async_media_fallback")
-                job.progress = 0.10 + 0.85 * ((index + 1) / total)
+                frame["source_frame_index"] = source_frame_index
+                if fps:
+                    frame["source_seconds"] = round(source_frame_index / fps, 6)
+                frame["thumbnail"] = image_thumbnail_data_url(image)
+                frame["quality"] = assess_image_quality(image)
+                job.result = video_job_progress_result(
+                    metadata, index + 1, "person_tracks"
+                )
+                job.progress = 0.85 + 0.10 * ((index + 1) / total)
                 job.updated_at = wall_time()
-                if persist_interval <= 0 or (job.updated_at - last_progress_persist_at) >= persist_interval:
-                    await run_blocking_io(persist_video_job, job, lightweight_result=True)
+                if (
+                    persist_interval <= 0
+                    or (job.updated_at - last_progress_persist_at) >= persist_interval
+                ):
+                    await run_blocking_io(
+                        persist_video_job, job, lightweight_result=True
+                    )
                     last_progress_persist_at = job.updated_at
 
+            detector_meta = analysis["detector_meta"]
+            embedding_meta = analysis["embedding_meta"]
             job.result = public_video_job_result(
                 {
                     "metadata": metadata,
-                    "frames": frame_results,
-                    "frame_count": len(frame_results),
-                    "analysis_mode": "async_media_fallback",
+                    "frames": analysis["frames"],
+                    "tracks": analysis["tracks"],
+                    "tracker": analysis["tracker"],
+                    "frame_count": len(analysis["frames"]),
+                    "person_count": analysis["person_count"],
+                    "track_count": analysis["track_count"],
+                    "embedding_count": analysis["embedding_count"],
+                    "analysis_mode": "person_tracks",
+                    "models": {
+                        "detector": analysis["detector_key"],
+                        "reid": analysis["reid_key"],
+                    },
+                    "timing": {
+                        "detector_load_seconds": analysis["detector_load_seconds"],
+                        "reid_load_seconds": analysis["reid_load_seconds"],
+                        "detector": detector_meta["timing"],
+                        "reid": embedding_meta["timing"],
+                    },
                 }
             )
             job.status = JobStatus.COMPLETED
@@ -519,8 +621,12 @@ async def run_video_job(
                 job.updated_at = wall_time()
                 await run_blocking_io(persist_video_job, job)
                 return
-            if normalize_retry_count(job.attempts) <= normalize_retry_count(job.max_retries, VIDEO_JOB_MAX_RETRIES):
-                retry_delay = max(0.0, float(VIDEO_JOB_RETRY_BACKOFF_SECONDS)) * normalize_retry_count(job.attempts, 1)
+            if normalize_retry_count(job.attempts) <= normalize_retry_count(
+                job.max_retries, VIDEO_JOB_MAX_RETRIES
+            ):
+                retry_delay = max(
+                    0.0, float(VIDEO_JOB_RETRY_BACKOFF_SECONDS)
+                ) * normalize_retry_count(job.attempts, 1)
                 job.status = JobStatus.QUEUED
                 job.error = VIDEO_JOB_ERROR_MESSAGE
                 job.next_retry_at = wall_time() + retry_delay

@@ -10,10 +10,10 @@ model:
 intended_use:
   task: person re-identification embedding
   service_endpoints:
-    - /infer/person-embeddings
-    - /infer/person-tracks
-    - /infer/video/person-tracks
-    - /infer/stream/person-tracks
+    - /v1/vision/infer
+    - /v1/infer/tracks
+    - /v1/jobs/video
+    - /v1/streams
 limitations:
   - This card records artifact identity and serving contract only.
   - Production retrieval quality, threshold calibration, and demographic/scene robustness must be supplied by the model delivery process before external release.

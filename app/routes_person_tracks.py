@@ -9,7 +9,12 @@ from app.metrics import observe
 from app.model_refs import validate_model_reference_parts
 from app.observability import log_json, now, request_id_from_headers
 from app.portrait_auth import permission_dependency
-from app.routes_inference_common import inference_error_boundary, validate_detection_parameters, validate_image_files
+from app.portrait_response import portrait_success
+from app.routes_inference_common import (
+    inference_error_boundary,
+    validate_detection_parameters,
+    validate_image_files,
+)
 from app.security import require_api_token
 from app.settings import (
     DEFAULT_CONFIDENCE,
@@ -24,12 +29,17 @@ from app.settings import (
 router = APIRouter()
 
 
-@router.post("/infer/person-tracks", dependencies=[Depends(require_api_token), Depends(permission_dependency("infer"))])
+@router.post(
+    "/v1/infer/tracks",
+    dependencies=[Depends(require_api_token), Depends(permission_dependency("infer"))],
+)
 async def infer_person_tracks(
     request: Request,
     files: list[UploadFile] = File(...),
     detector_project_name: str = Form(DEFAULT_DETECTOR_PROJECT),
-    detector_artifact_name: str = Form(DEFAULT_DETECTOR_ARTIFACT, alias="detector_model_name"),
+    detector_artifact_name: str = Form(
+        DEFAULT_DETECTOR_ARTIFACT, alias="detector_model_name"
+    ),
     reid_project_name: str = Form(DEFAULT_DETECTOR_PROJECT),
     reid_artifact_name: str = Form(DEFAULT_REID_ARTIFACT, alias="reid_model_name"),
     confidence: float = Form(DEFAULT_CONFIDENCE),
@@ -41,15 +51,19 @@ async def infer_person_tracks(
     observe("tracks_requests_total")
     total_start = now()
 
-    detector_project_name, detector_model_name, reid_project_name, reid_model_name = validate_model_reference_parts(
-        detector_project_name,
-        detector_artifact_name,
-        reid_project_name,
-        reid_artifact_name,
+    detector_project_name, detector_model_name, reid_project_name, reid_model_name = (
+        validate_model_reference_parts(
+            detector_project_name,
+            detector_artifact_name,
+            reid_project_name,
+            reid_artifact_name,
+        )
     )
 
     validate_image_files(files, max_images=MAX_PIPELINE_FRAMES)
-    validate_detection_parameters(confidence=confidence, iou=iou, max_detections=max_detections)
+    validate_detection_parameters(
+        confidence=confidence, iou=iou, max_detections=max_detections
+    )
 
     with inference_error_boundary(
         request_id,
@@ -88,45 +102,50 @@ async def infer_person_tracks(
             detector_mode=detector_meta["inference_mode"],
             reid_mode=embedding_meta["inference_mode"],
             decode_seconds=round(decode_seconds, 6),
-            detector_inference_seconds=round(detector_meta["timing"]["inference_seconds"], 6),
-            reid_inference_seconds=round(embedding_meta["timing"]["inference_seconds"], 6),
+            detector_inference_seconds=round(
+                detector_meta["timing"]["inference_seconds"], 6
+            ),
+            reid_inference_seconds=round(
+                embedding_meta["timing"]["inference_seconds"], 6
+            ),
             total_seconds=round(total_seconds, 6),
         )
 
-    return {
-        "status": "success",
-        "request_id": request_id,
-        "detector_model": result["detector_key"],
-        "reid_model": result["reid_key"],
-        "cold_loaded": {
-            "detector": result["detector_cold_loaded"],
-            "reid": result["reid_cold_loaded"],
-        },
-        "timing": {
-            "decode_seconds": decode_seconds,
-            "detector_load_seconds": result["detector_load_seconds"],
-            "reid_load_seconds": result["reid_load_seconds"],
-            "detector": detector_meta["timing"],
-            "reid": embedding_meta["timing"],
-            "total_seconds": total_seconds,
-        },
-        "detector": {
-            "input_shape": detector_meta["input_shape"],
-            "output_shapes": detector_meta["output_shapes"],
-            "inference_mode": detector_meta["inference_mode"],
-        },
-        "reid": {
-            "input_shape": embedding_meta["input_shape"],
-            "output_shapes": embedding_meta["output_shapes"],
-            "inference_mode": embedding_meta["inference_mode"],
-            "embedding_dim": embedding_meta["embedding_dim"],
+    return portrait_success(
+        request_id,
+        {
+            "detector_model": result["detector_key"],
+            "reid_model": result["reid_key"],
+            "cold_loaded": {
+                "detector": result["detector_cold_loaded"],
+                "reid": result["reid_cold_loaded"],
+            },
+            "timing": {
+                "decode_seconds": decode_seconds,
+                "detector_load_seconds": result["detector_load_seconds"],
+                "reid_load_seconds": result["reid_load_seconds"],
+                "detector": detector_meta["timing"],
+                "reid": embedding_meta["timing"],
+                "total_seconds": total_seconds,
+            },
+            "detector": {
+                "input_shape": detector_meta["input_shape"],
+                "output_shapes": detector_meta["output_shapes"],
+                "inference_mode": detector_meta["inference_mode"],
+            },
+            "reid": {
+                "input_shape": embedding_meta["input_shape"],
+                "output_shapes": embedding_meta["output_shapes"],
+                "inference_mode": embedding_meta["inference_mode"],
+                "embedding_dim": embedding_meta["embedding_dim"],
+                "embedding_count": result["embedding_count"],
+            },
+            "frames": result["frames"],
+            "tracks": result["tracks"],
+            "track_count": result["track_count"],
+            "tracker": result["tracker"],
+            "frame_count": len(result["frames"]),
+            "person_count": result["person_count"],
             "embedding_count": result["embedding_count"],
         },
-        "frames": result["frames"],
-        "tracks": result["tracks"],
-        "track_count": result["track_count"],
-        "tracker": result["tracker"],
-        "frame_count": len(result["frames"]),
-        "person_count": result["person_count"],
-        "embedding_count": result["embedding_count"],
-    }
+    )

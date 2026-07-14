@@ -26,6 +26,7 @@ from app.portrait_streams import (
 )
 from app.portrait_stream_worker import (
     emit_stream_event,
+    normalize_stream_analysis_settings,
     restore_stream_worker_sessions,
     start_stream_worker_session,
     stop_stream_worker_session,
@@ -82,7 +83,9 @@ async def v1_create_stream(
         payload.stream_url,
         tenant_id=tenant_id,
         name=payload.name,
-        settings=normalize_public_metadata(payload.settings, field_name="settings"),
+        settings=normalize_stream_analysis_settings(
+            normalize_public_metadata(payload.settings, field_name="settings")
+        ),
         metadata=normalize_public_metadata(payload.metadata, field_name="metadata"),
     )
     try:

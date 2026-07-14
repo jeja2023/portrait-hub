@@ -26,8 +26,22 @@ def image_bytes(color: tuple[int, int, int]) -> bytes:
     return buffer.getvalue()
 
 
-def upload(name: str, color: tuple[int, int, int]) -> tuple[str, tuple[str, bytes, str]]:
+def upload(
+    name: str, color: tuple[int, int, int]
+) -> tuple[str, tuple[str, bytes, str]]:
     return name, (f"{name}.png", image_bytes(color), "image/png")
+
+
+def v1_error_message(response) -> str:
+    return response.json()["error"]["message"]
+
+
+def v1_error_details(response):
+    return response.json()["error"].get("details", {})
+
+
+def v1_validation_issues(response) -> list[dict[str, object]]:
+    return v1_error_details(response)["issues"]
 
 
 def test_v1_compare_persons_uses_threshold_contract() -> None:
@@ -89,7 +103,11 @@ def test_v1_gallery_enroll_and_search_round_trip() -> None:
     enroll = client.post(
         "/v1/gallery/enroll",
         files=[upload("files", (10, 80, 180))],
-        data={"person_id": "p_test_round_trip", "display_name": "Test Person", "modality": "body"},
+        data={
+            "person_id": "p_test_round_trip",
+            "display_name": "Test Person",
+            "modality": "body",
+        },
     )
     assert enroll.status_code == 200
     assert enroll.json()["data"]["person"]["person_id"] == "p_test_round_trip"
@@ -108,7 +126,10 @@ def test_v1_gallery_enroll_and_search_round_trip() -> None:
     candidates = search.json()["data"]["candidates"]
     assert candidates
     assert candidates[0]["person_id"] == "p_test_round_trip"
-    assert search.json()["data"]["query"]["combined_quality_score"] >= search.json()["data"]["query"]["quality_score"] * 0.76
+    assert (
+        search.json()["data"]["query"]["combined_quality_score"]
+        >= search.json()["data"]["query"]["quality_score"] * 0.76
+    )
 
 
 def test_v1_gallery_search_batch_async_returns_batch_job_result() -> None:
@@ -118,7 +139,11 @@ def test_v1_gallery_search_batch_async_returns_batch_job_result() -> None:
     enroll = client.post(
         "/v1/gallery/enroll",
         files=[upload("files", (10, 80, 180))],
-        data={"person_id": "p_async_search", "display_name": "Async Search", "modality": "body"},
+        data={
+            "person_id": "p_async_search",
+            "display_name": "Async Search",
+            "modality": "body",
+        },
     )
     assert enroll.status_code == 200
 
@@ -205,7 +230,11 @@ def test_v1_gallery_reindex_rebuilds_vector_index_with_filters(monkeypatch) -> N
             return {"backend": self.backend_name, "status": "upserted"}
 
     monkeypatch.setattr(portrait_vector_store, "VECTOR_STORE", TrackingVectorStore())
-    monkeypatch.setattr(routes_portrait_gallery, "audit_event", lambda event, **fields: audit_events.append((event, fields)))
+    monkeypatch.setattr(
+        routes_portrait_gallery,
+        "audit_event",
+        lambda event, **fields: audit_events.append((event, fields)),
+    )
 
     try:
         dry_run = client.post(
@@ -219,7 +248,9 @@ def test_v1_gallery_reindex_rebuilds_vector_index_with_filters(monkeypatch) -> N
         assert dry_run_data["reindexed_feature_count"] == 0
         assert calls == []
 
-        response = client.post("/v1/gallery/reindex", params={"modality": "body", "model_id": "model-a"})
+        response = client.post(
+            "/v1/gallery/reindex", params={"modality": "body", "model_id": "model-a"}
+        )
 
         assert response.status_code == 200
         data = response.json()["data"]
@@ -244,7 +275,9 @@ def test_v1_gallery_reindex_rebuilds_vector_index_with_filters(monkeypatch) -> N
         GALLERY.update(gallery_snapshot)
 
 
-def test_v1_gallery_enroll_response_redacts_object_storage_location(monkeypatch) -> None:
+def test_v1_gallery_enroll_response_redacts_object_storage_location(
+    monkeypatch,
+) -> None:
     client = TestClient(app)
     GALLERY.clear()
 
@@ -271,14 +304,25 @@ def test_v1_gallery_enroll_response_redacts_object_storage_location(monkeypatch)
 
     response = client.post(
         "/v1/gallery/enroll",
-        files={"files": ("secret-person-name.png", image_bytes((10, 80, 180)), "image/png")},
+        files={
+            "files": ("secret-person-name.png", image_bytes((10, 80, 180)), "image/png")
+        },
         data={"person_id": "p_object_redaction", "modality": "body"},
     )
 
     assert response.status_code == 200
     object_payload = response.json()["data"]["features"][0]["object"]
     assert object_payload == {"backend": "s3", "stored": True, "encrypted": True}
-    for secret in ["object_key", "secret-object-key", "bucket", "secret-bucket", "sha256", "secret-sha", "bytes", "secret-person-name"]:
+    for secret in [
+        "object_key",
+        "secret-object-key",
+        "bucket",
+        "secret-bucket",
+        "sha256",
+        "secret-sha",
+        "bytes",
+        "secret-person-name",
+    ]:
         assert secret not in response.text
 
 
@@ -287,7 +331,9 @@ def test_v1_infer_response_does_not_echo_source_filename() -> None:
 
     response = client.post(
         "/v1/infer/faces",
-        files={"files": ("secret-person-name.png", image_bytes((10, 80, 180)), "image/png")},
+        files={
+            "files": ("secret-person-name.png", image_bytes((10, 80, 180)), "image/png")
+        },
     )
 
     assert response.status_code == 200
@@ -314,9 +360,9 @@ def test_v1_gallery_search_rejects_out_of_range_top_k() -> None:
     )
 
     assert too_small.status_code == 400
-    assert "top_k 必须大于等于 1" in too_small.json()["detail"]
+    assert "top_k 必须大于等于 1" in v1_error_message(too_small)
     assert too_large.status_code == 400
-    assert "top_k 必须介于 1 到 100 之间" in too_large.json()["detail"]
+    assert "top_k 必须介于 1 到 100 之间" in v1_error_message(too_large)
 
 
 def test_v1_gallery_enroll_skips_duplicate_inputs() -> None:
@@ -338,7 +384,9 @@ def test_v1_gallery_enroll_skips_duplicate_inputs() -> None:
     assert data["skipped_duplicates"][0]["duplicate_distance"] == 0
 
 
-def test_v1_gallery_enroll_cleans_object_when_feature_persist_fails(monkeypatch) -> None:
+def test_v1_gallery_enroll_cleans_object_when_feature_persist_fails(
+    monkeypatch,
+) -> None:
     client = TestClient(app)
     GALLERY.clear()
     deleted = []
@@ -347,7 +395,10 @@ def test_v1_gallery_enroll_cleans_object_when_feature_persist_fails(monkeypatch)
         backend_name = "local_file"
 
         def put_bytes(self, tenant_id, object_type, filename, data):
-            return {"backend": self.backend_name, "object_key": "tenant/gallery/failed.json"}
+            return {
+                "backend": self.backend_name,
+                "object_key": "tenant/gallery/failed.json",
+            }
 
         def delete_object(self, info):
             deleted.append(info["object_key"])
@@ -381,7 +432,10 @@ def test_gallery_enroll_rolls_back_when_audit_fails(monkeypatch) -> None:
         backend_name = "local_file"
 
         def put_bytes(self, tenant_id, object_type, filename, data):
-            return {"backend": self.backend_name, "object_key": f"{tenant_id}/{object_type}/{filename}"}
+            return {
+                "backend": self.backend_name,
+                "object_key": f"{tenant_id}/{object_type}/{filename}",
+            }
 
         def delete_object(self, info):
             deleted.append(info["object_key"])
@@ -395,7 +449,11 @@ def test_gallery_enroll_rolls_back_when_audit_fails(monkeypatch) -> None:
 
     monkeypatch.setattr(routes_portrait_gallery, "OBJECT_STORE", TrackingObjectStore())
     monkeypatch.setattr(routes_portrait_gallery, "audit_event", fail_audit)
-    monkeypatch.setattr(routes_portrait_gallery, "persist_person_delete", lambda tenant_id, person_id: None)
+    monkeypatch.setattr(
+        routes_portrait_gallery,
+        "persist_person_delete",
+        lambda tenant_id, person_id: None,
+    )
 
     response = client.post(
         "/v1/gallery/enroll",
@@ -404,21 +462,29 @@ def test_gallery_enroll_rolls_back_when_audit_fails(monkeypatch) -> None:
     )
 
     assert response.status_code == 503
-    assert "状态写入失败" in response.json()["detail"]
+    assert "状态写入失败" in v1_error_message(response)
     assert deleted == ["default/gallery-image/files.png"]
     assert "p_audit_rollback" not in {person.person_id for person in GALLERY.values()}
 
 
-def test_gallery_enroll_existing_person_rolls_back_added_feature_when_audit_fails(monkeypatch) -> None:
+def test_gallery_enroll_existing_person_rolls_back_added_feature_when_audit_fails(
+    monkeypatch,
+) -> None:
     client = TestClient(app)
     GALLERY.clear()
     seed = client.post(
         "/v1/gallery/enroll",
         files=[upload("files", (10, 80, 180))],
-        data={"person_id": "p_existing_audit", "display_name": "Existing", "modality": "body"},
+        data={
+            "person_id": "p_existing_audit",
+            "display_name": "Existing",
+            "modality": "body",
+        },
     )
     assert seed.status_code == 200
-    person = next(item for item in GALLERY.values() if item.person_id == "p_existing_audit")
+    person = next(
+        item for item in GALLERY.values() if item.person_id == "p_existing_audit"
+    )
     original_feature_ids = [feature.feature_id for feature in person.features]
     delete_calls = []
     deleted_objects = []
@@ -427,7 +493,10 @@ def test_gallery_enroll_existing_person_rolls_back_added_feature_when_audit_fail
         backend_name = "local_file"
 
         def put_bytes(self, tenant_id, object_type, filename, data):
-            return {"backend": self.backend_name, "object_key": f"{tenant_id}/{object_type}/{filename}"}
+            return {
+                "backend": self.backend_name,
+                "object_key": f"{tenant_id}/{object_type}/{filename}",
+            }
 
         def delete_object(self, info):
             deleted_objects.append(info["object_key"])
@@ -446,24 +515,38 @@ def test_gallery_enroll_existing_person_rolls_back_added_feature_when_audit_fail
         delete_calls.append((tenant_id, person_id))
 
     monkeypatch.setattr(routes_portrait_gallery, "persist_person_delete", record_delete)
-    monkeypatch.setattr(routes_portrait_gallery, "persist_person", lambda restored_person: None)
-    monkeypatch.setattr(routes_portrait_gallery, "persist_feature", lambda restored_person, feature: None)
+    monkeypatch.setattr(
+        routes_portrait_gallery, "persist_person", lambda restored_person: None
+    )
+    monkeypatch.setattr(
+        routes_portrait_gallery,
+        "persist_feature",
+        lambda restored_person, feature: None,
+    )
 
     response = client.post(
         "/v1/gallery/enroll",
         files=[upload("files", (20, 90, 170))],
-        data={"person_id": "p_existing_audit", "display_name": "Changed", "modality": "body"},
+        data={
+            "person_id": "p_existing_audit",
+            "display_name": "Changed",
+            "modality": "body",
+        },
     )
 
     assert response.status_code == 503
-    restored = next(item for item in GALLERY.values() if item.person_id == "p_existing_audit")
+    restored = next(
+        item for item in GALLERY.values() if item.person_id == "p_existing_audit"
+    )
     assert restored.display_name == "Existing"
     assert [feature.feature_id for feature in restored.features] == original_feature_ids
     assert delete_calls == [("default", "p_existing_audit")]
     assert deleted_objects == ["default/gallery-image/files.png"]
 
 
-def test_gallery_enroll_rollback_failure_redacts_object_cleanup_details(monkeypatch) -> None:
+def test_gallery_enroll_rollback_failure_redacts_object_cleanup_details(
+    monkeypatch,
+) -> None:
     client = TestClient(app)
     GALLERY.clear()
 
@@ -471,7 +554,10 @@ def test_gallery_enroll_rollback_failure_redacts_object_cleanup_details(monkeypa
         backend_name = "local_file"
 
         def put_bytes(self, tenant_id, object_type, filename, data):
-            return {"backend": self.backend_name, "object_key": "tenant/gallery/secret-token.png"}
+            return {
+                "backend": self.backend_name,
+                "object_key": "tenant/gallery/secret-token.png",
+            }
 
         def delete_object(self, info):
             return {
@@ -487,9 +573,15 @@ def test_gallery_enroll_rollback_failure_redacts_object_cleanup_details(monkeypa
     def fail_audit(*args, **kwargs):
         raise HTTPException(status_code=503, detail="审计 secret-token")
 
-    monkeypatch.setattr(routes_portrait_gallery, "OBJECT_STORE", LeakyFailingObjectStore())
+    monkeypatch.setattr(
+        routes_portrait_gallery, "OBJECT_STORE", LeakyFailingObjectStore()
+    )
     monkeypatch.setattr(routes_portrait_gallery, "audit_event", fail_audit)
-    monkeypatch.setattr(routes_portrait_gallery, "persist_person_delete", lambda tenant_id, person_id: None)
+    monkeypatch.setattr(
+        routes_portrait_gallery,
+        "persist_person_delete",
+        lambda tenant_id, person_id: None,
+    )
 
     response = client.post(
         "/v1/gallery/enroll",
@@ -498,8 +590,8 @@ def test_gallery_enroll_rollback_failure_redacts_object_cleanup_details(monkeypa
     )
 
     assert response.status_code == 500
-    assert response.json()["detail"] == {
-        "message": "人员库变更失败，且回滚持久化失败",
+    assert v1_error_message(response) == "人员库变更失败，且回滚持久化失败"
+    assert v1_error_details(response) == {
         "rollback_failed": True,
         "rollback_error_count": 1,
     }
@@ -530,7 +622,10 @@ def test_gallery_delete_person_cleans_persisted_feature_objects(monkeypatch) -> 
                 quality_score=1.0,
                 source_id="source",
                 created_at=0.0,
-                object_info={"backend": "local_file", "object_key": "default/gallery-image/object.json"},
+                object_info={
+                    "backend": "local_file",
+                    "object_key": "default/gallery-image/object.json",
+                },
             )
         ],
     )
@@ -545,8 +640,14 @@ def test_gallery_delete_person_cleans_persisted_feature_objects(monkeypatch) -> 
             return {"backend": "local_file", "status": "ready"}
 
     monkeypatch.setattr(routes_portrait_gallery, "OBJECT_STORE", TrackingObjectStore())
-    monkeypatch.setattr(routes_portrait_gallery, "audit_event", lambda event, **kwargs: audit_events.append((event, kwargs)))
-    monkeypatch.setattr(portrait_gallery, "persist_person_delete", lambda tenant_id, person_id: None)
+    monkeypatch.setattr(
+        routes_portrait_gallery,
+        "audit_event",
+        lambda event, **kwargs: audit_events.append((event, kwargs)),
+    )
+    monkeypatch.setattr(
+        portrait_gallery, "persist_person_delete", lambda tenant_id, person_id: None
+    )
 
     response = client.delete("/v1/gallery/p_delete_objects")
 
@@ -567,7 +668,9 @@ def test_gallery_delete_person_cleans_persisted_feature_objects(monkeypatch) -> 
     assert gallery_key("default", "p_delete_objects") not in GALLERY
 
 
-def test_gallery_delete_person_rolls_back_when_object_cleanup_fails(monkeypatch) -> None:
+def test_gallery_delete_person_rolls_back_when_object_cleanup_fails(
+    monkeypatch,
+) -> None:
     client = TestClient(app)
     GALLERY.clear()
     person = portrait_gallery.PersonRecord(
@@ -586,7 +689,10 @@ def test_gallery_delete_person_rolls_back_when_object_cleanup_fails(monkeypatch)
                 quality_score=1.0,
                 source_id="source",
                 created_at=0.0,
-                object_info={"backend": "local_file", "object_key": "default/gallery-image/secret-object.json"},
+                object_info={
+                    "backend": "local_file",
+                    "object_key": "default/gallery-image/secret-object.json",
+                },
             )
         ],
     )
@@ -605,18 +711,37 @@ def test_gallery_delete_person_rolls_back_when_object_cleanup_fails(monkeypatch)
             return {"backend": "local_file", "status": "ready"}
 
     monkeypatch.setattr(routes_portrait_gallery, "OBJECT_STORE", FailingObjectStore())
-    monkeypatch.setattr(routes_portrait_gallery, "audit_event", lambda *args, **kwargs: None)
-    monkeypatch.setattr(portrait_gallery, "persist_person_delete", lambda tenant_id, person_id: None)
-    monkeypatch.setattr(routes_portrait_gallery, "persist_person_delete", lambda tenant_id, person_id: None)
-    monkeypatch.setattr(routes_portrait_gallery, "persist_person", lambda restored_person: None)
-    monkeypatch.setattr(routes_portrait_gallery, "persist_feature", lambda restored_person, feature: None)
+    monkeypatch.setattr(
+        routes_portrait_gallery, "audit_event", lambda *args, **kwargs: None
+    )
+    monkeypatch.setattr(
+        portrait_gallery, "persist_person_delete", lambda tenant_id, person_id: None
+    )
+    monkeypatch.setattr(
+        routes_portrait_gallery,
+        "persist_person_delete",
+        lambda tenant_id, person_id: None,
+    )
+    monkeypatch.setattr(
+        routes_portrait_gallery, "persist_person", lambda restored_person: None
+    )
+    monkeypatch.setattr(
+        routes_portrait_gallery,
+        "persist_feature",
+        lambda restored_person, feature: None,
+    )
 
     response = client.delete("/v1/gallery/p_delete_cleanup_fails")
 
     assert response.status_code == 503
-    assert response.json()["detail"] == "对象清理失败"
+    assert v1_error_message(response) == "对象清理失败"
     assert gallery_key("default", "p_delete_cleanup_fails") in GALLERY
-    assert GALLERY[gallery_key("default", "p_delete_cleanup_fails")].features[0].object_info["object_key"].endswith("secret-object.json")
+    assert (
+        GALLERY[gallery_key("default", "p_delete_cleanup_fails")]
+        .features[0]
+        .object_info["object_key"]
+        .endswith("secret-object.json")
+    )
     assert "secret-object" not in response.text
     assert "object_key" not in response.text
 
@@ -628,7 +753,11 @@ def test_gallery_patch_rolls_back_when_audit_fails(monkeypatch) -> None:
     enroll = client.post(
         "/v1/gallery/enroll",
         files=[upload("files", (10, 80, 180))],
-        data={"person_id": "p_patch_audit", "display_name": "Before", "modality": "body"},
+        data={
+            "person_id": "p_patch_audit",
+            "display_name": "Before",
+            "modality": "body",
+        },
     )
     assert enroll.status_code == 200
 
@@ -644,7 +773,9 @@ def test_gallery_patch_rolls_back_when_audit_fails(monkeypatch) -> None:
     )
 
     assert response.status_code == 503
-    stored = next(person for person in GALLERY.values() if person.person_id == "p_patch_audit")
+    stored = next(
+        person for person in GALLERY.values() if person.person_id == "p_patch_audit"
+    )
     assert stored.display_name == "Before"
     assert stored.metadata == {}
 
@@ -656,7 +787,11 @@ def test_gallery_delete_rolls_back_when_audit_fails(monkeypatch) -> None:
     enroll = client.post(
         "/v1/gallery/enroll",
         files=[upload("files", (10, 80, 180))],
-        data={"person_id": "p_delete_audit", "display_name": "Delete Me", "modality": "body"},
+        data={
+            "person_id": "p_delete_audit",
+            "display_name": "Delete Me",
+            "modality": "body",
+        },
     )
     assert enroll.status_code == 200
 
@@ -665,12 +800,16 @@ def test_gallery_delete_rolls_back_when_audit_fails(monkeypatch) -> None:
 
     monkeypatch.setattr(routes_portrait_gallery, "audit_event", fail_audit)
     monkeypatch.setattr(routes_portrait_gallery, "persist_person", lambda person: None)
-    monkeypatch.setattr(routes_portrait_gallery, "persist_feature", lambda person, feature: None)
+    monkeypatch.setattr(
+        routes_portrait_gallery, "persist_feature", lambda person, feature: None
+    )
 
     response = client.delete("/v1/gallery/p_delete_audit")
 
     assert response.status_code == 503
-    stored = next(person for person in GALLERY.values() if person.person_id == "p_delete_audit")
+    stored = next(
+        person for person in GALLERY.values() if person.person_id == "p_delete_audit"
+    )
     assert stored.display_name == "Delete Me"
     assert len(stored.features) == 1
 
@@ -687,7 +826,9 @@ def test_v1_video_job_create_rolls_back_job_when_queue_fails(monkeypatch) -> Non
         return f"test/{job_id}.mp4"
 
     monkeypatch.setattr(routes_portrait_jobs, "TASK_QUEUE", FailingTaskQueue())
-    monkeypatch.setattr(routes_portrait_jobs, "stage_video_upload", fake_stage_video_upload)
+    monkeypatch.setattr(
+        routes_portrait_jobs, "stage_video_upload", fake_stage_video_upload
+    )
 
     response = client.post(
         "/v1/jobs/video",
@@ -706,7 +847,12 @@ def test_v1_video_job_create_rolls_back_job_when_audit_fails(monkeypatch) -> Non
         def enqueue(self, queue, payload):
             class Message:
                 def public_dict(self):
-                    return {"message_id": "msg_test", "queue": queue, "payload": payload, "status": "queued"}
+                    return {
+                        "message_id": "msg_test",
+                        "queue": queue,
+                        "payload": payload,
+                        "status": "queued",
+                    }
 
             return Message()
 
@@ -717,9 +863,13 @@ def test_v1_video_job_create_rolls_back_job_when_audit_fails(monkeypatch) -> Non
         raise HTTPException(status_code=503, detail="状态写入失败")
 
     monkeypatch.setattr(routes_portrait_jobs, "TASK_QUEUE", CapturingTaskQueue())
-    monkeypatch.setattr(routes_portrait_jobs, "stage_video_upload", fake_stage_video_upload)
+    monkeypatch.setattr(
+        routes_portrait_jobs, "stage_video_upload", fake_stage_video_upload
+    )
     monkeypatch.setattr(routes_portrait_jobs, "audit_event", fail_audit)
-    monkeypatch.setattr("app.portrait_jobs.delete_video_job", lambda tenant_id, job_id: None)
+    monkeypatch.setattr(
+        "app.portrait_jobs.delete_video_job", lambda tenant_id, job_id: None
+    )
 
     response = client.post(
         "/v1/jobs/video",
@@ -730,7 +880,9 @@ def test_v1_video_job_create_rolls_back_job_when_audit_fails(monkeypatch) -> Non
     assert VIDEO_JOBS == {}
 
 
-def test_v1_video_job_create_response_does_not_echo_source_filename(monkeypatch) -> None:
+def test_v1_video_job_create_response_does_not_echo_source_filename(
+    monkeypatch,
+) -> None:
     client = TestClient(app)
     VIDEO_JOBS.clear()
     captured_payloads = []
@@ -741,17 +893,25 @@ def test_v1_video_job_create_response_does_not_echo_source_filename(monkeypatch)
 
             class Message:
                 def public_dict(self):
-                    return {"message_id": "msg_test", "queue": queue, "payload": payload, "status": "queued"}
+                    return {
+                        "message_id": "msg_test",
+                        "queue": queue,
+                        "payload": payload,
+                        "status": "queued",
+                    }
 
             return Message()
 
     async def fake_stage_video_upload(file, tenant_id, job_id):
         return f"test/{job_id}.mp4"
 
-
     monkeypatch.setattr(routes_portrait_jobs, "TASK_QUEUE", CapturingTaskQueue())
-    monkeypatch.setattr(routes_portrait_jobs, "stage_video_upload", fake_stage_video_upload)
-    monkeypatch.setattr(routes_portrait_jobs, "audit_event", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        routes_portrait_jobs, "stage_video_upload", fake_stage_video_upload
+    )
+    monkeypatch.setattr(
+        routes_portrait_jobs, "audit_event", lambda *args, **kwargs: None
+    )
 
     response = client.post(
         "/v1/jobs/video",
@@ -770,14 +930,21 @@ def test_v1_video_job_create_response_does_not_echo_source_filename(monkeypatch)
 def test_v1_video_job_cancel_rolls_back_when_audit_fails(monkeypatch) -> None:
     client = TestClient(app)
     VIDEO_JOBS.clear()
-    job = VideoJob(job_id="job_cancel_audit", tenant_id="default", filename="video.mp4", status="queued")
+    job = VideoJob(
+        job_id="job_cancel_audit",
+        tenant_id="default",
+        filename="video.mp4",
+        status="queued",
+    )
     VIDEO_JOBS[job_key("default", job.job_id)] = job
 
     def fail_audit(*args, **kwargs):
         raise HTTPException(status_code=503, detail="状态写入失败")
 
     monkeypatch.setattr(routes_portrait_jobs, "audit_event", fail_audit)
-    monkeypatch.setattr(routes_portrait_jobs, "persist_video_job", lambda restored_job: None)
+    monkeypatch.setattr(
+        routes_portrait_jobs, "persist_video_job", lambda restored_job: None
+    )
 
     response = client.post(f"/v1/jobs/{job.job_id}/cancel")
 
@@ -787,11 +954,15 @@ def test_v1_video_job_cancel_rolls_back_when_audit_fails(monkeypatch) -> None:
     assert stored.cancel_requested is False
 
 
-
 def test_v1_video_job_results_lists_completed_jobs_with_thumbnails(monkeypatch) -> None:
     client = TestClient(app)
     VIDEO_JOBS.clear()
-    job = VideoJob(job_id="job_video_done", tenant_id="default", filename="video.mp4", status="completed")
+    job = VideoJob(
+        job_id="job_video_done",
+        tenant_id="default",
+        filename="video.mp4",
+        status="completed",
+    )
     job.result = {
         "metadata": {"filename": "video.mp4"},
         "frame_count": 1,
@@ -816,7 +987,9 @@ def test_v1_video_job_results_lists_completed_jobs_with_thumbnails(monkeypatch) 
     assert response.status_code == 200
     data = response.json()["data"]
     assert data["results"][0]["job"]["job_id"] == "job_video_done"
-    assert data["results"][0]["result"]["frames"][0]["thumbnail"].startswith("data:image/jpeg;base64,")
+    assert data["results"][0]["result"]["frames"][0]["thumbnail"].startswith(
+        "data:image/jpeg;base64,"
+    )
 
 
 def test_v1_video_job_not_found_does_not_echo_job_id() -> None:
@@ -832,7 +1005,7 @@ def test_v1_video_job_not_found_does_not_echo_job_id() -> None:
 
     for response in responses:
         assert response.status_code == 404
-        assert response.json()["detail"] == "任务不存在"
+        assert v1_error_message(response) == "任务不存在"
         assert secret_job_id not in response.text
 
 
@@ -845,17 +1018,41 @@ def test_v1_gallery_and_stream_not_found_do_not_echo_resource_ids() -> None:
 
     responses = [
         (client.get(f"/v1/gallery/{secret_person_id}"), "人员不存在", secret_person_id),
-        (client.delete(f"/v1/gallery/{secret_person_id}"), "人员不存在", secret_person_id),
-        (client.get(f"/v1/streams/{secret_stream_id}"), "视频流不存在", secret_stream_id),
-        (client.post(f"/v1/streams/{secret_stream_id}/start"), "视频流不存在", secret_stream_id),
-        (client.post(f"/v1/streams/{secret_stream_id}/stop"), "视频流不存在", secret_stream_id),
-        (client.get(f"/v1/streams/{secret_stream_id}/status"), "视频流不存在", secret_stream_id),
-        (client.get(f"/v1/streams/{secret_stream_id}/events"), "视频流不存在", secret_stream_id),
+        (
+            client.delete(f"/v1/gallery/{secret_person_id}"),
+            "人员不存在",
+            secret_person_id,
+        ),
+        (
+            client.get(f"/v1/streams/{secret_stream_id}"),
+            "视频流不存在",
+            secret_stream_id,
+        ),
+        (
+            client.post(f"/v1/streams/{secret_stream_id}/start"),
+            "视频流不存在",
+            secret_stream_id,
+        ),
+        (
+            client.post(f"/v1/streams/{secret_stream_id}/stop"),
+            "视频流不存在",
+            secret_stream_id,
+        ),
+        (
+            client.get(f"/v1/streams/{secret_stream_id}/status"),
+            "视频流不存在",
+            secret_stream_id,
+        ),
+        (
+            client.get(f"/v1/streams/{secret_stream_id}/events"),
+            "视频流不存在",
+            secret_stream_id,
+        ),
     ]
 
     for response, detail, secret in responses:
         assert response.status_code == 404
-        assert response.json()["detail"] == detail
+        assert v1_error_message(response) == detail
         assert secret not in response.text
 
 
@@ -879,7 +1076,7 @@ def test_v1_job_and_stream_reject_invalid_resource_ids_without_echo() -> None:
 
     for response, field_name in responses:
         assert response.status_code == 400
-        assert field_name in response.json()["detail"]
+        assert field_name in v1_error_message(response)
         assert invalid_id not in response.text
 
 
@@ -890,7 +1087,9 @@ def test_v1_video_job_rejects_out_of_range_numeric_controls(monkeypatch) -> None
     async def fake_stage_video_upload(file, tenant_id, job_id):
         return f"test/{job_id}.mp4"
 
-    monkeypatch.setattr(routes_portrait_jobs, "stage_video_upload", fake_stage_video_upload)
+    monkeypatch.setattr(
+        routes_portrait_jobs, "stage_video_upload", fake_stage_video_upload
+    )
 
     bad_interval = client.post(
         "/v1/jobs/video",
@@ -904,9 +1103,9 @@ def test_v1_video_job_rejects_out_of_range_numeric_controls(monkeypatch) -> None
     )
 
     assert bad_interval.status_code == 400
-    assert "frame_interval 必须大于等于 1" in bad_interval.json()["detail"]
+    assert "frame_interval 必须大于等于 1" in v1_error_message(bad_interval)
     assert too_many_frames.status_code == 400
-    assert "max_frames 必须介于 1" in too_many_frames.json()["detail"]
+    assert "max_frames 必须介于 1" in v1_error_message(too_many_frames)
     assert VIDEO_JOBS == {}
 
 
@@ -960,7 +1159,7 @@ def test_v1_gallery_rejects_invalid_person_id() -> None:
     )
 
     assert response.status_code == 400
-    assert "person_id 必须" in response.json()["detail"]
+    assert "person_id 必须" in v1_error_message(response)
 
 
 def test_v1_gallery_public_response_redacts_metadata() -> None:
@@ -998,7 +1197,7 @@ def test_v1_gallery_rejects_oversized_metadata() -> None:
     )
 
     assert response.status_code == 400
-    assert "metadata 字符串值过长" in response.json()["detail"]
+    assert "metadata 字符串值过长" in v1_error_message(response)
 
 
 def test_v1_gallery_patch_has_strict_schema() -> None:
@@ -1014,7 +1213,9 @@ def test_v1_gallery_patch_has_strict_schema() -> None:
 
     unknown = client.patch("/v1/gallery/p_patch_schema", json={"role": "admin"})
     empty = client.patch("/v1/gallery/p_patch_schema", json={})
-    long_name = client.patch("/v1/gallery/p_patch_schema", json={"display_name": "x" * 300})
+    long_name = client.patch(
+        "/v1/gallery/p_patch_schema", json={"display_name": "x" * 300}
+    )
 
     assert unknown.status_code == 422
     assert empty.status_code == 400
@@ -1059,11 +1260,19 @@ def test_stream_create_rolls_back_when_audit_fails(monkeypatch) -> None:
         raise HTTPException(status_code=503, detail="状态写入失败")
 
     monkeypatch.setattr(routes_portrait_streams, "audit_event", fail_audit)
-    monkeypatch.setattr(routes_portrait_streams, "remove_stream", lambda stream_id, tenant_id: STREAMS.pop(stream_key(tenant_id, stream_id), None) is not None)
+    monkeypatch.setattr(
+        routes_portrait_streams,
+        "remove_stream",
+        lambda stream_id, tenant_id: STREAMS.pop(stream_key(tenant_id, stream_id), None)
+        is not None,
+    )
     try:
         response = client.post(
             "/v1/streams",
-            json={"stream_url": "http://example.com/audit-create", "name": "audit-create"},
+            json={
+                "stream_url": "http://example.com/audit-create",
+                "name": "audit-create",
+            },
         )
 
         assert response.status_code == 503
@@ -1078,8 +1287,13 @@ def test_stream_start_rolls_back_when_audit_fails(monkeypatch) -> None:
     snapshot = dict(STREAMS)
     STREAMS.clear()
     monkeypatch.setattr(routes_portrait_streams, "persist_stream", lambda stream: None)
-    monkeypatch.setattr("app.portrait_stream_worker.append_jsonl", lambda path, payload, fail_closed=False: None)
-    monkeypatch.setattr("app.portrait_stream_worker.persist_stream", lambda stream: None)
+    monkeypatch.setattr(
+        "app.portrait_stream_worker.append_jsonl",
+        lambda path, payload, fail_closed=False: None,
+    )
+    monkeypatch.setattr(
+        "app.portrait_stream_worker.persist_stream", lambda stream: None
+    )
 
     def fail_audit(*args, **kwargs):
         raise HTTPException(status_code=503, detail="状态写入失败")
@@ -1106,8 +1320,13 @@ def test_stream_stop_rolls_back_when_audit_fails(monkeypatch) -> None:
     snapshot = dict(STREAMS)
     STREAMS.clear()
     monkeypatch.setattr(routes_portrait_streams, "persist_stream", lambda stream: None)
-    monkeypatch.setattr("app.portrait_stream_worker.append_jsonl", lambda path, payload, fail_closed=False: None)
-    monkeypatch.setattr("app.portrait_stream_worker.persist_stream", lambda stream: None)
+    monkeypatch.setattr(
+        "app.portrait_stream_worker.append_jsonl",
+        lambda path, payload, fail_closed=False: None,
+    )
+    monkeypatch.setattr(
+        "app.portrait_stream_worker.persist_stream", lambda stream: None
+    )
 
     def fail_audit(*args, **kwargs):
         raise HTTPException(status_code=503, detail="状态写入失败")
@@ -1181,7 +1400,7 @@ def test_v1_threshold_profile_rejects_invalid_value_without_echo() -> None:
 
     for response in [update, compare, search]:
         assert response.status_code == 400
-        assert response.json()["detail"] == "不支持的阈值方案"
+        assert v1_error_message(response) == "不支持的阈值方案"
         assert secret_profile not in response.text
 
 
@@ -1192,8 +1411,8 @@ def test_v1_threshold_update_redacts_extra_field_names() -> None:
     response = client.put("/v1/thresholds/normal", json={secret_modality: 0.51})
 
     assert response.status_code == 422
-    assert response.json()["detail"][0]["type"] == "extra_forbidden"
-    assert response.json()["detail"][0]["loc"] == ["body", "extra_field"]
+    assert v1_validation_issues(response)[0]["type"] == "extra_forbidden"
+    assert v1_validation_issues(response)[0]["loc"] == ["body", "extra_field"]
     assert secret_modality not in response.text
 
 
@@ -1219,7 +1438,7 @@ def test_v1_gallery_rejects_invalid_modality_before_decoding_without_echo() -> N
     )
 
     assert response.status_code == 400
-    assert response.json()["detail"] == "不支持的模态"
+    assert v1_error_message(response) == "不支持的模态"
     assert secret_modality not in response.text
     assert "valid image" not in response.text
 
@@ -1234,7 +1453,7 @@ def test_v1_stream_rejects_deep_settings() -> None:
     )
 
     assert response.status_code == 400
-    assert "settings 超过最大深度" in response.json()["detail"]
+    assert "settings 超过最大深度" in v1_error_message(response)
 
 
 def test_v1_stream_and_retention_requests_reject_extra_fields() -> None:
@@ -1244,7 +1463,9 @@ def test_v1_stream_and_retention_requests_reject_extra_fields() -> None:
         "/v1/streams",
         json={"stream_url": "http://example.com/live", "unexpected": True},
     )
-    cleanup = client.post("/v1/admin/retention/cleanup", json={"retention_days": 0, "force": True})
+    cleanup = client.post(
+        "/v1/admin/retention/cleanup", json={"retention_days": 0, "force": True}
+    )
 
     assert stream.status_code == 422
     assert cleanup.status_code == 422
@@ -1254,13 +1475,17 @@ def test_v1_retention_cleanup_confirm_validation() -> None:
     client = TestClient(app)
 
     # 1. 传递正确的 confirm 的情况
-    response_ok = client.post("/v1/admin/retention/cleanup", json={"retention_days": 0, "confirm": "cleanup"})
+    response_ok = client.post(
+        "/v1/admin/retention/cleanup", json={"retention_days": 0, "confirm": "cleanup"}
+    )
     assert response_ok.status_code == 200
 
     # 2. 传递错误的 confirm 的情况
-    response_bad = client.post("/v1/admin/retention/cleanup", json={"retention_days": 0, "confirm": "wrong"})
+    response_bad = client.post(
+        "/v1/admin/retention/cleanup", json={"retention_days": 0, "confirm": "wrong"}
+    )
     assert response_bad.status_code == 400
-    assert "cleanup" in response_bad.json()["detail"]
+    assert "cleanup" in v1_error_message(response_bad)
 
 
 def test_v1_compare_faces_and_gait_expose_input_evidence() -> None:
@@ -1338,7 +1563,10 @@ def test_v1_infer_pose_appearance_and_gait_contracts() -> None:
     appearance_payload = appearance.json()["data"]
     assert appearance_payload["frames"][0]["appearance"]["embedding_dim"] > 0
     assert "embedding" in appearance_payload["frames"][0]["appearance"]
-    assert appearance_payload["model"]["status"] in {"color_histogram_fallback", "attribute_reid_onnx"}
+    assert appearance_payload["model"]["status"] in {
+        "color_histogram_fallback",
+        "attribute_reid_onnx",
+    }
 
     assert gait.status_code == 200
     gait_payload = gait.json()["data"]
@@ -1356,7 +1584,7 @@ def test_v1_stream_blocks_private_ip_literals_by_default() -> None:
     )
 
     assert response.status_code == 400
-    assert "SSRF" in response.json()["detail"]
+    assert "SSRF" in v1_error_message(response)
 
 
 def test_v1_admin_status_reports_production_adapters() -> None:
@@ -1387,12 +1615,35 @@ def test_v1_model_load_and_unload_are_audited(monkeypatch) -> None:
     async def fake_unload_model_by_key(key):
         return True
 
-    monkeypatch.setattr(routes_portrait_models, "resolve_model_reference", lambda model_id, project_name, model_name: ("portrait_hub", "yolov8n.onnx", "portrait_hub/yolov8n.onnx", None))
-    monkeypatch.setattr(routes_portrait_models, "get_model_path", lambda project, model: "models/yolov8n.onnx")
-    monkeypatch.setattr(routes_portrait_models, "get_or_load_model", fake_get_or_load_model)
-    monkeypatch.setattr(routes_portrait_models, "unload_model_by_key", fake_unload_model_by_key)
-    monkeypatch.setattr(routes_portrait_models, "bundle_info", lambda key, bundle: {"model": key})
-    monkeypatch.setattr(routes_portrait_models, "audit_event", lambda event, **fields: events.append((event, fields)))
+    monkeypatch.setattr(
+        routes_portrait_models,
+        "resolve_model_reference",
+        lambda model_id, project_name, model_name: (
+            "portrait_hub",
+            "yolov8n.onnx",
+            "portrait_hub/yolov8n.onnx",
+            None,
+        ),
+    )
+    monkeypatch.setattr(
+        routes_portrait_models,
+        "get_model_path",
+        lambda project, model: "models/yolov8n.onnx",
+    )
+    monkeypatch.setattr(
+        routes_portrait_models, "get_or_load_model", fake_get_or_load_model
+    )
+    monkeypatch.setattr(
+        routes_portrait_models, "unload_model_by_key", fake_unload_model_by_key
+    )
+    monkeypatch.setattr(
+        routes_portrait_models, "bundle_info", lambda key, bundle: {"model": key}
+    )
+    monkeypatch.setattr(
+        routes_portrait_models,
+        "audit_event",
+        lambda event, **fields: events.append((event, fields)),
+    )
 
     load = client.post("/v1/models/portrait_hub/yolov8n.onnx/load")
     unload = client.post("/v1/models/portrait_hub/yolov8n.onnx/unload")
@@ -1415,17 +1666,34 @@ def test_v1_model_load_fails_when_audit_fails(monkeypatch) -> None:
     def fail_audit(*args, **kwargs):
         raise HTTPException(status_code=503, detail="状态写入失败")
 
-    monkeypatch.setattr(routes_portrait_models, "resolve_model_reference", lambda model_id, project_name, model_name: ("portrait_hub", "yolov8n.onnx", "portrait_hub/yolov8n.onnx", None))
-    monkeypatch.setattr(routes_portrait_models, "get_model_path", lambda project, model: "models/yolov8n.onnx")
-    monkeypatch.setattr(routes_portrait_models, "get_or_load_model", fake_get_or_load_model)
-    monkeypatch.setattr(routes_portrait_models, "bundle_info", lambda key, bundle: {"model": key})
+    monkeypatch.setattr(
+        routes_portrait_models,
+        "resolve_model_reference",
+        lambda model_id, project_name, model_name: (
+            "portrait_hub",
+            "yolov8n.onnx",
+            "portrait_hub/yolov8n.onnx",
+            None,
+        ),
+    )
+    monkeypatch.setattr(
+        routes_portrait_models,
+        "get_model_path",
+        lambda project, model: "models/yolov8n.onnx",
+    )
+    monkeypatch.setattr(
+        routes_portrait_models, "get_or_load_model", fake_get_or_load_model
+    )
+    monkeypatch.setattr(
+        routes_portrait_models, "bundle_info", lambda key, bundle: {"model": key}
+    )
     monkeypatch.setattr(routes_portrait_models, "audit_event", fail_audit)
 
     try:
         response = client.post("/v1/models/portrait_hub/yolov8n.onnx/load")
 
         assert response.status_code == 503
-        assert "状态写入失败" in response.json()["detail"]
+        assert "状态写入失败" in v1_error_message(response)
         assert "portrait_hub/yolov8n.onnx" not in MODEL_REGISTRY
     finally:
         MODEL_REGISTRY.clear()
@@ -1436,7 +1704,10 @@ def test_v1_model_unload_rolls_back_when_audit_fails(monkeypatch) -> None:
     client = TestClient(app)
     registry_snapshot = dict(MODEL_REGISTRY)
     MODEL_REGISTRY.clear()
-    MODEL_REGISTRY["portrait_hub/yolov8n.onnx"] = {"model_hash": "hash", "last_used_at": 1.0}
+    MODEL_REGISTRY["portrait_hub/yolov8n.onnx"] = {
+        "model_hash": "hash",
+        "last_used_at": 1.0,
+    }
 
     async def fake_unload_model_by_key(key):
         return MODEL_REGISTRY.pop(key, None) is not None
@@ -1444,8 +1715,19 @@ def test_v1_model_unload_rolls_back_when_audit_fails(monkeypatch) -> None:
     def fail_audit(*args, **kwargs):
         raise HTTPException(status_code=503, detail="状态写入失败")
 
-    monkeypatch.setattr(routes_portrait_models, "resolve_model_reference", lambda model_id, project_name, model_name: ("portrait_hub", "yolov8n.onnx", "portrait_hub/yolov8n.onnx", None))
-    monkeypatch.setattr(routes_portrait_models, "unload_model_by_key", fake_unload_model_by_key)
+    monkeypatch.setattr(
+        routes_portrait_models,
+        "resolve_model_reference",
+        lambda model_id, project_name, model_name: (
+            "portrait_hub",
+            "yolov8n.onnx",
+            "portrait_hub/yolov8n.onnx",
+            None,
+        ),
+    )
+    monkeypatch.setattr(
+        routes_portrait_models, "unload_model_by_key", fake_unload_model_by_key
+    )
     monkeypatch.setattr(routes_portrait_models, "audit_event", fail_audit)
 
     try:
@@ -1485,13 +1767,15 @@ def test_v1_threshold_update_rollback_failure_is_redacted(monkeypatch) -> None:
         raise HTTPException(status_code=503, detail="恢复 secret-token")
 
     monkeypatch.setattr(routes_portrait_models, "audit_event", fail_audit)
-    monkeypatch.setattr(routes_portrait_models, "save_threshold_state", fail_restore_state)
+    monkeypatch.setattr(
+        routes_portrait_models, "save_threshold_state", fail_restore_state
+    )
 
     response = client.put("/v1/thresholds/normal", json={"body": 0.12})
 
     assert response.status_code == 500
-    assert response.json()["detail"] == {
-        "message": "模型管理变更失败，且回滚持久化失败",
+    assert v1_error_message(response) == "模型管理变更失败，且回滚持久化失败"
+    assert v1_error_details(response) == {
         "rollback_failed": True,
         "rollback_error_count": 1,
     }
@@ -1530,7 +1814,9 @@ def test_security_headers_and_admin_export_contract() -> None:
 def test_admin_backup_writes_redacted_object(monkeypatch, workspace_tmp_path) -> None:
     from app import portrait_object_storage
 
-    monkeypatch.setattr(portrait_object_storage, "OBJECT_STORAGE_DIR", workspace_tmp_path / "objects")
+    monkeypatch.setattr(
+        portrait_object_storage, "OBJECT_STORAGE_DIR", workspace_tmp_path / "objects"
+    )
     client = TestClient(app)
 
     response = client.post("/v1/admin/backup", json={"confirm": "backup"})
@@ -1552,7 +1838,10 @@ def test_hsts_header_is_explicitly_gated_for_https_deployments(monkeypatch) -> N
 
     response = client.get("/health")
 
-    assert response.headers["Strict-Transport-Security"] == "max-age=123; includeSubDomains; preload"
+    assert (
+        response.headers["Strict-Transport-Security"]
+        == "max-age=123; includeSubDomains; preload"
+    )
 
 
 def test_admin_export_is_redacted_for_sensitive_fields() -> None:
@@ -1565,7 +1854,11 @@ def test_admin_export_is_redacted_for_sensitive_fields() -> None:
         stream.add_event(
             "debug",
             "payload with sensitive fields",
-            {"token": "secret-123", "access_key": "key-456", "embedding": [1.0, 2.0, 3.0]},
+            {
+                "token": "secret-123",
+                "access_key": "key-456",
+                "embedding": [1.0, 2.0, 3.0],
+            },
         )
 
         export = client.get("/v1/admin/export")
@@ -1589,7 +1882,11 @@ def test_admin_export_is_audited_without_exported_payload(monkeypatch) -> None:
     snapshot = dict(STREAMS)
     STREAMS.clear()
     events = []
-    monkeypatch.setattr(routes_portrait_admin, "audit_event", lambda event, **fields: events.append((event, fields)))
+    monkeypatch.setattr(
+        routes_portrait_admin,
+        "audit_event",
+        lambda event, **fields: events.append((event, fields)),
+    )
     try:
         stream = create_stream("http://example.com/live")
         stream.add_event("debug", "event", {"token": "secret"})
@@ -1622,7 +1919,7 @@ def test_admin_export_fails_closed_when_audit_fails(monkeypatch) -> None:
     response = client.get("/v1/admin/export")
 
     assert response.status_code == 503
-    assert "状态写入失败" in response.json()["detail"]
+    assert "状态写入失败" in v1_error_message(response)
 
 
 def test_stream_lists_and_admin_export_are_paginated() -> None:
@@ -1630,7 +1927,9 @@ def test_stream_lists_and_admin_export_are_paginated() -> None:
     snapshot = dict(STREAMS)
     STREAMS.clear()
     try:
-        streams = [create_stream(f"http://example.com/live-{index}") for index in range(3)]
+        streams = [
+            create_stream(f"http://example.com/live-{index}") for index in range(3)
+        ]
         for index in range(5):
             streams[0].add_event("debug", f"event {index}")
 
@@ -1643,7 +1942,9 @@ def test_stream_lists_and_admin_export_are_paginated() -> None:
         assert data["offset"] == 1
         assert data["next_offset"] is None
 
-        events = client.get(f"/v1/streams/{streams[0].stream_id}/events?limit=2&offset=1")
+        events = client.get(
+            f"/v1/streams/{streams[0].stream_id}/events?limit=2&offset=1"
+        )
         assert events.status_code == 200
         event_data = events.json()["data"]
         assert event_data["count"] == 2
@@ -1658,7 +1959,9 @@ def test_stream_lists_and_admin_export_are_paginated() -> None:
         assert len(exported_stream["events"]) <= 2
         assert export_data["pagination"]["streams"]["total"] == 3
         assert exported_stream["events_pagination"]["limit"] == 2
-        assert exported_stream["events_pagination"]["count"] == len(exported_stream["events"])
+        assert exported_stream["events_pagination"]["count"] == len(
+            exported_stream["events"]
+        )
     finally:
         STREAMS.clear()
         STREAMS.update(snapshot)
@@ -1681,10 +1984,15 @@ def test_retention_cleanup_persists_trimmed_streams(monkeypatch) -> None:
     snapshot = dict(STREAMS)
     STREAMS.clear()
     persisted = []
-    monkeypatch.setattr("app.routes_portrait_admin.persist_stream", lambda stream: persisted.append(stream.stream_id))
+    monkeypatch.setattr(
+        "app.routes_portrait_admin.persist_stream",
+        lambda stream: persisted.append(stream.stream_id),
+    )
     try:
         stream = create_stream("http://example.com/live")
-        stream.events.append(StreamEvent(event_id="evt_old", type="old", message="old", created_at=0.0))
+        stream.events.append(
+            StreamEvent(event_id="evt_old", type="old", message="old", created_at=0.0)
+        )
 
         cleanup = client.post("/v1/admin/retention/cleanup", json={"retention_days": 0})
 
@@ -1696,7 +2004,9 @@ def test_retention_cleanup_persists_trimmed_streams(monkeypatch) -> None:
         STREAMS.update(snapshot)
 
 
-def test_retention_cleanup_removes_expired_gallery_people_and_objects(monkeypatch) -> None:
+def test_retention_cleanup_removes_expired_gallery_people_and_objects(
+    monkeypatch,
+) -> None:
     client = TestClient(app)
     gallery_snapshot = dict(GALLERY)
     GALLERY.clear()
@@ -1720,7 +2030,10 @@ def test_retention_cleanup_removes_expired_gallery_people_and_objects(monkeypatc
                 quality_score=1.0,
                 source_id="source",
                 created_at=0.0,
-                object_info={"backend": "local_file", "object_key": "default/gallery-image/old-secret.json"},
+                object_info={
+                    "backend": "local_file",
+                    "object_key": "default/gallery-image/old-secret.json",
+                },
             )
         ],
     )
@@ -1744,8 +2057,14 @@ def test_retention_cleanup_removes_expired_gallery_people_and_objects(monkeypatc
             return {"backend": "local_file", "status": "ready"}
 
     monkeypatch.setattr(routes_portrait_admin, "OBJECT_STORE", TrackingObjectStore())
-    monkeypatch.setattr(routes_portrait_admin, "audit_event", lambda event, **fields: audit_events.append((event, fields)))
-    monkeypatch.setattr(portrait_gallery, "persist_person_delete", lambda tenant_id, person_id: None)
+    monkeypatch.setattr(
+        routes_portrait_admin,
+        "audit_event",
+        lambda event, **fields: audit_events.append((event, fields)),
+    )
+    monkeypatch.setattr(
+        portrait_gallery, "persist_person_delete", lambda tenant_id, person_id: None
+    )
     try:
         cleanup = client.post("/v1/admin/retention/cleanup", json={"retention_days": 0})
 
@@ -1767,7 +2086,9 @@ def test_retention_cleanup_removes_expired_gallery_people_and_objects(monkeypatc
         GALLERY.update(gallery_snapshot)
 
 
-def test_retention_cleanup_rolls_back_gallery_person_when_object_cleanup_fails(monkeypatch) -> None:
+def test_retention_cleanup_rolls_back_gallery_person_when_object_cleanup_fails(
+    monkeypatch,
+) -> None:
     client = TestClient(app)
     gallery_snapshot = dict(GALLERY)
     GALLERY.clear()
@@ -1789,7 +2110,10 @@ def test_retention_cleanup_rolls_back_gallery_person_when_object_cleanup_fails(m
                 quality_score=1.0,
                 source_id="source",
                 created_at=0.0,
-                object_info={"backend": "local_file", "object_key": "default/gallery-image/secret-object.json"},
+                object_info={
+                    "backend": "local_file",
+                    "object_key": "default/gallery-image/secret-object.json",
+                },
             )
         ],
     )
@@ -1808,19 +2132,33 @@ def test_retention_cleanup_rolls_back_gallery_person_when_object_cleanup_fails(m
             return {"backend": "local_file", "status": "ready"}
 
     monkeypatch.setattr(routes_portrait_admin, "OBJECT_STORE", FailingObjectStore())
-    monkeypatch.setattr(routes_portrait_admin, "audit_event", lambda *args, **kwargs: None)
-    monkeypatch.setattr(portrait_gallery, "persist_person_delete", lambda tenant_id, person_id: None)
-    monkeypatch.setattr(routes_portrait_admin, "persist_person", lambda restored_person: None)
-    monkeypatch.setattr(routes_portrait_admin, "persist_feature", lambda restored_person, feature: None)
+    monkeypatch.setattr(
+        routes_portrait_admin, "audit_event", lambda *args, **kwargs: None
+    )
+    monkeypatch.setattr(
+        portrait_gallery, "persist_person_delete", lambda tenant_id, person_id: None
+    )
+    monkeypatch.setattr(
+        routes_portrait_admin, "persist_person", lambda restored_person: None
+    )
+    monkeypatch.setattr(
+        routes_portrait_admin, "persist_feature", lambda restored_person, feature: None
+    )
     try:
-        response = client.post("/v1/admin/retention/cleanup", json={"retention_days": 0})
+        response = client.post(
+            "/v1/admin/retention/cleanup", json={"retention_days": 0}
+        )
 
         assert response.status_code == 503
-        assert response.json()["detail"] == "对象清理失败"
+        assert v1_error_message(response) == "对象清理失败"
         assert gallery_key("default", "p_retention_object_fail") in GALLERY
         restored = GALLERY[gallery_key("default", "p_retention_object_fail")]
         assert restored.display_name == "Retain Me"
-        assert restored.features[0].object_info["object_key"].endswith("secret-object.json")
+        assert (
+            restored.features[0]
+            .object_info["object_key"]
+            .endswith("secret-object.json")
+        )
         assert "secret-object" not in response.text
         assert "object_key" not in response.text
     finally:
@@ -1834,7 +2172,9 @@ def test_retention_cleanup_rolls_back_when_audit_fails(monkeypatch) -> None:
     stream_snapshot = dict(STREAMS)
     VIDEO_JOBS.clear()
     STREAMS.clear()
-    monkeypatch.setattr("app.portrait_jobs.delete_video_job", lambda tenant_id, job_id: None)
+    monkeypatch.setattr(
+        "app.portrait_jobs.delete_video_job", lambda tenant_id, job_id: None
+    )
     monkeypatch.setattr(routes_portrait_admin, "persist_stream", lambda stream: None)
     monkeypatch.setattr(routes_portrait_admin, "persist_video_job", lambda job: None)
 
@@ -1843,19 +2183,34 @@ def test_retention_cleanup_rolls_back_when_audit_fails(monkeypatch) -> None:
 
     monkeypatch.setattr(routes_portrait_admin, "audit_event", fail_audit)
     try:
-        job = VideoJob(job_id="job_retention_old", tenant_id="default", filename="old.mp4", updated_at=0.0)
+        job = VideoJob(
+            job_id="job_retention_old",
+            tenant_id="default",
+            filename="old.mp4",
+            updated_at=0.0,
+        )
         VIDEO_JOBS[job_key("default", job.job_id)] = job
         stream = create_stream("http://example.com/rollback-audit")
         stream.events = [
             StreamEvent(event_id="evt_old", type="old", message="old", created_at=0.0),
-            StreamEvent(event_id="evt_keep", type="keep", message="keep", created_at=999999999999.0),
+            StreamEvent(
+                event_id="evt_keep",
+                type="keep",
+                message="keep",
+                created_at=999999999999.0,
+            ),
         ]
 
-        response = client.post("/v1/admin/retention/cleanup", json={"retention_days": 0})
+        response = client.post(
+            "/v1/admin/retention/cleanup", json={"retention_days": 0}
+        )
 
         assert response.status_code == 503
         assert VIDEO_JOBS[job_key("default", job.job_id)].filename == "old.mp4"
-        assert [event.event_id for event in STREAMS[stream_key("default", stream.stream_id)].events] == [
+        assert [
+            event.event_id
+            for event in STREAMS[stream_key("default", stream.stream_id)].events
+        ] == [
             "evt_old",
             "evt_keep",
         ]
@@ -1872,7 +2227,9 @@ def test_retention_cleanup_rolls_back_when_stream_persist_fails(monkeypatch) -> 
     stream_snapshot = dict(STREAMS)
     VIDEO_JOBS.clear()
     STREAMS.clear()
-    monkeypatch.setattr("app.portrait_jobs.delete_video_job", lambda tenant_id, job_id: None)
+    monkeypatch.setattr(
+        "app.portrait_jobs.delete_video_job", lambda tenant_id, job_id: None
+    )
     monkeypatch.setattr(routes_portrait_admin, "persist_video_job", lambda job: None)
 
     def fail_persist_stream(stream):
@@ -1880,25 +2237,40 @@ def test_retention_cleanup_rolls_back_when_stream_persist_fails(monkeypatch) -> 
 
     monkeypatch.setattr(routes_portrait_admin, "persist_stream", fail_persist_stream)
     try:
-        job = VideoJob(job_id="job_retention_persist", tenant_id="default", filename="old.mp4", updated_at=0.0)
+        job = VideoJob(
+            job_id="job_retention_persist",
+            tenant_id="default",
+            filename="old.mp4",
+            updated_at=0.0,
+        )
         VIDEO_JOBS[job_key("default", job.job_id)] = job
         stream = create_stream("http://example.com/rollback-persist")
         stream.events = [
             StreamEvent(event_id="evt_old", type="old", message="old", created_at=0.0),
-            StreamEvent(event_id="evt_keep", type="keep", message="keep", created_at=999999999999.0),
+            StreamEvent(
+                event_id="evt_keep",
+                type="keep",
+                message="keep",
+                created_at=999999999999.0,
+            ),
         ]
 
-        response = client.post("/v1/admin/retention/cleanup", json={"retention_days": 0})
+        response = client.post(
+            "/v1/admin/retention/cleanup", json={"retention_days": 0}
+        )
 
         assert response.status_code == 500
-        assert response.json()["detail"] == {
-            "message": "保留清理失败，且回滚持久化失败",
+        assert v1_error_message(response) == "保留清理失败，且回滚持久化失败"
+        assert v1_error_details(response) == {
             "rollback_failed": True,
             "rollback_error_count": 1,
         }
         assert "状态写入失败" not in response.text
         assert VIDEO_JOBS[job_key("default", job.job_id)].filename == "old.mp4"
-        assert [event.event_id for event in STREAMS[stream_key("default", stream.stream_id)].events] == [
+        assert [
+            event.event_id
+            for event in STREAMS[stream_key("default", stream.stream_id)].events
+        ] == [
             "evt_old",
             "evt_keep",
         ]
@@ -1915,8 +2287,12 @@ def test_v1_job_and_stream_state_use_tenant_scoped_keys() -> None:
     VIDEO_JOBS.clear()
     STREAMS.clear()
     try:
-        VIDEO_JOBS[job_key("tenant-a", "job_same")] = VideoJob(job_id="job_same", tenant_id="tenant-a", filename="a.mp4")
-        VIDEO_JOBS[job_key("tenant-b", "job_same")] = VideoJob(job_id="job_same", tenant_id="tenant-b", filename="b.mp4")
+        VIDEO_JOBS[job_key("tenant-a", "job_same")] = VideoJob(
+            job_id="job_same", tenant_id="tenant-a", filename="a.mp4"
+        )
+        VIDEO_JOBS[job_key("tenant-b", "job_same")] = VideoJob(
+            job_id="job_same", tenant_id="tenant-b", filename="b.mp4"
+        )
 
         assert get_video_job("job_same") is None
         assert get_video_job("job_same", tenant_id="tenant-a").filename == "a.mp4"
@@ -1929,8 +2305,12 @@ def test_v1_job_and_stream_state_use_tenant_scoped_keys() -> None:
         STREAMS[stream_key("tenant-a", stream_a.stream_id)] = stream_a
         STREAMS[stream_key("tenant-b", stream_b.stream_id)] = stream_b
 
-        assert STREAMS[stream_key("tenant-a", stream_a.stream_id)].tenant_id == "tenant-a"
-        assert STREAMS[stream_key("tenant-b", stream_a.stream_id)].tenant_id == "tenant-b"
+        assert (
+            STREAMS[stream_key("tenant-a", stream_a.stream_id)].tenant_id == "tenant-a"
+        )
+        assert (
+            STREAMS[stream_key("tenant-b", stream_a.stream_id)].tenant_id == "tenant-b"
+        )
     finally:
         VIDEO_JOBS.clear()
         VIDEO_JOBS.update(job_snapshot)

@@ -87,7 +87,7 @@ X-API-Key: <application-api-key>
 
 控制台“接口调试台”用于开发或受控内网环境的最小联调，不应替代业务侧自动化测试。它覆盖单图检索、批量检索、单图比对、批量比对、融合比对、图片解析、离线视频、实时流创建、实时流事件查询、模型状态和阈值查询。
 
-接口调试台会保留统一响应外层的 `request_id`、HTTP 状态和 `detail.code`，并把接口模板、解析后的路径、耗时、文件数量、`async_mode` 和受控调试标记写入页面响应数据，方便和 `/v1/access/call-logs` 按 `request_id` 交叉定位。
+接口调试台会保留统一响应外层的 `request_id`、HTTP 状态和 `error.code`，并把接口模板、解析后的路径、耗时、文件数量、`async_mode` 和受控调试标记写入页面响应数据，方便和 `/v1/access/call-logs` 按 `request_id` 交叉定位。
 ## Python SDK 最小示例
 
 ```python
@@ -233,7 +233,7 @@ X-PortraitHub-Signature: sha256=<hmac-sha256-body>
 - 2xx 视为成功；非 2xx 按控制台 Webhook 配置的 `retry_limit` 和 `timeout_seconds` 重试。
 - 回调 URL 不应包含 token；敏感凭证放在服务端配置或 mTLS 中。
 - 订阅事件至少覆盖 `gallery.enrolled`、`search.completed`、`compare.completed`、`job.completed`、`stream.event` 和 `model.rollout` 中实际使用的类型。
-- 排查模型发布、灰度和回滚时，可用 `GET /rollout/audit?limit=20` 查看最近非 dry-run 发布审计；响应会忽略损坏 JSONL 行并只返回白名单字段，避免把任意审计载荷透给接入侧。
+- 排查模型发布、灰度和回滚时，可用 `GET /v1/admin/models/rollout/audit?limit=20` 查看最近非 dry-run 发布审计；响应会忽略损坏 JSONL 行并只返回白名单字段，避免把任意审计载荷透给接入侧。
 
 ## 响应与错误处理
 
@@ -247,9 +247,23 @@ X-PortraitHub-Signature: sha256=<hmac-sha256-body>
 }
 ```
 
-错误响应至少包含 `request_id`，`detail` 可能是字符串，也可能是结构化对象。调用方应按 HTTP 状态码做主判断，按 `detail.code` 做细分处理。
+`/v1` 错误响应使用固定外层，不再根据错误类型改变字段形状：
 
-稳定目录也可通过 GET `/v1/access/error-codes` 查询；控制台“错误码”页与该接口同源，方便接入方把 HTTP 状态、`detail.code` 和重试策略保持一致。
+```json
+{
+  "status": "error",
+  "request_id": "req_...",
+  "error": {
+    "code": "validation_error",
+    "message": "请求参数验证失败",
+    "details": {}
+  }
+}
+```
+
+调用方应按 HTTP 状态码做主判断，按 `error.code` 做细分处理；`error.details` 仅在存在结构化上下文时返回。
+
+稳定目录也可通过 GET `/v1/access/error-codes` 查询；控制台“错误码”页与该接口同源，方便接入方把 HTTP 状态、`error.code` 和重试策略保持一致。
 
 | HTTP | 典型原因 | 调用方处理 |
 | --- | --- | --- |
@@ -268,7 +282,7 @@ X-PortraitHub-Signature: sha256=<hmac-sha256-body>
 默认生产目标见 [SLO.md](SLO.md)。调用方至少记录：
 
 - `request_id` 与业务 trace id。
-- HTTP 状态码、`detail.code`、接口路径和租户。
+- HTTP 状态码、`error.code`、接口路径和租户。
 - 客户端总耗时、连接超时、读取超时。
 - 对视频/流任务记录 `job_id` 或 `stream_id`。
 
