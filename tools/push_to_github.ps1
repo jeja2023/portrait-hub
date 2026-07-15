@@ -155,6 +155,9 @@ try {
     if ($LASTEXITCODE -ne 0) {
         throw "当前分支名无效：$branch"
     }
+    if ($branch -cne "main") {
+        throw "本仓库只允许从 main 分支提交和推送；当前分支为 $branch。"
+    }
 
     Write-Host "仓库：$RepoRoot"
     Write-Host "远端：github.com"
