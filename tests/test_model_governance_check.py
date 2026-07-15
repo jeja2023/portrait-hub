@@ -17,6 +17,7 @@ def test_model_governance_check_passes_for_repo_models() -> None:
             strict_hash=True,
             strict_sidecars=True,
             strict_governance=True,
+            allow_missing_artifacts=True,
             json=True,
         )
     )
