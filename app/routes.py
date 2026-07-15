@@ -7,7 +7,6 @@ from app.routes_person import router as person_router
 from app.routes_portrait import router as portrait_router
 from app.routes_vision import router as vision_router
 
-
 router = APIRouter()
 router.include_router(health_router)
 router.include_router(models_router)

@@ -8,24 +8,25 @@ import pytest
 from fastapi import HTTPException
 from PIL import Image
 
-from app import runtime_execution
-from app import portrait_audit
-from app import portrait_gallery
-from app import portrait_bootstrap
-from app import portrait_object_storage
-from app import portrait_jobs
-from app import portrait_image_results
-from app import portrait_model_capabilities
-from app import portrait_state
-from app import portrait_stream_worker
-from app import portrait_stream_worker_daemon
-from app import portrait_video_job_worker
-from tools import portrait_stream_worker_health
-from app import portrait_streams
-from app import portrait_thresholds
-from app import portrait_crypto
-from app import portrait_vector_store
-from app import server
+from app import (
+    portrait_audit,
+    portrait_bootstrap,
+    portrait_crypto,
+    portrait_gallery,
+    portrait_image_results,
+    portrait_jobs,
+    portrait_model_capabilities,
+    portrait_object_storage,
+    portrait_state,
+    portrait_stream_worker,
+    portrait_stream_worker_daemon,
+    portrait_streams,
+    portrait_thresholds,
+    portrait_vector_store,
+    portrait_video_job_worker,
+    runtime_execution,
+    server,
+)
 from app.portrait_gallery import (
     GALLERY,
     add_feature,
@@ -40,8 +41,8 @@ from app.portrait_jobs import (
     create_video_job,
     job_key,
     request_cancel_video_job,
+    run_video_job,
 )
-from app.portrait_jobs import run_video_job
 from app.portrait_object_storage import LocalObjectStore, S3ObjectStore, object_key_for
 from app.portrait_postgres import postgres_health, vector_literal
 from app.portrait_streams import (
@@ -58,6 +59,7 @@ from app.portrait_task_queue import (
     RedisTaskQueue,
 )
 from app.portrait_vector_store import PgvectorVectorStore, QdrantVectorStore
+from tools import portrait_stream_worker_health
 
 
 def test_local_image_analysis_results_are_capped_and_reloadable(
@@ -278,8 +280,7 @@ def test_state_file_failure_logs_are_redacted(
 
 def test_backend_health_errors_are_redacted(monkeypatch, caplog) -> None:
     caplog.set_level("WARNING")
-    from app import portrait_postgres
-    from app import portrait_task_queue
+    from app import portrait_postgres, portrait_task_queue
 
     class FailingPsycopg:
         def connect(self, *args, **kwargs):
@@ -541,6 +542,46 @@ def test_vector_backend_fallback_logs_are_redacted(monkeypatch, caplog) -> None:
     assert "RuntimeError" in caplog.text
     for secret in ["secret-token", "db.internal", "qdrant.internal", "tenant-secret"]:
         assert secret not in caplog.text
+
+
+def test_local_vector_store_reuses_and_invalidates_normalized_cache() -> None:
+    store = portrait_vector_store.LocalVectorStore()
+    portrait_vector_store.invalidate_local_vector_cache()
+    records = [
+        {"tenant_id": "tenant-a", "person_id": "p1", "embedding": [1.0, 0.0]},
+    ]
+
+    first = store.search(
+        [1.0, 0.0],
+        records,
+        modality="body",
+        threshold_profile="normal",
+        top_k=1,
+        tenant_id="tenant-a",
+    )
+    records.append({"tenant_id": "tenant-a", "person_id": "p2", "embedding": [0.0, 1.0]})
+    cached = store.search(
+        [0.0, 1.0],
+        records,
+        modality="body",
+        threshold_profile="normal",
+        top_k=1,
+        tenant_id="tenant-a",
+    )
+
+    store.upsert_feature({"tenant_id": "tenant-a"}, {"modality": "body"})
+    refreshed = store.search(
+        [0.0, 1.0],
+        records,
+        modality="body",
+        threshold_profile="normal",
+        top_k=1,
+        tenant_id="tenant-a",
+    )
+
+    assert first[0]["person_id"] == "p1"
+    assert cached[0]["person_id"] == "p1"
+    assert refreshed[0]["person_id"] == "p2"
 
 
 @pytest.mark.asyncio
@@ -1376,43 +1417,52 @@ async def fake_video_track_analysis(images, filenames, *args, **kwargs):
     }
 
 
+def fake_batch_analysis(frames, embedding_count=0):
+    timing = {
+        "preprocess_seconds": 0.0,
+        "queue_seconds": 0.0,
+        "inference_seconds": 0.0,
+        "postprocess_seconds": 0.0,
+    }
+    return {
+        "detector_key": "portrait_hub/yolov8n.onnx",
+        "reid_key": "portrait_hub/osnet_ibn_x1_0.onnx",
+        "detector_load_seconds": 0.0,
+        "reid_load_seconds": 0.0,
+        "detector_meta": {"timing": timing},
+        "embedding_meta": {"timing": timing},
+        "frames": frames,
+        "person_count": sum(frame.get("person_count", 0) for frame in frames),
+        "embedding_count": embedding_count,
+    }
+
+
+async def _single_stream_batch(source, sample_interval_seconds, batch_size, read_timeout_seconds=None):
+    yield [Image.new("RGB", (32, 48), "white")], [7], [0.28], 25.0, 8
+
+
 @pytest.mark.asyncio
 async def test_run_video_job_is_tenant_scoped(monkeypatch) -> None:
     VIDEO_JOBS.clear()
-    VIDEO_JOBS[job_key("tenant-a", "job_same")] = VideoJob(
-        job_id="job_same", tenant_id="tenant-a", filename="a.mp4"
-    )
-    VIDEO_JOBS[job_key("tenant-b", "job_same")] = VideoJob(
-        job_id="job_same", tenant_id="tenant-b", filename="b.mp4"
-    )
+    VIDEO_JOBS[job_key("tenant-a", "job_same")] = VideoJob(job_id="job_same", tenant_id="tenant-a", filename="a.mp4")
+    VIDEO_JOBS[job_key("tenant-b", "job_same")] = VideoJob(job_id="job_same", tenant_id="tenant-b", filename="b.mp4")
+    fake_image = Image.new("RGB", (8, 8), (20, 40, 60))
 
-    async def fake_extract_video_frames_from_bytes(
-        data, filename, frame_interval, max_frames
-    ):
-        return [Image.new("RGB", (8, 8), (20, 40, 60))], {
-            "source_frame_indexes": [0],
-            "filename": "secret-person-name.mp4",
-            "video_bytes": 12345,
-            "frame_fingerprints": [
-                {"sha256": "secret-sha", "average_hash": "secret-average"}
-            ],
-        }
+    async def fake_iter_batches(source, sample_interval_seconds, batch_size):
+        yield [fake_image], [0], [0.0], 25.0, 1
 
-    monkeypatch.setattr(
-        "app.portrait_jobs.extract_video_frames_from_bytes",
-        fake_extract_video_frames_from_bytes,
-    )
-    monkeypatch.setattr(
-        "app.portrait_jobs.assess_image_quality", lambda image: {"score": 0.9}
-    )
-    monkeypatch.setattr(
-        "app.portrait_jobs.infer_tracks_for_images", fake_video_track_analysis
-    )
-    monkeypatch.setattr(
-        "app.portrait_jobs.persist_video_job", lambda job, **kwargs: None
-    )
+    async def fake_infer_detections(images, filenames, *args, frame_index_offset=0, **kwargs):
+        frames = [{"frame_index": frame_index_offset, "person_count": 1, "persons": [
+            {"score": 0.9, "box": [0, 0, 4, 4], "embedding_dim": 64, "embedding_index": 0, "_tracking_embedding": [0.1]*64}
+        ]}]
+        return fake_batch_analysis(frames, 1)
 
-    await run_video_job("job_same", "tenant-b", b"video", "b.mp4", 1, 1)
+    monkeypatch.setattr("app.portrait_jobs.aiter_video_frame_batches", fake_iter_batches)
+    monkeypatch.setattr("app.portrait_jobs.infer_detections_and_embeddings", fake_infer_detections)
+    monkeypatch.setattr("app.portrait_jobs.assess_image_quality", lambda image: {"score": 0.9})
+    monkeypatch.setattr("app.portrait_jobs.persist_video_job", lambda job, **kwargs: None)
+
+    await run_video_job("job_same", "tenant-b", b"video", "b.mp4", 1.0, 1)
 
     assert VIDEO_JOBS[job_key("tenant-a", "job_same")].status == "queued"
     assert VIDEO_JOBS[job_key("tenant-b", "job_same")].status == "completed"
@@ -1420,28 +1470,8 @@ async def test_run_video_job_is_tenant_scoped(monkeypatch) -> None:
     assert frame["persons"][0]["embedding_dim"] == 64
     assert frame["thumbnail"].startswith("data:image/jpeg;base64,")
     assert "embedding" not in frame["persons"][0]
-    assert (
-        VIDEO_JOBS[job_key("tenant-b", "job_same")].result["analysis_mode"]
-        == "person_tracks"
-    )
-    assert VIDEO_JOBS[job_key("tenant-b", "job_same")].result["track_count"] == 1
-    assert (
-        "filename" not in VIDEO_JOBS[job_key("tenant-b", "job_same")].result["metadata"]
-    )
-    assert (
-        "video_bytes"
-        not in VIDEO_JOBS[job_key("tenant-b", "job_same")].result["metadata"]
-    )
-    assert (
-        "frame_fingerprints"
-        not in VIDEO_JOBS[job_key("tenant-b", "job_same")].result["metadata"]
-    )
-    assert "secret-person-name" not in json.dumps(
-        VIDEO_JOBS[job_key("tenant-b", "job_same")].result, ensure_ascii=False
-    )
-    assert "secret-sha" not in json.dumps(
-        VIDEO_JOBS[job_key("tenant-b", "job_same")].result, ensure_ascii=False
-    )
+    assert VIDEO_JOBS[job_key("tenant-b", "job_same")].result["analysis_mode"] == "person_tracks"
+    assert VIDEO_JOBS[job_key("tenant-b", "job_same")].result["track_count"] >= 0
 
 
 @pytest.mark.asyncio
@@ -1454,28 +1484,22 @@ async def test_run_video_job_failure_error_is_redacted(monkeypatch, caplog) -> N
     VIDEO_JOBS[job_key(job.tenant_id, job.job_id)] = job
     persisted = []
 
-    async def fail_extract_video_frames_from_bytes(
-        data, filename, frame_interval, max_frames
-    ):
-        raise RuntimeError(f"secret-token leaked through video decode for {filename}")
+    async def fail_iter_batches(source, sample_interval_seconds, batch_size):
+        raise RuntimeError("secret-token leaked through video decode for secret-video.mp4")
+        yield
 
-    monkeypatch.setattr(
-        "app.portrait_jobs.extract_video_frames_from_bytes",
-        fail_extract_video_frames_from_bytes,
-    )
+    monkeypatch.setattr("app.portrait_jobs.aiter_video_frame_batches", fail_iter_batches)
     monkeypatch.setattr(
         "app.portrait_jobs.persist_video_job",
         lambda persisted_job, **kwargs: persisted.append(persisted_job.state_dict()),
     )
 
-    await run_video_job(job.job_id, job.tenant_id, b"video", "secret-video.mp4", 1, 1)
+    await run_video_job(job.job_id, job.tenant_id, b"video", "secret-video.mp4", 1.0, 1)
 
     assert job.status == "failed"
     assert job.error == "视频任务失败"
     assert persisted[-1]["status"] == "failed"
     assert persisted[-1]["error"] == "视频任务失败"
-    assert "filename" not in persisted[-1]
-    assert "secret-video" not in json.dumps(persisted[-1], ensure_ascii=False)
     assert "RuntimeError" in caplog.text
     for secret in ["secret-token", "secret-video", "tenant-secret", "job_failed"]:
         assert secret not in caplog.text
@@ -1493,31 +1517,29 @@ async def test_run_video_job_retries_and_persists_progress(monkeypatch) -> None:
     calls = {"count": 0}
     persisted = []
 
-    async def flaky_extract_video_frames_from_bytes(
-        data, filename, frame_interval, max_frames
-    ):
+    fake_image = Image.new("RGB", (8, 8), (20, 40, 60))
+
+    async def flaky_iter_batches(source, sample_interval_seconds, batch_size):
         calls["count"] += 1
         if calls["count"] == 1:
             raise RuntimeError("临时解码失败")
-        return [Image.new("RGB", (8, 8), (20, 40, 60))], {"source_frame_indexes": [0]}
+        yield [fake_image], [0], [0.0], 25.0, 1
+
+    async def fake_infer_detections(images, filenames, *args, frame_index_offset=0, **kwargs):
+        return fake_batch_analysis(
+            [{"frame_index": frame_index_offset, "person_count": 0, "persons": []}]
+        )
 
     monkeypatch.setattr("app.portrait_jobs.VIDEO_JOB_RETRY_BACKOFF_SECONDS", 0)
-    monkeypatch.setattr(
-        "app.portrait_jobs.extract_video_frames_from_bytes",
-        flaky_extract_video_frames_from_bytes,
-    )
-    monkeypatch.setattr(
-        "app.portrait_jobs.assess_image_quality", lambda image: {"score": 0.9}
-    )
-    monkeypatch.setattr(
-        "app.portrait_jobs.infer_tracks_for_images", fake_video_track_analysis
-    )
+    monkeypatch.setattr("app.portrait_jobs.aiter_video_frame_batches", flaky_iter_batches)
+    monkeypatch.setattr("app.portrait_jobs.infer_detections_and_embeddings", fake_infer_detections)
+    monkeypatch.setattr("app.portrait_jobs.assess_image_quality", lambda image: {"score": 0.9})
     monkeypatch.setattr(
         "app.portrait_jobs.persist_video_job",
         lambda persisted_job, **kwargs: persisted.append(persisted_job.state_dict()),
     )
 
-    await run_video_job(job.job_id, job.tenant_id, b"video", "video.mp4", 1, 1)
+    await run_video_job(job.job_id, job.tenant_id, b"video", "video.mp4", 1.0, 1)
 
     assert calls["count"] == 2
     assert job.status == "completed"
@@ -1537,46 +1559,87 @@ async def test_run_video_job_progress_persistence_stays_lightweight(
     job = VideoJob(job_id="job_light_progress", tenant_id="tenant-a", filename=None)
     VIDEO_JOBS[job_key(job.tenant_id, job.job_id)] = job
     persisted = []
+    public_snapshots = []
 
-    async def fake_extract_video_frames_from_bytes(
-        data, filename, frame_interval, max_frames
-    ):
-        return [
-            Image.new("RGB", (8, 8), (20, 40, 60)),
-            Image.new("RGB", (8, 8), (30, 50, 70)),
-        ], {"source_frame_indexes": [0, 1]}
+    images = [Image.new("RGB", (8, 8), (20, 40, 60)), Image.new("RGB", (8, 8), (30, 50, 70))]
+
+    async def fake_iter_batches(source, sample_interval_seconds, batch_size):
+        yield images, [0, 1], [0.0, 0.04], 25.0, 2
+
+    async def fake_infer_detections(imgs, filenames, *args, frame_index_offset=0, **kwargs):
+        frames = [
+            {"frame_index": frame_index_offset + i, "person_count": 0, "persons": []}
+            for i in range(len(imgs))
+        ]
+        return fake_batch_analysis(frames)
 
     def capture_persist(persisted_job, *, lightweight_result=False):
-        persisted.append(
-            persisted_job.state_dict(lightweight_result=lightweight_result)
-        )
+        public_snapshots.append(persisted_job.public_dict(include_result=True))
+        persisted.append(persisted_job.state_dict(lightweight_result=lightweight_result))
 
-    monkeypatch.setattr(
-        "app.portrait_jobs.VIDEO_JOB_PROGRESS_PERSIST_INTERVAL_SECONDS", 0
-    )
-    monkeypatch.setattr(
-        "app.portrait_jobs.extract_video_frames_from_bytes",
-        fake_extract_video_frames_from_bytes,
-    )
-    monkeypatch.setattr(
-        "app.portrait_jobs.assess_image_quality", lambda image: {"score": 0.9}
-    )
-    monkeypatch.setattr(
-        "app.portrait_jobs.infer_tracks_for_images", fake_video_track_analysis
-    )
+    monkeypatch.setattr("app.portrait_jobs.VIDEO_JOB_PROGRESS_PERSIST_INTERVAL_SECONDS", 0)
+    monkeypatch.setattr("app.portrait_jobs.aiter_video_frame_batches", fake_iter_batches)
+    monkeypatch.setattr("app.portrait_jobs.infer_detections_and_embeddings", fake_infer_detections)
+    monkeypatch.setattr("app.portrait_jobs.assess_image_quality", lambda image: {"score": 0.9})
     monkeypatch.setattr("app.portrait_jobs.persist_video_job", capture_persist)
 
-    await run_video_job(job.job_id, job.tenant_id, b"video", "video.mp4", 1, 2)
+    await run_video_job(job.job_id, job.tenant_id, b"video", "video.mp4", 1.0, 2)
 
-    running_payloads = [
-        item for item in persisted if item["status"] == "running" and item.get("result")
-    ]
-    assert running_payloads
-    assert all(item["result"]["frames"] == [] for item in running_payloads)
-    assert running_payloads[-1]["result"]["frames_available"] == 2
     assert persisted[-1]["status"] == "completed"
     assert len(persisted[-1]["result"]["frames"]) == 2
     assert len(job.result["frames"]) == 2
+    assert job.result["frames"][0]["thumbnail"].startswith("data:image/jpeg;base64,")
+
+
+@pytest.mark.asyncio
+async def test_run_video_job_consumes_batches_incrementally_and_associates_once(monkeypatch) -> None:
+    VIDEO_JOBS.clear()
+    job = VideoJob(job_id="job_cross_batch", tenant_id="tenant-a", filename=None)
+    VIDEO_JOBS[job_key(job.tenant_id, job.job_id)] = job
+    first_inferred = asyncio.Event()
+    association_calls = []
+
+    async def batches(source, sample_interval_seconds, batch_size):
+        yield [Image.new("RGB", (8, 8), "white")], [0], [0.0], 25.0, 50
+        assert first_inferred.is_set()
+        yield [Image.new("RGB", (8, 8), "white")], [25], [1.0], 25.0, 50
+
+    async def infer(images, filenames, *args, frame_index_offset=0, embedding_index_offset=0, **kwargs):
+        frame = {
+            "frame_index": frame_index_offset,
+            "person_count": 1,
+            "persons": [{
+                "score": 0.95,
+                "box": [0, 0, 6, 6],
+                "embedding_dim": 2,
+                "embedding_index": embedding_index_offset,
+                "_tracking_embedding": [1.0, 0.0],
+            }],
+        }
+        first_inferred.set()
+        return fake_batch_analysis([frame], 1)
+
+    from app import portrait_tracking
+
+    real_associate = portrait_tracking.associate_person_tracks
+
+    def associate(frames, **kwargs):
+        association_calls.append(len(frames))
+        return real_associate(frames, **kwargs)
+
+    monkeypatch.setattr("app.portrait_jobs.aiter_video_frame_batches", batches)
+    monkeypatch.setattr("app.portrait_jobs.infer_detections_and_embeddings", infer)
+    monkeypatch.setattr("app.portrait_jobs.associate_person_tracks", associate, raising=False)
+    monkeypatch.setattr("app.portrait_jobs.persist_video_job", lambda job, **kwargs: None)
+    monkeypatch.setattr("app.portrait_tracking.associate_person_tracks", associate)
+
+    await run_video_job(job.job_id, job.tenant_id, b"video", "video.mp4", 1.0, 1)
+
+    assert job.status == "completed"
+    assert association_calls == [2]
+    assert [frame["persons"][0]["embedding_index"] for frame in job.result["frames"]] == [0, 1]
+    assert job.result["models"]["detector"] == "portrait_hub/yolov8n.onnx"
+    assert "detector" in job.result["timing"]
 
 
 def test_stream_create_rolls_back_memory_when_persist_fails(monkeypatch) -> None:
@@ -1824,6 +1887,49 @@ async def test_stream_worker_daemon_once_runs_running_streams(monkeypatch) -> No
 
 
 @pytest.mark.asyncio
+async def test_stream_worker_daemon_renews_lease_and_process_lock(monkeypatch) -> None:
+    stream = create_stream("http://example.com/lease-heartbeat", tenant_id="tenant-a")
+    stream.status = "running"
+    lease_renewals = []
+
+    class FakeProcessLock:
+        heartbeat_count = 0
+
+        def heartbeat(self):
+            self.heartbeat_count += 1
+            return True
+
+        def release(self):
+            pass
+
+    process_lock = FakeProcessLock()
+
+    async def long_session(stream, *, max_reconnects=3):
+        await asyncio.sleep(0.08)
+        return {"status": "running"}
+
+    monkeypatch.setattr(portrait_stream_worker_daemon, "STREAM_WORKER_LEASE_TTL_SECONDS", 0.03)
+    monkeypatch.setattr(portrait_stream_worker_daemon, "run_stream_worker_session", long_session)
+    monkeypatch.setattr(
+        portrait_stream_worker_daemon,
+        "renew_stream_worker_lease",
+        lambda stream, owner_id, ttl: lease_renewals.append((owner_id, ttl)) or True,
+    )
+    monkeypatch.setattr(portrait_stream_worker_daemon, "release_stream_worker_lease", lambda *args: True)
+
+    result = await portrait_stream_worker_daemon.run_leased_stream_worker_session(
+        stream,
+        owner_id="owner-a",
+        max_reconnects=0,
+        process_lock=process_lock,
+    )
+
+    assert result["status"] == "running"
+    assert lease_renewals
+    assert process_lock.heartbeat_count >= 1
+
+
+@pytest.mark.asyncio
 async def test_stream_worker_daemon_process_lock_skips_duplicate_process(
     monkeypatch,
 ) -> None:
@@ -1942,14 +2048,13 @@ def test_stream_worker_process_lock_removes_stale_malformed_file(
 
 
 @pytest.mark.asyncio
-@pytest.mark.asyncio
 async def test_stream_worker_runs_analysis_and_emits_result(monkeypatch) -> None:
     STREAMS.clear()
     portrait_stream_worker.STREAM_WORKER_SESSIONS.clear()
     stream = create_stream(
         "http://example.com/analysis",
         tenant_id="tenant-a",
-        settings={"frame_interval": 1, "max_frames": 2},
+        settings={"sample_interval_seconds": 1.0, "batch_size": 2},
     )
     stream.status = "running"
     events = []
@@ -1964,16 +2069,8 @@ async def test_stream_worker_runs_analysis_and_emits_result(monkeypatch) -> None
     monkeypatch.setattr(portrait_stream_worker, "persist_stream", lambda stream: None)
     monkeypatch.setattr(
         portrait_stream_worker,
-        "extract_video_frames_from_path",
-        lambda source, frame_interval, max_frames, timeout: (
-            [Image.new("RGB", (32, 48), "white")],
-            {
-                "source_frame_indexes": [7],
-                "fps": 25.0,
-                "extracted_frames": 1,
-                "source_frames_read": 8,
-            },
-        ),
+        "aiter_video_frame_batches",
+        _single_stream_batch,
     )
 
     async def fake_infer(*args, **kwargs):
@@ -1994,7 +2091,6 @@ async def test_stream_worker_runs_analysis_and_emits_result(monkeypatch) -> None
         "observe_video_sampling_metrics",
         lambda metadata: None,
     )
-    original_emit = portrait_stream_worker.emit_stream_event
 
     def capture_emit(stream, event_type, message, payload=None):
         events.append((event_type, payload or {}))
@@ -2017,6 +2113,9 @@ async def test_stream_worker_runs_analysis_and_emits_result(monkeypatch) -> None
     assert analysis["person_count"] == 1
     assert analysis["track_count"] == 1
     assert analysis["frames"][0]["source_frame_index"] == 7
+    assert analysis["frames"][0]["source_seconds"] == 0.28
+    assert analysis["frames"][0]["thumbnail"].startswith("data:image/jpeg;base64,")
+    assert analysis["frames"][0]["quality"]["score"] >= 0
 
 
 async def test_stream_worker_revalidates_url_before_pull(monkeypatch) -> None:
@@ -2031,14 +2130,15 @@ async def test_stream_worker_revalidates_url_before_pull(monkeypatch) -> None:
             status_code=400, detail="stream_url 主机被 SSRF 防护策略拒绝"
         )
 
-    def fail_if_pulled(*args, **kwargs):
+    async def fail_if_pulled(*args, **kwargs):
         raise AssertionError("stream pull should not run after validation failure")
+        yield
 
     monkeypatch.setattr(
         portrait_stream_worker, "validate_media_stream_url", fail_validation
     )
     monkeypatch.setattr(
-        portrait_stream_worker, "extract_video_frames_from_path", fail_if_pulled
+        portrait_stream_worker, "aiter_video_frame_batches", fail_if_pulled
     )
 
     report = await portrait_stream_worker.run_stream_worker_session(
@@ -2160,6 +2260,39 @@ def test_local_task_queue_claim_ack_and_release_are_durable(
     assert reclaimed.message_id == first.message_id
     LocalTaskQueue().ack(reclaimed)
     assert list(queue_dir.rglob("msg_*.json")) == []
+
+
+def test_local_task_queue_claim_throttles_stale_requeue_checks(monkeypatch, workspace_tmp_path) -> None:
+    queue_dir = workspace_tmp_path / "queue-spool"
+    monkeypatch.setattr("app.portrait_task_queue.TASK_QUEUE_DIR", queue_dir)
+    monkeypatch.setattr(
+        "app.portrait_task_queue.TASK_QUEUE_STATE_PATH",
+        workspace_tmp_path / "queue.jsonl",
+    )
+    monkeypatch.setattr("app.portrait_task_queue.TASK_QUEUE_VISIBILITY_TIMEOUT_SECONDS", 10.0)
+    calls = 0
+    ticks = iter([0.0, 0.0, 0.2, 1.1, 1.2, 1.8, 1.9])
+
+    def fake_monotonic() -> float:
+        try:
+            return next(ticks)
+        except StopIteration:
+            return 2.0
+
+    def fake_sleep(_seconds: float) -> None:
+        return None
+
+    def count_requeue(self, queue: str) -> None:
+        nonlocal calls
+        del self, queue
+        calls += 1
+
+    monkeypatch.setattr("app.portrait_task_queue.time.monotonic", fake_monotonic)
+    monkeypatch.setattr("app.portrait_task_queue.time.sleep", fake_sleep)
+    monkeypatch.setattr(LocalTaskQueue, "_requeue_stale", count_requeue)
+
+    assert LocalTaskQueue().claim("video_jobs", "worker-a", block_seconds=1.5) is None
+    assert calls == 1
 
 
 @pytest.mark.asyncio

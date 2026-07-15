@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 
 from app.portrait_gallery import GALLERY, add_feature, upsert_person
-from tools import load_test, portrait_migrate
+from tools import load_test, portrait_governance_scheduler, portrait_migrate
 
 
 def test_migrate_json_to_postgres_dry_run_validates_gallery_state(monkeypatch, workspace_tmp_path) -> None:
@@ -107,9 +107,7 @@ def test_load_test_records_unreachable_targets_as_error() -> None:
     )
 
     assert str(result["status"]).startswith("error:")
-from io import BytesIO
 
-from tools import portrait_governance_scheduler
 
 
 class _FakeResponse:
@@ -129,7 +127,7 @@ class _FakeResponse:
 def test_governance_scheduler_once_runs_backup_and_cleanup(monkeypatch, capsys) -> None:
     requests = []
 
-    def fake_urlopen(request, timeout):  # noqa: ANN001, ARG001
+    def fake_urlopen(request, timeout):
         requests.append(request.full_url)
         return _FakeResponse(b'{"data":{"ok":true}}')
 

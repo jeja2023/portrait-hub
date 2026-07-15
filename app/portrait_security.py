@@ -17,7 +17,6 @@ from app.settings import (
     TENANT_HEADER_REQUIRED,
 )
 
-
 TENANT_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,63}$")
 PERSON_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$")
 RESOURCE_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$")
@@ -144,7 +143,7 @@ def tenant_id_from_request(request: Request) -> str:
         )
     state = getattr(request, "state", None)
     if state is not None:
-        setattr(state, "portrait_tenant_id", tenant_id)
+        state.portrait_tenant_id = tenant_id
     return tenant_id
 
 

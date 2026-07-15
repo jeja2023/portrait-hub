@@ -1,16 +1,16 @@
-import logging
 import asyncio
 import hashlib
+import logging
 import signal
-from contextlib import asynccontextmanager
 from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
 from typing import Any, cast
 
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from app.trusted_host_middleware import HotReloadTrustedHostMiddleware
 
+from app.config_hot_reload import ENV_PATH, reload_runtime_config
 from app.core import (
     WARMUP_MODELS,
     cache_key,
@@ -26,12 +26,17 @@ from app.core import (
     split_cache_key,
     traceparent_from_headers,
 )
-from app.config_hot_reload import ENV_PATH, reload_runtime_config
-from app.portrait_errors import PortraitError
-from app.rate_limit import check_rate_limit
-from app.portrait_call_logs import application_id_from_api_key, record_call_log
+from app.metrics import observe_request_status
 from app.portrait_access import flush_access_call_stats
 from app.portrait_async import run_blocking_io
+from app.portrait_bootstrap import ensure_portrait_runtime_state_loaded
+from app.portrait_call_logs import application_id_from_api_key, record_call_log
+from app.portrait_errors import PortraitError
+from app.portrait_response import exception_log_summary
+from app.portrait_security import inferred_tenant_id_from_request
+from app.portrait_video_job_worker import start_in_process_worker
+from app.production_gates import validate_production_externalization
+from app.rate_limit import check_rate_limit
 from app.routes import router
 from app.security_headers import apply_security_headers
 from app.settings import (
@@ -40,19 +45,14 @@ from app.settings import (
     CONFIG_HOT_RELOAD_ENABLED,
     ENABLE_API_DOCS,
     MAX_REQUEST_BODY_BYTES,
-    MODEL_CONFIG_PATH,
     MODEL_CAPABILITIES_PATH,
+    MODEL_CONFIG_PATH,
     OPENTELEMETRY_ENABLED,
     OTEL_SERVICE_NAME,
     TRUSTED_HOSTS,
     WARMUP_FAIL_FAST,
 )
-from app.metrics import observe_request_status
-from app.portrait_bootstrap import ensure_portrait_runtime_state_loaded
-from app.portrait_response import exception_log_summary
-from app.portrait_security import inferred_tenant_id_from_request
-from app.production_gates import validate_production_externalization
-from app.portrait_video_job_worker import start_in_process_worker
+from app.trusted_host_middleware import HotReloadTrustedHostMiddleware
 
 
 def request_body_too_large_detail() -> str:
@@ -118,7 +118,7 @@ async def config_hot_reload_loop() -> None:
         except asyncio.CancelledError:
             raise
         except Exception as exc:
-            logger.warning("configuration hot re加载失败ed: %s", exc)
+            logger.warning("configuration hot reload failed: %s", exc)
             await asyncio.sleep(2.0)
 
 
@@ -477,13 +477,13 @@ def configure_opentelemetry(app: FastAPI) -> None:
         return
     try:  # pragma: no cover - 可选的生产环境依赖
         from opentelemetry import trace
+        from opentelemetry.exporter.otlp.proto.http.trace_exporter import (
+            OTLPSpanExporter,
+        )
         from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
         from opentelemetry.sdk.resources import Resource
         from opentelemetry.sdk.trace import TracerProvider
         from opentelemetry.sdk.trace.export import BatchSpanProcessor
-        from opentelemetry.exporter.otlp.proto.http.trace_exporter import (
-            OTLPSpanExporter,
-        )
     except Exception as exc:  # pragma: no cover - 可选依赖缺失
         logger.warning(
             "opentelemetry is enabled but dependencies are unavailable: %s", exc

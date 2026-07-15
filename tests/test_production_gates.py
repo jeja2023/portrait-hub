@@ -7,6 +7,12 @@ def test_production_profile_requires_external_services(monkeypatch) -> None:
     monkeypatch.setattr(settings, "API_TOKEN", "platform-token")
     monkeypatch.setattr(settings, "API_TOKEN_TENANT_ID", "")
     monkeypatch.setattr(settings, "API_TOKEN_ALLOW_TENANT_OVERRIDE", False)
+    monkeypatch.setattr(settings, "AUTH_REQUIRED", False)
+    monkeypatch.setattr(settings, "DEBUG_ENDPOINTS_ENABLED", True)
+    monkeypatch.setattr(settings, "ENABLE_API_DOCS", True)
+    monkeypatch.setattr(settings, "RATE_LIMIT_PER_MINUTE", 0)
+    monkeypatch.setattr(settings, "MAX_REQUEST_BODY_BYTES", 768 * 1024 * 1024)
+    monkeypatch.setattr(settings, "MAX_VIDEO_BYTES", 100 * 1024 * 1024)
     monkeypatch.setattr(settings, "PORTRAIT_STORAGE_BACKEND", "json")
     monkeypatch.setattr(settings, "POSTGRES_DSN", "")
     monkeypatch.setattr(settings, "PORTRAIT_VECTOR_BACKEND", "local")
@@ -28,6 +34,11 @@ def test_production_profile_requires_external_services(monkeypatch) -> None:
 
     failures = production_gates.production_externalization_failures()
 
+    assert "生产环境中 AUTH_REQUIRED 必须为 true" in failures
+    assert "生产环境中 DEBUG_ENDPOINTS_ENABLED 必须为 false" in failures
+    assert "生产环境中 ENABLE_API_DOCS 必须为 false" in failures
+    assert "生产环境中 RATE_LIMIT_PER_MINUTE 必须大于 0" in failures
+    assert any("MAX_REQUEST_BODY_BYTES" in failure for failure in failures)
     assert "生产环境中 PORTRAIT_STORAGE_BACKEND 必须为 postgres" in failures
     assert "生产环境中 PORTRAIT_VECTOR_BACKEND 必须为 pgvector 或 qdrant" in failures
     assert "生产环境中 PORTRAIT_OBJECT_STORAGE_BACKEND 必须为 s3" in failures
@@ -43,6 +54,13 @@ def test_production_profile_accepts_externalized_pgvector_stack(monkeypatch) -> 
     monkeypatch.setattr(settings, "API_TOKEN", "platform-token")
     monkeypatch.setattr(settings, "API_TOKEN_TENANT_ID", "tenant-a")
     monkeypatch.setattr(settings, "API_TOKEN_ALLOW_TENANT_OVERRIDE", False)
+    monkeypatch.setattr(settings, "AUTH_REQUIRED", True)
+    monkeypatch.setattr(settings, "RBAC_ENABLED", False)
+    monkeypatch.setattr(settings, "DEBUG_ENDPOINTS_ENABLED", False)
+    monkeypatch.setattr(settings, "ENABLE_API_DOCS", False)
+    monkeypatch.setattr(settings, "RATE_LIMIT_PER_MINUTE", 120)
+    monkeypatch.setattr(settings, "MAX_VIDEO_BYTES", 100 * 1024 * 1024)
+    monkeypatch.setattr(settings, "MAX_REQUEST_BODY_BYTES", 112 * 1024 * 1024)
     monkeypatch.setattr(settings, "PORTRAIT_STORAGE_BACKEND", "postgres")
     monkeypatch.setattr(settings, "POSTGRES_DSN", "postgresql://portrait:secret@db/portrait")
     monkeypatch.setattr(settings, "PORTRAIT_VECTOR_BACKEND", "pgvector")
@@ -64,6 +82,17 @@ def test_production_profile_accepts_externalized_pgvector_stack(monkeypatch) -> 
 
     assert production_gates.production_externalization_failures() == []
     production_gates.validate_production_externalization()
+
+
+def test_production_profile_requires_credential_backend(monkeypatch) -> None:
+    monkeypatch.setattr(settings, "PORTRAIT_RUNTIME_PROFILE", "production")
+    monkeypatch.setattr(settings, "PRODUCTION_EXTERNAL_SERVICES_REQUIRED", True)
+    monkeypatch.setattr(settings, "API_TOKEN", "")
+    monkeypatch.setattr(settings, "RBAC_ENABLED", False)
+
+    failures = production_gates.production_externalization_failures()
+
+    assert "生产环境必须配置 API_TOKEN 或启用 RBAC_ENABLED" in failures
 
 
 def test_optional_module_available_treats_missing_parent_as_false(monkeypatch) -> None:

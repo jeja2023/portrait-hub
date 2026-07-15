@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Sequence
 
-from starlette.datastructures import Headers, URL
+from starlette.datastructures import URL, Headers
 from starlette.middleware.trustedhost import ENFORCE_DOMAIN_WILDCARD
 from starlette.responses import PlainTextResponse, RedirectResponse, Response
 from starlette.types import ASGIApp, Receive, Scope, Send

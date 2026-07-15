@@ -1,9 +1,8 @@
 from __future__ import annotations
 
-from collections import deque
 import threading
+from collections import deque
 from typing import Any
-
 
 _CALL_LOG_LIMIT = 2_000
 _CALL_LOGS: deque[dict[str, Any]] = deque(maxlen=_CALL_LOG_LIMIT)

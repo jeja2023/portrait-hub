@@ -5,7 +5,7 @@ from copy import deepcopy
 from app.portrait_gallery import GALLERY, PersonRecord, gallery_key, persist_feature, persist_person
 from app.portrait_jobs import VIDEO_JOBS, VIDEO_JOBS_LOCK, VideoJob, job_key, persist_video_job
 from app.portrait_streams import StreamRecord, persist_stream, restore_stream_snapshot_in_store, stream_records_snapshot
-from app.portrait_task_queue import QueueMessage, TASK_MESSAGE_STORE
+from app.portrait_task_queue import TASK_MESSAGE_STORE, QueueMessage
 
 
 class RuntimeStateStore:
@@ -106,8 +106,8 @@ def task_message_count() -> int:
 
 
 __all__ = [
-    "RuntimeStateStore",
     "RUNTIME_STORE",
+    "RuntimeStateStore",
     "gallery_people_snapshots",
     "gallery_person_snapshot",
     "restore_gallery_person",

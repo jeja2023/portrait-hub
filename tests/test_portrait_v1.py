@@ -1,17 +1,19 @@
 from io import BytesIO
 
+import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from PIL import Image
-import pytest
 
-from app import routes_portrait_gallery
-from app import routes_portrait_admin
-from app import routes_portrait_jobs
-from app import routes_portrait_streams
-from app import routes_portrait_models
-from app import portrait_gallery
-from app import portrait_vector_store
+from app import (
+    portrait_gallery,
+    portrait_vector_store,
+    routes_portrait_admin,
+    routes_portrait_gallery,
+    routes_portrait_jobs,
+    routes_portrait_models,
+    routes_portrait_streams,
+)
 from app.portrait_gallery import GALLERY, gallery_key
 from app.portrait_jobs import VIDEO_JOBS, VideoJob, get_video_job, job_key
 from app.portrait_streams import STREAMS, StreamEvent, create_stream, stream_key
@@ -954,16 +956,16 @@ def test_v1_video_job_cancel_rolls_back_when_audit_fails(monkeypatch) -> None:
     assert stored.cancel_requested is False
 
 
-def test_v1_video_job_results_lists_completed_jobs_with_thumbnails(monkeypatch) -> None:
+def test_v1_video_job_results_lists_jobs_with_available_thumbnails(monkeypatch) -> None:
     client = TestClient(app)
     VIDEO_JOBS.clear()
-    job = VideoJob(
+    completed = VideoJob(
         job_id="job_video_done",
         tenant_id="default",
         filename="video.mp4",
         status="completed",
     )
-    job.result = {
+    completed.result = {
         "metadata": {"filename": "video.mp4"},
         "frame_count": 1,
         "analysis_mode": "async_media_fallback",
@@ -980,13 +982,39 @@ def test_v1_video_job_results_lists_completed_jobs_with_thumbnails(monkeypatch) 
             }
         ],
     }
-    VIDEO_JOBS[job_key(job.tenant_id, job.job_id)] = job
+    running = VideoJob(
+        job_id="job_video_running",
+        tenant_id="default",
+        filename="video.mp4",
+        status="running",
+        updated_at=completed.updated_at + 1,
+    )
+    running.result = {
+        "metadata": {"filename": "video.mp4"},
+        "frame_count": 1,
+        "frames_available": 1,
+        "partial": True,
+        "analysis_mode": "person_tracks",
+        "frames": [
+            {
+                "frame_index": 0,
+                "source_frame_index": 3,
+                "width": 64,
+                "height": 64,
+                "thumbnail": "data:image/jpeg;base64,efgh",
+            }
+        ],
+    }
+    VIDEO_JOBS[job_key(completed.tenant_id, completed.job_id)] = completed
+    VIDEO_JOBS[job_key(running.tenant_id, running.job_id)] = running
 
     response = client.get("/v1/jobs/video/results")
 
     assert response.status_code == 200
     data = response.json()["data"]
-    assert data["results"][0]["job"]["job_id"] == "job_video_done"
+    ids = [item["job"]["job_id"] for item in data["results"]]
+    assert ids[:2] == ["job_video_running", "job_video_done"]
+    assert data["results"][0]["result"]["partial"] is True
     assert data["results"][0]["result"]["frames"][0]["thumbnail"].startswith(
         "data:image/jpeg;base64,"
     )
@@ -1094,18 +1122,18 @@ def test_v1_video_job_rejects_out_of_range_numeric_controls(monkeypatch) -> None
     bad_interval = client.post(
         "/v1/jobs/video",
         files={"file": ("video.mp4", b"fake", "video/mp4")},
-        data={"frame_interval": "0"},
+        data={"sample_interval_seconds": "-1"},
     )
     too_many_frames = client.post(
         "/v1/jobs/video",
         files={"file": ("video.mp4", b"fake", "video/mp4")},
-        data={"max_frames": "999999"},
+        data={"batch_size": "999999"},
     )
 
     assert bad_interval.status_code == 400
-    assert "frame_interval 必须大于等于 1" in v1_error_message(bad_interval)
+    assert "sample_interval_seconds" in v1_error_message(bad_interval)
     assert too_many_frames.status_code == 400
-    assert "max_frames 必须介于 1" in v1_error_message(too_many_frames)
+    assert "batch_size 必须介于 1" in v1_error_message(too_many_frames)
     assert VIDEO_JOBS == {}
 
 

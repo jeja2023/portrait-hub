@@ -4,19 +4,17 @@ from __future__ import annotations
 
 import argparse
 import json
-from pathlib import Path
 import sys
+from pathlib import Path
 from typing import Any
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from tools.readiness_checks import (
+from tools.readiness_checks import (  # noqa: E402  sys.path 注入后再导入
     check_capabilities,
     check_model_files,
-    configured_model_path,
-    load_yaml,
 )
 
 
@@ -315,24 +313,9 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
         if (root / "app" / "schemas.py").is_file()
         else ""
     )
-    person_detection_routes = (
-        (root / "app" / "routes_person_detection.py").read_text(encoding="utf-8")
-        if (root / "app" / "routes_person_detection.py").is_file()
-        else ""
-    )
-    person_embeddings_routes = (
-        (root / "app" / "routes_person_embeddings.py").read_text(encoding="utf-8")
-        if (root / "app" / "routes_person_embeddings.py").is_file()
-        else ""
-    )
     person_tracks_routes = (
         (root / "app" / "routes_person_tracks.py").read_text(encoding="utf-8")
         if (root / "app" / "routes_person_tracks.py").is_file()
-        else ""
-    )
-    person_video_routes = (
-        (root / "app" / "routes_person_video.py").read_text(encoding="utf-8")
-        if (root / "app" / "routes_person_video.py").is_file()
         else ""
     )
     vision_routes = (
@@ -1395,7 +1378,7 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
                 and "JSON.parse(text)" in node_sdk
                 and "return text;" in node_sdk
                 and "if (!response.ok)" in node_sdk
-                and "module.exports = { PortraitHubClient, PortraitHubHTTPError }"
+                and "module.exports = { PortraitHubClient, PortraitHubHTTPError, SDK_VERSION }"
                 in node_sdk
             ),
         },
@@ -1739,13 +1722,13 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
                 not in portrait_audit
                 and 'logger.warning("postgres 健康检查失败: %s", exc)'
                 not in portrait_postgres_impl
-                and 'logger.warning("postgres gallery 加载失败ed: %s", exc)'
+                and 'logger.warning("postgres gallery load failed: %s", exc)'
                 not in portrait_postgres_impl
-                and 'logger.warning("postgres threshold 加载失败ed: %s", exc)'
+                and 'logger.warning("postgres threshold load failed: %s", exc)'
                 not in portrait_postgres_impl
-                and 'logger.warning("postgres video job 加载失败ed: %s", exc)'
+                and 'logger.warning("postgres video job load failed: %s", exc)'
                 not in portrait_postgres_impl
-                and 'logger.warning("postgres stream 加载失败ed: %s", exc)'
+                and 'logger.warning("postgres stream load failed: %s", exc)'
                 not in portrait_postgres_impl
                 and 'logger.warning("redis task queue 健康检查失败: %s", exc)'
                 not in portrait_task_queue
@@ -2429,12 +2412,17 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
                 and "isinstance(value, bool)" in portrait_request_validation
                 and 'validate_int_range("top_k", top_k, minimum=1, maximum=100)'
                 in portrait_gallery_routes
-                and 'validate_int_range("frame_interval"' in portrait_job_routes
-                and "max_frames = validate_int_range(" in portrait_job_routes
-                and "MAX_VIDEO_FRAMES" in portrait_job_routes
+                and "sample_interval_seconds" in portrait_job_routes
+                and "batch_size" in portrait_job_routes
+                and "INFERENCE_BATCH_SIZE_LIMIT" in portrait_job_routes
                 and "validate_detection_parameters(" in portrait_job_routes
                 and "top_k = max(1, min(100" not in portrait_gallery_routes
-                and "max(1, min(int(max_frames)" not in portrait_job_routes
+                and "frame_interval" not in portrait_job_routes
+                and "VIDEO_SAMPLE_INTERVAL_SECONDS: ${VIDEO_SAMPLE_INTERVAL_SECONDS:-1.0}" in compose
+                and "VIDEO_INFERENCE_BATCH_SIZE: ${VIDEO_INFERENCE_BATCH_SIZE:-16}" in compose
+                and "MAX_VIDEO_FRAME_UPLOADS: ${MAX_VIDEO_FRAME_UPLOADS:-64}" in compose
+                and "STREAM_SAMPLE_INTERVAL_SECONDS: ${STREAM_SAMPLE_INTERVAL_SECONDS:-1.0}" in compose
+                and "STREAM_INFERENCE_BATCH_SIZE: ${STREAM_INFERENCE_BATCH_SIZE:-8}" in compose
             ),
         },
         {
@@ -2677,9 +2665,9 @@ def check_security_controls(root: Path) -> list[dict[str, Any]]:
                 and 'request.headers.get("content-length")' in server
                 and "request.receive" in server
                 and "HTTPException(status_code=413" in server
-                and "MAX_REQUEST_BODY_BYTES: ${MAX_REQUEST_BODY_BYTES:-805306368}"
+                and "MAX_REQUEST_BODY_BYTES: ${MAX_REQUEST_BODY_BYTES:-117440512}"
                 in compose
-                and "MAX_REQUEST_BODY_BYTES=805306368" in env_example
+                and "MAX_REQUEST_BODY_BYTES=117440512" in env_example
                 and 'CPU_FALLBACK_ENABLED = parse_bool_env("CPU_FALLBACK_ENABLED", True)'
                 in settings
                 and "CPU_FALLBACK_ENABLED: ${CPU_FALLBACK_ENABLED:-true}" in compose

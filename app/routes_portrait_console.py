@@ -8,7 +8,6 @@ from fastapi.responses import FileResponse, HTMLResponse
 from app.portrait_auth import permission_dependency
 from app.security import require_api_token
 
-
 router = APIRouter()
 CONSOLE_ROOT = Path(__file__).resolve().parents[1] / "frontend" / "console"
 CONSOLE_HTML_PATH = CONSOLE_ROOT / "console.html"

@@ -2,7 +2,6 @@ import asyncio
 
 from app.portrait_async import run_blocking_io
 
-
 _STATE_LOADED = False
 _STATE_LOAD_LOCK: asyncio.Lock | None = None
 

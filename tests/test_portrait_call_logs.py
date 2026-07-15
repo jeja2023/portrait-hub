@@ -1,7 +1,7 @@
 from collections.abc import Iterator
 
-from fastapi.testclient import TestClient
 import pytest
+from fastapi.testclient import TestClient
 
 from app import portrait_access
 from app.portrait_call_logs import clear_call_logs, list_call_logs, record_call_log

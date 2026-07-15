@@ -1,7 +1,7 @@
 from io import BytesIO
 
 import pytest
-from fastapi import HTTPException, UploadFile
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from PIL import Image
 

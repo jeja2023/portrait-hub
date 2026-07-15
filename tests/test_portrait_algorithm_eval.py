@@ -1,4 +1,10 @@
-from tools.portrait_algorithm_eval import evaluate_pairs, evaluate_quality, evaluate_retrieval, evaluate_tracking, run_evaluation
+from tools.portrait_algorithm_eval import (
+    evaluate_pairs,
+    evaluate_quality,
+    evaluate_retrieval,
+    evaluate_tracking,
+    run_evaluation,
+)
 from tools.portrait_model_regression import run_model_regression
 
 

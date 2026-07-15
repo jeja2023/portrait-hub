@@ -8,9 +8,14 @@ on:
   schedule:
     - cron: "41 18 * * 2"
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build-sbom-scan:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: read
       security-events: write
@@ -28,7 +33,8 @@ jobs:
           format: cyclonedx-json
           output-file: sbom.cdx.json
       - name: Scan image with Trivy
-        uses: aquasecurity/trivy-action@master
+        # 供应链工作流自身必须可复现：钉住 tag 而非 @master 浮动引用
+        uses: aquasecurity/trivy-action@0.28.0
         with:
           image-ref: portrait-hub:${{ github.sha }}
           format: sarif
@@ -50,9 +56,17 @@ jobs:
           name: portrait-hub-sbom
           path: sbom.cdx.json
           if-no-files-found: error
+      - name: Upload image tarball for provenance
+        uses: actions/upload-artifact@v4
+        with:
+          name: portrait-hub-image
+          path: portrait-hub-image.tar
+          if-no-files-found: error
+          retention-days: 1
 
   scorecard:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: read
       id-token: write
@@ -72,6 +86,8 @@ jobs:
 
   provenance:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: build-sbom-scan
     permissions:
       contents: read
       id-token: write
@@ -79,10 +95,12 @@ jobs:
       artifact-metadata: write
     steps:
       - uses: actions/checkout@v4
-      - name: Build runtime image
-        run: docker build --build-arg INSTALL_PROD_OPTIONAL=true -t portrait-hub:${{ github.sha }} .
-      - name: Save runtime image
-        run: docker save portrait-hub:${{ github.sha }} -o portrait-hub-image.tar
+      # 复用 build-sbom-scan 构建的同一镜像 tar，避免重复 docker build 且保证
+      # attest 的 subject 与被扫描/签名的产物字节一致。
+      - name: Download image tarball
+        uses: actions/download-artifact@v4
+        with:
+          name: portrait-hub-image
       - name: Attest build provenance
         uses: actions/attest@v4
         with:

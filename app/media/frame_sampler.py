@@ -1,4 +1,4 @@
-from typing import Iterable
+from collections.abc import Iterable
 
 
 def normalize_frame_interval(frame_interval: int | None, default: int = 1) -> int:
@@ -56,10 +56,10 @@ def take_every(items: Iterable[object], frame_interval: int, max_items: int) -> 
 
 
 __all__ = [
-    "normalize_frame_interval",
     "bounded_max_frames",
-    "sample_indexes",
-    "uniform_sample_indexes",
     "hybrid_sample_indexes",
+    "normalize_frame_interval",
+    "sample_indexes",
     "take_every",
+    "uniform_sample_indexes",
 ]

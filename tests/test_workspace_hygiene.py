@@ -32,7 +32,7 @@ def test_workspace_hygiene_cleans_cache_entries(monkeypatch, workspace_tmp_path)
             return original_rmtree(path, *args, **kwargs)
         calls.append(("rmtree", Path(path).resolve()))
 
-    def fake_unlink(self, missing_ok: bool = False) -> None:  # noqa: ARG001
+    def fake_unlink(self, missing_ok: bool = False) -> None:
         calls.append(("unlink", self.resolve()))
 
     monkeypatch.setattr("tools.workspace_hygiene.shutil.rmtree", fake_rmtree)

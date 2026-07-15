@@ -15,7 +15,6 @@ from app.settings import (
     STREAM_EVENT_LIST_DEFAULT_LIMIT,
 )
 
-
 T = TypeVar("T")
 
 

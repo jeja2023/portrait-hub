@@ -2,13 +2,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
-
 DEFAULT_TRUSTED_HOSTS = "127.0.0.1,localhost"
 DEFAULT_RATE_LIMIT_PER_MINUTE = 0
 DEFAULT_RATE_LIMIT_BURST = 0
 DEFAULT_RATE_LIMIT_MAX_BUCKETS = 10_000
 DEFAULT_RATE_LIMIT_BUCKET_TTL_SECONDS = 3600
-DEFAULT_MAX_REQUEST_BODY_BYTES = 768 * 1024 * 1024
+# 与最大视频上传（100MB）+ multipart 余量对齐；过大的全局请求体上限会放大内存 DoS 面。
+DEFAULT_MAX_REQUEST_BODY_BYTES = 112 * 1024 * 1024
 DEFAULT_CONTENT_SECURITY_POLICY = (
     "default-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; "
     "form-action 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "

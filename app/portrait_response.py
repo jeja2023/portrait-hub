@@ -4,7 +4,6 @@ from fastapi import HTTPException, status
 
 from app.observability import logger
 
-
 HEALTH_CHECK_FAILED = "健康检查失败"
 MODEL_READINESS_CHECK_FAILED = "模型就绪检查失败"
 OBJECT_CLEANUP_FAILED = "对象清理失败"

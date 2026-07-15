@@ -6,9 +6,14 @@ on:
     branches: ["main", "master"]
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test-and-verify:
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -23,8 +28,16 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt
           python -m pip install -r requirements/dev.txt
-      - name: Run Python tests
-        run: python -m pytest -q
+      - name: Run ruff lint
+        run: python -m ruff check app tools tests
+      - name: Run Python tests with coverage
+        run: python -m pytest -q --cov=app --cov=tools --cov-report=term --cov-report=xml --durations=15
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-xml
+          path: coverage.xml
+          if-no-files-found: ignore
       - name: Run strict type checks
         run: python tools/type_check.py
       - name: Verify dependency lock policy

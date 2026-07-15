@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Any, Iterable
+from typing import Any
 
 from app.model_config import config_value, configured_input_size, model_config
 from app.model_config_resolver import resolve_model_reference

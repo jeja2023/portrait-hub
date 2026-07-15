@@ -274,10 +274,17 @@ async def test_permission_dependency_accepts_tenant_list_claim(monkeypatch) -> N
 
 
 def test_v1_requires_tenant_header_when_enabled(monkeypatch) -> None:
+    monkeypatch.setattr(security, "RBAC_ENABLED", True)
+    monkeypatch.setattr(security, "API_TOKEN", None)
+    monkeypatch.setattr(portrait_auth, "RBAC_ENABLED", True)
+    monkeypatch.setattr(portrait_auth, "JWT_SECRET", "test-secret")
+    monkeypatch.setattr(portrait_auth, "JWT_ISSUER", "portrait-hub")
+    monkeypatch.setattr(portrait_auth, "JWT_AUDIENCE", "portrait-hub-api")
     monkeypatch.setattr(portrait_security, "TENANT_HEADER_REQUIRED", True)
+    token = hs256_token(valid_jwt_payload(roles=["operator"]))
     client = TestClient(app)
 
-    response = client.get("/v1/admin/status")
+    response = client.get("/v1/admin/status", headers={"Authorization": f"Bearer {token}"})
 
     assert response.status_code == 400
     assert "缺少 x-tenant-id 请求头" in api_error_message(response)
@@ -519,6 +526,12 @@ def test_ready_deep_redacts_model_readiness_errors(monkeypatch, caplog) -> None:
     caplog.set_level("WARNING")
     from app import routes_health
 
+    monkeypatch.setattr(security, "API_TOKEN", "platform-token")
+    monkeypatch.setattr(security, "API_TOKEN_TENANT_ID", "")
+    monkeypatch.setattr(security, "API_TOKEN_ALLOW_TENANT_OVERRIDE", True)
+    monkeypatch.setattr(portrait_auth, "API_TOKEN", "platform-token")
+    monkeypatch.setattr(portrait_auth, "RBAC_ENABLED", False)
+
     monkeypatch.setattr(
         routes_health.ort, "get_available_providers", lambda: ["CUDAExecutionProvider"]
     )
@@ -534,7 +547,7 @@ def test_ready_deep_redacts_model_readiness_errors(monkeypatch, caplog) -> None:
     monkeypatch.setattr(routes_health, "get_model_path", fail_model_path)
     client = TestClient(app, raise_server_exceptions=False)
 
-    response = client.get("/ready/deep")
+    response = client.get("/ready/deep", headers={"Authorization": "Bearer platform-token"})
 
     assert response.status_code == 503
     payload = api_error_message(response)
@@ -945,3 +958,26 @@ async def test_application_api_key_scopes_apply_without_rbac(monkeypatch) -> Non
 
     assert exc_info.value.status_code == 403
     assert "gallery:write" in str(exc_info.value.detail)
+
+
+@pytest.mark.asyncio
+async def test_permission_dependency_fails_closed_without_rbac_or_credentials(monkeypatch) -> None:
+    monkeypatch.setattr(portrait_auth, "RBAC_ENABLED", False)
+    monkeypatch.setattr(portrait_auth, "AUTH_REQUIRED", True)
+    monkeypatch.setattr(portrait_auth, "API_TOKEN", None)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await portrait_auth.require_permission("gallery:read")
+
+    assert exc_info.value.status_code == 401
+    assert "missing API token" in str(exc_info.value.detail)
+
+
+@pytest.mark.asyncio
+async def test_permission_dependency_stays_permissive_when_auth_not_required(monkeypatch) -> None:
+    # AUTH_REQUIRED=false 的本地/测试部署：无凭证时放行，保持既有开发体验
+    monkeypatch.setattr(portrait_auth, "RBAC_ENABLED", False)
+    monkeypatch.setattr(portrait_auth, "AUTH_REQUIRED", False)
+    monkeypatch.setattr(portrait_auth, "API_TOKEN", None)
+
+    await portrait_auth.require_permission("gallery:read")

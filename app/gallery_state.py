@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from collections.abc import Callable
-from copy import deepcopy
 import json
 import threading
+from collections.abc import Callable
+from copy import deepcopy
 from typing import Any
 from uuid import uuid4
 
@@ -13,10 +13,20 @@ from app.observability import logger, wall_time
 from app.portrait_gallery_records import FeatureRecord, GalleryKey, PersonRecord, gallery_key
 from app.portrait_response import exception_log_summary
 from app.portrait_security import validate_person_id
-from app.portrait_state import append_jsonl, handle_state_read_error, read_json_state, state_path_fingerprint, write_json_state
+from app.portrait_state import (
+    append_jsonl,
+    handle_state_read_error,
+    read_json_state,
+    state_path_fingerprint,
+    write_json_state,
+)
 from app.portrait_thresholds import normalize_modality
-from app.settings import PORTRAIT_GALLERY_STATE_PATH, PORTRAIT_GALLERY_WAL_COMPACT_EVERY, PORTRAIT_GALLERY_WAL_ENABLED, PORTRAIT_STORAGE_BACKEND
-
+from app.settings import (
+    PORTRAIT_GALLERY_STATE_PATH,
+    PORTRAIT_GALLERY_WAL_COMPACT_EVERY,
+    PORTRAIT_GALLERY_WAL_ENABLED,
+    PORTRAIT_STORAGE_BACKEND,
+)
 
 PersistPersonHook = Callable[[PersonRecord], None]
 PersistFeatureHook = Callable[[PersonRecord, FeatureRecord], None]

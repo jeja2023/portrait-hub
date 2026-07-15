@@ -248,13 +248,13 @@ def normalize_model_config(cache_key_value: str, raw_config: dict[str, Any]) -> 
 
 __all__ = [
     "config_value_fingerprint",
-    "configured_model_entries",
-    "configured_alias_weight",
-    "configured_alias_targets",
-    "configured_alias_target",
     "configured_alias_entries",
-    "model_config_path_fingerprint",
+    "configured_alias_target",
+    "configured_alias_targets",
+    "configured_alias_weight",
+    "configured_model_entries",
     "empty_model_config_or_raise",
     "load_model_config_document",
+    "model_config_path_fingerprint",
     "normalize_model_config",
 ]

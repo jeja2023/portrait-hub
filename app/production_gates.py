@@ -15,7 +15,6 @@ except Exception:  # pragma: no cover - 本地环境可能故意缺少该依赖
 from app import settings
 from app.postgres_core import postgres_driver_available, postgres_pool_available
 
-
 PRODUCTION_PROFILES = {"prod", "production"}
 PRODUCTION_VECTOR_BACKENDS = {"pgvector", "qdrant"}
 
@@ -45,8 +44,20 @@ def production_externalization_failures() -> list[str]:
         return []
 
     failures: list[str] = []
+    if not settings.AUTH_REQUIRED:
+        failures.append("生产环境中 AUTH_REQUIRED 必须为 true")
+    if not (settings.API_TOKEN or settings.RBAC_ENABLED):
+        failures.append("生产环境必须配置 API_TOKEN 或启用 RBAC_ENABLED")
     if settings.API_TOKEN and not settings.API_TOKEN_TENANT_ID and not settings.API_TOKEN_ALLOW_TENANT_OVERRIDE:
         failures.append("生产环境中的 API_TOKEN 必须配置 API_TOKEN_TENANT_ID，或显式允许平台跨租户访问")
+    if settings.DEBUG_ENDPOINTS_ENABLED:
+        failures.append("生产环境中 DEBUG_ENDPOINTS_ENABLED 必须为 false")
+    if settings.ENABLE_API_DOCS:
+        failures.append("生产环境中 ENABLE_API_DOCS 必须为 false")
+    if settings.RATE_LIMIT_PER_MINUTE <= 0:
+        failures.append("生产环境中 RATE_LIMIT_PER_MINUTE 必须大于 0")
+    if settings.MAX_REQUEST_BODY_BYTES > settings.MAX_VIDEO_BYTES + 16 * 1024 * 1024:
+        failures.append("生产环境中 MAX_REQUEST_BODY_BYTES 不应显著超过 MAX_VIDEO_BYTES")
     if settings.VIDEO_JOB_WORKER_IN_PROCESS:
         failures.append("生产环境中 VIDEO_JOB_WORKER_IN_PROCESS 必须为 false")
     if settings.PORTRAIT_STORAGE_BACKEND != "postgres":

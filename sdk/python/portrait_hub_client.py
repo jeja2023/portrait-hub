@@ -9,6 +9,9 @@ from urllib.error import HTTPError
 from urllib.parse import quote, urlencode
 from urllib import request as urllib_request
 
+SDK_VERSION = "0.8.2"
+USER_AGENT = f"portrait-hub-sdk-python/{SDK_VERSION}"
+
 
 class PortraitHubHTTPError(RuntimeError):
     def __init__(self, status_code: int, detail: Any, headers: dict[str, str] | None = None) -> None:
@@ -46,7 +49,7 @@ class PortraitHubClient:
         return str(value).replace("\\", "\\\\").replace('"', '\\"').replace("\r", " ").replace("\n", " ")
 
     def _headers(self, extra: dict[str, str] | None = None) -> dict[str, str]:
-        headers = dict(extra or {})
+        headers = {"User-Agent": USER_AGENT, **(extra or {})}
         if self.tenant_id:
             headers["X-Tenant-ID"] = self.tenant_id
         if self.api_token:
@@ -232,10 +235,10 @@ class PortraitHubClient:
     def create_video_job(
         self,
         video: str | Path,
-        frame_interval: int | None = None,
-        max_frames: int | None = None,
+        sample_interval_seconds: float | None = None,
+        batch_size: int | None = None,
     ) -> dict[str, Any]:
-        fields = {key: value for key, value in {"frame_interval": frame_interval, "max_frames": max_frames}.items() if value is not None}
+        fields = {key: value for key, value in {"sample_interval_seconds": sample_interval_seconds, "batch_size": batch_size}.items() if value is not None}
         return self._multipart("/v1/jobs/video", fields=fields, files=[("file", video)])
 
     def get_job(self, job_id: str) -> dict[str, Any]:

@@ -1,10 +1,10 @@
-import yaml
 import pytest
+import yaml
+from fastapi import HTTPException
 
 from app import model_config_loader
 from app.model_config_loader import load_model_config_document, normalize_model_config
 from app.model_config_resolver import alias_resolution, alias_target
-from fastapi import HTTPException
 
 
 def test_normalize_model_config_maps_legacy_yolo_fields() -> None:

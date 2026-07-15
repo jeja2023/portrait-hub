@@ -43,7 +43,7 @@ async def load_images(files: list[UploadFile]) -> tuple[list[Image.Image], list[
 
 
 __all__ = [
-    "read_image_file",
     "decode_image",
     "load_images",
+    "read_image_file",
 ]

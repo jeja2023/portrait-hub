@@ -11,7 +11,6 @@ from app.observability import logger
 from app.portrait_response import exception_log_summary
 from app.settings import STATE_READ_FAIL_CLOSED, STATE_WRITE_FAIL_CLOSED
 
-
 ATOMIC_STATE_WRITE_DISABLED = False
 
 

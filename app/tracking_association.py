@@ -309,13 +309,11 @@ def global_match(
             return True
         if abs(candidate_score - current_score) <= 1e-9 and len(candidate_pairs) > len(current_pairs):
             return True
-        if (
+        return (
             abs(candidate_score - current_score) <= 1e-9
             and len(candidate_pairs) == len(current_pairs)
             and candidate_pairs < current_pairs
-        ):
-            return True
-        return False
+        )
 
     cache: dict[tuple[int, int], tuple[float, tuple[tuple[int, int], ...]]] = {}
 

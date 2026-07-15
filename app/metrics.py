@@ -5,7 +5,6 @@ from typing import Any, TypedDict
 
 from app.settings import PROMETHEUS_METRICS_CACHE_SECONDS
 
-
 METRICS: dict[str, float] = {
     "requests_total": 0,
     "predict_requests_total": 0,
@@ -194,7 +193,7 @@ def append_histogram(lines: list[str], metric: str, help_text: str) -> None:
             f"# TYPE {prometheus_name} histogram",
         ]
     )
-    for bucket, count in zip(histogram["buckets"], histogram["counts"]):
+    for bucket, count in zip(histogram["buckets"], histogram["counts"], strict=False):
         lines.append(f'{prometheus_name}_bucket{{le="{bucket:g}"}} {count}')
     lines.append(f'{prometheus_name}_bucket{{le="+Inf"}} {histogram["count"]}')
     lines.append(f'{prometheus_name}_count {histogram["count"]}')
@@ -213,9 +212,9 @@ def prometheus_metrics() -> str:
 
 
 def build_prometheus_metrics() -> str:
+    from app import runtime_state
     from app.model_config import MODEL_CONFIGS
     from app.portrait_stream_worker import STREAM_WORKER_SESSIONS
-    from app import runtime_state
 
     loaded_models = len(runtime_state.MODEL_REGISTRY)
     active_stream_sessions = sum(1 for item in STREAM_WORKER_SESSIONS.values() if item.get("status") == "running")

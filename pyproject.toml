@@ -1,6 +1,6 @@
 [project]
 name = "portrait-hub"
-version = "0.8.0"
+version = "0.8.2"
 requires-python = ">=3.12"
 description = "PortraitHub GPU 推理与人像智能服务"
 
@@ -10,9 +10,38 @@ pythonpath = ["."]
 addopts = "-p no:cacheprovider"
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
+markers = [
+    "integration: 需要真实外部服务（Postgres/Redis/Qdrant/MinIO）的集成测试",
+]
 
 [tool.mypy]
 python_version = "3.12"
 warn_unused_configs = true
 ignore_missing_imports = true
 strict = true
+
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+extend-exclude = [".venv", "typings", "models", "runtime-state"]
+
+[tool.ruff.lint]
+# 与现有 mypy strict 风格匹配的规则集；先启用高价值、低噪音规则，
+# 后续可逐步收紧（ANN/ARG 等待代码清理后再开）。
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+ignore = [
+    "E501",   # 行宽由 line-length 控制，避免与既有长字符串冲突
+    "B008",   # FastAPI 依赖注入惯用 Depends()/Header() 作默认值
+    "RUF001", # 允许中文标点等全角字符（项目大量中文文案）
+    "RUF002",
+    "RUF003",
+    # 以下为主观风格/低价值规则，暂不强制以避免大范围无行为收益的改动：
+    "SIM105", # try/except/pass 与 contextlib.suppress 等价，保留显式写法
+    "SIM102", # 允许嵌套 if 以保持可读的分层校验
+    "SIM108", # 不强制三元表达式替换 if/else
+    "SIM117", # 允许分离的 with 语句
+    "RUF046", # int(...) 冗余转换多为显式意图声明
+    "RUF007", # 不强制 pairwise 替换 zip
+    "SIM113", # 不强制 enumerate 替换手动索引计数
+    "UP047",  # 泛型函数保留显式 TypeVar 形式，暂不迁移 PEP695 语法
+]

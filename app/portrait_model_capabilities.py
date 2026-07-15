@@ -5,7 +5,6 @@ import yaml
 
 from app.settings import MODEL_CAPABILITIES_PATH, PORTRAIT_REQUIRE_PRODUCTION_MODEL_CAPABILITIES
 
-
 DEFAULT_CAPABILITIES = {
     "face_detection": {
         "status": "fallback",

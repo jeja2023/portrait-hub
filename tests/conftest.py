@@ -1,12 +1,11 @@
 import os
-from collections.abc import Iterator
-from pathlib import Path
 import shutil
 import warnings
+from collections.abc import Iterator
+from pathlib import Path
 from uuid import uuid4
 
 import pytest
-
 
 # 生产代码现在把安全敏感开关默认设为 fail-closed 值（见 app/settings.py）。测试套件会在
 # 无鉴权、且以 "testserver" 主机访问端点，因此在导入任何 `app` 模块之前就在这里重新选用

@@ -35,8 +35,8 @@ def percentile(values: list[float], q: float) -> float | None:
 
 
 def roc_auc(scores: list[float], labels: list[int]) -> float | None:
-    positives = [score for score, label in zip(scores, labels) if label == 1]
-    negatives = [score for score, label in zip(scores, labels) if label == 0]
+    positives = [score for score, label in zip(scores, labels, strict=False) if label == 1]
+    negatives = [score for score, label in zip(scores, labels, strict=False) if label == 0]
     if not positives or not negatives:
         return None
     wins = 0.0
@@ -50,8 +50,8 @@ def roc_auc(scores: list[float], labels: list[int]) -> float | None:
 
 
 def tar_at_far(scores: list[float], labels: list[int], far: float) -> dict[str, Any]:
-    positives = [score for score, label in zip(scores, labels) if label == 1]
-    negatives = sorted([score for score, label in zip(scores, labels) if label == 0], reverse=True)
+    positives = [score for score, label in zip(scores, labels, strict=False) if label == 1]
+    negatives = sorted([score for score, label in zip(scores, labels, strict=False) if label == 0], reverse=True)
     if not positives or not negatives:
         return {"far": far, "threshold": None, "tar": None}
     allowed_false_accepts = int(far * len(negatives))
@@ -64,10 +64,10 @@ def tar_at_far(scores: list[float], labels: list[int], far: float) -> dict[str, 
 
 
 def threshold_report(scores: list[float], labels: list[int], threshold: float) -> dict[str, Any]:
-    tp = sum(1 for score, label in zip(scores, labels) if score >= threshold and label == 1)
-    fp = sum(1 for score, label in zip(scores, labels) if score >= threshold and label == 0)
-    tn = sum(1 for score, label in zip(scores, labels) if score < threshold and label == 0)
-    fn = sum(1 for score, label in zip(scores, labels) if score < threshold and label == 1)
+    tp = sum(1 for score, label in zip(scores, labels, strict=False) if score >= threshold and label == 1)
+    fp = sum(1 for score, label in zip(scores, labels, strict=False) if score >= threshold and label == 0)
+    tn = sum(1 for score, label in zip(scores, labels, strict=False) if score < threshold and label == 0)
+    fn = sum(1 for score, label in zip(scores, labels, strict=False) if score < threshold and label == 1)
     precision = tp / (tp + fp) if tp + fp else 0.0
     recall = tp / (tp + fn) if tp + fn else 0.0
     fpr = fp / (fp + tn) if fp + tn else 0.0
@@ -93,7 +93,7 @@ def threshold_report(scores: list[float], labels: list[int], threshold: float) -
 def review_band_report(scores: list[float], labels: list[int], threshold: float, band_width: float = 0.03) -> dict[str, Any]:
     lower = threshold - band_width
     upper = threshold + band_width
-    in_band = [(score, label) for score, label in zip(scores, labels) if lower <= score <= upper]
+    in_band = [(score, label) for score, label in zip(scores, labels, strict=False) if lower <= score <= upper]
     positives = sum(1 for _, label in in_band if label == 1)
     negatives = len(in_band) - positives
     return {
@@ -107,8 +107,8 @@ def review_band_report(scores: list[float], labels: list[int], threshold: float,
 
 
 def score_separation(scores: list[float], labels: list[int]) -> dict[str, Any]:
-    positives = [score for score, label in zip(scores, labels) if label == 1]
-    negatives = [score for score, label in zip(scores, labels) if label == 0]
+    positives = [score for score, label in zip(scores, labels, strict=False) if label == 1]
+    negatives = [score for score, label in zip(scores, labels, strict=False) if label == 0]
     if not positives or not negatives:
         return {"positive_mean": None, "negative_mean": None, "mean_gap": None, "d_prime": None}
     positive_mean = sum(positives) / len(positives)

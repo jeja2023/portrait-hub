@@ -17,7 +17,12 @@ from app.portrait_embeddings import (
     fallback_face_candidate,
     image_fingerprint_embedding,
 )
-from app.portrait_model_runtime_capability import get_capability_runtime, runtime_input_size, runtime_input_value, runtime_output_value
+from app.portrait_model_runtime_capability import (
+    get_capability_runtime,
+    runtime_input_size,
+    runtime_input_value,
+    runtime_output_value,
+)
 from app.portrait_model_runtime_preprocess import batch_slice, letterbox_tensor, resize_tensor
 from app.runtime_common import embedding_rows, normalize_scores, round_normalized_embedding, rows_with_last_dim
 from app.runtime_execution import run_model_bundle_batch
@@ -301,7 +306,7 @@ async def apply_arcface_embeddings(image: Image.Image, faces: list[dict[str, Any
     rows = embedding_rows(raw_outputs, len(inputs))
     if rows.shape[0] != len(faces):
         return False
-    for face, vector in zip(faces, rows):
+    for face, vector in zip(faces, rows, strict=False):
         embedding = round_normalized_embedding(vector)
         face["embedding"] = embedding
         face["embedding_dim"] = len(embedding)

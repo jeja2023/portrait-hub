@@ -14,7 +14,12 @@ from app.portrait_response import exception_log_summary
 from app.runtime_sessions import create_session, io_meta, primary_execution_provider
 from app.runtime_state import MODEL_LOAD_LOCKS, MODEL_LOAD_RETRY_AFTER, MODEL_REGISTRY, REGISTRY_LOCK, gpu_device_ids
 from app.schemas import ModelBundle
-from app.settings import MAX_LOADED_MODELS, MODEL_CONCURRENCY_LIMIT, MODEL_LOAD_RETRY_COOLDOWN_SECONDS, MODEL_QUEUE_TIMEOUT_SECONDS
+from app.settings import (
+    MAX_LOADED_MODELS,
+    MODEL_CONCURRENCY_LIMIT,
+    MODEL_LOAD_RETRY_COOLDOWN_SECONDS,
+    MODEL_QUEUE_TIMEOUT_SECONDS,
+)
 
 
 def bundle_providers(bundle: ModelBundle) -> list[str]:
@@ -245,17 +250,17 @@ async def get_or_load_model(
 
 
 __all__ = [
-    "bundle_providers",
     "bundle_info",
+    "bundle_providers",
+    "evict_lru_if_needed",
+    "get_model_load_lock",
+    "get_or_load_model",
+    "mark_model_load_failed",
+    "model_gpu_device_id",
+    "model_load_cooldown_active",
     "model_path_fingerprint",
     "model_runtime_limits",
-    "model_gpu_device_id",
     "release_model_bundle",
-    "get_model_load_lock",
-    "evict_lru_if_needed",
-    "unload_model_by_key",
     "touch_model",
-    "get_or_load_model",
-    "model_load_cooldown_active",
-    "mark_model_load_failed",
+    "unload_model_by_key",
 ]

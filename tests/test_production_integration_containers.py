@@ -15,7 +15,6 @@ from typing import Any
 
 import pytest
 
-
 pytestmark = pytest.mark.skipif(
     os.getenv("PORTRAIT_RUN_CONTAINER_INTEGRATION_TESTS") != "1",
     reason="设置 PORTRAIT_RUN_CONTAINER_INTEGRATION_TESTS=1 后运行外部服务 testcontainers 集成测试",

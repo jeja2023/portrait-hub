@@ -4,9 +4,10 @@ import os
 import re
 import time
 import uuid
+from collections.abc import Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar, Token
-from typing import Any, Iterator
+from typing import Any
 
 from fastapi import Request
 

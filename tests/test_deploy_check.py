@@ -1,6 +1,14 @@
 from pathlib import Path
 
-from tools.deploy_check import DeployReport, check_ci_workflows, check_dependency_lock, check_docker_files, check_import_app, check_source_encoding, onnxruntime_version
+from tools.deploy_check import (
+    DeployReport,
+    check_ci_workflows,
+    check_dependency_lock,
+    check_docker_files,
+    check_import_app,
+    check_source_encoding,
+    onnxruntime_version,
+)
 
 
 def test_deploy_report_redacts_sensitive_details() -> None:

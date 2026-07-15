@@ -9,7 +9,6 @@ from app.portrait_security import validate_job_id, validate_stream_id
 from app.portrait_streams import get_stream
 from app.settings import API_LIST_DEFAULT_LIMIT, API_TOKEN, AUTH_REQUIRED, RBAC_ENABLED
 
-
 router = APIRouter()
 
 

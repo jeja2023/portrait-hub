@@ -7,7 +7,6 @@ from typing import Any
 
 import yaml
 
-
 PRODUCTION_CAPABILITY_STATUSES = {"model_backed", "ready", "production"}
 
 

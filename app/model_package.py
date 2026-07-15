@@ -1,6 +1,6 @@
 import hashlib
-from pathlib import Path
 from collections.abc import Mapping
+from pathlib import Path
 from typing import Any
 
 import yaml
@@ -10,7 +10,6 @@ from app.constants import COCO_CLASSES
 from app.model_config import config_section, config_value, configured_sha256, model_config, model_task
 from app.observability import logger
 from app.portrait_response import exception_log_summary
-from app.schemas import ModelConfig
 from app.settings import MODELS_ROOT
 
 

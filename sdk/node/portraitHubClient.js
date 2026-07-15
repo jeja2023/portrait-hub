@@ -1,5 +1,8 @@
 const fs = require("fs");
 
+const SDK_VERSION = "0.8.2";
+const USER_AGENT = `portrait-hub-sdk-node/${SDK_VERSION}`;
+
 class PortraitHubHTTPError extends Error {
   constructor(status, payload, headers) {
     super(`PortraitHub 请求失败 with HTTP ${status}`);
@@ -11,11 +14,12 @@ class PortraitHubHTTPError extends Error {
 }
 
 class PortraitHubClient {
-  constructor({ baseUrl, apiToken = null, tenantId = null, authScheme = "bearer" }) {
+  constructor({ baseUrl, apiToken = null, tenantId = null, authScheme = "bearer", timeoutMs = 30000 }) {
     this.baseUrl = baseUrl.replace(/\/$/, "");
     this.apiToken = apiToken;
     this.tenantId = tenantId;
     this.authScheme = this.normalizeAuthScheme(authScheme);
+    this.timeoutMs = Math.max(1, Number(timeoutMs) || 30000);
   }
 
   normalizeAuthScheme(value) {
@@ -27,7 +31,7 @@ class PortraitHubClient {
   }
 
   headers(extra = {}) {
-    const headers = { ...extra };
+    const headers = { "User-Agent": USER_AGENT, ...extra };
     if (this.tenantId) headers["X-Tenant-ID"] = this.tenantId;
     if (this.apiToken) {
       if (this.authScheme === "api_key") headers["X-API-Key"] = this.apiToken;
@@ -55,6 +59,7 @@ class PortraitHubClient {
       method,
       headers: this.headers(body ? { "Content-Type": "application/json" } : {}),
       body: body ? JSON.stringify(body) : undefined,
+      signal: AbortSignal.timeout(this.timeoutMs),
     });
     return this.parseResponse(response);
   }
@@ -73,6 +78,7 @@ class PortraitHubClient {
       method: "POST",
       headers: this.headers(),
       body: form,
+      signal: AbortSignal.timeout(this.timeoutMs),
     });
     return this.parseResponse(response);
   }
@@ -169,10 +175,10 @@ class PortraitHubClient {
     return this.json("POST", this.pathWithQuery("/v1/gallery/reindex", { modality, model_id: modelId, dry_run: dryRun }));
   }
 
-  createVideoJob(video, { frameInterval = null, maxFrames = null } = {}) {
+  createVideoJob(video, { sampleIntervalSeconds = null, batchSize = null } = {}) {
     return this.multipart(
       "/v1/jobs/video",
-      { frame_interval: frameInterval, max_frames: maxFrames },
+      { sample_interval_seconds: sampleIntervalSeconds, batch_size: batchSize },
       [["file", video]],
     );
   }
@@ -234,4 +240,4 @@ class PortraitHubClient {
   }
 }
 
-module.exports = { PortraitHubClient, PortraitHubHTTPError };
+module.exports = { PortraitHubClient, PortraitHubHTTPError, SDK_VERSION };

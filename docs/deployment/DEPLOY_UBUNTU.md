@@ -613,8 +613,8 @@ curl -X POST http://127.0.0.1:9001/v1/infer/tracks \
 curl -X POST http://127.0.0.1:9001/v1/jobs/video \
   -H "Authorization: Bearer $TOKEN" \
   -F "file=@clip.mp4" \
-  -F "frame_interval=15" \
-  -F "max_frames=64" \
+  -F "sample_interval_seconds=0.5" \
+  -F "batch_size=64" \
   -F "include_embeddings=false"
 ```
 
@@ -626,7 +626,7 @@ curl -X POST http://127.0.0.1:9001/v1/jobs/video \
 curl -X POST http://127.0.0.1:9001/v1/streams \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"stream_url":"rtsp://user:password@camera-host/stream1","name":"camera-1","settings":{"frame_interval":15,"max_frames":32,"read_timeout_seconds":10,"include_embeddings":false}}'
+  -d '{"stream_url":"rtsp://user:password@camera-host/stream1","name":"camera-1","settings":{"sample_interval_seconds":0.5,"batch_size":32,"read_timeout_seconds":10,"include_embeddings":false}}'
 ```
 
 随后调用 POST /v1/streams/{stream_id}/start 启动分析，通过 GET /v1/streams/{stream_id}/events 或 WS /ws/streams/{stream_id} 读取 stream_analysis_completed 事件。

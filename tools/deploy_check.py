@@ -785,7 +785,7 @@ def check_docker_files(root: Path, report: DeployReport) -> None:
     )
     report.add(
         "compose_request_body_limit_default",
-        "MAX_REQUEST_BODY_BYTES: ${MAX_REQUEST_BODY_BYTES:-805306368}"
+        "MAX_REQUEST_BODY_BYTES: ${MAX_REQUEST_BODY_BYTES:-117440512}"
         in read_text(root / "docker-compose.yml"),
         None,
     )

@@ -192,8 +192,8 @@ JOB_ID=$(curl -s -X POST "https://portrait.internal.example/v1/jobs/video" \
   -H "X-Tenant-ID: tenant-a" \
   -H "X-API-Key: ${PORTRAIT_HUB_API_TOKEN}" \
   -F "file=@clip.mp4" \
-  -F "frame_interval=15" \
-  -F "max_frames=64" | jq -r '.data.job.job_id')
+  -F "sample_interval_seconds=0.5" \
+  -F "batch_size=64" | jq -r '.data.job.job_id')
 
 curl -H "X-Tenant-ID: tenant-a" \
   -H "X-API-Key: ${PORTRAIT_HUB_API_TOKEN}" \

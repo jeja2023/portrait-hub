@@ -1,6 +1,6 @@
 const assert = require("assert");
 
-const { PortraitHubClient, PortraitHubHTTPError } = require("../sdk/node/portraitHubClient");
+const { PortraitHubClient, PortraitHubHTTPError, SDK_VERSION } = require("../sdk/node/portraitHubClient");
 
 function response({ ok, status, body, contentType = "application/json" }) {
   return {
@@ -18,8 +18,10 @@ function response({ ok, status, body, contentType = "application/json" }) {
 }
 
 async function testHeadersSupportBearerAndApplicationApiKey() {
+  const userAgent = `portrait-hub-sdk-node/${SDK_VERSION}`;
   const bearer = new PortraitHubClient({ baseUrl: "http://testserver", apiToken: "token", tenantId: "tenant-a" });
   assert.deepStrictEqual(bearer.headers(), {
+    "User-Agent": userAgent,
     "X-Tenant-ID": "tenant-a",
     Authorization: "Bearer token",
   });
@@ -31,6 +33,7 @@ async function testHeadersSupportBearerAndApplicationApiKey() {
     authScheme: "api_key",
   });
   assert.deepStrictEqual(apiKey.headers(), {
+    "User-Agent": userAgent,
     "X-Tenant-ID": "tenant-a",
     "X-API-Key": "phk_secret",
   });
@@ -41,6 +44,7 @@ async function testHeadersSupportBearerAndApplicationApiKey() {
     authScheme: "api_key",
   });
   assert.deepStrictEqual(inferredTenantApiKey.headers(), {
+    "User-Agent": userAgent,
     "X-API-Key": "phk_secret",
   });
 

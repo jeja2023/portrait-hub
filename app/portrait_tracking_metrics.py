@@ -153,7 +153,7 @@ def aggregate_track_template(
         )
         refined_weights = []
         outlier_count = 0
-        for base_weight, consensus in zip(weights, consensus_scores):
+        for base_weight, consensus in zip(weights, consensus_scores, strict=False):
             if len(vectors) >= 3 and consensus < consensus_floor:
                 factor = 0.08
                 outlier_count += 1
@@ -165,15 +165,15 @@ def aggregate_track_template(
         refined_weights = weights[:]
 
     total_weight = max(1e-9, sum(refined_weights))
-    template = sum(vector * weight for vector, weight in zip(vectors, refined_weights)) / total_weight
+    template = sum(vector * weight for vector, weight in zip(vectors, refined_weights, strict=False)) / total_weight
     template = l2_normalize_vector(np.asarray(template, dtype=np.float32))
-    consensus_score = sum(consensus * weight for consensus, weight in zip(consensus_scores, refined_weights)) / total_weight
+    consensus_score = sum(consensus * weight for consensus, weight in zip(consensus_scores, refined_weights, strict=False)) / total_weight
     payload: dict[str, Any] = {
         "embedding_dim": int(template.shape[0]),
         "sample_count": len(vectors),
         "aggregation": "quality_confidence_weighted_mean",
-        "quality": round(sum(quality * weight for quality, weight in zip(qualities, refined_weights)) / total_weight, 6),
-        "confidence": round(sum(confidence * weight for confidence, weight in zip(confidences, refined_weights)) / total_weight, 6),
+        "quality": round(sum(quality * weight for quality, weight in zip(qualities, refined_weights, strict=False)) / total_weight, 6),
+        "confidence": round(sum(confidence * weight for confidence, weight in zip(confidences, refined_weights, strict=False)) / total_weight, 6),
         "temporal": {
             "method": "linear_recency_decay",
             "frame_span": [min_frame_index, max_frame_index],

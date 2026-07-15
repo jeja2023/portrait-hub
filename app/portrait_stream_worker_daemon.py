@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-from dataclasses import dataclass
 import hashlib
 import json
 import os
-from pathlib import Path
 import socket
+from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
@@ -22,6 +22,7 @@ from app.portrait_streams import (
     load_streams_state,
     normalize_stream_status,
     release_stream_worker_lease,
+    renew_stream_worker_lease,
     stream_records_snapshot,
 )
 from app.settings import (
@@ -32,7 +33,6 @@ from app.settings import (
     STREAM_WORKER_PROCESS_LOCK_STALE_SECONDS,
 )
 
-
 STREAM_WORKER_OWNER_ID = f"{socket.gethostname()}:{os.getpid()}:{uuid4().hex[:8]}"
 
 
@@ -41,6 +41,18 @@ class StreamProcessLock:
     path: Path
     token: str
     acquired: bool = True
+
+    def heartbeat(self) -> bool:
+        if not self.acquired:
+            return False
+        payload = read_stream_process_lock_payload(self.path)
+        if payload is None or payload.get("token") != self.token:
+            return False
+        try:
+            os.utime(self.path, None)
+            return True
+        except OSError:
+            return False
 
     def release(self) -> None:
         if not self.acquired:
@@ -60,7 +72,7 @@ class StreamProcessLock:
 
 
 def stream_process_lock_path(stream: StreamRecord) -> Path:
-    digest = hashlib.sha256(f"{stream.tenant_id}\0{stream.stream_id}".encode("utf-8")).hexdigest()[:32]
+    digest = hashlib.sha256(f"{stream.tenant_id}\0{stream.stream_id}".encode()).hexdigest()[:32]
     return STREAM_WORKER_LOCK_DIR / f"{digest}.lock"
 
 
@@ -81,17 +93,19 @@ def read_stream_process_lock_payload(path: Path) -> dict[str, Any] | None:
 
 
 def stream_process_lock_created_at(path: Path, payload: dict[str, Any] | None) -> float:
+    timestamps: list[float] = []
     if payload is not None:
         raw_created_at = payload.get("created_at")
         try:
             if raw_created_at is not None:
-                return float(raw_created_at)
+                timestamps.append(float(raw_created_at))
         except (TypeError, ValueError):
             pass
     try:
-        return float(path.stat().st_mtime)
+        timestamps.append(float(path.stat().st_mtime))
     except OSError:
-        return wall_time()
+        pass
+    return max(timestamps) if timestamps else wall_time()
 
 
 def stream_process_lock_is_stale(path: Path) -> bool:
@@ -163,6 +177,26 @@ def acquire_stream_process_lock(stream: StreamRecord, owner_id: str) -> StreamPr
     return None
 
 
+async def maintain_stream_worker_ownership(
+    stream: StreamRecord,
+    owner_id: str,
+    process_lock: StreamProcessLock | None,
+) -> None:
+    interval = max(0.01, float(STREAM_WORKER_LEASE_TTL_SECONDS) / 3.0)
+    while True:
+        await asyncio.sleep(interval)
+        renewed = await asyncio.to_thread(
+            renew_stream_worker_lease,
+            stream,
+            owner_id,
+            STREAM_WORKER_LEASE_TTL_SECONDS,
+        )
+        if not renewed:
+            raise RuntimeError("stream worker lease lost")
+        if process_lock is not None and not await asyncio.to_thread(process_lock.heartbeat):
+            raise RuntimeError("stream worker process lock lost")
+
+
 async def run_leased_stream_worker_session(
     stream: StreamRecord,
     *,
@@ -170,9 +204,35 @@ async def run_leased_stream_worker_session(
     max_reconnects: int,
     process_lock: StreamProcessLock | None = None,
 ) -> dict[str, Any]:
+    session_task = asyncio.create_task(
+        run_stream_worker_session(stream, max_reconnects=max_reconnects)
+    )
+    ownership_task = asyncio.create_task(
+        maintain_stream_worker_ownership(stream, owner_id, process_lock)
+    )
     try:
-        return await run_stream_worker_session(stream, max_reconnects=max_reconnects)
+        done, _ = await asyncio.wait(
+            {session_task, ownership_task}, return_when=asyncio.FIRST_COMPLETED
+        )
+        if ownership_task in done:
+            ownership_error = ownership_task.exception()
+            if ownership_error is not None:
+                session_task.cancel()
+                try:
+                    await session_task
+                except asyncio.CancelledError:
+                    pass
+                raise ownership_error
+        return await session_task
     finally:
+        for task in (session_task, ownership_task):
+            if not task.done():
+                task.cancel()
+        for task in (session_task, ownership_task):
+            try:
+                await task
+            except (asyncio.CancelledError, Exception):
+                pass
         try:
             release_stream_worker_lease(stream, owner_id)
         except Exception as exc:

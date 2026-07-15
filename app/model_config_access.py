@@ -75,11 +75,11 @@ def configured_input_size(
 
 
 __all__ = [
-    "model_config",
     "config_section",
     "config_value",
-    "model_task",
-    "configured_sha256",
-    "parse_image_size",
     "configured_input_size",
+    "configured_sha256",
+    "model_config",
+    "model_task",
+    "parse_image_size",
 ]

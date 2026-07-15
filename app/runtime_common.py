@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+from typing import Any
+
 import numpy as np
 import numpy.typing as npt
-from typing import Any
 
 from app.portrait_compare import l2_normalize_vector
 from app.portrait_model_runtime_preprocess import batch_slice

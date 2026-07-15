@@ -1,8 +1,9 @@
-import os
 import json
+import os
+from typing import ClassVar
 
-import pytest
 import numpy as np
+import pytest
 from fastapi import HTTPException, Request
 from fastapi.testclient import TestClient
 
@@ -14,12 +15,12 @@ from app import (
     portrait_auth,
     portrait_image_results,
     portrait_model_capabilities,
+    rollout_audit,
     routes_debug,
     routes_model_query,
-    routes_vision,
     routes_portrait_models,
     routes_predict,
-    rollout_audit,
+    routes_vision,
     security,
 )
 from app.runtime_state import MODEL_REGISTRY
@@ -261,6 +262,20 @@ def test_openapi_keeps_core_routes() -> None:
     assert removed_paths.isdisjoint(paths)
 
 
+def test_video_job_openapi_uses_time_sampling_batch_contract() -> None:
+    schema = app.openapi()
+    request_schema = schema["paths"]["/v1/jobs/video"]["post"]["requestBody"]["content"][
+        "multipart/form-data"
+    ]["schema"]
+    component_name = request_schema["$ref"].rsplit("/", 1)[-1]
+    properties = schema["components"]["schemas"][component_name]["properties"]
+
+    assert "sample_interval_seconds" in properties
+    assert "batch_size" in properties
+    assert "frame_interval" not in properties
+    assert "max_frames" not in properties
+
+
 def test_console_is_product_admin_shell_with_strict_inline_policy() -> None:
     client = TestClient(app)
 
@@ -412,6 +427,8 @@ def test_console_assets_use_light_structured_response_panels() -> None:
     assert "特征重建" in navigation_body
     assert "视频解析结果" in runtime_body
     assert "视频流解析" in runtime_body
+    assert "stream-results-visuals" in runtime_body
+    assert "streamResultVisuals" in runtime_body
     assert "人员库查询" not in navigation_body
     assert "智能解析" not in navigation_body
     assert "视频分析" not in navigation_body
@@ -544,9 +561,10 @@ def test_request_id_is_normalized_and_reused_between_body_and_header() -> None:
 
 
 def test_json_logs_include_context_fields() -> None:
-    from app.observability import JsonLogFormatter, reset_log_context, set_log_context
     import json
     import logging
+
+    from app.observability import JsonLogFormatter, reset_log_context, set_log_context
 
     record = logging.LogRecord(
         "test", logging.INFO, __file__, 1, "hello %s", ("world",), None
@@ -1415,7 +1433,7 @@ def test_v1_model_management_responses_do_not_expose_filesystem_paths(
     class FakeTensor:
         name = "input"
         type = "tensor(float)"
-        shape = [1, 3, 8, 8]
+        shape: ClassVar[list[int]] = [1, 3, 8, 8]
 
     class FakeSession:
         def get_providers(self):

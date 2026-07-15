@@ -47,6 +47,6 @@ class DecodedImage:
 
 
 __all__ = [
-    "MediaFrame",
     "DecodedImage",
+    "MediaFrame",
 ]

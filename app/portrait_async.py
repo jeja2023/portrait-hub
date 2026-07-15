@@ -1,7 +1,6 @@
 import asyncio
-from collections.abc import Callable, Sequence
-from typing import Awaitable, ParamSpec, TypeVar, cast
-
+from collections.abc import Awaitable, Callable, Sequence
+from typing import ParamSpec, TypeVar, cast
 
 P = ParamSpec("P")
 T = TypeVar("T")

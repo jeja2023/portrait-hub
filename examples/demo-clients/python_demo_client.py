@@ -68,7 +68,11 @@ def run_demo(args: argparse.Namespace) -> dict[str, Any]:
     if args.image and args.image_b:
         steps.append(summarize("compare_persons", client.compare_persons(Path(args.image), Path(args.image_b), args.threshold_profile)))
     if args.video:
-        steps.append(summarize("create_video_job", client.create_video_job(Path(args.video), frame_interval=args.frame_interval, max_frames=args.max_frames)))
+        steps.append(summarize("create_video_job", client.create_video_job(
+            Path(args.video),
+            sample_interval_seconds=args.sample_interval_seconds,
+            batch_size=args.batch_size,
+        )))
 
     return {"ok": True, "dry_run": False, "steps": steps}
 
@@ -81,8 +85,8 @@ def main() -> int:
     parser.add_argument("--person-id", default="demo-python-person")
     parser.add_argument("--top-k", type=int, default=5)
     parser.add_argument("--threshold-profile", default="normal")
-    parser.add_argument("--frame-interval", type=int, default=15)
-    parser.add_argument("--max-frames", type=int, default=64)
+    parser.add_argument("--sample-interval-seconds", type=float, default=1.0)
+    parser.add_argument("--batch-size", type=int, default=16)
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
     print(json.dumps(run_demo(args), ensure_ascii=False, indent=2, sort_keys=True))

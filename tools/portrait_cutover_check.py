@@ -13,9 +13,8 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from tools.portrait_model_regression import run_model_regression  # noqa: E402
 from tools.portrait_algorithm_eval import load_manifest  # noqa: E402
-
+from tools.portrait_model_regression import run_model_regression  # noqa: E402
 
 REQUIRED_PRODUCTION_CAPABILITIES: dict[str, dict[str, Any]] = {
     "face_detection": {"adapter": "scrfd"},

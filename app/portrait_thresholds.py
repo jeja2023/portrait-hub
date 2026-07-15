@@ -1,13 +1,12 @@
-from copy import deepcopy
 import math
 import threading
+from copy import deepcopy
 from typing import Any
 
 from fastapi import HTTPException, status
 
 from app.portrait_state import handle_state_read_error, read_json_state, write_json_state
 from app.settings import PORTRAIT_STORAGE_BACKEND, PORTRAIT_THRESHOLDS_STATE_PATH
-
 
 ThresholdProfiles = dict[str, dict[str, float]]
 

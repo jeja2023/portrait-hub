@@ -17,11 +17,11 @@ from app.portrait_tracking_metrics import (
 )
 
 
-def first_frame_index(track: "TrackState") -> int:
+def first_frame_index(track: TrackState) -> int:
     return min(track.frame_indexes) if track.frame_indexes else track.last_frame_index
 
 
-def last_frame_index(track: "TrackState") -> int:
+def last_frame_index(track: TrackState) -> int:
     return max(track.frame_indexes) if track.frame_indexes else track.last_frame_index
 
 
@@ -81,7 +81,7 @@ class TrackState:
 
     def public_dict(self, *, include_template_embedding: bool = False) -> dict[str, Any]:
         ordered = sorted(self.frame_indexes)
-        gaps = [right - left - 1 for left, right in zip(ordered, ordered[1:]) if right - left > 1]
+        gaps = [right - left - 1 for left, right in zip(ordered, ordered[1:], strict=False) if right - left > 1]
         stability = track_stability_score(self.observations)
         average_confidence = self.confidence_sum / max(1, self.hits)
         average_quality = self.quality_sum / max(1, self.hits)
@@ -115,13 +115,13 @@ def make_observation(frame_index: int, person: dict[str, Any]) -> dict[str, Any]
 def average_boxes(boxes: list[list[float]], weights: list[float]) -> list[float]:
     total = max(1e-9, sum(weights))
     return [
-        round(sum(float(box[index]) * weight for box, weight in zip(boxes, weights)) / total, 4)
+        round(sum(float(box[index]) * weight for box, weight in zip(boxes, weights, strict=False)) / total, 4)
         for index in range(4)
     ]
 
 
 def interpolate_box(left: list[float], right: list[float], ratio: float) -> list[float]:
-    return [round(float(a) * (1.0 - ratio) + float(b) * ratio, 4) for a, b in zip(left, right)]
+    return [round(float(a) * (1.0 - ratio) + float(b) * ratio, 4) for a, b in zip(left, right, strict=False)]
 
 
 def predict_track_box(track: TrackState, frame_index: int) -> list[float]:
@@ -147,7 +147,7 @@ def track_stability_score(observations: list[dict[str, Any]]) -> float:
         return 1.0
     ious = [
         box_iou(left.get("box", []), right.get("box", []))
-        for left, right in zip(observations, observations[1:])
+        for left, right in zip(observations, observations[1:], strict=False)
     ]
     return round(float(sum(ious) / len(ious)), 6) if ious else 1.0
 
@@ -183,7 +183,7 @@ def postprocess_tracklets(frames: list[dict[str, Any]], tracks: list[TrackState]
                     "support": len(boxes),
                 }
 
-        for left, right in zip(observations, observations[1:]):
+        for left, right in zip(observations, observations[1:], strict=False):
             gap = int(right["frame_index"]) - int(left["frame_index"]) - 1
             if gap <= 0 or gap > max_interpolation_gap:
                 continue

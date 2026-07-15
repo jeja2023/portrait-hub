@@ -3,8 +3,10 @@ from __future__ import annotations
 import copy
 import hashlib
 import hmac
+import ipaddress
 import re
 import secrets
+import socket
 import threading
 import time
 from typing import Any
@@ -13,8 +15,12 @@ from urllib.parse import urlparse
 from fastapi import HTTPException, status
 
 from app.portrait_state import handle_state_read_error, read_json_state, write_json_state
-from app.settings import PORTRAIT_ACCESS_KEY_ROTATION_GRACE_SECONDS, PORTRAIT_ACCESS_STATE_PATH
-
+from app.settings import (
+    ALLOW_PRIVATE_WEBHOOK_HOSTS,
+    PORTRAIT_ACCESS_KEY_ROTATION_GRACE_SECONDS,
+    PORTRAIT_ACCESS_STATE_PATH,
+    WEBHOOK_ALLOWED_HOSTS,
+)
 
 _ACCESS_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,95}$")
 _ACCESS_STATUS_VALUES = {"active", "disabled"}
@@ -268,6 +274,63 @@ def normalize_events(events: list[str] | None) -> list[str]:
     return values
 
 
+def _webhook_host_matches_allowlist(hostname: str) -> bool:
+    if not WEBHOOK_ALLOWED_HOSTS:
+        return True
+    normalized = hostname.lower().rstrip(".")
+    for allowed in WEBHOOK_ALLOWED_HOSTS:
+        allowed_host = allowed.lower().rstrip(".")
+        if normalized == allowed_host or normalized.endswith(f".{allowed_host}"):
+            return True
+    return False
+
+
+def _webhook_address_is_blocked(address: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
+    return (
+        address.is_private
+        or address.is_loopback
+        or address.is_link_local
+        or address.is_multicast
+        or address.is_reserved
+        or address.is_unspecified
+    )
+
+
+def _reject_blocked_webhook_host(hostname: str) -> None:
+    # 防 SSRF：拒绝解析到内网/回环/链路本地等地址的回调主机。DNS 名称按其解析结果全部校验，
+    # 以缩小 DNS-rebinding 窗口；ALLOW_PRIVATE_WEBHOOK_HOSTS 可在受控环境放行内网目标。
+    if ALLOW_PRIVATE_WEBHOOK_HOSTS:
+        return
+    try:
+        literal = ipaddress.ip_address(hostname)
+    except ValueError:
+        literal = None
+    if literal is not None:
+        if _webhook_address_is_blocked(literal):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="事件回调 URL 主机被 SSRF 防护策略拒绝",
+            )
+        return
+    try:
+        infos = socket.getaddrinfo(hostname, None, type=socket.SOCK_STREAM)
+    except OSError:
+        return
+    for info in infos:
+        sockaddr = info[4]
+        if not sockaddr:
+            continue
+        try:
+            address = ipaddress.ip_address(str(sockaddr[0]))
+        except ValueError:
+            continue
+        if _webhook_address_is_blocked(address):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="事件回调 URL 主机被 SSRF 防护策略拒绝",
+            )
+
+
 def validate_webhook_url(value: str | None, *, required: bool) -> str:
     url = str(value or "").strip()
     if not url:
@@ -281,6 +344,12 @@ def validate_webhook_url(value: str | None, *, required: bool) -> str:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="事件回调 URL 不能包含凭证")
     if len(url) > 2048:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="事件回调 URL 过长")
+    if not _webhook_host_matches_allowlist(parsed.hostname):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="事件回调 URL 主机不在 WEBHOOK_ALLOWED_HOSTS 允许列表中",
+        )
+    _reject_blocked_webhook_host(parsed.hostname)
     return url
 
 
@@ -758,20 +827,20 @@ __all__ = [
     "clear_access_state",
     "create_application",
     "create_tenant",
+    "create_webhook",
     "ensure_tenant",
     "find_tenant",
     "flush_access_call_stats",
-    "create_webhook",
     "list_applications",
     "list_tenants",
     "list_webhooks",
     "load_access_state",
-    "restore_access_state",
     "record_application_call",
+    "restore_access_state",
     "rotate_application_secret",
     "rotate_webhook_secret",
+    "tenant_id_from_name",
     "update_application",
     "update_webhook",
-    "tenant_id_from_name",
     "webhook_sample_delivery",
 ]

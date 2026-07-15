@@ -33,10 +33,10 @@ def global_api_token_matches(authorization: str | None, x_api_key: str | None) -
     bearer = optional_header_value(authorization)
     api_key = optional_header_value(x_api_key)
     return (
-        bearer is not None
-        and hmac.compare_digest(bearer, f"Bearer {API_TOKEN}")
-        or api_key is not None
-        and hmac.compare_digest(api_key, API_TOKEN)
+        (bearer is not None
+        and hmac.compare_digest(bearer, f"Bearer {API_TOKEN}"))
+        or (api_key is not None
+        and hmac.compare_digest(api_key, API_TOKEN))
     )
 
 

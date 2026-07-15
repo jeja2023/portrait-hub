@@ -12,8 +12,9 @@ from fastapi import Header, HTTPException, status
 
 from app.settings import (
     API_TOKEN,
-    JWT_AUDIENCE,
+    AUTH_REQUIRED,
     JWT_ALGORITHM,
+    JWT_AUDIENCE,
     JWT_ISSUER,
     JWT_PUBLIC_KEY,
     JWT_PUBLIC_KEY_PATH,
@@ -146,7 +147,7 @@ def configured_jwt_public_key() -> str:
         return JWT_PUBLIC_KEY.replace("\\n", "\n")
     if JWT_PUBLIC_KEY_PATH:
         try:
-            with open(JWT_PUBLIC_KEY_PATH, "r", encoding="utf-8") as file:
+            with open(JWT_PUBLIC_KEY_PATH, encoding="utf-8") as file:
                 return file.read()
         except Exception as exc:
             raise unauthorized("JWT public key is unavailable") from exc
@@ -355,7 +356,11 @@ async def require_permission(
     tenant_id = optional_header_value(x_tenant_id)
     api_key = optional_header_value(x_api_key)
     if api_key:
-        from app.portrait_access import application_key_matches, application_key_matches_any_tenant, application_scopes_allow_permission
+        from app.portrait_access import (
+            application_key_matches,
+            application_key_matches_any_tenant,
+            application_scopes_allow_permission,
+        )
 
         application = application_key_matches(tenant_id, api_key) if tenant_id else application_key_matches_any_tenant(api_key)
         if application is not None:
@@ -368,6 +373,11 @@ async def require_permission(
     if API_TOKEN and authorization and hmac.compare_digest(authorization, f"Bearer {API_TOKEN}"):
         return
     if not RBAC_ENABLED:
+        # RBAC 关闭且未命中任何凭证：仅当认证为必填（生产默认）时 fail-closed，
+        # 避免仅挂 permission_dependency 而漏挂 require_api_token 的路由被匿名访问。
+        # AUTH_REQUIRED=false 的本地/测试部署保持宽松（与 require_api_token 一致）。
+        if AUTH_REQUIRED and not API_TOKEN:
+            raise unauthorized("missing API token, application API key, or enabled RBAC JWT backend")
         return
     if not authorization or not authorization.startswith("Bearer "):
         raise unauthorized("missing bearer JWT")

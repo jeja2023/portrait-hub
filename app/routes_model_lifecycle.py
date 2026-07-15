@@ -17,9 +17,8 @@ from app.runtime import (
     get_or_load_model,
     unload_model_by_key,
 )
-from app.security import require_api_token
 from app.schemas import ModelBundle, ModelRequest, WarmupRequest
-
+from app.security import require_api_token
 
 router = APIRouter()
 

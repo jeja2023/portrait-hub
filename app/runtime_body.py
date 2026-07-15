@@ -8,11 +8,11 @@ from app.geometry import crop_person, person_crop_quality
 from app.inference_detection import infer_person_frames
 from app.inference_reid import infer_reid_images
 from app.observability import logger, wall_time
-from app.portrait_embeddings import FALLBACK_EMBEDDING_MODEL_ID, FALLBACK_EMBEDDING_VERSION, body_record as fallback_body_record
+from app.portrait_embeddings import FALLBACK_EMBEDDING_MODEL_ID, FALLBACK_EMBEDDING_VERSION
+from app.portrait_embeddings import body_record as fallback_body_record
 from app.portrait_model_runtime_capability import get_capability_runtime, runtime_output_value
 from app.portrait_response import exception_log_summary
 from app.settings import RUNTIME_CAPABILITY_RETRY_COOLDOWN_SECONDS
-
 
 # 这些变量持有的是 "retry-after"（稍后重试）的时间戳，而不是一个永久的标志：
 # 未来某时刻的值意味着运行时在发生故障后处于冷却状态，而 0.0 或 False 表示

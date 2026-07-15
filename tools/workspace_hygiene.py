@@ -5,9 +5,9 @@ from __future__ import annotations
 import argparse
 import os
 import shutil
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Iterable
-
+from typing import Any
 
 CACHE_DIR_NAMES = {
     ".codex-pycache",

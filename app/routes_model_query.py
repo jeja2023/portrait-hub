@@ -14,7 +14,6 @@ from app.portrait_security import tenant_id_from_request
 from app.runtime import MODEL_REGISTRY
 from app.security import require_api_token
 
-
 router = APIRouter()
 
 

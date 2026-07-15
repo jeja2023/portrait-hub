@@ -54,7 +54,7 @@ async def acquire_with_timeout(
                 await asyncio.wait_for(semaphore.acquire(), timeout=timeout_seconds)
             else:
                 await semaphore.acquire()
-        except asyncio.TimeoutError as exc:
+        except TimeoutError as exc:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail=detail,
@@ -205,11 +205,11 @@ async def run_yolo_frames(
 
 
 __all__ = [
+    "acquire_with_timeout",
     "build_input_array",
     "bundle_execution_provider",
-    "acquire_with_timeout",
     "run_model_bundle",
     "run_model_bundle_batch",
-    "stack_outputs",
     "run_yolo_frames",
+    "stack_outputs",
 ]

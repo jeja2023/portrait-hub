@@ -5,9 +5,8 @@ import ast
 import importlib.util
 import subprocess
 import sys
-from pathlib import Path
 import tomllib
-
+from pathlib import Path
 
 DEFAULT_TARGET_ROOTS = ("app", "tools", "sdk")
 IGNORED_PATH_PARTS = {".git", ".mypy_cache", ".pytest_cache", ".venv", "__pycache__"}

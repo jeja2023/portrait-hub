@@ -5,7 +5,6 @@ from typing import Any
 
 import cv2
 
-from app.media.frame_sampler import bounded_max_frames, normalize_frame_interval
 from app.observability import logger
 from app.video_io import SUPPORTED_VIDEO_EXTENSIONS, extract_video_frames_from_path
 
@@ -37,8 +36,8 @@ def probe_video_file(path: str) -> dict[str, Any]:
 async def extract_video_frames_from_bytes(
     data: bytes,
     filename: str | None,
-    frame_interval: int,
-    max_frames: int,
+    sample_interval_seconds: float,
+    batch_size: int,
 ) -> tuple[list[Any], dict[str, Any]]:
     suffix = Path(filename or "video.mp4").suffix.lower() or ".mp4"
     if suffix not in SUPPORTED_VIDEO_EXTENSIONS:
@@ -51,13 +50,11 @@ async def extract_video_frames_from_bytes(
             temp_path = temp_file.name
 
         metadata = await asyncio.to_thread(probe_video_file, temp_path)
-        interval = normalize_frame_interval(frame_interval, default=1)
-        capped_frames = bounded_max_frames(max_frames, default=max_frames, upper_bound=max_frames)
         frames, extract_meta = await asyncio.to_thread(
             extract_video_frames_from_path,
             temp_path,
-            interval,
-            capped_frames,
+            sample_interval_seconds,
+            batch_size,
             None,
         )
         metadata.update(extract_meta)

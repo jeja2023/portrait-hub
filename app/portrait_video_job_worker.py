@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import math
 import os
 import re
 import socket
@@ -15,13 +16,13 @@ from app.portrait_async import run_blocking_io
 from app.portrait_jobs import (
     TERMINAL_JOB_STATUSES,
     get_video_job,
-    load_video_jobs_state,
     normalize_job_status,
+    refresh_video_job,
     run_video_job,
     video_job_identifier_fingerprint,
 )
 from app.portrait_response import exception_log_summary
-from app.portrait_task_queue import QueueMessage, TASK_QUEUE
+from app.portrait_task_queue import TASK_QUEUE, QueueMessage
 from app.routes_inference_common import validate_detection_parameters
 from app.settings import (
     DEFAULT_CONFIDENCE,
@@ -29,13 +30,12 @@ from app.settings import (
     DEFAULT_DETECTOR_PROJECT,
     DEFAULT_IOU,
     DEFAULT_REID_ARTIFACT,
-    MAX_VIDEO_FRAMES,
+    INFERENCE_BATCH_SIZE_LIMIT,
     TASK_QUEUE_POLL_INTERVAL_SECONDS,
     TASK_QUEUE_VISIBILITY_TIMEOUT_SECONDS,
     VIDEO_JOB_WORKER_IN_PROCESS,
 )
 from app.video_io import delete_video_job_input
-
 
 VIDEO_JOB_WORKER_ID = f"{socket.gethostname()}:{os.getpid()}:{uuid4().hex[:8]}"
 _TENANT_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$")
@@ -57,12 +57,12 @@ def validate_video_job_message(message: QueueMessage) -> dict[str, Any]:
         raise ValueError("视频任务消息租户无效")
     if not _JOB_PATTERN.fullmatch(job_id):
         raise ValueError("视频任务消息 ID 无效")
-    frame_interval = int(message.payload.get("frame_interval") or 0)
-    max_frames = int(message.payload.get("max_frames") or 0)
-    if frame_interval < 1:
-        raise ValueError("视频任务抽帧间隔无效")
-    if max_frames < 1 or max_frames > MAX_VIDEO_FRAMES:
-        raise ValueError("视频任务最大帧数无效")
+    sample_interval_seconds = float(message.payload.get("sample_interval_seconds") or 0.0)
+    batch_size = int(message.payload.get("batch_size") or 0)
+    if not math.isfinite(sample_interval_seconds) or sample_interval_seconds <= 0:
+        raise ValueError("视频任务采样间隔无效")
+    if batch_size < 1 or batch_size > INFERENCE_BATCH_SIZE_LIMIT:
+        raise ValueError("视频任务批次大小无效")
     detector_project_name = str(
         message.payload.get("detector_project_name") or DEFAULT_DETECTOR_PROJECT
     )
@@ -102,8 +102,8 @@ def validate_video_job_message(message: QueueMessage) -> dict[str, Any]:
         "tenant_id": tenant_id,
         "job_id": job_id,
         "input_ref": input_ref,
-        "frame_interval": frame_interval,
-        "max_frames": max_frames,
+        "sample_interval_seconds": sample_interval_seconds,
+        "batch_size": batch_size,
         "detector_project_name": detector_project_name,
         "detector_model_name": detector_model_name,
         "reid_project_name": reid_project_name,
@@ -117,8 +117,8 @@ def validate_video_job_message(message: QueueMessage) -> dict[str, Any]:
 
 async def process_video_job_message(message: QueueMessage) -> dict[str, Any]:
     task = validate_video_job_message(message)
-    await run_blocking_io(load_video_jobs_state)
-    job = get_video_job(task["job_id"], tenant_id=task["tenant_id"])
+    # 按 (tenant_id, job_id) 单条刷新，避免每条消息全量重载任务表
+    job = await run_blocking_io(refresh_video_job, task["job_id"], task["tenant_id"])
     if job is None:
         await run_blocking_io(delete_video_job_input, task["input_ref"])
         await run_blocking_io(
@@ -150,8 +150,8 @@ async def process_video_job_message(message: QueueMessage) -> dict[str, Any]:
         job.tenant_id,
         None,
         None,
-        task["frame_interval"],
-        task["max_frames"],
+        task["sample_interval_seconds"],
+        task["batch_size"],
         input_ref=task["input_ref"],
         detector_project_name=task["detector_project_name"],
         detector_model_name=task["detector_model_name"],

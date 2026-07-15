@@ -171,6 +171,6 @@ async def infer_detection_images(
 
 
 __all__ = [
-    "infer_person_frames",
     "infer_detection_images",
+    "infer_person_frames",
 ]

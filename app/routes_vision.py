@@ -11,6 +11,7 @@ from fastapi import (
     UploadFile,
     status,
 )
+from PIL import Image
 
 from app.image_io import load_images
 from app.inference import (
@@ -29,9 +30,9 @@ from app.portrait_image_results import (
     image_analysis_results_snapshot,
 )
 from app.portrait_pagination import normalize_list_pagination, page_items_keyset
-from app.portrait_response import portrait_success
 from app.portrait_request_context import PortraitRequestContext, portrait_request_context
 from app.portrait_request_validation import validate_int_range
+from app.portrait_response import portrait_success
 from app.routes_inference_common import (
     inference_error_boundary,
     validate_detection_parameters,
@@ -41,9 +42,6 @@ from app.runtime import get_or_load_model, touch_model
 from app.schemas import ModelBundle
 from app.security import require_api_token
 from app.settings import MAX_TOP_K, MAX_VISION_IMAGES
-
-from PIL import Image
-
 
 router = APIRouter()
 
@@ -124,7 +122,7 @@ async def v1_list_image_analysis_results(
     ctx: PortraitRequestContext = Depends(portrait_request_context),
 ) -> dict[str, Any]:
     pagination_request = normalize_list_pagination(limit, offset, cursor)
-    items = [
+    items: list[dict[str, Any]] = [
         {
             "sort_key": -float(record.created_at),
             "result_id": record.result_id,

@@ -8,30 +8,38 @@ from fastapi import HTTPException, status
 from PIL import Image
 
 from app.inference_tracks import infer_tracks_for_images
+from app.media.quality import assess_image_quality
+from app.media.stream_decode import validate_media_stream_url
 from app.metrics import observe_video_sampling_metrics
 from app.model_refs import validate_model_reference_parts
 from app.observability import logger, wall_time
-from app.media.stream_decode import validate_media_stream_url
+from app.portrait_jobs import image_thumbnail_data_url
 from app.portrait_request_validation import validate_int_range
 from app.portrait_response import exception_log_summary
-from app.routes_inference_common import validate_detection_parameters
 from app.portrait_security import redact_sensitive_fields
 from app.portrait_state import append_jsonl
-from app.portrait_streams import StreamRecord, StreamStatus, persist_stream, restore_stream, restore_stream_snapshot_in_store
+from app.portrait_streams import (
+    StreamRecord,
+    StreamStatus,
+    persist_stream,
+    restore_stream,
+    restore_stream_snapshot_in_store,
+)
+from app.routes_inference_common import validate_detection_parameters
 from app.settings import (
     DEFAULT_CONFIDENCE,
     DEFAULT_DETECTOR_ARTIFACT,
     DEFAULT_DETECTOR_PROJECT,
     DEFAULT_IOU,
     DEFAULT_REID_ARTIFACT,
+    INFERENCE_BATCH_SIZE_LIMIT,
     MAX_DETECTIONS,
-    MAX_STREAM_FRAMES,
     STREAM_EVENT_STATE_PATH,
-    STREAM_FRAME_INTERVAL,
+    STREAM_INFERENCE_BATCH_SIZE,
     STREAM_READ_TIMEOUT_SECONDS,
+    STREAM_SAMPLE_INTERVAL_SECONDS,
 )
-from app.video_io import extract_video_frames_from_path, public_video_metadata
-
+from app.video_io import aiter_video_frame_batches, public_video_metadata
 
 STREAM_WORKER_SESSIONS: dict[tuple[str, str], dict[str, Any]] = {}
 STREAM_FRAME_BUFFER_LIMIT = 1
@@ -41,14 +49,14 @@ STREAM_ANALYSIS_SETTING_KEYS = {
     "confidence",
     "detector_model_name",
     "detector_project_name",
-    "frame_interval",
     "include_embeddings",
     "iou",
     "max_detections",
-    "max_frames",
     "read_timeout_seconds",
     "reid_model_name",
     "reid_project_name",
+    "sample_interval_seconds",
+    "batch_size",
 }
 
 
@@ -94,6 +102,14 @@ def stream_analysis_parameters(settings: dict[str, Any]) -> dict[str, Any]:
         maximum=MAX_DETECTIONS,
     )
     validate_detection_parameters(confidence=confidence, iou=iou, max_detections=max_detections)
+    sample_interval_seconds = _float_setting(
+        settings, "sample_interval_seconds", STREAM_SAMPLE_INTERVAL_SECONDS
+    )
+    if sample_interval_seconds <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="sample_interval_seconds 必须大于 0",
+        )
     return {
         "detector_project_name": detector_project_name,
         "detector_model_name": detector_model_name,
@@ -103,16 +119,12 @@ def stream_analysis_parameters(settings: dict[str, Any]) -> dict[str, Any]:
         "iou": iou,
         "max_detections": max_detections,
         "include_embeddings": _bool_setting(settings, "include_embeddings", False),
-        "frame_interval": validate_int_range(
-            "frame_interval",
-            settings.get("frame_interval", STREAM_FRAME_INTERVAL),
+        "sample_interval_seconds": sample_interval_seconds,
+        "batch_size": validate_int_range(
+            "batch_size",
+            settings.get("batch_size", STREAM_INFERENCE_BATCH_SIZE),
             minimum=1,
-        ),
-        "max_frames": validate_int_range(
-            "max_frames",
-            settings.get("max_frames", MAX_STREAM_FRAMES),
-            minimum=1,
-            maximum=MAX_STREAM_FRAMES,
+            maximum=INFERENCE_BATCH_SIZE_LIMIT,
         ),
         "read_timeout_seconds": validate_int_range(
             "read_timeout_seconds",
@@ -152,12 +164,19 @@ async def analyze_stream_frames(
         include_embeddings=parameters["include_embeddings"],
     )
     source_indexes = metadata.get("source_frame_indexes", [])
+    source_seconds = metadata.get("source_seconds", [])
     fps = float(metadata.get("fps") or 0.0)
     for index, frame in enumerate(result["frames"]):
+        image = images[index] if index < len(images) else None
         source_frame_index = source_indexes[index] if index < len(source_indexes) else index
         frame["source_frame_index"] = source_frame_index
-        if fps:
+        if index < len(source_seconds):
+            frame["source_seconds"] = round(float(source_seconds[index]), 6)
+        elif fps:
             frame["source_seconds"] = round(source_frame_index / fps, 6)
+        if image is not None:
+            frame["thumbnail"] = image_thumbnail_data_url(image)
+            frame["quality"] = assess_image_quality(image)
     observe_video_sampling_metrics(metadata)
     return {
         "analysis_mode": "person_tracks",
@@ -368,48 +387,53 @@ async def run_stream_worker_session(
     *,
     max_reconnects: int = 3,
 ) -> dict[str, Any]:
-    """在每个重连窗口内完成拉流、抽帧和人员轨迹解析。"""
+    """Session 内持续 rolling batch：连接保持在 worker 里，每批输出 stream_analysis_completed。"""
     session = start_stream_worker_session(stream)
     attempts = 0
     while stream.status == StreamStatus.RUNNING and attempts <= max_reconnects:
         try:
             await asyncio.to_thread(validate_media_stream_url, stream.stream_url)
             parameters = stream_analysis_parameters(stream.settings)
-            frames, metadata = await asyncio.to_thread(
-                extract_video_frames_from_path,
+            async for batch_images, batch_source_indexes, batch_source_seconds, fps, _ in aiter_video_frame_batches(
                 stream.stream_url,
-                parameters["frame_interval"],
-                parameters["max_frames"],
+                parameters["sample_interval_seconds"],
+                parameters["batch_size"],
                 parameters["read_timeout_seconds"],
-            )
-            heartbeat_stream_worker_session(
-                stream,
-                frame_buffer_depth=min(len(frames), STREAM_FRAME_BUFFER_LIMIT),
-                frames_sampled=len(frames),
-            )
-            analysis = await analyze_stream_frames(stream, frames, metadata)
-            key = stream_session_key(stream)
-            worker_session = STREAM_WORKER_SESSIONS[key]
-            worker_session["frames_processed"] = int(worker_session.get("frames_processed", 0)) + len(frames)
-            worker_session["last_analysis_at"] = wall_time()
-            worker_session["last_person_count"] = int(analysis.get("person_count", 0))
-            worker_session["last_track_count"] = int(analysis.get("track_count", 0))
-            emit_stream_event(
-                stream,
-                "stream_analysis_completed",
-                "stream analysis completed",
-                analysis,
-            )
-            emit_stream_event(
-                stream,
-                "stream_worker_heartbeat",
-                "stream worker heartbeat",
-                {
-                    **heartbeat_stream_worker_session(stream, frame_buffer_depth=0),
-                    "source_frames_read": metadata.get("source_frames_read"),
-                    "extracted_frames": metadata.get("extracted_frames"),
-                },
-            )
+            ):
+                if stream.status != StreamStatus.RUNNING:
+                    break
+                heartbeat_stream_worker_session(
+                    stream,
+                    frame_buffer_depth=min(len(batch_images), STREAM_FRAME_BUFFER_LIMIT),
+                    frames_sampled=len(batch_images),
+                )
+                metadata = {
+                    "source_frame_indexes": batch_source_indexes,
+                    "source_seconds": batch_source_seconds,
+                    "fps": fps,
+                    "extracted_frames": len(batch_images),
+                    "source_frames_read": (batch_source_indexes[-1] + 1) if batch_source_indexes else 0,
+                }
+                analysis = await analyze_stream_frames(stream, batch_images, metadata)
+                key = stream_session_key(stream)
+                worker_session = STREAM_WORKER_SESSIONS[key]
+                worker_session["frames_processed"] = int(worker_session.get("frames_processed", 0)) + len(batch_images)
+                worker_session["last_analysis_at"] = wall_time()
+                worker_session["last_person_count"] = int(analysis.get("person_count", 0))
+                worker_session["last_track_count"] = int(analysis.get("track_count", 0))
+                emit_stream_event(stream, "stream_analysis_completed", "stream analysis completed", analysis)
+                emit_stream_event(
+                    stream,
+                    "stream_worker_heartbeat",
+                    "stream worker heartbeat",
+                    {
+                        **heartbeat_stream_worker_session(stream, frame_buffer_depth=0),
+                        "source_frames_read": metadata.get("source_frames_read"),
+                        "extracted_frames": metadata.get("extracted_frames"),
+                    },
+                )
+            if stream.status == StreamStatus.RUNNING:
+                raise ConnectionError("stream source ended")
             return public_stream_worker_session(STREAM_WORKER_SESSIONS[stream_session_key(stream)])
         except Exception as exc:
             attempts += 1

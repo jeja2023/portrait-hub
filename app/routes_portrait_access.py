@@ -6,6 +6,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.observability import request_id_from_headers
 from app.portrait_access import (
     access_state_payload,
     create_application,
@@ -22,16 +23,14 @@ from app.portrait_access import (
     update_webhook,
     webhook_sample_delivery,
 )
-from app.portrait_call_logs import list_call_logs
-from app.portrait_errors import error_code_catalog
 from app.portrait_async import run_blocking_io
 from app.portrait_audit import audit_event
-from app.observability import request_id_from_headers
 from app.portrait_auth import permission_dependency
+from app.portrait_call_logs import list_call_logs
+from app.portrait_errors import error_code_catalog
 from app.portrait_request_context import PortraitRequestContext, portrait_request_context
 from app.portrait_response import portrait_success
 from app.security import require_api_token
-
 
 router = APIRouter(dependencies=[Depends(require_api_token)])
 

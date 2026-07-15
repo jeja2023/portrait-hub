@@ -3,10 +3,10 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from app import postgres_core as _core
 from app.observability import logger, trace_span
 from app.portrait_response import exception_log_summary
 from app.settings import PGVECTOR_HNSW_EF_SEARCH
-from app import postgres_core as _core
 
 
 def load_gallery_snapshot() -> dict[str, Any]:
@@ -75,7 +75,7 @@ def load_gallery_snapshot() -> dict[str, Any]:
                             }
                         )
     except Exception as exc:  # pragma: no cover - 需要外部数据库支持
-        logger.warning("postgres gallery 加载失败ed: %s", exception_log_summary(exc))
+        logger.warning("postgres gallery load failed: %s", exception_log_summary(exc))
         return {"people": []}
     return {"version": 1, "people": list(people.values())}
 
@@ -156,21 +156,18 @@ def _execute_upsert_gallery_feature(cursor: Any, tenant_id: str, person_id: str,
 
 
 def upsert_gallery_person(person: dict[str, Any]) -> None:
-    with _core.postgres_connection() as connection:
-        with connection.cursor() as cursor:
-            _execute_upsert_gallery_person(cursor, person)
+    with _core.postgres_connection() as connection, connection.cursor() as cursor:
+        _execute_upsert_gallery_person(cursor, person)
 
 
 def upsert_gallery_feature(tenant_id: str, person_id: str, feature: dict[str, Any]) -> None:
-    with _core.postgres_connection() as connection:
-        with connection.cursor() as cursor:
-            _execute_upsert_gallery_feature(cursor, tenant_id, person_id, feature)
+    with _core.postgres_connection() as connection, connection.cursor() as cursor:
+        _execute_upsert_gallery_feature(cursor, tenant_id, person_id, feature)
 
 
 def delete_gallery_person(tenant_id: str, person_id: str) -> None:
-    with _core.postgres_connection() as connection:
-        with connection.cursor() as cursor:
-            cursor.execute("DELETE FROM portrait_people WHERE tenant_id = %s AND person_id = %s", (tenant_id, person_id))
+    with _core.postgres_connection() as connection, connection.cursor() as cursor:
+        cursor.execute("DELETE FROM portrait_people WHERE tenant_id = %s AND person_id = %s", (tenant_id, person_id))
 
 
 def replace_gallery_snapshot(snapshot: dict[str, Any]) -> None:
@@ -218,15 +215,14 @@ def replace_gallery_snapshot(snapshot: dict[str, Any]) -> None:
     if not tenant_ids:
         logger.warning("postgres gallery snapshot replacement skipped because snapshot contains no tenants")
         return
-    with _core.postgres_connection() as connection:
-        with connection.cursor() as cursor:
-            for tenant_id in tenant_ids:
-                cursor.execute("DELETE FROM portrait_features WHERE tenant_id = %s", (tenant_id,))
-                cursor.execute("DELETE FROM portrait_people WHERE tenant_id = %s", (tenant_id,))
-            if person_rows:
-                cursor.executemany(UPSERT_PERSON_SQL, person_rows)
-            if feature_rows:
-                cursor.executemany(UPSERT_FEATURE_SQL, feature_rows)
+    with _core.postgres_connection() as connection, connection.cursor() as cursor:
+        for tenant_id in tenant_ids:
+            cursor.execute("DELETE FROM portrait_features WHERE tenant_id = %s", (tenant_id,))
+            cursor.execute("DELETE FROM portrait_people WHERE tenant_id = %s", (tenant_id,))
+        if person_rows:
+            cursor.executemany(UPSERT_PERSON_SQL, person_rows)
+        if feature_rows:
+            cursor.executemany(UPSERT_FEATURE_SQL, feature_rows)
 
 
 def search_pgvector(
@@ -272,15 +268,14 @@ def search_pgvector(
     # 放宽 HNSW 候选列表，使 tenant_id/modality 等值过滤（施加在 ANN 候选之上）
     # 不会让结果少于 top_k。
     ef_search = max(int(PGVECTOR_HNSW_EF_SEARCH), int(top_k))
-    with _core.postgres_connection(row_factory=_core.dict_row) as connection:
-        with connection.cursor() as cursor:
-            try:
-                cursor.execute(f"SET LOCAL hnsw.ef_search = {ef_search}")
-            except Exception as exc:  # pragma: no cover - 无 pgvector HNSW 时该 GUC 不存在
-                logger.warning("could not set hnsw.ef_search, using server default: %s", exception_log_summary(exc))
-            literal = _core.vector_literal(embedding)
-            cursor.execute(query, (literal, tenant_id, modality, len(embedding), int(top_k)))
-            rows = list(cursor)
+    with _core.postgres_connection(row_factory=_core.dict_row) as connection, connection.cursor() as cursor:
+        try:
+            cursor.execute(f"SET LOCAL hnsw.ef_search = {ef_search}")
+        except Exception as exc:  # pragma: no cover - 无 pgvector HNSW 时该 GUC 不存在
+            logger.warning("could not set hnsw.ef_search, using server default: %s", exception_log_summary(exc))
+        literal = _core.vector_literal(embedding)
+        cursor.execute(query, (literal, tenant_id, modality, len(embedding), int(top_k)))
+        rows = list(cursor)
 
     candidates: list[dict[str, Any]] = []
     for row in rows:

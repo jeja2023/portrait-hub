@@ -2,7 +2,7 @@
 
 面向 Ubuntu + Docker + NVIDIA GPU 的 ONNX 推理服务。服务通过 FastAPI 暴露接口，按 GPU 拆成多个 worker，适合给人像识别、人像检索、ReID 等业务项目提供共享推理能力。
 
-当前版本：`0.8.0`。本版本在租户目录与单凭证接入基础上，完成持久化视频任务、租户令牌边界、分块上传、批量统计落盘、严格生产门禁和结果灯箱可访问性升级；业务系统仍优先使用单租户应用 API Key，多租户 JWT 或平台运维场景保留显式 `X-Tenant-ID`。
+当前版本：`0.8.2`。本补丁完成离线视频与实时视频流的连续时间轴采样、增量批次推理、跨批次轨迹关联和 worker 租约续期，并统一 API、SDK、Compose、环境变量及部署文档中的视频处理契约；业务系统仍优先使用单租户应用 API Key，多租户 JWT 或平台运维场景保留显式 `X-Tenant-ID`。
 
 ## PortraitHub v1 平台接口
 
@@ -376,8 +376,8 @@ curl -X POST http://127.0.0.1:9001/v1/infer/tracks \
 ```bash
 curl -X POST http://127.0.0.1:9001/v1/jobs/video \
   -F "file=@clip.mp4" \
-  -F "frame_interval=15" \
-  -F "max_frames=64" \
+  -F "sample_interval_seconds=1.0" \
+  -F "batch_size=16" \
   -F "include_embeddings=false"
 ```
 
@@ -388,7 +388,7 @@ curl -X POST http://127.0.0.1:9001/v1/jobs/video \
 ```bash
 curl -X POST http://127.0.0.1:9001/v1/streams \
   -H "Content-Type: application/json" \
-  -d '{"stream_url":"rtsp://user:password@camera-host/stream1","name":"camera-1","settings":{"frame_interval":15,"max_frames":32,"read_timeout_seconds":10,"include_embeddings":false}}'
+  -d '{"stream_url":"rtsp://user:password@camera-host/stream1","name":"camera-1","settings":{"sample_interval_seconds":1.0,"batch_size":8,"read_timeout_seconds":10,"include_embeddings":false}}'
 ```
 
 随后调用 POST /v1/streams/{stream_id}/start 启动分析，通过 GET /v1/streams/{stream_id}/events 或 WS /ws/streams/{stream_id} 读取结果。worker 完成拉流、抽帧、人体检测、ReID 和轨迹关联后会发布 stream_analysis_completed 事件，载荷包含 frames、tracks、person_count 和 track_count。
@@ -751,15 +751,16 @@ http://gpu-worker-1:8000/predict
 - `MAX_EMBEDDING_IMAGES`: `/v1/vision/infer` 单次请求图片数量上限，默认 `64`。
 - `MAX_PIPELINE_FRAMES`: `/v1/infer/tracks` 单次请求帧数量上限，默认 `16`。
 - `MAX_VIDEO_BYTES`: `/v1/jobs/video` 单个视频文件大小上限，默认 `104857600`。
-- `VIDEO_FRAME_INTERVAL`: 离线视频默认抽帧间隔，默认 `15`。
+- `VIDEO_SAMPLE_INTERVAL_SECONDS`: 离线视频按媒体时间轴采样的秒间隔，默认 `1.0`。
+- `VIDEO_INFERENCE_BATCH_SIZE`: 离线视频每批推理帧数，默认 `16`；仅控制单批推理内存，不截断视频。
 - `VIDEO_UPLOAD_CHUNK_BYTES` / `VIDEO_JOB_INPUT_DIR`: 视频上传分块大小和私有暂存目录；API 与独立视频 worker 必须共享该目录。
 - `TASK_QUEUE_DIR` / `TASK_QUEUE_VISIBILITY_TIMEOUT_SECONDS` / `TASK_QUEUE_POLL_INTERVAL_SECONDS`: 本地持久化 spool、失联任务重新认领和 worker 轮询参数。
 - `VIDEO_JOB_WORKER_IN_PROCESS`: 本地开发可启用内置 worker；生产必须设为 `false` 并运行独立 worker。
 - `ACCESS_STATS_FLUSH_INTERVAL_SECONDS`: 应用调用统计批量落盘周期；配置变更和服务关闭仍会立即刷新。
-- `MAX_VIDEO_FRAMES`: 离线视频单次最多抽取帧数，默认 `64`。
+- `MAX_VIDEO_FRAME_UPLOADS`: 图片帧序列上传接口的单次文件数限制，默认 `64`。
 - `MAX_REQUEST_BODY_BYTES`: 全局 HTTP 请求体大小上限，默认 `805306368`；设为 `0` 可关闭。
-- `STREAM_FRAME_INTERVAL`: 视频流默认抽帧间隔，默认 `15`。
-- `MAX_STREAM_FRAMES`: 视频流单次最多抽取帧数，默认 `32`。
+- `STREAM_SAMPLE_INTERVAL_SECONDS`: 视频流按媒体时间轴采样的秒间隔，默认 `1.0`。
+- `STREAM_INFERENCE_BATCH_SIZE`: 视频流 rolling batch 的每批推理帧数，默认 `8`。
 - `STREAM_READ_TIMEOUT_SECONDS`: 视频流单次读取软超时，默认 `10`。
 - `STREAM_WORKER_POLL_INTERVAL_SECONDS`: 长驻 stream worker 轮询运行中流的间隔秒数，默认 `5`。
 - `STREAM_WORKER_MAX_RECONNECTS`: stream worker 单次会话断线后的最大重连次数，默认 `3`。

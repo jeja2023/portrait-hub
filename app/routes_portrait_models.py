@@ -1,5 +1,5 @@
-from copy import deepcopy
 from collections import OrderedDict
+from copy import deepcopy
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
@@ -8,8 +8,8 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from app.core import (
     MODEL_ALIASES,
     MODEL_CONFIGS,
-    MODEL_REGISTRY,
     MODEL_LOAD_LOCKS,
+    MODEL_REGISTRY,
     bundle_info,
     get_model_path,
     get_or_load_model,
@@ -20,8 +20,7 @@ from app.core import (
     unload_model_by_key,
 )
 from app.model_package import model_hash
-from app.observability import logger
-from app.observability import request_id_from_headers
+from app.observability import logger, request_id_from_headers
 from app.portrait_async import run_blocking_io
 from app.portrait_audit import audit_event
 from app.portrait_auth import permission_dependency
@@ -37,10 +36,9 @@ from app.portrait_thresholds import (
     threshold_snapshot,
     update_threshold_profile,
 )
-from app.security import require_api_token
 from app.schemas import ModelBundle
+from app.security import require_api_token
 from app.settings import MAX_LOADED_MODELS
-
 
 router = APIRouter(dependencies=[Depends(require_api_token)])
 
@@ -167,7 +165,7 @@ async def v1_model_load(request: Request, model_id: str) -> dict[str, Any]:
 )
 async def v1_model_unload(request: Request, model_id: str) -> dict[str, Any]:
     request_id = request_id_from_headers(request)
-    project, model, key, alias_name = resolve_model_reference(model_id, None, None)
+    _project, _model, key, alias_name = resolve_model_reference(model_id, None, None)
     previous_registry = model_registry_snapshot()
     previous_locks = model_load_locks_snapshot()
     unloaded = await unload_model_by_key(key)

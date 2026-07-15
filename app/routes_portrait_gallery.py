@@ -19,28 +19,26 @@ from app.portrait_gallery import (
     persist_person_delete,
     reindex_gallery_vectors,
 )
-from app.portrait_gallery_orchestration import (
-    SUPPORTED_GALLERY_MODALITIES,
-    create_async_gallery_search_batch,
-    enroll_gallery_person,
-    search_gallery_batch,
-    search_gallery_image,
-    validate_gallery_modality,
-)
 from app.portrait_gallery_mutations import (
     cleanup_gallery_feature_objects,
     raise_gallery_rollback_failure,
     restore_gallery_person_snapshot,
     rollback_gallery_mutation,
 )
-from app.portrait_response import OBJECT_CLEANUP_FAILED, portrait_success
+from app.portrait_gallery_orchestration import (
+    create_async_gallery_search_batch,
+    enroll_gallery_person,
+    search_gallery_batch,
+    search_gallery_image,
+    validate_gallery_modality,
+)
+from app.portrait_object_storage import OBJECT_STORE
 from app.portrait_request_context import PortraitRequestContext, portrait_request_context
 from app.portrait_request_validation import validate_int_range
+from app.portrait_response import OBJECT_CLEANUP_FAILED, portrait_success
 from app.portrait_security import normalize_public_metadata
 from app.portrait_storage import store_backend_name
-from app.portrait_object_storage import OBJECT_STORE
 from app.security import require_api_token
-
 
 router = APIRouter(dependencies=[Depends(require_api_token)])
 

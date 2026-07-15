@@ -3,8 +3,7 @@ import asyncio
 import numpy as np
 import pytest
 
-from app import runtime_execution
-from app import runtime_registry, runtime_sessions, runtime_state
+from app import runtime_execution, runtime_registry, runtime_sessions, runtime_state
 
 
 def patch_devices(monkeypatch, device_ids: list[int], queue_limit: int = 1) -> None:

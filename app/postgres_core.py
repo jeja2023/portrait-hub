@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import json
 import math
+from collections.abc import Iterator
 from contextlib import contextmanager
-from typing import Any, Iterator
+from typing import Any
 
 from app.observability import logger, trace_span
 from app.portrait_response import HEALTH_CHECK_FAILED, exception_log_summary
@@ -69,16 +70,15 @@ def postgres_connection(row_factory: Any = None) -> Iterator[Any]:
     require_postgres()
     pool = get_postgres_pool()
     if pool is not None:
-        with trace_span("portrait.postgres.connection", pooled=True):
-            with pool.connection() as connection:
-                previous_row_factory = getattr(connection, "row_factory", None)
+        with trace_span("portrait.postgres.connection", pooled=True), pool.connection() as connection:
+            previous_row_factory = getattr(connection, "row_factory", None)
+            if row_factory is not None:
+                connection.row_factory = row_factory
+            try:
+                yield connection
+            finally:
                 if row_factory is not None:
-                    connection.row_factory = row_factory
-                try:
-                    yield connection
-                finally:
-                    if row_factory is not None:
-                        connection.row_factory = previous_row_factory
+                    connection.row_factory = previous_row_factory
         return
 
     kwargs: dict[str, Any] = {"connect_timeout": POSTGRES_CONNECT_TIMEOUT_SECONDS}
@@ -102,11 +102,10 @@ def postgres_health() -> dict[str, Any]:
     if not postgres_configured() or psycopg is None:
         return {**payload, "status": "not_ready"}
     try:
-        with trace_span("portrait.postgres.health"):
-            with postgres_connection() as connection:
-                with connection.cursor() as cursor:
-                    cursor.execute("SELECT 1")
-                    cursor.fetchone()
+        with trace_span("portrait.postgres.health"), postgres_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT 1")
+                cursor.fetchone()
         return {**payload, "status": "ready"}
     except Exception as exc:  # pragma: no cover - 需要外部数据库支持
         logger.warning("postgres 健康检查失败: %s", exception_log_summary(exc))
@@ -138,24 +137,24 @@ def vector_literal(values: list[float]) -> str:
 
 
 __all__ = [
-    "ConnectionPool",
-    "PostgresUnavailable",
     "POSTGRES_CONNECT_TIMEOUT_SECONDS",
     "POSTGRES_DSN",
     "POSTGRES_POOL",
     "POSTGRES_POOL_MAX_SIZE",
     "POSTGRES_POOL_MIN_SIZE",
+    "ConnectionPool",
+    "PostgresUnavailable",
     "dict_row",
+    "embedding_bytes",
+    "get_postgres_pool",
+    "jsonb",
+    "normalized_embedding",
     "postgres_configured",
+    "postgres_connection",
     "postgres_driver_available",
+    "postgres_health",
     "postgres_pool_available",
     "psycopg",
     "require_postgres",
-    "get_postgres_pool",
-    "postgres_connection",
-    "postgres_health",
-    "jsonb",
-    "normalized_embedding",
-    "embedding_bytes",
     "vector_literal",
 ]

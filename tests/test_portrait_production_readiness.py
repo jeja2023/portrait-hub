@@ -184,7 +184,7 @@ def test_cutover_check_passes_with_real_artifact_hashes(workspace_tmp_path: Path
         "portrait_hub/attribute_reid.onnx": "attribute_reid.onnx",
     }
     for model_id, filename in artifacts.items():
-        (models_root / filename).write_bytes(f"fake artifact for {model_id}".encode("utf-8"))
+        (models_root / filename).write_bytes(f"fake artifact for {model_id}".encode())
     models = {
         model_id: {
             "task": model_id.split("/")[-1].split("_", 1)[0],

@@ -10,7 +10,6 @@ from typing import Any
 
 import yaml
 
-
 REQUIRED_GOVERNANCE_SECTIONS = [
     "dataset_lineage",
     "bias",
@@ -139,7 +138,7 @@ def active_model_ids(models: dict[str, Any], aliases: dict[str, Any], capabiliti
             ids.append(resolve_alias_target(model_id.strip(), aliases) or model_id.strip())
     if ids:
         return sorted(dict.fromkeys(ids))
-    return sorted(str(key) for key in models.keys())
+    return sorted(str(key) for key in models)
 
 
 def validate_model(

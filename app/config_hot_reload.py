@@ -2,13 +2,12 @@ from __future__ import annotations
 
 import importlib
 import os
-from pathlib import Path
 import sys
+from pathlib import Path
 from typing import Any
 
 from app.observability import logger
 from app.runtime_defaults import parse_env_file
-
 
 ENV_PATH = Path(os.getenv("ENV_PATH", ".env"))
 

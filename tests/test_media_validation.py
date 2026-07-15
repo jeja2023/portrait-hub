@@ -1,27 +1,32 @@
+import asyncio
 import ipaddress
+import threading
+import time
 from io import BytesIO
 from pathlib import Path
 
 import pytest
 from fastapi import HTTPException, UploadFile
 
+from app import video_io
 from app.image_io import read_image_file as read_legacy_image_file
 from app.media import stream_decode
 from app.media.image_decode import read_limited_upload, validate_image_content
 from app.media.stream_decode import mask_stream_url
-from app import video_io
 from app.video_io import (
+    aiter_video_frame_batches,
     consecutive_hash_distances,
     count_near_duplicate_fingerprints,
-    frame_hash_distance,
-    public_video_metadata,
     delete_video_job_input,
     extract_video_frames_from_upload,
+    frame_hash_distance,
+    public_video_metadata,
     read_video_file,
     resolve_video_job_input,
     stage_video_upload,
     validate_stream_url,
     validate_video_content,
+    video_frame_timestamp_seconds,
 )
 
 
@@ -94,7 +99,7 @@ async def test_video_upload_extraction_streams_to_a_temporary_file(monkeypatch) 
             read_sizes.append(size)
             return super().read(size)
 
-    def fake_extract(source: str, frame_interval: int, max_frames: int, timeout: int | None):
+    def fake_extract(source: str, sample_interval_seconds: float, batch_size: int, timeout: int | None):
         nonlocal observed_path
         observed_path = Path(source)
         assert observed_path.read_bytes() == payload
@@ -103,7 +108,7 @@ async def test_video_upload_extraction_streams_to_a_temporary_file(monkeypatch) 
     monkeypatch.setattr(video_io, "extract_video_frames_from_path", fake_extract)
     upload = UploadFile(filename="clip.mp4", file=TrackingBytesIO(payload))
 
-    frames, metadata = await extract_video_frames_from_upload(upload, 15, 64)
+    frames, metadata = await extract_video_frames_from_upload(upload, 1.0, 16)
 
     assert frames == []
     assert metadata["video_bytes"] == len(payload)
@@ -128,6 +133,45 @@ def test_video_validation_accepts_iso_bmff_for_mp4() -> None:
     mp4_bytes = b"\x00\x00\x00\x18ftypmp42" + b"\x00" * 32
 
     assert validate_video_content(mp4_bytes, "sample.mp4") == "iso_bmff"
+
+
+def test_video_frame_timestamp_prefers_media_timeline_over_nominal_fps() -> None:
+    class FakeCapture:
+        def get(self, prop):
+            assert prop == video_io.cv2.CAP_PROP_POS_MSEC
+            return 1750.0
+
+    assert video_frame_timestamp_seconds(FakeCapture(), 90, 30.0, 1.0) == 1.75
+
+
+def test_video_frame_timestamp_uses_monotonic_fallback_without_fps() -> None:
+    class FakeCapture:
+        def get(self, prop):
+            assert prop == video_io.cv2.CAP_PROP_POS_MSEC
+            return 0.0
+
+    assert video_frame_timestamp_seconds(FakeCapture(), 90, 0.0, 1.0, 1.25) == 1.25
+
+
+@pytest.mark.asyncio
+async def test_async_video_batches_yield_before_decoder_reaches_eof(monkeypatch) -> None:
+    allow_second_batch = threading.Event()
+
+    def fake_batches(source, sample_interval_seconds, batch_size, read_timeout_seconds, stop_requested):
+        yield ["first"], [0], [0.0], 25.0, 100
+        while not allow_second_batch.is_set() and not stop_requested():
+            time.sleep(0.01)
+        if not stop_requested():
+            yield ["second"], [25], [1.0], 25.0, 100
+
+    monkeypatch.setattr(video_io, "iter_video_frame_batches", fake_batches)
+    batches = aiter_video_frame_batches("source", 1.0, 1)
+    try:
+        first = await asyncio.wait_for(anext(batches), timeout=0.5)
+        assert first[0] == ["first"]
+    finally:
+        allow_second_batch.set()
+        await batches.aclose()
 
 
 def test_legacy_stream_validation_uses_ssrf_rules_and_masks_credentials() -> None:

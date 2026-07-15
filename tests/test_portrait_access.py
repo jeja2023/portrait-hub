@@ -1,7 +1,7 @@
 from collections.abc import Iterator
 
-from fastapi.testclient import TestClient
 import pytest
+from fastapi.testclient import TestClient
 
 from app import portrait_access, portrait_auth, portrait_security, routes_portrait_access, security
 from main import app
@@ -259,6 +259,20 @@ def test_access_webhooks_validate_urls_hide_hashes_and_generate_sample_delivery(
         },
     )
     assert invalid_url.status_code == 422
+
+    private_url = client.post(
+        "/v1/access/webhooks",
+        headers=tenant_headers(),
+        json={
+            "name": "Private target",
+            "application_id": "demo-app",
+            "url": "https://127.0.0.1/hook",
+            "status": "active",
+            "events": ["job.completed"],
+        },
+    )
+    assert private_url.status_code == 422
+    assert "SSRF" in private_url.text
 
     sample = client.post("/v1/access/webhooks/events-primary/sample", headers=tenant_headers())
     assert sample.status_code == 200

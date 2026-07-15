@@ -7,7 +7,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-
 # 除直接/可选清单外，还审计完全钉版的锁文件（传递依赖的版本实际存在于此，例如
 # python-multipart），这样即使某个有漏洞的传递依赖从不出现在 requirements.txt 中也能被发现。
 DEFAULT_REQUIREMENTS = ["requirements.lock", "requirements.txt", "requirements/prod-optional.txt"]

@@ -11,19 +11,18 @@ from uuid import uuid4
 
 from PIL import Image
 
-from app.inference_tracks import infer_tracks_for_images
+from app.inference_tracks import infer_detections_and_embeddings
 from app.media.quality import assess_image_quality
-from app.media.video_decode import extract_video_frames_from_bytes
 from app.model_refs import validate_model_reference_parts
 from app.observability import logger, wall_time
 from app.portrait_async import run_blocking_io
 from app.portrait_response import exception_log_summary
-from app.routes_inference_common import validate_detection_parameters
 from app.portrait_state import (
     handle_state_read_error,
     read_json_state,
     write_json_state,
 )
+from app.routes_inference_common import validate_detection_parameters
 from app.settings import (
     DEFAULT_CONFIDENCE,
     DEFAULT_DETECTOR_ARTIFACT,
@@ -35,13 +34,13 @@ from app.settings import (
     VIDEO_JOB_MAX_RETRIES,
     VIDEO_JOB_PROGRESS_PERSIST_INTERVAL_SECONDS,
     VIDEO_JOB_RETRY_BACKOFF_SECONDS,
+    VIDEO_JOB_WORKER_IN_PROCESS,
 )
 from app.video_io import (
-    extract_video_frames_from_path,
+    aiter_video_frame_batches,
     public_video_metadata,
     resolve_video_job_input,
 )
-
 
 VIDEO_JOB_ERROR_MESSAGE = "视频任务失败"
 
@@ -123,13 +122,20 @@ def lightweight_video_job_result(
 
 
 def video_job_progress_result(
-    metadata: dict[str, Any], frame_count: int, analysis_mode: str
+    metadata: dict[str, Any],
+    frame_count: int,
+    analysis_mode: str,
+    *,
+    frames: list[dict[str, Any]] | None = None,
+    total_frame_count: int | None = None,
 ) -> dict[str, Any]:
+    visible_frames = deepcopy(frames) if isinstance(frames, list) else []
     return {
         "metadata": public_video_metadata(metadata),
         "frame_count": frame_count,
         "frames_available": frame_count,
-        "frames": [],
+        "total_frame_count": total_frame_count,
+        "frames": visible_frames,
         "analysis_mode": analysis_mode,
         "partial": True,
     }
@@ -205,9 +211,7 @@ class VideoJob:
             created_at=float(payload.get("created_at", wall_time())),
             updated_at=float(payload.get("updated_at", wall_time())),
             error=public_video_job_error(payload.get("error")),
-            result=payload.get("result")
-            if isinstance(payload.get("result"), dict)
-            else payload.get("result"),
+            result=payload.get("result"),
             cancel_requested=bool(payload.get("cancel_requested", False)),
             attempts=normalize_retry_count(payload.get("attempts", 0)),
             max_retries=normalize_retry_count(
@@ -272,7 +276,10 @@ def persist_video_job(job: VideoJob, *, lightweight_result: bool = False) -> Non
     if postgres_jobs_enabled():
         from app.portrait_postgres import upsert_video_job
 
-        upsert_video_job(job.state_dict(lightweight_result=lightweight_result))
+        # 在锁内构建快照，避免序列化时读到其他线程写一半的字段
+        with VIDEO_JOBS_LOCK:
+            payload = job.state_dict(lightweight_result=lightweight_result)
+        upsert_video_job(payload)
         return
     save_video_jobs_state(lightweight_result=lightweight_result)
 
@@ -362,6 +369,32 @@ def get_video_job(job_id: str, tenant_id: str | None = None) -> VideoJob | None:
         return matches[0] if len(matches) == 1 else None
 
 
+def refresh_video_job(job_id: str, tenant_id: str) -> VideoJob | None:
+    """从存储后端刷新单个任务到内存态。
+
+    postgres 后端按 (tenant_id, job_id) 单行加载，避免 worker 每条消息全表拉取；
+    本地文件后端仍需整文件读取（跨进程可见性），但只在此入口做一次。
+    """
+    if postgres_jobs_enabled():
+        from app.portrait_postgres import load_video_job_record
+
+        record = load_video_job_record(tenant_id, job_id)
+        with VIDEO_JOBS_LOCK:
+            key = job_key(tenant_id, job_id)
+            if record is None:
+                VIDEO_JOBS.pop(key, None)
+                return None
+            try:
+                job = VideoJob.from_state(record)
+            except Exception as exc:
+                logger.warning("已跳过无效视频任务状态: %s", exception_log_summary(exc))
+                return None
+            VIDEO_JOBS[key] = job
+            return job
+    load_video_jobs_state()
+    return get_video_job(job_id, tenant_id=tenant_id)
+
+
 def request_cancel_video_job(job_id: str, tenant_id: str | None = None) -> bool:
     with VIDEO_JOBS_LOCK:
         job = get_video_job(job_id, tenant_id=tenant_id)
@@ -445,8 +478,8 @@ async def run_video_job(
     tenant_id: str,
     data: bytes | None,
     filename: str | None,
-    frame_interval: int,
-    max_frames: int,
+    sample_interval_seconds: float,
+    batch_size: int,
     *,
     input_ref: str | None = None,
     detector_project_name: str = DEFAULT_DETECTOR_PROJECT,
@@ -477,14 +510,26 @@ async def run_video_job(
         )
 
     while True:
-        job.status = JobStatus.RUNNING
-        job.progress = 0.05
-        job.error = None
-        job.next_retry_at = None
-        job.result = None
-        job.attempts = normalize_retry_count(job.attempts) + 1
-        job.updated_at = wall_time()
+        # 在锁内做状态转换，避免与 request_cancel_video_job 竞态：
+        # 若取消已先行落地（status=CANCELLED），此处不得再覆盖为 RUNNING。
+        with VIDEO_JOBS_LOCK:
+            if job.cancel_requested or normalize_job_status(job.status) == JobStatus.CANCELLED:
+                job.cancel_requested = True
+                job.status = JobStatus.CANCELLED
+                job.updated_at = wall_time()
+                cancelled_on_entry = True
+            else:
+                job.status = JobStatus.RUNNING
+                job.progress = 0.05
+                job.error = None
+                job.next_retry_at = None
+                job.result = None
+                job.attempts = normalize_retry_count(job.attempts) + 1
+                job.updated_at = wall_time()
+                cancelled_on_entry = False
         await run_blocking_io(persist_video_job, job)
+        if cancelled_on_entry:
+            return
         try:
             if await cancellation_requested():
                 job.cancel_requested = True
@@ -493,23 +538,6 @@ async def run_video_job(
                 await run_blocking_io(persist_video_job, job)
                 return
 
-            if input_ref:
-                input_path = resolve_video_job_input(input_ref)
-                frames, metadata = await asyncio.to_thread(
-                    extract_video_frames_from_path,
-                    str(input_path),
-                    frame_interval,
-                    max_frames,
-                    None,
-                )
-            elif data is not None:
-                frames, metadata = await extract_video_frames_from_bytes(
-                    data, filename, frame_interval, max_frames
-                )
-            else:
-                raise ValueError("视频任务缺少输入引用")
-            if not frames:
-                raise ValueError("视频任务未提取到可分析帧")
             (
                 detector_project_name,
                 detector_model_name,
@@ -524,81 +552,160 @@ async def run_video_job(
             validate_detection_parameters(
                 confidence=confidence, iou=iou, max_detections=max_detections
             )
-            job.result = video_job_progress_result(metadata, 0, "person_tracks")
+
+            # 解析视频源路径
+            if input_ref:
+                source_path = str(resolve_video_job_input(input_ref))
+            elif data is not None:
+                # 写入临时文件供 iter_video_frame_batches 使用
+                import tempfile
+                suffix = f".{(filename or 'video.mp4').rsplit('.', 1)[-1]}" if filename else ".mp4"
+                tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)  # noqa: SIM115  需在 with 外保留落盘路径
+                tmp.write(data)
+                tmp.flush()
+                tmp.close()
+                source_path = tmp.name
+            else:
+                raise ValueError("视频任务缺少输入引用")
+
+            # 按批提特征，收集所有帧结果
+            all_frames: list[dict[str, Any]] = []
+            all_source_indexes: list[int] = []
+            all_source_seconds: list[float] = []
+            fps_value = 0.0
+            total_frame_count = 0
+            total_embedding_count = 0
+            frame_index_offset = 0
+            batch_count = 0
+            detector_key = ""
+            reid_key = ""
+            detector_load_seconds = 0.0
+            reid_load_seconds = 0.0
+            detector_timing: dict[str, float] = {}
+            reid_timing: dict[str, float] = {}
+            persist_interval = float(VIDEO_JOB_PROGRESS_PERSIST_INTERVAL_SECONDS)
+            last_progress_persist_at = 0.0
+
+            job.result = video_job_progress_result({}, 0, "person_tracks")
             job.progress = 0.10
             job.updated_at = wall_time()
             await run_blocking_io(persist_video_job, job, lightweight_result=True)
 
-            analysis = await infer_tracks_for_images(
-                frames,
-                [None] * len(frames),
-                detector_project_name,
-                detector_model_name,
-                reid_project_name,
-                reid_model_name,
-                confidence=confidence,
-                iou=iou,
-                max_detections=max_detections,
-                include_embeddings=include_embeddings,
-            )
-            if await cancellation_requested():
-                job.cancel_requested = True
-                job.status = JobStatus.CANCELLED
-                job.updated_at = wall_time()
-                await run_blocking_io(persist_video_job, job)
-                return
-
-            source_indexes = metadata.get("source_frame_indexes", [])
-            fps = float(metadata.get("fps") or 0.0)
-            total = max(1, len(analysis["frames"]))
-            persist_interval = float(VIDEO_JOB_PROGRESS_PERSIST_INTERVAL_SECONDS)
-            last_progress_persist_at = wall_time()
-            for index, frame in enumerate(analysis["frames"]):
-                image = frames[index]
-                source_frame_index = (
-                    source_indexes[index] if index < len(source_indexes) else index
-                )
-                frame["source_frame_index"] = source_frame_index
-                if fps:
-                    frame["source_seconds"] = round(source_frame_index / fps, 6)
-                frame["thumbnail"] = image_thumbnail_data_url(image)
-                frame["quality"] = assess_image_quality(image)
-                job.result = video_job_progress_result(
-                    metadata, index + 1, "person_tracks"
-                )
-                job.progress = 0.85 + 0.10 * ((index + 1) / total)
-                job.updated_at = wall_time()
-                if (
-                    persist_interval <= 0
-                    or (job.updated_at - last_progress_persist_at) >= persist_interval
+            try:
+                async for batch_images, batch_source_indexes, batch_source_seconds, fps, total_fc in aiter_video_frame_batches(
+                    source_path, sample_interval_seconds, batch_size
                 ):
-                    await run_blocking_io(
-                        persist_video_job, job, lightweight_result=True
+                    if await cancellation_requested():
+                        job.cancel_requested = True
+                        job.status = JobStatus.CANCELLED
+                        job.updated_at = wall_time()
+                        await run_blocking_io(persist_video_job, job)
+                        return
+                    fps_value = fps
+                    total_frame_count = total_fc
+                    batch_analysis = await infer_detections_and_embeddings(
+                        batch_images,
+                        [None] * len(batch_images),
+                        detector_project_name,
+                        detector_model_name,
+                        reid_project_name,
+                        reid_model_name,
+                        confidence=confidence,
+                        iou=iou,
+                        max_detections=max_detections,
+                        include_embeddings=include_embeddings,
+                        frame_index_offset=frame_index_offset,
+                        embedding_index_offset=total_embedding_count,
                     )
-                    last_progress_persist_at = job.updated_at
+                    batch_frames = batch_analysis["frames"]
+                    total_embedding_count += int(batch_analysis["embedding_count"])
+                    detector_key = str(batch_analysis["detector_key"])
+                    reid_key = str(batch_analysis["reid_key"])
+                    detector_load_seconds += float(batch_analysis["detector_load_seconds"])
+                    reid_load_seconds += float(batch_analysis["reid_load_seconds"])
+                    for target, source in (
+                        (detector_timing, batch_analysis["detector_meta"].get("timing", {})),
+                        (reid_timing, batch_analysis["embedding_meta"].get("timing", {})),
+                    ):
+                        for key, value in source.items():
+                            if isinstance(value, (int, float)):
+                                target[key] = target.get(key, 0.0) + float(value)
+                    for frame, image, src_idx, src_seconds in zip(
+                        batch_frames, batch_images, batch_source_indexes, batch_source_seconds, strict=False
+                    ):
+                        frame["source_frame_index"] = src_idx
+                        frame["source_seconds"] = src_seconds
+                        frame["thumbnail"] = image_thumbnail_data_url(image)
+                        frame["quality"] = assess_image_quality(image)
+                        all_frames.append(frame)
+                        all_source_indexes.append(src_idx)
+                        all_source_seconds.append(src_seconds)
+                    frame_index_offset += len(batch_images)
+                    batch_count += 1
+                    # 进度更新
+                    job.result = video_job_progress_result(
+                        {
+                            "fps": fps_value,
+                            "source_frame_indexes": all_source_indexes,
+                            "source_seconds": all_source_seconds,
+                            "source_frame_count": total_frame_count,
+                            "sample_interval_seconds": sample_interval_seconds,
+                            "batch_size": batch_size,
+                        },
+                        len(all_frames),
+                        "person_tracks",
+                        frames=all_frames,
+                        total_frame_count=total_frame_count or None,
+                    )
+                    if total_frame_count > 0 and batch_source_indexes:
+                        decoded_ratio = min(1.0, (batch_source_indexes[-1] + 1) / total_frame_count)
+                        job.progress = 0.10 + 0.75 * decoded_ratio
+                    else:
+                        job.progress = min(0.84, 0.10 + 0.75 * (batch_count / (batch_count + 1)))
+                    job.updated_at = wall_time()
+                    if persist_interval <= 0 or (job.updated_at - last_progress_persist_at) >= persist_interval:
+                        await run_blocking_io(persist_video_job, job, lightweight_result=VIDEO_JOB_WORKER_IN_PROCESS)
+                        last_progress_persist_at = job.updated_at
+            finally:
+                if data is not None:
+                    import os as _os
+                    try:
+                        _os.unlink(source_path)
+                    except Exception:
+                        pass
 
-            detector_meta = analysis["detector_meta"]
-            embedding_meta = analysis["embedding_meta"]
+            if not all_frames:
+                raise ValueError("视频任务未提取到可分析帧")
+
+            # 所有批次完成后统一 associate_person_tracks
+            from app.portrait_tracking import associate_person_tracks
+            tracking_meta = associate_person_tracks(all_frames, include_template_embeddings=include_embeddings)
+
+            metadata = {
+                "fps": fps_value,
+                "source_frame_indexes": all_source_indexes,
+                "source_seconds": all_source_seconds,
+                "source_frame_count": total_frame_count,
+                "sample_interval_seconds": sample_interval_seconds,
+                "batch_size": batch_size,
+            }
             job.result = public_video_job_result(
                 {
                     "metadata": metadata,
-                    "frames": analysis["frames"],
-                    "tracks": analysis["tracks"],
-                    "tracker": analysis["tracker"],
-                    "frame_count": len(analysis["frames"]),
-                    "person_count": analysis["person_count"],
-                    "track_count": analysis["track_count"],
-                    "embedding_count": analysis["embedding_count"],
+                    "frames": all_frames,
+                    "tracks": tracking_meta["tracks"],
+                    "tracker": {k: v for k, v in tracking_meta.items() if k != "tracks"},
+                    "frame_count": len(all_frames),
+                    "person_count": sum(f.get("person_count", 0) for f in all_frames),
+                    "track_count": tracking_meta["track_count"],
+                    "embedding_count": total_embedding_count,
                     "analysis_mode": "person_tracks",
-                    "models": {
-                        "detector": analysis["detector_key"],
-                        "reid": analysis["reid_key"],
-                    },
+                    "models": {"detector": detector_key, "reid": reid_key},
                     "timing": {
-                        "detector_load_seconds": analysis["detector_load_seconds"],
-                        "reid_load_seconds": analysis["reid_load_seconds"],
-                        "detector": detector_meta["timing"],
-                        "reid": embedding_meta["timing"],
+                        "detector_load_seconds": detector_load_seconds,
+                        "reid_load_seconds": reid_load_seconds,
+                        "detector": detector_timing,
+                        "reid": reid_timing,
                     },
                 }
             )

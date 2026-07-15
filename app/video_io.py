@@ -1,6 +1,10 @@
 import asyncio
 import hashlib
+import math
 import os
+import queue
+import threading
+from collections.abc import AsyncGenerator, Callable, Generator
 from copy import deepcopy
 from pathlib import Path
 from tempfile import NamedTemporaryFile
@@ -14,12 +18,11 @@ from PIL import Image
 
 from app.media.fingerprint import hamming_hex, perceptual_hash_payload
 from app.media.frame_sampler import hybrid_sample_indexes
-from app.media.video_backends import decode_frames_at_indexes
 from app.media.quality import assess_image_quality, clamp01
 from app.media.stream_decode import revalidate_stream_url, validate_media_stream_url
+from app.media.video_backends import decode_frames_at_indexes
 from app.observability import logger, now
 from app.settings import MAX_VIDEO_BYTES, VIDEO_JOB_INPUT_DIR, VIDEO_UPLOAD_CHUNK_BYTES
-
 
 SUPPORTED_VIDEO_EXTENSIONS = {".mp4", ".avi", ".mov", ".mkv", ".webm", ".m4v"}
 SENSITIVE_VIDEO_METADATA_KEYS = {"filename", "video_bytes", "frame_fingerprints"}
@@ -32,6 +35,7 @@ VIDEO_EXTENSION_CONTAINERS = {
     ".webm": {"matroska"},
 }
 Array = npt.NDArray[Any]
+VideoFrameBatch = tuple[list[Image.Image], list[int], list[float], float, int]
 
 
 def public_video_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
@@ -163,6 +167,25 @@ def delete_video_job_input(input_ref: str) -> None:
 def cv_frame_to_image(frame: Array) -> Image.Image:
     rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
     return Image.fromarray(rgb)
+
+
+def video_frame_timestamp_seconds(
+    capture: cv2.VideoCapture,
+    frame_index: int,
+    fps: float,
+    previous_seconds: float,
+    fallback_seconds: float | None = None,
+) -> float:
+    timestamp_ms = float(capture.get(cv2.CAP_PROP_POS_MSEC) or 0.0)
+    timestamp_seconds = timestamp_ms / 1000.0
+    if math.isfinite(timestamp_seconds) and timestamp_seconds >= previous_seconds:
+        if timestamp_seconds > 0.0 or frame_index == 0:
+            return timestamp_seconds
+    if fps > 0:
+        return max(previous_seconds, frame_index / fps)
+    if fallback_seconds is not None:
+        return max(previous_seconds, fallback_seconds)
+    return previous_seconds
 
 
 def frame_change_score(previous: Image.Image | None, current: Image.Image) -> float:
@@ -303,7 +326,7 @@ def count_near_duplicate_fingerprints(
 
 
 def consecutive_hash_distances(fingerprints: list[dict[str, Any]]) -> list[int | None]:
-    return [frame_hash_distance(left, right) for left, right in zip(fingerprints, fingerprints[1:])]
+    return [frame_hash_distance(left, right) for left, right in zip(fingerprints, fingerprints[1:], strict=False)]
 
 
 def select_quality_diverse_positions(
@@ -506,8 +529,8 @@ def select_frames_from_candidates(
 
 def extract_video_frames_from_capture(
     capture: cv2.VideoCapture,
-    frame_interval: int,
-    max_frames: int,
+    sample_interval_seconds: float,
+    batch_size: int,
     read_timeout_seconds: int | None = None,
     source: str | None = None,
 ) -> tuple[list[Image.Image], dict[str, Any]]:
@@ -515,46 +538,47 @@ def extract_video_frames_from_capture(
         raise ValueError("打开视频源失败")
 
     start = now()
-    frame_interval = max(1, frame_interval)
-    max_frames = max(1, max_frames)
+    batch_size = max(1, batch_size)
     frame_count = int(capture.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
     fps = capture.get(cv2.CAP_PROP_FPS) or 0
     width = capture.get(cv2.CAP_PROP_FRAME_WIDTH) or 0
     height = capture.get(cv2.CAP_PROP_FRAME_HEIGHT) or 0
-
-    candidate_indexes = sample_candidate_indexes(frame_count, frame_interval, max_frames, read_timeout_seconds)
-    if not candidate_indexes:
-        candidate_indexes = []
-    source_frames_read = max(candidate_indexes) + 1 if candidate_indexes else 0
-
-    can_reread_source_frames = source is not None and read_timeout_seconds is None and frame_count > 0
-    candidate_images, candidate_source_indexes, candidate_qualities, candidate_scene_scores = collect_frame_candidates(
-        capture,
-        candidate_indexes,
-        keep_original_images=not can_reread_source_frames,
-    )
-
-    if not candidate_images:
-        # 对没有准确帧数的视频流或容器的回退处理。
-        capture.set(cv2.CAP_PROP_POS_FRAMES, 0)
-        frame_index = 0
-        candidate_limit = max_frames * 3
-        previous_candidate: Image.Image | None = None
-        while len(candidate_images) < candidate_limit:
-            if read_timeout_seconds is not None and now() - start > read_timeout_seconds:
-                break
-            ok, frame = capture.read()
-            if not ok:
-                break
-            if frame_index % frame_interval == 0:
-                image = cv_frame_to_image(frame)
-                candidate_images.append(image)
-                candidate_source_indexes.append(frame_index)
-                candidate_qualities.append(assess_image_quality(image))
-                candidate_scene_scores.append(frame_change_score(previous_candidate, image))
-                previous_candidate = image
-            frame_index += 1
-        source_frames_read = frame_index
+    interval_seconds = max(0.01, float(sample_interval_seconds))
+    candidate_images: list[Image.Image] = []
+    candidate_source_indexes: list[int] = []
+    candidate_source_seconds: list[float] = []
+    candidate_qualities: list[dict[str, Any]] = []
+    candidate_scene_scores: list[float] = []
+    frame_index = 0
+    candidate_limit = batch_size * 3
+    last_sample_seconds: float | None = None
+    previous_seconds = 0.0
+    previous_candidate: Image.Image | None = None
+    while len(candidate_images) < candidate_limit:
+        if read_timeout_seconds is not None and now() - start > read_timeout_seconds:
+            break
+        ok, frame = capture.read()
+        if not ok:
+            break
+        source_seconds = video_frame_timestamp_seconds(
+            capture,
+            frame_index,
+            fps,
+            previous_seconds,
+            fallback_seconds=now() - start,
+        )
+        previous_seconds = source_seconds
+        if last_sample_seconds is None or source_seconds - last_sample_seconds + 1e-9 >= interval_seconds:
+            image = cv_frame_to_image(frame)
+            candidate_images.append(image)
+            candidate_source_indexes.append(frame_index)
+            candidate_source_seconds.append(round(source_seconds, 6))
+            candidate_qualities.append(assess_image_quality(image))
+            candidate_scene_scores.append(frame_change_score(previous_candidate, image))
+            previous_candidate = image
+            last_sample_seconds = source_seconds
+        frame_index += 1
+    source_frames_read = frame_index
 
     (
         frames,
@@ -571,24 +595,22 @@ def extract_video_frames_from_capture(
         candidate_source_indexes,
         candidate_qualities,
         candidate_scene_scores,
-        max_frames,
+        batch_size,
     )
-    decode_backend = "opencv"
-    if can_reread_source_frames and source is not None:
-        frames, decode_backend = read_frames_at_indexes_with_backend(source, source_frame_indexes, frames)
+    seconds_by_index = dict(zip(candidate_source_indexes, candidate_source_seconds, strict=False))
     meta = {
-        "decode_backend": decode_backend,
+        "decode_backend": "opencv",
         "source_frame_indexes": source_frame_indexes,
-        "source_seconds": [round(index / fps, 6) for index in source_frame_indexes] if fps else [],
+        "source_seconds": [seconds_by_index[index] for index in source_frame_indexes],
         "source_frames_read": source_frames_read,
         "source_frame_count": frame_count,
         "source_width": int(width),
         "source_height": int(height),
         "extracted_frames": len(frames),
         "fps": fps,
-        "frame_interval": frame_interval,
-        "max_frames": max_frames,
-        "sampling_strategy": "hybrid_quality_scene_diverse" if candidate_indexes else "sequential_quality_scene_diverse",
+        "sample_interval_seconds": float(sample_interval_seconds),
+        "batch_size": batch_size,
+        "sampling_strategy": "media_timeline_quality_scene_diverse",
         "candidate_frames_considered": len(candidate_source_indexes),
         "scene_segment_count": scene_segment_count,
         "selected_scene_segment_count": len(set(selected_scene_segment_ids)),
@@ -603,10 +625,121 @@ def extract_video_frames_from_capture(
     return frames, meta
 
 
+def iter_video_frame_batches(
+    source: str,
+    sample_interval_seconds: float,
+    batch_size: int,
+    read_timeout_seconds: int | None = None,
+    stop_requested: Callable[[], bool] | None = None,
+) -> Generator[VideoFrameBatch, None, None]:
+    """顺序 decode 整个视频，按秒采样，每 batch_size 帧 yield 一批。
+
+    Yields: (images, source_frame_indexes, source_seconds, fps, total_frame_count)
+    不截断长视频——调用方决定何时停止迭代。
+    """
+    revalidate_stream_url(source)
+    capture = cv2.VideoCapture(source)
+    if not capture.isOpened():
+        raise ValueError("打开视频源失败")
+    try:
+        fps = float(capture.get(cv2.CAP_PROP_FPS) or 0)
+        total_frame_count = int(capture.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+        interval_seconds = max(0.01, float(sample_interval_seconds))
+        if read_timeout_seconds is not None and hasattr(cv2, "CAP_PROP_READ_TIMEOUT_MSEC"):
+            capture.set(cv2.CAP_PROP_READ_TIMEOUT_MSEC, int(max(1, read_timeout_seconds) * 1000))
+        batch_images: list[Image.Image] = []
+        batch_indexes: list[int] = []
+        batch_seconds: list[float] = []
+        frame_index = 0
+        last_sample_seconds: float | None = None
+        previous_seconds = 0.0
+        fallback_start = now()
+        while True:
+            if stop_requested is not None and stop_requested():
+                break
+            ok, frame = capture.read()
+            if not ok:
+                break
+            source_seconds = video_frame_timestamp_seconds(
+                capture,
+                frame_index,
+                fps,
+                previous_seconds,
+                fallback_seconds=now() - fallback_start,
+            )
+            previous_seconds = source_seconds
+            if last_sample_seconds is None or source_seconds - last_sample_seconds + 1e-9 >= interval_seconds:
+                batch_images.append(cv_frame_to_image(frame))
+                batch_indexes.append(frame_index)
+                batch_seconds.append(round(source_seconds, 6))
+                last_sample_seconds = source_seconds
+                if len(batch_images) >= batch_size:
+                    yield batch_images, batch_indexes, batch_seconds, fps, total_frame_count
+                    batch_images = []
+                    batch_indexes = []
+                    batch_seconds = []
+            frame_index += 1
+        if batch_images:
+            yield batch_images, batch_indexes, batch_seconds, fps, total_frame_count
+    finally:
+        capture.release()
+
+
+async def aiter_video_frame_batches(
+    source: str,
+    sample_interval_seconds: float,
+    batch_size: int,
+    read_timeout_seconds: int | None = None,
+) -> AsyncGenerator[VideoFrameBatch, None]:
+    """Bridge the blocking decoder to asyncio with one batch of read-ahead."""
+    batch_queue: queue.Queue[VideoFrameBatch | BaseException | None] = queue.Queue(maxsize=1)
+    stop_event = threading.Event()
+
+    def put(item: VideoFrameBatch | BaseException | None) -> bool:
+        while not stop_event.is_set():
+            try:
+                batch_queue.put(item, timeout=0.1)
+                return True
+            except queue.Full:
+                continue
+        return False
+
+    def produce() -> None:
+        try:
+            for batch in iter_video_frame_batches(
+                source, sample_interval_seconds, batch_size, read_timeout_seconds, stop_event.is_set
+            ):
+                if not put(batch):
+                    return
+        except BaseException as exc:
+            put(exc)
+        finally:
+            put(None)
+
+    producer = threading.Thread(target=produce, name="video-frame-batch-reader", daemon=True)
+    producer.start()
+    try:
+        while True:
+            try:
+                item = await asyncio.to_thread(batch_queue.get, True, 0.25)
+            except queue.Empty:
+                if not producer.is_alive() and batch_queue.empty():
+                    break
+                continue
+            if item is None:
+                break
+            if isinstance(item, BaseException):
+                raise item
+            yield item
+    finally:
+        stop_event.set()
+        producer.join(timeout=0.25)
+
+
 def extract_video_frames_from_path(
     source: str,
-    frame_interval: int,
-    max_frames: int,
+    sample_interval_seconds: float,
+    batch_size: int,
     read_timeout_seconds: int | None = None,
 ) -> tuple[list[Image.Image], dict[str, Any]]:
     # 在连接前立即重新校验远程流 URL，以缓解先前校验与本次拉流之间的 DNS rebinding
@@ -614,15 +747,15 @@ def extract_video_frames_from_path(
     revalidate_stream_url(source)
     capture = cv2.VideoCapture(source)
     try:
-        return extract_video_frames_from_capture(capture, frame_interval, max_frames, read_timeout_seconds, source)
+        return extract_video_frames_from_capture(capture, sample_interval_seconds, batch_size, read_timeout_seconds, source)
     finally:
         capture.release()
 
 
 async def extract_video_frames_from_upload(
     file: UploadFile,
-    frame_interval: int,
-    max_frames: int,
+    sample_interval_seconds: float,
+    batch_size: int,
 ) -> tuple[list[Image.Image], dict[str, Any]]:
     suffix = validate_video_filename(file.filename) or ".mp4"
     temp_path = ""
@@ -637,8 +770,8 @@ async def extract_video_frames_from_upload(
         frames, meta = await asyncio.to_thread(
             extract_video_frames_from_path,
             temp_path,
-            frame_interval,
-            max_frames,
+            sample_interval_seconds,
+            batch_size,
             None,
         )
         meta["video_bytes"] = total
@@ -652,38 +785,41 @@ async def extract_video_frames_from_upload(
 
 
 __all__ = [
-    "SUPPORTED_VIDEO_EXTENSIONS",
     "SENSITIVE_VIDEO_METADATA_KEYS",
+    "SUPPORTED_VIDEO_EXTENSIONS",
     "VIDEO_EXTENSION_CONTAINERS",
-    "public_video_metadata",
-    "validate_video_filename",
-    "sniff_video_container",
-    "validate_video_content",
-    "read_video_file",
-    "stage_video_upload",
-    "resolve_video_job_input",
-    "delete_video_job_input",
-    "cv_frame_to_image",
-    "frame_change_score",
-    "frame_hash_distance",
-    "scene_change_at",
-    "frame_relevance_score",
-    "frame_diversity_score",
-    "frame_temporal_coverage_score",
-    "derive_scene_segments",
-    "frame_scene_coverage_score",
-    "is_near_duplicate_frame",
-    "count_near_duplicate_fingerprints",
-    "consecutive_hash_distances",
-    "select_quality_diverse_positions",
-    "validate_stream_url",
-    "sample_candidate_indexes",
+    "aiter_video_frame_batches",
     "candidate_analysis_image",
     "collect_frame_candidates",
-    "read_frames_at_indexes",
-    "read_frames_at_indexes_with_backend",
-    "select_frames_from_candidates",
+    "consecutive_hash_distances",
+    "count_near_duplicate_fingerprints",
+    "cv_frame_to_image",
+    "delete_video_job_input",
+    "derive_scene_segments",
     "extract_video_frames_from_capture",
     "extract_video_frames_from_path",
     "extract_video_frames_from_upload",
+    "frame_change_score",
+    "frame_diversity_score",
+    "frame_hash_distance",
+    "frame_relevance_score",
+    "frame_scene_coverage_score",
+    "frame_temporal_coverage_score",
+    "is_near_duplicate_frame",
+    "iter_video_frame_batches",
+    "public_video_metadata",
+    "read_frames_at_indexes",
+    "read_frames_at_indexes_with_backend",
+    "read_video_file",
+    "resolve_video_job_input",
+    "sample_candidate_indexes",
+    "scene_change_at",
+    "select_frames_from_candidates",
+    "select_quality_diverse_positions",
+    "sniff_video_container",
+    "stage_video_upload",
+    "validate_stream_url",
+    "validate_video_content",
+    "validate_video_filename",
+    "video_frame_timestamp_seconds",
 ]

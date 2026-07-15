@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import json
 import hashlib
+import json
 import math
 from collections import deque
 from dataclasses import dataclass
@@ -15,16 +15,15 @@ from app.portrait_response import exception_log_summary
 from app.portrait_security import REDACTED, is_sensitive_field
 from app.portrait_state import append_jsonl, state_path_fingerprint
 from app.settings import (
+    AUDIT_WRITE_FAIL_CLOSED,
     MAX_AUDIT_DEPTH,
     MAX_AUDIT_KEYS,
     MAX_AUDIT_LIST_ITEMS,
     MAX_AUDIT_PAYLOAD_BYTES,
     MAX_AUDIT_STRING_LENGTH,
-    AUDIT_WRITE_FAIL_CLOSED,
     PORTRAIT_AUDIT_PATH,
     PORTRAIT_STORAGE_BACKEND,
 )
-
 
 AUDIT_HASH_ALGORITHM = "sha256-canonical-json-v1"
 AUDIT_CHAIN_FIELDS = {"audit_chain_version", "audit_hash_algorithm", "audit_prev_hash", "audit_hash"}

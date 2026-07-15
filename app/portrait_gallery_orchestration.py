@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import asyncio
-from io import BytesIO
 import json
 from collections.abc import Callable
+from io import BytesIO
 from typing import Any
 
 from fastapi import BackgroundTasks, HTTPException, UploadFile, status
@@ -37,7 +37,6 @@ from app.portrait_security import normalize_public_metadata
 from app.portrait_storage import store_backend_name
 from app.portrait_thresholds import normalize_modality, validate_threshold_profile
 from app.settings import MAX_EMBEDDING_IMAGES, MAX_GALLERY_SEARCH_BATCH_CONCURRENCY
-
 
 SUPPORTED_GALLERY_MODALITIES = {"face", "body", "appearance"}
 

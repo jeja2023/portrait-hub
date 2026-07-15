@@ -1,3 +1,4 @@
+import math
 from copy import deepcopy
 from typing import Any
 
@@ -17,31 +18,31 @@ from app.observability import logger
 from app.portrait_async import run_blocking_io
 from app.portrait_audit import audit_event
 from app.portrait_auth import permission_dependency
-from app.portrait_pagination import normalize_list_pagination, page_items_keyset
 from app.portrait_jobs import (
     JobStatus,
     VideoJob,
     create_video_job,
     get_video_job,
-    normalize_job_status,
     load_video_jobs_state,
-    public_video_job_result,
+    normalize_job_status,
     persist_video_job,
+    public_video_job_result,
     remove_video_job,
     request_cancel_video_job,
     restore_video_job,
 )
+from app.portrait_pagination import normalize_list_pagination, page_items_keyset
+from app.portrait_request_context import (
+    PortraitRequestContext,
+    portrait_request_context,
+)
+from app.portrait_request_validation import validate_int_range
 from app.portrait_response import (
     exception_log_summary,
     portrait_success,
     raise_rollback_failure,
 )
-from app.portrait_request_context import (
-    PortraitRequestContext,
-    portrait_request_context,
-)
 from app.portrait_runtime_store import video_jobs_snapshots
-from app.portrait_request_validation import validate_int_range
 from app.portrait_security import validate_job_id
 from app.portrait_task_queue import TASK_QUEUE
 from app.routes_inference_common import validate_detection_parameters
@@ -52,12 +53,12 @@ from app.settings import (
     DEFAULT_DETECTOR_PROJECT,
     DEFAULT_IOU,
     DEFAULT_REID_ARTIFACT,
-    MAX_VIDEO_FRAMES,
-    VIDEO_FRAME_INTERVAL,
+    INFERENCE_BATCH_SIZE_LIMIT,
+    VIDEO_INFERENCE_BATCH_SIZE,
     VIDEO_JOB_WORKER_IN_PROCESS,
+    VIDEO_SAMPLE_INTERVAL_SECONDS,
 )
 from app.video_io import delete_video_job_input, stage_video_upload
-
 
 router = APIRouter(dependencies=[Depends(require_api_token)])
 
@@ -88,8 +89,8 @@ def raise_job_rollback_failure(
 @router.post("/v1/jobs/video", dependencies=[Depends(permission_dependency("jobs"))])
 async def v1_create_video_job(
     file: UploadFile = File(...),
-    frame_interval: int = Form(VIDEO_FRAME_INTERVAL),
-    max_frames: int = Form(MAX_VIDEO_FRAMES),
+    sample_interval_seconds: float = Form(VIDEO_SAMPLE_INTERVAL_SECONDS),
+    batch_size: int = Form(VIDEO_INFERENCE_BATCH_SIZE),
     detector_project_name: str = Form(DEFAULT_DETECTOR_PROJECT),
     detector_artifact_name: str = Form(
         DEFAULT_DETECTOR_ARTIFACT, alias="detector_model_name"
@@ -104,10 +105,9 @@ async def v1_create_video_job(
 ) -> dict[str, Any]:
     request_id = ctx.request_id
     tenant_id = ctx.tenant_id
-    frame_interval = validate_int_range("frame_interval", frame_interval, minimum=1)
-    max_frames = validate_int_range(
-        "max_frames", max_frames, minimum=1, maximum=MAX_VIDEO_FRAMES
-    )
+    if not math.isfinite(sample_interval_seconds) or sample_interval_seconds <= 0:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="sample_interval_seconds 必须大于 0")
+    batch_size = validate_int_range("batch_size", batch_size, minimum=1, maximum=INFERENCE_BATCH_SIZE_LIMIT)
     detector_project_name, detector_model_name, reid_project_name, reid_model_name = (
         validate_model_reference_parts(
             detector_project_name,
@@ -138,8 +138,8 @@ async def v1_create_video_job(
                 "job_id": job.job_id,
                 "tenant_id": tenant_id,
                 "input_ref": input_ref,
-                "frame_interval": frame_interval,
-                "max_frames": max_frames,
+                "sample_interval_seconds": sample_interval_seconds,
+                "batch_size": batch_size,
                 "detector_project_name": detector_project_name,
                 "detector_model_name": detector_model_name,
                 "reid_project_name": reid_project_name,
@@ -187,11 +187,11 @@ async def v1_list_video_job_results(
     pagination_request = normalize_list_pagination(limit, offset, cursor)
     items: list[dict[str, Any]] = []
     for job in video_jobs_snapshots(tenant_id):
-        if normalize_job_status(job.status) != JobStatus.COMPLETED:
-            continue
         result = job.result if isinstance(job.result, dict) else None
         frames = result.get("frames") if isinstance(result, dict) else None
         if not isinstance(frames, list) or not frames:
+            continue
+        if normalize_job_status(job.status) in {JobStatus.FAILED, JobStatus.CANCELLED}:
             continue
         items.append(
             {

@@ -2,7 +2,7 @@ from types import SimpleNamespace
 
 import pytest
 from fastapi import HTTPException
-from starlette.datastructures import Address, Headers, URL
+from starlette.datastructures import URL, Address, Headers
 
 from app import portrait_access, rate_limit
 

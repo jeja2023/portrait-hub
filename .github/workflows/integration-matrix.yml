@@ -4,10 +4,22 @@ on:
   workflow_dispatch:
   schedule:
     - cron: "23 20 * * 2"
+  # 数据后端实现或生产可选依赖变更时在 PR 上按需运行，
+  # 避免后端回归要等每周定时任务才被发现。
+  pull_request:
+    paths:
+      - "app/postgres_*.py"
+      - "app/portrait_postgres.py"
+      - "app/portrait_vector_store.py"
+      - "app/portrait_object_storage.py"
+      - "app/portrait_task_queue.py"
+      - "requirements/prod-optional.txt"
+      - "tests/test_production_integration_containers.py"
 
 jobs:
   external-services:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:

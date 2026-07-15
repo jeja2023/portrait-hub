@@ -12,6 +12,9 @@ from app.media.quality import assess_image_quality
 from app.portrait_async import gather_limited
 from app.settings import MAX_IMAGE_BYTES, MAX_IMAGE_DECODE_CONCURRENCY, MAX_IMAGE_PIXELS
 
+# 纵深防御：让 PIL 自身的解压炸弹阈值与业务上限一致，而非依赖其默认 ~89M 像素。
+# 手工的 opened.size 预检仍然保留（在完整解码前基于头部信息快速拒绝）。
+Image.MAX_IMAGE_PIXELS = MAX_IMAGE_PIXELS
 
 SUPPORTED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".bmp"}
 SUPPORTED_IMAGE_FORMATS = {"JPEG", "PNG", "WEBP", "BMP"}
@@ -185,17 +188,17 @@ def mark_near_duplicates(decoded: list[DecodedImage], max_hash_distance: int = 4
 
 
 __all__ = [
+    "IMAGE_EXTENSION_FORMATS",
     "SUPPORTED_IMAGE_EXTENSIONS",
     "SUPPORTED_IMAGE_FORMATS",
-    "IMAGE_EXTENSION_FORMATS",
-    "validate_image_filename",
-    "expected_format_from_filename",
-    "sniff_image_format",
-    "validate_image_content",
-    "read_limited_upload",
     "decode_image_bytes",
     "decode_upload_image",
     "decode_upload_images",
     "duplicate_distance",
+    "expected_format_from_filename",
     "mark_near_duplicates",
+    "read_limited_upload",
+    "sniff_image_format",
+    "validate_image_content",
+    "validate_image_filename",
 ]

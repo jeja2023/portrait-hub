@@ -49,7 +49,7 @@ class FeatureRecord:
         return payload
 
     @classmethod
-    def from_state(cls, payload: dict[str, Any]) -> "FeatureRecord":
+    def from_state(cls, payload: dict[str, Any]) -> FeatureRecord:
         object_info = payload.get("object_info") if isinstance(payload.get("object_info"), dict) else None
         return cls(
             feature_id=str(payload["feature_id"]),
@@ -99,7 +99,7 @@ class PersonRecord:
         }
 
     @classmethod
-    def from_state(cls, payload: dict[str, Any]) -> "PersonRecord":
+    def from_state(cls, payload: dict[str, Any]) -> PersonRecord:
         metadata = payload.get("metadata")
         return cls(
             tenant_id=str(payload.get("tenant_id", "default")),

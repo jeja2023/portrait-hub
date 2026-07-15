@@ -136,9 +136,9 @@ def person_crop_quality(image: Image.Image, box: list[float], min_size: int = 2)
 
 
 __all__ = [
-    "xywh_to_xyxy",
-    "restore_boxes",
-    "nms",
     "crop_person",
+    "nms",
     "person_crop_quality",
+    "restore_boxes",
+    "xywh_to_xyxy",
 ]

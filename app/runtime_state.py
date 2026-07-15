@@ -4,7 +4,6 @@ from collections import OrderedDict
 from app.schemas import ModelBundle
 from app.settings import GPU_DEVICE_IDS, GPU_QUEUE_LIMIT, GPU_QUEUE_LIMIT_PER_DEVICE
 
-
 MODEL_REGISTRY: "OrderedDict[str, ModelBundle]" = OrderedDict()
 MODEL_LOAD_LOCKS: dict[str, asyncio.Lock] = {}
 REGISTRY_LOCK = asyncio.Lock()
@@ -55,17 +54,17 @@ def decrement_gpu_queue_waiters(device_id: int | None) -> None:
 
 
 __all__ = [
-    "MODEL_REGISTRY",
-    "MODEL_LOAD_LOCKS",
-    "MODEL_LOAD_RETRY_AFTER",
-    "REGISTRY_LOCK",
-    "GPU_SEMAPHORE",
+    "GPU_DEVICE_QUEUE_WAITERS",
     "GPU_DEVICE_SEMAPHORES",
     "GPU_QUEUE_WAITERS",
-    "GPU_DEVICE_QUEUE_WAITERS",
-    "gpu_device_ids",
-    "gpu_semaphore_for_device",
-    "gpu_queue_depth_for_device",
-    "increment_gpu_queue_waiters",
+    "GPU_SEMAPHORE",
+    "MODEL_LOAD_LOCKS",
+    "MODEL_LOAD_RETRY_AFTER",
+    "MODEL_REGISTRY",
+    "REGISTRY_LOCK",
     "decrement_gpu_queue_waiters",
+    "gpu_device_ids",
+    "gpu_queue_depth_for_device",
+    "gpu_semaphore_for_device",
+    "increment_gpu_queue_waiters",
 ]

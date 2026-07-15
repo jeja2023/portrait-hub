@@ -49,7 +49,7 @@ class ImageAnalysisResult:
         }
 
     @classmethod
-    def from_state(cls, payload: dict[str, Any]) -> "ImageAnalysisResult":
+    def from_state(cls, payload: dict[str, Any]) -> ImageAnalysisResult:
         result_payload = payload.get("payload")
         previews = payload.get("previews")
         return cls(

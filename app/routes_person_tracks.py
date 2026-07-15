@@ -25,7 +25,6 @@ from app.settings import (
     MAX_PIPELINE_FRAMES,
 )
 
-
 router = APIRouter()
 
 

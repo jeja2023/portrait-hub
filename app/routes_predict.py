@@ -13,7 +13,6 @@ from app.runtime import build_input_array, get_or_load_model, input_dtype, run_m
 from app.schemas import InferenceRequest
 from app.security import require_api_token
 
-
 router = APIRouter()
 
 

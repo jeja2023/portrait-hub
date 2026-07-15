@@ -24,7 +24,6 @@ from app.postgres_core import (  # 重新导出以实现向后兼容的导入
     vector_literal,
 )
 
-
 POSTGRES_DSN = _core.POSTGRES_DSN
 POSTGRES_CONNECT_TIMEOUT_SECONDS = _core.POSTGRES_CONNECT_TIMEOUT_SECONDS
 POSTGRES_POOL_MIN_SIZE = _core.POSTGRES_POOL_MIN_SIZE
@@ -36,51 +35,65 @@ ConnectionPool = _core.ConnectionPool
 _CORE_DEPENDENCY_LOCK = threading.RLock()
 
 
+def _core_dependencies_in_sync() -> bool:
+    return (
+        _core.POSTGRES_DSN is POSTGRES_DSN
+        and _core.POSTGRES_CONNECT_TIMEOUT_SECONDS is POSTGRES_CONNECT_TIMEOUT_SECONDS
+        and _core.POSTGRES_POOL_MIN_SIZE is POSTGRES_POOL_MIN_SIZE
+        and _core.POSTGRES_POOL_MAX_SIZE is POSTGRES_POOL_MAX_SIZE
+        and _core.psycopg is psycopg
+        and _core.dict_row is dict_row
+        and _core.ConnectionPool is ConnectionPool
+    )
+
+
 def _sync_core_dependencies() -> None:
-    _core.POSTGRES_DSN = POSTGRES_DSN
-    _core.POSTGRES_CONNECT_TIMEOUT_SECONDS = POSTGRES_CONNECT_TIMEOUT_SECONDS
-    _core.POSTGRES_POOL_MIN_SIZE = POSTGRES_POOL_MIN_SIZE
-    _core.POSTGRES_POOL_MAX_SIZE = POSTGRES_POOL_MAX_SIZE
-    _core.POSTGRES_POOL = POSTGRES_POOL
-    _core.psycopg = psycopg
-    _core.dict_row = dict_row
-    _core.ConnectionPool = ConnectionPool
+    # 快路径：门面属性未被外部改写（测试 monkeypatch / 配置热更新）时直接返回，
+    # 不抢全局锁，避免把连接池的并发能力串行化到一把进程级锁上。
+    if _core_dependencies_in_sync():
+        return
+    with _CORE_DEPENDENCY_LOCK:
+        if _core_dependencies_in_sync():
+            return
+        _core.POSTGRES_DSN = POSTGRES_DSN
+        _core.POSTGRES_CONNECT_TIMEOUT_SECONDS = POSTGRES_CONNECT_TIMEOUT_SECONDS
+        _core.POSTGRES_POOL_MIN_SIZE = POSTGRES_POOL_MIN_SIZE
+        _core.POSTGRES_POOL_MAX_SIZE = POSTGRES_POOL_MAX_SIZE
+        # 门面配置变化意味着连接目标变了，重置核心缓存的连接池让其按新配置重建
+        _core.POSTGRES_POOL = POSTGRES_POOL
+        _core.psycopg = psycopg
+        _core.dict_row = dict_row
+        _core.ConnectionPool = ConnectionPool
 
 
 def postgres_health() -> dict[str, object]:
-    with _CORE_DEPENDENCY_LOCK:
-        _sync_core_dependencies()
-        return _core.postgres_health()
+    _sync_core_dependencies()
+    return _core.postgres_health()
 
 
 def load_gallery_snapshot() -> dict[str, object]:
-    with _CORE_DEPENDENCY_LOCK:
-        _sync_core_dependencies()
-        return _gallery.load_gallery_snapshot()
+    _sync_core_dependencies()
+    return _gallery.load_gallery_snapshot()
 
 
 def upsert_gallery_person(person: dict[str, object]) -> None:
-    with _CORE_DEPENDENCY_LOCK:
-        _sync_core_dependencies()
-        _gallery.upsert_gallery_person(person)
+    _sync_core_dependencies()
+    _gallery.upsert_gallery_person(person)
 
 
 def upsert_gallery_feature(tenant_id: str, person_id: str, feature: dict[str, object]) -> None:
-    with _CORE_DEPENDENCY_LOCK:
-        _sync_core_dependencies()
-        _gallery.upsert_gallery_feature(tenant_id, person_id, feature)
+    _sync_core_dependencies()
+    _gallery.upsert_gallery_feature(tenant_id, person_id, feature)
 
 
 def delete_gallery_person(tenant_id: str, person_id: str) -> None:
-    with _CORE_DEPENDENCY_LOCK:
-        _sync_core_dependencies()
-        _gallery.delete_gallery_person(tenant_id, person_id)
+    _sync_core_dependencies()
+    _gallery.delete_gallery_person(tenant_id, person_id)
 
 
 def replace_gallery_snapshot(snapshot: dict[str, object]) -> None:
-    with _CORE_DEPENDENCY_LOCK:
-        _sync_core_dependencies()
-        _gallery.replace_gallery_snapshot(snapshot)
+    _sync_core_dependencies()
+    _gallery.replace_gallery_snapshot(snapshot)
 
 
 def search_pgvector(
@@ -92,102 +105,94 @@ def search_pgvector(
     top_k: int,
     tenant_id: str,
 ) -> list[dict[str, object]]:
-    with _CORE_DEPENDENCY_LOCK:
-        _sync_core_dependencies()
-        return _gallery.search_pgvector(
-            query_embedding,
-            modality=modality,
-            threshold=threshold,
-            threshold_profile=threshold_profile,
-            top_k=top_k,
-            tenant_id=tenant_id,
-        )
+    _sync_core_dependencies()
+    return _gallery.search_pgvector(
+        query_embedding,
+        modality=modality,
+        threshold=threshold,
+        threshold_profile=threshold_profile,
+        top_k=top_k,
+        tenant_id=tenant_id,
+    )
 
 
 def load_threshold_snapshot() -> dict[str, object]:
-    with _CORE_DEPENDENCY_LOCK:
-        _sync_core_dependencies()
-        return _thresholds.load_threshold_snapshot()
+    _sync_core_dependencies()
+    return _thresholds.load_threshold_snapshot()
 
 
 def save_threshold_snapshot(thresholds: dict[str, object]) -> None:
-    with _CORE_DEPENDENCY_LOCK:
-        _sync_core_dependencies()
-        _thresholds.save_threshold_snapshot(thresholds)
+    _sync_core_dependencies()
+    _thresholds.save_threshold_snapshot(thresholds)
 
 
 def insert_audit_event(payload: dict[str, object]) -> None:
-    with _CORE_DEPENDENCY_LOCK:
-        _sync_core_dependencies()
-        _audit.insert_audit_event(payload)
+    _sync_core_dependencies()
+    _audit.insert_audit_event(payload)
 
 
 def upsert_image_analysis_result(
     payload: dict[str, object], *, max_results: int
 ) -> None:
-    with _CORE_DEPENDENCY_LOCK:
-        _sync_core_dependencies()
-        _image_results.upsert_image_analysis_result(
-            payload, max_results=max_results
-        )
+    _sync_core_dependencies()
+    _image_results.upsert_image_analysis_result(
+        payload, max_results=max_results
+    )
 
 
 def load_image_analysis_results_snapshot() -> list[dict[str, object]]:
-    with _CORE_DEPENDENCY_LOCK:
-        _sync_core_dependencies()
-        return _image_results.load_image_analysis_results_snapshot()
+    _sync_core_dependencies()
+    return _image_results.load_image_analysis_results_snapshot()
 
 
 def upsert_video_job(payload: dict[str, object]) -> None:
-    with _CORE_DEPENDENCY_LOCK:
-        _sync_core_dependencies()
-        _jobs.upsert_video_job(payload)
+    _sync_core_dependencies()
+    _jobs.upsert_video_job(payload)
 
 
 def delete_video_job(tenant_id: str, job_id: str) -> None:
-    with _CORE_DEPENDENCY_LOCK:
-        _sync_core_dependencies()
-        _jobs.delete_video_job(tenant_id, job_id)
+    _sync_core_dependencies()
+    _jobs.delete_video_job(tenant_id, job_id)
 
 
 def load_video_jobs_snapshot() -> list[dict[str, object]]:
-    with _CORE_DEPENDENCY_LOCK:
-        _sync_core_dependencies()
-        return _jobs.load_video_jobs_snapshot()
+    _sync_core_dependencies()
+    return _jobs.load_video_jobs_snapshot()
+
+
+def load_video_job_record(tenant_id: str, job_id: str) -> dict[str, object] | None:
+    _sync_core_dependencies()
+    return _jobs.load_video_job_record(tenant_id, job_id)
 
 
 def upsert_stream(payload: dict[str, object]) -> None:
-    with _CORE_DEPENDENCY_LOCK:
-        _sync_core_dependencies()
-        _streams.upsert_stream(payload)
+    _sync_core_dependencies()
+    _streams.upsert_stream(payload)
 
 
 def delete_stream(tenant_id: str, stream_id: str) -> None:
-    with _CORE_DEPENDENCY_LOCK:
-        _sync_core_dependencies()
-        _streams.delete_stream(tenant_id, stream_id)
+    _sync_core_dependencies()
+    _streams.delete_stream(tenant_id, stream_id)
 
 
 def load_streams_snapshot() -> list[dict[str, object]]:
-    with _CORE_DEPENDENCY_LOCK:
-        _sync_core_dependencies()
-        return _streams.load_streams_snapshot()
+    _sync_core_dependencies()
+    return _streams.load_streams_snapshot()
 
 
 def insert_object_record(tenant_id: str, info: dict[str, object], metadata: dict[str, object] | None = None) -> None:
-    with _CORE_DEPENDENCY_LOCK:
-        _sync_core_dependencies()
-        _objects.insert_object_record(tenant_id, info, metadata)
+    _sync_core_dependencies()
+    _objects.insert_object_record(tenant_id, info, metadata)
 
 
 __all__ = [
-    "ConnectionPool",
-    "PostgresUnavailable",
     "POSTGRES_CONNECT_TIMEOUT_SECONDS",
     "POSTGRES_DSN",
     "POSTGRES_POOL",
     "POSTGRES_POOL_MAX_SIZE",
     "POSTGRES_POOL_MIN_SIZE",
+    "ConnectionPool",
+    "PostgresUnavailable",
     "delete_gallery_person",
     "delete_stream",
     "delete_video_job",
@@ -201,6 +206,7 @@ __all__ = [
     "load_image_analysis_results_snapshot",
     "load_streams_snapshot",
     "load_threshold_snapshot",
+    "load_video_job_record",
     "load_video_jobs_snapshot",
     "normalized_embedding",
     "postgres_configured",

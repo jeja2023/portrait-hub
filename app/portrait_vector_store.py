@@ -1,3 +1,4 @@
+from threading import Lock
 from typing import Any, Protocol
 from uuid import NAMESPACE_URL, uuid5
 
@@ -7,7 +8,13 @@ import numpy.typing as npt
 from app.observability import logger, trace_span
 from app.portrait_response import exception_log_summary
 from app.portrait_thresholds import get_threshold, validate_threshold_profile
-from app.settings import PORTRAIT_REQUIRE_PRODUCTION_VECTOR_BACKEND, PORTRAIT_VECTOR_BACKEND, QDRANT_API_KEY, QDRANT_PREFER_GRPC, QDRANT_URL
+from app.settings import (
+    PORTRAIT_REQUIRE_PRODUCTION_VECTOR_BACKEND,
+    PORTRAIT_VECTOR_BACKEND,
+    QDRANT_API_KEY,
+    QDRANT_PREFER_GRPC,
+    QDRANT_URL,
+)
 
 try:  # pragma: no cover - 可选的生产环境依赖
     from qdrant_client import QdrantClient
@@ -39,6 +46,33 @@ def _gallery_scan_records(modality: str, tenant_id: str) -> list[dict[str, Any]]
         return []
 
 FloatArray = npt.NDArray[np.float32]
+
+
+# ------------------------------------------------------------------
+# 本地向量缓存 —— 避免每次查询重建归一化矩阵
+# 键 = (tenant_id, modality, embedding_dim)，值 = (matrix, record_metas)
+# upsert/delete 时调用 invalidate_local_vector_cache() 清除对应条目。
+# ------------------------------------------------------------------
+_LOCAL_VECTOR_CACHE: dict[tuple[str, str, int], tuple[FloatArray, list[dict[str, Any]]]] = {}
+_LOCAL_VECTOR_CACHE_LOCK = Lock()
+
+
+def _local_cache_key(tenant_id: str, modality: str, dimension: int) -> tuple[str, str, int]:
+    return (tenant_id, modality, dimension)
+
+
+def invalidate_local_vector_cache(tenant_id: str | None = None, modality: str | None = None) -> None:
+    """使本地向量矩阵缓存失效。不传参数时清空全部缓存。"""
+    with _LOCAL_VECTOR_CACHE_LOCK:
+        if tenant_id is None:
+            _LOCAL_VECTOR_CACHE.clear()
+            return
+        keys_to_drop = [
+            k for k in _LOCAL_VECTOR_CACHE
+            if k[0] == tenant_id and (modality is None or k[1] == modality)
+        ]
+        for k in keys_to_drop:
+            del _LOCAL_VECTOR_CACHE[k]
 
 
 def _require_or_fallback_allowed(error: Exception, backend_name: str) -> None:
@@ -95,10 +129,53 @@ class LocalVectorStore:
         }
 
     def upsert_feature(self, person: dict[str, Any], feature: dict[str, Any]) -> dict[str, Any]:
+        # 写操作使本地归一化矩阵缓存失效，避免后续搜索返回过时结果
+        tenant_id = str(person.get("tenant_id") or "default")
+        modality = str(feature.get("modality") or "")
+        invalidate_local_vector_cache(tenant_id, modality if modality else None)
         return {"backend": self.backend_name, "status": "local_index_derived_from_gallery"}
 
     def delete_person(self, tenant_id: str, person_id: str) -> dict[str, Any]:
+        # 删除操作使该租户全部模态的缓存失效
+        invalidate_local_vector_cache(tenant_id)
         return {"backend": self.backend_name, "status": "local_index_derived_from_gallery"}
+
+    def _build_matrix(
+        self,
+        records: list[dict[str, Any]],
+        query_dim: int,
+        tenant_id: str,
+        modality: str,
+    ) -> tuple[FloatArray, list[dict[str, Any]]]:
+        """构建或从缓存返回预归一化矩阵。
+
+        仅当调用方传入非空 records 时才尝试缓存（records 来自外层图库快照，
+        是完整的当前图库视图）。缓存命中时直接返回，避免重建 O(N·D) 操作。
+        """
+        cache_key = _local_cache_key(tenant_id, modality, query_dim)
+        with _LOCAL_VECTOR_CACHE_LOCK:
+            cached = _LOCAL_VECTOR_CACHE.get(cache_key)
+        if cached is not None:
+            return cached
+
+        vectors: list[FloatArray] = []
+        vector_records: list[dict[str, Any]] = []
+        for record in records:
+            vector = np.asarray(record.get("embedding") or [], dtype=np.float32).reshape(-1)
+            if vector.shape[0] != query_dim:
+                continue
+            norm = float(np.linalg.norm(vector))
+            if norm <= 0:
+                continue
+            vectors.append(vector / norm)
+            vector_records.append(record)
+        if not vectors:
+            return np.empty((0, query_dim), dtype=np.float32), []
+        matrix: FloatArray = np.stack(vectors, axis=0)
+        result = (matrix, vector_records)
+        with _LOCAL_VECTOR_CACHE_LOCK:
+            _LOCAL_VECTOR_CACHE[cache_key] = result
+        return result
 
     def search(
         self,
@@ -119,20 +196,11 @@ class LocalVectorStore:
         if query_norm <= 0:
             return []
         query = query / query_norm
-        vectors: list[FloatArray] = []
-        vector_records: list[dict[str, Any]] = []
-        for record in records:
-            vector = np.asarray(record.get("embedding") or [], dtype=np.float32).reshape(-1)
-            if vector.shape != query.shape:
-                continue
-            norm = float(np.linalg.norm(vector))
-            if norm <= 0:
-                continue
-            vectors.append(vector / norm)
-            vector_records.append(record)
-        if not vectors:
+
+        matrix, vector_records = self._build_matrix(records, query.shape[0], tenant_id, modality)
+        if matrix.shape[0] == 0:
             return []
-        matrix = np.stack(vectors, axis=0)
+
         similarities = matrix @ query
         limit = min(max(1, int(top_k)), len(vector_records))
         if limit < len(vector_records):

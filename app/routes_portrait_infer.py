@@ -19,8 +19,7 @@ from app.portrait_model_runtime import (
 )
 from app.portrait_response import portrait_success
 from app.security import require_api_token
-from app.settings import MAX_VIDEO_FRAMES, MAX_VISION_IMAGES
-
+from app.settings import MAX_VIDEO_FRAME_UPLOADS, MAX_VISION_IMAGES
 
 router = APIRouter(dependencies=[Depends(require_api_token)])
 
@@ -191,7 +190,7 @@ async def v1_infer_gait(
     include_embedding: bool = Form(False),
 ) -> dict[str, Any]:
     request_id = request_id_from_headers(request)
-    validate_file_count(files, MAX_VIDEO_FRAMES)
+    validate_file_count(files, MAX_VIDEO_FRAME_UPLOADS)
     decoded = await decode_upload_images(files)
     embedding, meta = await infer_gait_embedding_for_images([item.image for item in decoded])
     result: dict[str, Any] = {

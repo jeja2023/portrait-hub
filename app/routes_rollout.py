@@ -21,7 +21,6 @@ from app.schemas import (
 )
 from app.security import require_api_token
 
-
 router = APIRouter()
 
 ALIAS_RESOLUTION_FAILED = "别名解析失败"

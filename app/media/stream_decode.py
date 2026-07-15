@@ -6,7 +6,6 @@ from fastapi import HTTPException, status
 
 from app.settings import ALLOW_PRIVATE_STREAM_HOSTS, STREAM_ALLOWED_HOSTS
 
-
 SUPPORTED_STREAM_SCHEMES = {"rtsp", "rtmp", "http", "https"}
 
 
@@ -135,11 +134,11 @@ __all__ = [
     "SUPPORTED_STREAM_SCHEMES",
     "host_matches_allowlist",
     "is_blocked_stream_address",
+    "mask_stream_url",
     "reject_blocked_stream_address",
     "reject_private_ip_literal",
-    "resolve_stream_host_addresses",
     "reject_private_resolved_addresses",
-    "validate_media_stream_url",
+    "resolve_stream_host_addresses",
     "revalidate_stream_url",
-    "mask_stream_url",
+    "validate_media_stream_url",
 ]

@@ -16,7 +16,6 @@ from app.settings import (
     REQUIRE_ENCRYPTION,
 )
 
-
 AES_GCM_ALGORITHM = "aes-256-gcm"
 LEGACY_XOR_ALGORITHM = "hmac-sha256-xor-stream"
 LEGACY_SHA256_KDF = "sha256"
@@ -127,7 +126,7 @@ def xor_stream(data: bytes, key: bytes) -> bytes:
     while len(output) < len(data):
         output.extend(hmac.new(key, counter.to_bytes(8, "big"), hashlib.sha256).digest())
         counter += 1
-    return bytes(byte ^ mask for byte, mask in zip(data, output))
+    return bytes(byte ^ mask for byte, mask in zip(data, output, strict=False))
 
 
 def encrypt_bytes(data: bytes) -> dict[str, Any]:

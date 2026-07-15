@@ -16,12 +16,11 @@ from app.portrait_model_runtime import (
     infer_body_record_for_image,
     infer_gait_embedding_for_images,
 )
-from app.portrait_response import portrait_success
 from app.portrait_request_context import PortraitRequestContext, portrait_request_context
+from app.portrait_response import portrait_success
 from app.portrait_thresholds import validate_threshold_profile
 from app.security import require_api_token
-from app.settings import MAX_COMPARE_BATCH_CONCURRENCY, MAX_COMPARE_BATCH_PAIRS, MAX_VIDEO_FRAMES
-
+from app.settings import MAX_COMPARE_BATCH_CONCURRENCY, MAX_COMPARE_BATCH_PAIRS, MAX_VIDEO_FRAME_UPLOADS
 
 router = APIRouter(dependencies=[Depends(require_api_token)])
 
@@ -76,10 +75,10 @@ def distinct_sequence(decoded: list[DecodedImage]) -> tuple[list[DecodedImage], 
 def validate_sequence(files: list[UploadFile], name: str) -> None:
     if not files:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"{name} 至少需要一帧")
-    if len(files) > MAX_VIDEO_FRAMES:
+    if len(files) > MAX_VIDEO_FRAME_UPLOADS:
         raise HTTPException(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail=f"{name} 的帧数过多：{len(files)}，最大 {MAX_VIDEO_FRAMES}",
+            detail=f"{name} 的帧数过多：{len(files)}，最大 {MAX_VIDEO_FRAME_UPLOADS}",
         )
 
 
@@ -92,7 +91,7 @@ async def compare_batch_results(
     include_vectors: bool,
     progress_callback: Any | None = None,
 ) -> list[dict[str, Any]]:
-    pairs = list(zip(image_a, image_b))
+    pairs = list(zip(image_a, image_b, strict=False))
     total = max(1, len(pairs))
     completed = 0
     progress_lock = asyncio.Lock()
@@ -386,6 +385,7 @@ async def v1_compare_batch(
 
         async def handler(batch_job: VideoJob) -> dict[str, Any]:
             from io import BytesIO
+
             from fastapi import UploadFile
             from starlette.datastructures import Headers
 

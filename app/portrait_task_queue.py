@@ -65,7 +65,7 @@ class QueueMessage:
         }
 
     @classmethod
-    def from_state(cls, payload: dict[str, Any]) -> "QueueMessage":
+    def from_state(cls, payload: dict[str, Any]) -> QueueMessage:
         message_payload = payload.get("payload")
         if not isinstance(message_payload, dict):
             raise ValueError("Task message payload must be an object")
@@ -130,7 +130,7 @@ def local_queue_path(queue: str, state: str) -> Path:
 
 
 def _cancellation_key(tenant_id: str, job_id: str) -> str:
-    identity = f"{tenant_id}\0{job_id}".encode("utf-8")
+    identity = f"{tenant_id}\0{job_id}".encode()
     return hashlib.sha256(identity).hexdigest()
 
 
@@ -210,8 +210,19 @@ class LocalTaskQueue:
         del consumer_id
         queue_name = normalize_queue_name(queue)
         deadline = time.monotonic() + max(0.0, float(block_seconds))
+        # 退避参数：空轮询时从 _POLL_INITIAL_SLEEP 指数增长到 _POLL_MAX_SLEEP
+        _POLL_INITIAL_SLEEP = 0.05
+        _POLL_MAX_SLEEP = 1.5
+        _STALE_CHECK_INTERVAL = max(1.0, float(TASK_QUEUE_VISIBILITY_TIMEOUT_SECONDS) / 2)
+        sleep_interval = _POLL_INITIAL_SLEEP
+        # -inf 保证进入循环的第一轮总是执行一次过期回收，之后按间隔节流
+        last_stale_check = float("-inf")
         while True:
-            self._requeue_stale(queue_name)
+            now = time.monotonic()
+            # _requeue_stale 每 VISIBILITY_TIMEOUT/2 跑一次，而非每轮
+            if now - last_stale_check >= _STALE_CHECK_INTERVAL:
+                self._requeue_stale(queue_name)
+                last_stale_check = time.monotonic()
             pending_dir = local_queue_path(queue_name, "pending")
             sources = sorted(pending_dir.glob("msg_*.json")) if pending_dir.is_dir() else []
             for source in sources:
@@ -236,7 +247,12 @@ class LocalTaskQueue:
                 return message
             if time.monotonic() >= deadline:
                 return None
-            time.sleep(min(0.1, max(0.0, deadline - time.monotonic())))
+            # 指数退避：有消息时重置，空队列时逐步增长
+            remaining = deadline - time.monotonic()
+            actual_sleep = min(sleep_interval, max(0.0, remaining))
+            if actual_sleep > 0:
+                time.sleep(actual_sleep)
+            sleep_interval = min(sleep_interval * 2, _POLL_MAX_SLEEP)
 
     def heartbeat(self, message: QueueMessage, consumer_id: str) -> None:
         del consumer_id

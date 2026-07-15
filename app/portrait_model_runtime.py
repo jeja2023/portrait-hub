@@ -46,7 +46,6 @@ from app.runtime_face import (
 from app.runtime_gait import gait_sequence_tensor
 from app.runtime_pose import decode_rtmpose_outputs, scale_pose_point, softmax_max
 
-
 # 此处镜像 app.runtime_body 中的 retry-after 时间戳（0.0 = 可用，
 # 未来的时间戳 = 冷却中）。此模块是跨调用之间的真理源；
 # 这些值会在每次调用前推入 runtime_body，并在调用后读回。
@@ -211,11 +210,11 @@ __all__ = [
     "ARCFACE_CANONICAL_112",
     "COCO17_KEYPOINT_NAMES",
     "COCO17_SKELETON",
-    "CapabilityRuntime",
     "FACE_DETECTION_FALLBACK_MODEL_ID",
     "FACE_KEYPOINT_NAMES",
     "FALLBACK_EMBEDDING_MODEL_ID",
     "FALLBACK_EMBEDDING_VERSION",
+    "CapabilityRuntime",
     "apply_arcface_embeddings",
     "apply_fallback_face_embeddings",
     "arcface_aligned_crop",

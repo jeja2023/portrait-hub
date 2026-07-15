@@ -13,7 +13,6 @@ import importlib.util
 from typing import Any
 
 import cv2
-import numpy as np
 import numpy.typing as npt
 
 from app.metrics import record_video_decode_backend
@@ -102,7 +101,7 @@ def decode_frames_at_indexes(source: str, sorted_indexes: list[int], *, backend:
 
 
 __all__ = [
+    "decode_frames_at_indexes",
     "pyav_available",
     "resolve_decode_backend",
-    "decode_frames_at_indexes",
 ]

@@ -11,13 +11,12 @@ from app.model_package import get_model_path
 from app.model_refs import split_cache_key
 from app.observability import logger
 from app.portrait_async import run_blocking_io
-from app.runtime import get_or_load_model, input_dtype, run_model_bundle
-from app.security import request_is_authenticated, require_api_token
 from app.portrait_auth import permission_dependency
 from app.portrait_response import MODEL_READINESS_CHECK_FAILED, exception_log_summary
+from app.runtime import get_or_load_model, input_dtype, run_model_bundle
 from app.runtime_sessions import runtime_provider_status
+from app.security import request_is_authenticated, require_api_token
 from app.settings import APP_VERSION, OBJECT_STORAGE_DIR, READY_CHECK_DEPENDENCIES, RUNTIME_STATE_DIR
-
 
 router = APIRouter()
 

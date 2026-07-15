@@ -3,7 +3,6 @@ from typing import Any
 from app.model_config_loader import load_model_config_document
 from app.schemas import ModelConfig
 
-
 MODEL_CONFIGS, MODEL_ALIASES = load_model_config_document()
 
 
@@ -17,7 +16,7 @@ def reload_model_config_state() -> tuple[dict[str, ModelConfig], dict[str, Any]]
 
 
 __all__ = [
-    "MODEL_CONFIGS",
     "MODEL_ALIASES",
+    "MODEL_CONFIGS",
     "reload_model_config_state",
 ]

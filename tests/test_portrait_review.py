@@ -1,8 +1,8 @@
 from collections.abc import Iterator
 
+import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
-import pytest
 
 from app import portrait_review, routes_portrait_review
 from main import app

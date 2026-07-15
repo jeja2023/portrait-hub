@@ -4,7 +4,7 @@ from typing import Any
 
 from app import gallery_search as _gallery_search
 from app import gallery_state as _gallery_state
-from app.gallery_search import (  # noqa: F401
+from app.gallery_search import (
     aggregate_gallery_candidates,
     apply_gallery_query_quality,
     apply_gallery_rank_context,
@@ -35,7 +35,6 @@ from app.settings import (
     PORTRAIT_GALLERY_WAL_ENABLED,
     PORTRAIT_STORAGE_BACKEND,
 )
-
 
 _state_persist_person = _gallery_state.persist_person
 _state_persist_feature = _gallery_state.persist_feature
@@ -172,17 +171,17 @@ def search_gallery(
 
 
 __all__ = [
+    "GALLERY",
+    "GALLERY_LOCK",
     "FeatureRecord",
     "GalleryKey",
     "PersonRecord",
-    "GALLERY",
-    "GALLERY_LOCK",
+    "add_feature",
     "aggregate_gallery_candidates",
+    "append_gallery_wal",
     "apply_gallery_query_quality",
     "apply_gallery_rank_context",
     "apply_gallery_wal",
-    "add_feature",
-    "append_gallery_wal",
     "delete_person",
     "feature_object_infos",
     "gallery_candidate_key",

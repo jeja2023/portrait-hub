@@ -1,5 +1,5 @@
-from dataclasses import dataclass
 import threading
+from dataclasses import dataclass
 from typing import Any
 
 from fastapi import HTTPException, Request, status
@@ -62,8 +62,8 @@ def application_policy_from_request(request: Request, now: float) -> dict[str, A
     policy = application_request_policy(tenant_id, api_key, now)
     state = getattr(request, "state", None)
     if state is not None:
-        setattr(state, "portrait_tenant_id", tenant_id)
-        setattr(state, "portrait_application_id", str(policy.get("app_id") or "") if policy else None)
+        state.portrait_tenant_id = tenant_id
+        state.portrait_application_id = str(policy.get("app_id") or "") if policy else None
     return policy
 
 

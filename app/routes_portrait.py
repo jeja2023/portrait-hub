@@ -12,7 +12,6 @@ from app.routes_portrait_review import router as review_router
 from app.routes_portrait_streams import router as streams_router
 from app.routes_portrait_ws import router as ws_router
 
-
 router = APIRouter()
 router.include_router(access_router)
 router.include_router(infer_router)

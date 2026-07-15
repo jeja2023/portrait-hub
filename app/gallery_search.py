@@ -8,7 +8,6 @@ from app.portrait_compare import l2_normalize_vector
 from app.portrait_response import exception_log_summary
 from app.portrait_thresholds import normalize_modality
 
-
 # 查询质量分低于此值时，绝不会尝试保守的伪相关反馈扩展，因此调用方可以跳过本来
 # 需要的图库快照物化（见 search_gallery / gallery_query_expansion_plan）。
 QUERY_EXPANSION_MIN_QUERY_QUALITY = 0.40

@@ -2,18 +2,18 @@ from typing import Any
 
 from PIL import Image
 
+import app.portrait_vector_store as portrait_vector_store
 from app.geometry import person_crop_quality
 from app.media.frame_sampler import hybrid_sample_indexes
-from app.portrait_embeddings import best_face_embedding
 from app.portrait_compare import (
     apply_input_independence_to_decision,
     compare_track_templates,
     fuse_modalities,
     quality_aware_compare,
 )
+from app.portrait_embeddings import best_face_embedding
 from app.portrait_gallery import GALLERY, add_feature, aggregate_gallery_candidates, search_gallery, upsert_person
 from app.portrait_tracking import aggregate_track_template, associate_person_tracks, box_iou
-import app.portrait_vector_store as portrait_vector_store
 from app.video_io import derive_scene_segments, scene_change_at, select_quality_diverse_positions
 
 

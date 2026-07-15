@@ -78,7 +78,7 @@ def assess_image_quality(image: Image.Image) -> dict[str, Any]:
 
 
 __all__ = [
+    "assess_image_quality",
     "clamp01",
     "round_quality",
-    "assess_image_quality",
 ]

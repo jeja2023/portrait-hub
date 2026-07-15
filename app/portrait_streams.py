@@ -14,7 +14,6 @@ from app.portrait_security import is_sensitive_field, redact_sensitive_fields
 from app.portrait_state import handle_state_read_error, read_json_state, write_json_state
 from app.settings import ALLOW_STREAM_URLS, PORTRAIT_STORAGE_BACKEND, PORTRAIT_STREAMS_STATE_PATH
 
-
 PROTECTED_STATE_VALUE_MARKER = "__portrait_protected_value__"
 PROTECTED_STATE_VALUE_PAYLOAD = "payload"
 

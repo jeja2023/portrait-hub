@@ -18,27 +18,35 @@ from app.portrait_auth import permission_dependency
 from app.portrait_gallery import (
     GALLERY,
     PersonRecord,
-    delete_person as delete_gallery_person,
+    feature_object_infos,
     gallery_key,
+    list_gallery_people,
     persist_feature,
     persist_person,
-    feature_object_infos,
-    list_gallery_people,
+)
+from app.portrait_gallery import (
+    delete_person as delete_gallery_person,
 )
 from app.portrait_jobs import VIDEO_JOBS, VideoJob, job_key, persist_video_job, remove_video_job
 from app.portrait_model_capabilities import MODEL_CAPABILITIES
 from app.portrait_object_storage import OBJECT_STORE, public_object_info
 from app.portrait_pagination import normalize_list_pagination, normalize_stream_event_pagination, page_items_keyset
 from app.portrait_request_context import PortraitRequestContext, portrait_request_context
+from app.portrait_response import OBJECT_CLEANUP_FAILED, exception_log_summary, portrait_success, raise_rollback_failure
 from app.portrait_runtime_store import (
     gallery_people_snapshots,
     video_jobs_snapshots,
 )
-from app.portrait_response import OBJECT_CLEANUP_FAILED, exception_log_summary, portrait_success, raise_rollback_failure
 from app.portrait_security import redact_sensitive_fields
 from app.portrait_storage import GALLERY_STORE
 from app.portrait_stream_worker import stream_worker_status
-from app.portrait_streams import StreamRecord, persist_stream, restore_stream, restore_stream_snapshot_in_store, stream_records_snapshot
+from app.portrait_streams import (
+    StreamRecord,
+    persist_stream,
+    restore_stream,
+    restore_stream_snapshot_in_store,
+    stream_records_snapshot,
+)
 from app.portrait_task_queue import TASK_QUEUE
 from app.portrait_thresholds import threshold_snapshot
 from app.portrait_vector_store import VECTOR_STORE
@@ -65,7 +73,6 @@ from app.settings import (
     TASK_QUEUE_BACKEND,
     TENANT_HEADER_REQUIRED,
 )
-
 
 router = APIRouter(dependencies=[Depends(require_api_token)])
 

@@ -175,10 +175,10 @@ def classification_predictions(
 
 
 __all__ = [
+    "classification_predictions",
+    "normalize_embeddings",
+    "sigmoid",
+    "softmax",
     "yolo_detections",
     "yolo_person_detections",
-    "normalize_embeddings",
-    "softmax",
-    "sigmoid",
-    "classification_predictions",
 ]

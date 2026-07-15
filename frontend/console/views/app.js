@@ -577,8 +577,8 @@ const template = `
         </div>
         <form id="video-form" class="form-grid">
           <label class="span-2">视频文件 <input id="job-file-input" name="file" type="file" accept="video/*" /></label>
-          <label>抽帧间隔 <input id="job-frame-interval-input" name="frame_interval" type="number" min="1" value="15" /></label>
-          <label>最大处理帧数 <input id="job-max-frames-input" name="max_frames" type="number" min="1" value="64" /></label>
+          <label>采样间隔（秒） <input id="job-sample-interval-input" name="sample_interval_seconds" type="number" min="0.1" step="0.1" value="1.0" /></label>
+          <label>批次大小 <input id="job-batch-size-input" name="batch_size" type="number" min="1" value="16" /></label>
           <button type="submit" class="primary">创建任务</button>
         </form>
         <div class="card">
@@ -639,6 +639,7 @@ const template = `
               <p>展示视频流注册状态、worker 会话和最近事件快照。</p>
             </div>
             <div id="stream-results-summary" class="result-summary"></div>
+            <div id="stream-results-visuals" class="result-visual-grid"></div>
             <div id="stream-results-list" class="stream-result-list"></div>
             <div id="stream-results-json" class="json-view data-viewer" role="region" aria-label="视频流解析结果数据"></div>
           </div>
@@ -1439,8 +1440,8 @@ const fieldLabels = {
   updated_at: "最后更新时间",
   created_at: "任务创建时间",
   finished_at: "任务结束时间",
-  frame_interval: "视频抽帧间隔",
-  max_frames: "最大允许抽帧数",
+  sample_interval_seconds: "视频采样间隔（秒）",
+  batch_size: "每批推理帧数",
   device: "运行设备 (GPU/CPU)",
   running: "运行状态",
   error: "错误信息",
@@ -1965,6 +1966,23 @@ function watchJsonSocket(name, path, statusSelector, outputSelector) {
         renderJobSummary(payload);
         renderJobVisuals(payload);
         renderPayload("job", outputSelector, payload);
+        if (state.view === "video-results" && state.analysisResultsTab === "video") {
+          refreshVideoResults().catch(() => {});
+        }
+      } else if (name === "stream") {
+        const streamPayload = {
+          streams: payload.stream ? [payload.stream] : [],
+          total: payload.stream ? 1 : 0,
+          stream_worker: state.analysisResults.stream?.stream_worker || {},
+          event_payloads: [
+            {
+              stream_id: payload.stream?.stream_id || payload.stream_id,
+              events: Array.isArray(payload.events) ? payload.events : [],
+            },
+          ],
+        };
+        renderStreamResults(streamPayload);
+        renderPayload("streams", outputSelector, payload);
       } else {
         renderDataViewer(outputSelector, payload, name);
       }
@@ -2448,7 +2466,7 @@ function updateSnippetButtons() {
   qs("#vision-copy-button").onclick = wrapHandler(() => copyText(requestSnippet(vision, visionFields), "调用示例已复制"));
   qs("#compare-copy-button").onclick = wrapHandler(() => copyText(requestSnippet(compare, ["image_a=@a.jpg", "image_b=@b.jpg", "threshold_profile=normal"]), "调用示例已复制"));
   qs("#gallery-copy-button").onclick = wrapHandler(() => copyText(requestSnippet("/v1/gallery/search", ["file=@query.jpg", "modality=body", "top_k=5"]), "调用示例已复制"));
-  qs("#video-copy-button").onclick = wrapHandler(() => copyText(requestSnippet("/v1/jobs/video", ["file=@demo.mp4", "frame_interval=15", "max_frames=64"]), "调用示例已复制"));
+  qs("#video-copy-button").onclick = wrapHandler(() => copyText(requestSnippet("/v1/jobs/video", ["file=@demo.mp4", "sample_interval_seconds=1.0", "batch_size=16"]), "调用示例已复制"));
 }
 
 async function renderPreviews(input, selector, prefix = "") {
@@ -4351,19 +4369,48 @@ function latestStreamEvent(events) {
   return [...events].sort((left, right) => Number(right.created_at || 0) - Number(left.created_at || 0))[0] || null;
 }
 
+function streamResultVisuals(streams, eventPayloads) {
+  const streamMap = new Map(streams.map((stream) => [stream.stream_id, stream]));
+  const visuals = [];
+  eventPayloads.forEach((item) => {
+    const stream = streamMap.get(item.stream_id) || {};
+    const streamLabel = stream.name || item.stream_id || "\u89c6\u9891\u6d41";
+    const events = Array.isArray(item.events) ? item.events : [];
+    events.forEach((event) => {
+      if (event.type !== "stream_analysis_completed") return;
+      const frames = Array.isArray(event.payload?.frames) ? event.payload.frames : [];
+      frames.forEach((frame, index) => {
+        const visual = videoFrameVisual(frame, index, streamLabel);
+        if (!visual) return;
+        visual.stream = stream;
+        visual.event = event;
+        visuals.push(visual);
+      });
+    });
+  });
+  return visuals;
+}
+
 function renderStreamResults(payload) {
   state.analysisResults.stream = payload;
   const streams = Array.isArray(payload.streams) ? payload.streams : [];
   const eventPayloads = Array.isArray(payload.event_payloads) ? payload.event_payloads : [];
   const events = eventPayloads.flatMap((item) => Array.isArray(item.events) ? item.events : []);
+  const visuals = streamResultVisuals(streams, eventPayloads);
   const sessions = Array.isArray(payload.stream_worker?.sessions) ? payload.stream_worker.sessions : [];
   const runningCount = streams.filter((stream) => stream.status === "running").length;
   renderSummary("#stream-results-summary", [
     { label: "视频流数", value: payload.total ?? streams.length },
     { label: "运行中", value: runningCount },
     { label: "最近事件", value: events.length },
+    { label: "\u7ed3\u679c\u56fe\u7247", value: visuals.length },
     { label: "活跃会话", value: payload.stream_worker?.active_sessions ?? sessions.length ?? 0 },
   ]);
+  renderVideoVisualGrid("#stream-results-visuals", visuals, "\u6682\u65e0\u89c6\u9891\u6d41\u89e3\u6790\u56fe\u7247\uff0c\u8bf7\u5148\u542f\u52a8\u89c6\u9891\u6d41\u89e3\u6790", {
+    variant: "video",
+    maxWidth: 260,
+    maxHeight: 180,
+  });
   const list = qs("#stream-results-list");
   if (list) {
     if (!streams.length) {
@@ -4735,7 +4782,7 @@ function setupEvents() {
   qs("#search-form").addEventListener("submit", wrapHandler(submitGallerySearch));
   qs("#video-form").addEventListener("submit", wrapHandler(submitVideoJob));
   qs("#stream-form").addEventListener("submit", wrapHandler(submitStream));
-  ["#vision-visuals", "#job-visuals", "#image-results-visuals", "#video-results-visuals", "#track-review-visuals"].forEach((selector) => qs(selector).addEventListener("click", (event) => {
+  ["#vision-visuals", "#job-visuals", "#image-results-visuals", "#video-results-visuals", "#stream-results-visuals", "#track-review-visuals"].forEach((selector) => qs(selector).addEventListener("click", (event) => {
     const trigger = event.target instanceof Element ? event.target.closest("[data-result-visual-index]") : null;
     if (!trigger) return;
     const index = Number(trigger.dataset.resultVisualIndex);
