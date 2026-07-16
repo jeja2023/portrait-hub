@@ -633,7 +633,26 @@ curl -X POST http://127.0.0.1:9001/v1/streams \
 
 视频流解析默认关闭。需要在 .env 中设置 ALLOW_STREAM_URLS=true；开发机访问私网流时还需设置 ALLOW_PRIVATE_STREAM_HOSTS=true。生产环境建议只允许可信内网摄像头地址。
 
-长驻视频流拉取推荐使用 python -m app.portrait_stream_worker_daemon 或 Compose 中的 portrait-stream-worker 服务。daemon 会为每条运行中的 stream 获取可过期的 state lease，并在 STREAM_WORKER_LOCK_DIR 下创建原子 lock 文件做进程级兜底，避免重复拉流。模型输出调试：
+长驻视频流拉取推荐使用 python -m app.portrait_stream_worker_daemon 或 Compose 中的 portrait-stream-worker 服务。daemon 会为每条运行中的 stream 获取可过期的 state lease，并在 STREAM_WORKER_LOCK_DIR 下创建原子 lock 文件做进程级兜底，避免重复拉流。
+
+#### 视频流无解析图片排查
+
+先查询最近事件，而不是只读取默认的少量起始事件：
+
+```bash
+curl "http://127.0.0.1:9001/v1/streams/{stream_id}/events?limit=200" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+- 出现 `stream_analysis_completed` 且 payload 中有 `thumbnails`，说明服务端已经产出图片；控制台会选择最新分析批次展示。
+- 若只有 `stream_registered`、`stream_started`、`stream_worker_start_requested` 或 `stream_worker_session_started`，同时 `processed_frames=0`，优先检查 `portrait-stream-worker` 是否运行、是否持续重启以及日志中的拉流错误。
+- API 与 worker 必须共享相同的状态后端和路径；JSON 后端需共享 `PORTRAIT_STREAMS_STATE_PATH`，容器部署需挂载同一数据卷。两者还必须使用一致的 `ALLOW_STREAM_URLS`、`ALLOW_PRIVATE_STREAM_HOSTS` 和 `STREAM_ALLOWED_HOSTS`。
+- `worker_lease_active=false` 通常表示 daemon 未接管该流；若 daemon 已运行，检查 `STREAM_WORKER_LOCK_DIR` 权限、残留锁和 lease 过期时间。
+- CPU 兜底推理首批结果可能需要 20～60 秒。启动后应等待一个完整批次，再以 `stream_analysis_completed` 事件确认结果，而不是仅凭流状态为“分析中”判断成功。
+
+本地开发使用 `python dev_start.py` 时会自动启动 API 和流 worker，并把同一份 `.dev_start.env` 传给两个进程；生产环境仍应使用 Compose、systemd 或 Kubernetes 中的独立 worker 服务。
+
+模型输出调试：
 
 ```bash
 curl -X POST http://127.0.0.1:9001/debug/model-output \

@@ -2,7 +2,7 @@
 
 面向 Ubuntu + Docker + NVIDIA GPU 的 ONNX 推理服务。服务通过 FastAPI 暴露接口，按 GPU 拆成多个 worker，适合给人像识别、人像检索、ReID 等业务项目提供共享推理能力。
 
-当前版本：`0.8.3`。本补丁完成控制台前端、生产检查工具和大型契约测试的模块化拆分，保持 HTTP API、控制台资源路径、CLI 与兼容导入稳定；`0.8.2` 引入的视频采样、增量推理、跨批次轨迹关联和 worker 租约能力保持不变。
+当前版本：`0.8.4`。本补丁修复实时视频流已启动但控制台没有解析图片的问题：流分析事件会跨 API/worker 进程及时同步，实时视频流详情与“解析结果”页面会展示最新批次缩略图，本地启动器也会同时托管 API 与流 worker daemon。
 
 拆分后的模块映射、维护边界和验证命令见 [大型文件拆分维护指南](docs/maintenance/LARGE_FILE_SPLIT.md)，完整发布记录见 [更新日志](更新日志.md)。
 
@@ -109,6 +109,7 @@ v1 已加入的生产加固：
 - `tools/portrait_cutover_check.py --regression-manifest <held-out.yml> --validate-onnx --json` 是最终的真实模型门禁。它要求生产能力状态、非兜底模型 ID、匹配的产物 SHA-256、可选的 ONNXRuntime 加载检查，以及通过回归门禁。
 - 精度回归门禁可直接参考 `python tools/portrait_model_regression.py --manifest examples/portrait-model-regression.example.yml --json`；上线前把示例分数替换成留出集评估结果。
 - 长期运行的流拉取应在 API 进程外执行：`python -m app.portrait_stream_worker_daemon`；Docker Compose 已包含对应的 `portrait-stream-worker` 服务。
+- 本地使用 `python dev_start.py` 时，启动器会把 `.dev_start.env` 的完整配置同时传给 API 和 `portrait_stream_worker_daemon`，并监督两个进程；无需再单独打开终端启动流 worker。CPU 兜底推理的首批结果可能需要 20～60 秒，应以事件中的 `stream_analysis_completed` 作为已产出解析图片的判据。
 - 离线视频任务应由 `python -m app.portrait_video_job_worker` 独立消费；Compose、`deploy/portrait-video-job-worker.service` 和 `deploy/k8s-video-job-worker.yaml` 已提供部署入口。API 与 worker 必须共享 `VIDEO_JOB_INPUT_DIR`，生产队列使用 Redis Streams。
 - 流 daemon 会先通过每个 stream 的原子 lock 文件做进程级兜底，再写入可过期的 stream worker lease，避免多个 daemon 进程重复拉取同一条流。
 - `deploy/portrait-stream-worker.service` 和 `deploy/k8s-stream-worker.yaml` 提供流 worker 进程的 systemd 和 Kubernetes 部署模板，而 `tools/portrait_stream_worker_health.py --json` 会报告进程内 worker 心跳是否过期。

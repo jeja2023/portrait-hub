@@ -26,6 +26,7 @@ from app.portrait_streams import (
     create_stream,
     get_stream,
     persist_stream,
+    refresh_streams_state,
     remove_stream,
     restore_stream,
     restore_stream_snapshot_in_store,
@@ -104,6 +105,7 @@ async def v1_list_streams(
 ) -> dict[str, Any]:
     request_id = ctx.request_id
     tenant_id = ctx.tenant_id
+    await run_blocking_io(refresh_streams_state)
     pagination_request = normalize_list_pagination(limit, offset, cursor)
     tenant_streams = [stream for stream in sorted(stream_records_snapshot(), key=lambda item: item.stream_id) if stream.tenant_id == tenant_id]
     streams, pagination = page_items_keyset(
@@ -129,6 +131,7 @@ async def v1_get_stream(
 ) -> dict[str, Any]:
     request_id = ctx.request_id
     tenant_id = ctx.tenant_id
+    await run_blocking_io(refresh_streams_state)
     stream = stream_or_404(stream_id, tenant_id)
     return portrait_success(request_id, {"stream": stream.public_dict(include_events=True)})
 
@@ -140,6 +143,7 @@ async def v1_start_stream(
 ) -> dict[str, Any]:
     request_id = ctx.request_id
     tenant_id = ctx.tenant_id
+    await run_blocking_io(refresh_streams_state)
     stream = stream_or_404(stream_id, tenant_id)
     previous_stream = deepcopy(stream)
     previous_worker_sessions = stream_worker_sessions_snapshot()
@@ -172,6 +176,7 @@ async def v1_stop_stream(
 ) -> dict[str, Any]:
     request_id = ctx.request_id
     tenant_id = ctx.tenant_id
+    await run_blocking_io(refresh_streams_state)
     stream = stream_or_404(stream_id, tenant_id)
     previous_stream = deepcopy(stream)
     previous_worker_sessions = stream_worker_sessions_snapshot()
@@ -197,6 +202,7 @@ async def v1_stream_status(
 ) -> dict[str, Any]:
     request_id = ctx.request_id
     tenant_id = ctx.tenant_id
+    await run_blocking_io(refresh_streams_state)
     stream = stream_or_404(stream_id, tenant_id)
     return portrait_success(
         request_id,
@@ -220,6 +226,7 @@ async def v1_stream_events(
     request_id = ctx.request_id
     pagination_request = normalize_stream_event_pagination(limit, offset, cursor)
     tenant_id = ctx.tenant_id
+    await run_blocking_io(refresh_streams_state)
     stream = stream_or_404(stream_id, tenant_id)
     events, pagination = page_items_keyset(
         stream.events,

@@ -1,12 +1,14 @@
 import asyncio
+import inspect
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect, status
 
+from app.portrait_async import run_blocking_io
 from app.portrait_auth import has_permission, jwt_tenant_matches, roles_from_claims, verify_hs256_jwt
 from app.portrait_jobs import get_video_job
 from app.portrait_security import validate_job_id, validate_stream_id
-from app.portrait_streams import get_stream
+from app.portrait_streams import get_stream, refresh_streams_state
 from app.settings import API_LIST_DEFAULT_LIMIT, API_TOKEN, AUTH_REQUIRED, RBAC_ENABLED
 
 router = APIRouter()
@@ -47,7 +49,10 @@ async def send_until_closed(websocket: WebSocket, payload_factory: Any, *, inter
     await websocket.accept()
     try:
         while True:
-            await websocket.send_json(payload_factory())
+            payload = payload_factory()
+            if inspect.isawaitable(payload):
+                payload = await payload
+            await websocket.send_json(payload)
             await asyncio.sleep(interval_seconds)
     except WebSocketDisconnect:
         return
@@ -85,7 +90,8 @@ async def ws_stream_events(websocket: WebSocket, stream_id: str) -> None:
         return
     limit = min(max(1, int(websocket.query_params.get("limit", API_LIST_DEFAULT_LIMIT))), 200)
 
-    def payload() -> dict[str, Any]:
+    async def payload() -> dict[str, Any]:
+        await run_blocking_io(refresh_streams_state)
         stream = get_stream(stream_id, tenant_id=tenant_id)
         if stream is None:
             return {"status": "not_found", "stream_id": stream_id, "tenant_id": tenant_id}

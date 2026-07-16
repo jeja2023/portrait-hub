@@ -176,6 +176,7 @@ async function refreshGallery() {
 }
 
 async function refreshStreams() {
+  const selectedStreamId = qs("#stream-id-input")?.value.trim() || "";
   const payload = await api("/v1/streams?limit=50");
   renderSummary("#streams-summary", [
     { label: "视频流解析", value: payload.total ?? (payload.streams || []).length },
@@ -184,6 +185,10 @@ async function refreshStreams() {
     { label: "租户", value: state.tenantId },
   ]);
   renderPayload("streams", "#streams-json", payload);
+  if (selectedStreamId) {
+    const detail = await api(`/v1/streams/${encodeURIComponent(selectedStreamId)}`).catch(() => null);
+    if (detail) renderLiveStreamResults(detail);
+  }
 }
 
 async function refreshAdmin() {

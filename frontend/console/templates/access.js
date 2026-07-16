@@ -27,6 +27,16 @@
             <button type="button" id="stream-watch-button">实时订阅</button>
           </div>
           <div id="stream-ws-status" class="ws-status">未订阅视频流事件</div>
+          <div class="stream-live-result" aria-live="polite">
+            <div class="section-title">
+              <h3>\u5b9e\u65f6\u89e3\u6790\u7ed3\u679c</h3>
+              <p>\u5c55\u793a\u6700\u65b0\u89e3\u6790\u6279\u6b21\u7684\u6807\u6ce8\u5e27\u548c\u4eba\u5458\u8f68\u8ff9\u6458\u8981\u3002</p>
+            </div>
+            <div id="stream-live-summary" class="result-summary"></div>
+            <div id="stream-live-visuals" class="result-visual-grid result-visual-grid--video">
+              <div class="result-empty">\u542f\u52a8\u5206\u6790\u540e\uff0c\u5b9e\u65f6\u89e3\u6790\u5e27\u4f1a\u663e\u793a\u5728\u8fd9\u91cc</div>
+            </div>
+          </div>
           <div id="streams-summary" class="result-summary"></div>
           <div id="streams-json" class="json-view data-viewer" role="region" aria-label="视频流响应数据"></div>
         </div>

@@ -55,7 +55,7 @@ def test_dev_start_local_env_clears_api_token_for_browser_console(
 
     env_path = workspace_tmp_path / ".env"
     env_path.write_text(
-        "API_TOKEN=123456\nAUTH_REQUIRED=true\nRBAC_ENABLED=true\n", encoding="utf-8"
+        "API_TOKEN=123456\nAUTH_REQUIRED=true\nRBAC_ENABLED=true\nALLOW_PRIVATE_STREAM_HOSTS=true\n", encoding="utf-8"
     )
 
     local_env_file, overrides = write_local_dev_env(workspace_tmp_path, env_path)
@@ -65,6 +65,63 @@ def test_dev_start_local_env_clears_api_token_for_browser_console(
     assert values["API_TOKEN"] == ""
     assert values["AUTH_REQUIRED"] == "false"
     assert values["RBAC_ENABLED"] == "false"
+    assert values["ALLOW_PRIVATE_STREAM_HOSTS"] == "true"
+
+
+def test_dev_start_runs_stream_worker_with_api(
+    monkeypatch,
+    workspace_tmp_path,
+) -> None:
+    import dev_start
+
+    processes = []
+
+    class FakeProcess:
+        def __init__(self, args, *, cwd, env):
+            self.args = args
+            self.cwd = cwd
+            self.env = env
+            self.terminated = False
+            processes.append(self)
+
+        def poll(self):
+            return None
+
+        def terminate(self):
+            self.terminated = True
+
+        def wait(self, timeout):
+            return 0
+
+        def kill(self):
+            raise AssertionError("graceful termination should succeed")
+
+    monkeypatch.setattr(dev_start.subprocess, "Popen", FakeProcess)
+
+    def stop_supervisor(_seconds):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(dev_start.time, "sleep", stop_supervisor)
+    python_exe = workspace_tmp_path / "python"
+    api_args = [str(python_exe), "-m", "uvicorn", "main:app"]
+    service_env = {"ALLOW_PRIVATE_STREAM_HOSTS": "true"}
+
+    with pytest.raises(KeyboardInterrupt):
+        dev_start.run_local_services(
+            workspace_tmp_path,
+            python_exe,
+            api_args,
+            service_env,
+        )
+
+    assert processes[0].args == [
+        str(python_exe),
+        "-m",
+        "app.portrait_stream_worker_daemon",
+    ]
+    assert processes[1].args == api_args
+    assert all(process.env is service_env for process in processes)
+    assert all(process.terminated for process in processes)
 
 
 def test_env_hot_reload_updates_model_capabilities(
@@ -476,6 +533,11 @@ def test_console_assets_use_light_structured_response_panels() -> None:
     assert "视频流解析" in views_union
     assert "stream-results-visuals" in views_union
     assert "streamResultVisuals" in results_body
+    assert "/events?limit=200" in results_body
+    assert "stream-live-summary" in template_access_body
+    assert "stream-live-visuals" in template_access_body
+    assert "renderLiveStreamResults(payload)" in network_body
+    assert 'watchJsonSocket("stream", `/ws/streams/${id}`' in runtime_body
     assert "人员库查询" not in navigation_body
     assert "智能解析" not in navigation_body
     assert "视频分析" not in navigation_body

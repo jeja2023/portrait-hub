@@ -302,19 +302,56 @@ function streamResultVisuals(streams, eventPayloads) {
     const stream = streamMap.get(item.stream_id) || {};
     const streamLabel = stream.name || item.stream_id || "视频流";
     const events = Array.isArray(item.events) ? item.events : [];
-    events.forEach((event) => {
-      if (event.type !== "stream_analysis_completed") return;
-      const frames = Array.isArray(event.payload?.frames) ? event.payload.frames : [];
-      frames.forEach((frame, index) => {
-        const visual = videoFrameVisual(frame, index, streamLabel);
-        if (!visual) return;
-        visual.stream = stream;
-        visual.event = event;
-        visuals.push(visual);
-      });
+    const event = latestStreamEvent(events.filter((entry) => entry.type === "stream_analysis_completed"));
+    if (!event) return;
+    const frames = Array.isArray(event.payload?.frames) ? event.payload.frames : [];
+    frames.forEach((frame, index) => {
+      const visual = videoFrameVisual(frame, index, streamLabel);
+      if (!visual) return;
+      visual.stream = stream;
+      visual.event = event;
+      visuals.push(visual);
     });
   });
   return visuals;
+}
+
+function renderLiveStreamResults(payload) {
+  const cachedStream = state.latestPayloads.stream?.stream || {};
+  const stream = payload?.stream
+    || (cachedStream.stream_id === payload?.stream_id ? cachedStream : null)
+    || { stream_id: payload?.stream_id };
+  const events = Array.isArray(payload?.events)
+    ? payload.events
+    : Array.isArray(stream.events)
+      ? stream.events
+      : [];
+  const latestEvent = latestStreamEvent(events);
+  const latestAnalysis = latestStreamEvent(events.filter((event) => event.type === "stream_analysis_completed"));
+  const analysis = latestAnalysis?.payload || {};
+  const frames = Array.isArray(analysis.frames) ? analysis.frames : [];
+  const streamLabel = stream.name || stream.stream_id || payload?.stream_id || "\u89c6\u9891\u6d41";
+  const visuals = frames.map((frame, index) => {
+    const visual = videoFrameVisual(frame, index, streamLabel);
+    if (!visual) return null;
+    visual.stream = stream;
+    visual.event = latestAnalysis;
+    return visual;
+  }).filter(Boolean);
+
+  renderSummary("#stream-live-summary", [
+    { label: "\u6d41\u72b6\u6001", value: localizeValue(stream.status || "--") },
+    { label: "\u6700\u65b0\u6279\u6b21\u5e27", value: analysis.frame_count ?? frames.length },
+    { label: "\u4eba\u5458", value: analysis.person_count ?? "--" },
+    { label: "\u8f68\u8ff9", value: analysis.track_count ?? "--" },
+    { label: "\u6700\u65b0\u4e8b\u4ef6", value: latestEvent?.type || "--" },
+    { label: "\u89e3\u6790\u65f6\u95f4", value: latestAnalysis?.created_at ? formatDateTime(latestAnalysis.created_at) : "--" },
+  ]);
+  renderVideoVisualGrid("#stream-live-visuals", visuals, "\u7b49\u5f85\u89c6\u9891\u6d41\u4ea7\u751f\u5b9e\u65f6\u89e3\u6790\u5e27", {
+    variant: "video",
+    maxWidth: 260,
+    maxHeight: 180,
+  });
 }
 
 function renderStreamResults(payload) {
@@ -373,7 +410,7 @@ async function refreshStreamResults() {
   const streams = Array.isArray(streamsPayload.streams) ? streamsPayload.streams : [];
   const [statusResult, eventResults] = await Promise.all([
     api("/v1/admin/status").catch(() => ({})),
-    Promise.allSettled(streams.slice(0, 24).map((stream) => api(`/v1/streams/${encodeURIComponent(stream.stream_id)}/events?limit=5`))),
+    Promise.allSettled(streams.slice(0, 24).map((stream) => api(`/v1/streams/${encodeURIComponent(stream.stream_id)}/events?limit=200`))),
   ]);
   const eventPayloads = streamEventPayloads(eventResults).map((item, index) => ({
     stream_id: item.stream_id || streams[index]?.stream_id,

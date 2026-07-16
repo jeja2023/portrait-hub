@@ -75,6 +75,7 @@ function watchJsonSocket(name, path, statusSelector, outputSelector) {
             },
           ],
         };
+        renderLiveStreamResults(payload);
         renderStreamResults(streamPayload);
         renderPayload("streams", outputSelector, payload);
       } else {

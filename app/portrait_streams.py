@@ -252,7 +252,18 @@ def persist_stream(stream: StreamRecord) -> None:
 
         upsert_stream(stream.state_dict())
         return
-    save_streams_state()
+    key = stream_key(stream.tenant_id, stream.stream_id)
+    with STREAMS_LOCK:
+        previous = STREAMS.get(key)
+        STREAMS[key] = stream
+        try:
+            save_streams_state()
+        except Exception:
+            if previous is None:
+                STREAMS.pop(key, None)
+            else:
+                STREAMS[key] = previous
+            raise
 
 
 def delete_stream_state(tenant_id: str, stream_id: str) -> None:
@@ -296,6 +307,19 @@ def load_streams_state() -> None:
                 logger.warning("已跳过无效视频流状态: %s", exception_log_summary(exc))
                 continue
             STREAMS[stream_key(stream.tenant_id, stream.stream_id)] = stream
+
+
+def refresh_streams_state() -> None:
+    with STREAMS_LOCK:
+        current_streams = dict(STREAMS)
+        load_streams_state()
+        persisted_streams = dict(STREAMS)
+        STREAMS.clear()
+        STREAMS.update(current_streams)
+        for key, persisted_stream in persisted_streams.items():
+            current_stream = current_streams.get(key)
+            if current_stream is None or persisted_stream.updated_at > current_stream.updated_at:
+                STREAMS[key] = persisted_stream
 
 
 def create_stream(

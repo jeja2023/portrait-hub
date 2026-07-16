@@ -404,6 +404,18 @@
   display: block;
 }
 
+.stream-live-result {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+}
+
+.stream-live-result .section-title {
+  margin: 0;
+}
+
 .stream-result-list {
   display: grid;
   gap: 10px;

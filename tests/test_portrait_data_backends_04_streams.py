@@ -1,5 +1,6 @@
 import asyncio
 import json
+from copy import deepcopy
 
 import pytest
 from fastapi import HTTPException
@@ -80,6 +81,36 @@ def test_streams_json_state_round_trip(monkeypatch, workspace_tmp_path) -> None:
     stored = STREAMS[stream_key("tenant-a", created.stream_id)]
     assert stored.name == "Lobby"
     assert stored.stream_url == "http://example.com/live"
+
+
+def test_detached_stream_worker_snapshot_is_persisted(monkeypatch, workspace_tmp_path) -> None:
+    state_path = workspace_tmp_path / "streams-worker.json"
+    monkeypatch.setattr(portrait_streams, "PORTRAIT_STORAGE_BACKEND", "json")
+    monkeypatch.setattr(portrait_streams, "PORTRAIT_STREAMS_STATE_PATH", state_path)
+    STREAMS.clear()
+
+    created = create_stream("http://example.com/live", tenant_id="tenant-a")
+    worker_snapshot = deepcopy(created)
+    worker_snapshot.add_event(
+        "stream_analysis_completed",
+        "stream analysis completed",
+        {
+            "frame_count": 1,
+            "person_count": 1,
+            "track_count": 1,
+            "frames": [{"thumbnail": "data:image/jpeg;base64,abcd"}],
+        },
+    )
+    portrait_streams.persist_stream(worker_snapshot)
+
+    STREAMS.clear()
+    portrait_streams.load_streams_state()
+
+    stored = STREAMS[stream_key("tenant-a", created.stream_id)]
+    assert stored.events[-1].type == "stream_analysis_completed"
+    assert stored.events[-1].payload["frames"][0]["thumbnail"].startswith(
+        "data:image/jpeg;base64,"
+    )
 
 
 def test_streams_json_state_protects_stream_url(

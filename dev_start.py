@@ -5,6 +5,7 @@ import os
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 from app.runtime_defaults import local_dev_env_overrides, parse_env_file
@@ -85,6 +86,54 @@ def install_dependencies(root_dir: Path, python_exe: Path, pip_exe: Path) -> boo
     return True
 
 
+def stream_worker_command(python_exe: Path) -> list[str]:
+    return [str(python_exe), "-m", "app.portrait_stream_worker_daemon"]
+
+
+def terminate_process(process: subprocess.Popen[bytes] | None) -> None:
+    if process is None or process.poll() is not None:
+        return
+    process.terminate()
+    try:
+        process.wait(timeout=10)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.wait(timeout=5)
+
+
+def run_local_services(
+    root_dir: Path,
+    python_exe: Path,
+    api_args: list[str],
+    service_env: dict[str, str],
+) -> None:
+    api_process: subprocess.Popen[bytes] | None = None
+    worker_process: subprocess.Popen[bytes] | None = None
+    try:
+        log_info("\u6b63\u5728\u542f\u52a8\u89c6\u9891\u6d41\u89e3\u6790 worker")
+        worker_process = subprocess.Popen(
+            stream_worker_command(python_exe),
+            cwd=str(root_dir),
+            env=service_env,
+        )
+        api_process = subprocess.Popen(
+            api_args,
+            cwd=str(root_dir),
+            env=service_env,
+        )
+        while True:
+            api_return_code = api_process.poll()
+            worker_return_code = worker_process.poll()
+            if api_return_code is not None:
+                raise RuntimeError(f"FastAPI \u670d\u52a1\u5df2\u9000\u51fa\uff0c\u9000\u51fa\u7801 {api_return_code}")
+            if worker_return_code is not None:
+                raise RuntimeError(f"\u89c6\u9891\u6d41\u89e3\u6790 worker \u5df2\u9000\u51fa\uff0c\u9000\u51fa\u7801 {worker_return_code}")
+            time.sleep(0.5)
+    finally:
+        terminate_process(api_process)
+        terminate_process(worker_process)
+
+
 def main() -> None:
     log_info("正在检查本地开发环境")
     root_dir = Path(__file__).resolve().parent
@@ -124,7 +173,7 @@ def main() -> None:
         log_error("依赖安装失败，正在放弃启动")
         sys.exit(1)
 
-    local_env_file, local_overrides = write_local_dev_env(root_dir, env_file)
+    local_env_file, _ = write_local_dev_env(root_dir, env_file)
     log_info(f"已生成本地环境变量文件: {local_env_file}")
     log_info("正在启动支持热重载的 FastAPI 服务")
 
@@ -140,12 +189,12 @@ def main() -> None:
         "--reload",
     ]
     startup_env = os.environ.copy()
-    startup_env.update(local_overrides)
+    startup_env.update(parse_env_file(local_env_file))
     startup_env["ENV_PATH"] = str(local_env_file)
     startup_env["PYTHONPATH"] = str(root_dir)
 
     try:
-        subprocess.run(startup_args, check=True, cwd=str(root_dir), env=startup_env)
+        run_local_services(root_dir, python_exe, startup_args, startup_env)
     except KeyboardInterrupt:
         log_info("服务已停止")
     except Exception as exc:

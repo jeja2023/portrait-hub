@@ -416,7 +416,7 @@ function setupEvents() {
   qs("#search-form").addEventListener("submit", wrapHandler(submitGallerySearch));
   qs("#video-form").addEventListener("submit", wrapHandler(submitVideoJob));
   qs("#stream-form").addEventListener("submit", wrapHandler(submitStream));
-  ["#vision-visuals", "#job-visuals", "#image-results-visuals", "#video-results-visuals", "#stream-results-visuals", "#track-review-visuals"].forEach((selector) => qs(selector).addEventListener("click", (event) => {
+  ["#vision-visuals", "#job-visuals", "#image-results-visuals", "#video-results-visuals", "#stream-live-visuals", "#stream-results-visuals", "#track-review-visuals"].forEach((selector) => qs(selector).addEventListener("click", (event) => {
     const trigger = event.target instanceof Element ? event.target.closest("[data-result-visual-index]") : null;
     if (!trigger) return;
     const index = Number(trigger.dataset.resultVisualIndex);
@@ -549,24 +549,33 @@ function setupEvents() {
   qs("#stream-get-button").addEventListener("click", wrapHandler(async () => {
     const id = encodedInput("#stream-id-input", "视频流 ID");
     if (!id) return;
-    renderPayload("streams", "#streams-json", await api(`/v1/streams/${id}`));
+    const payload = await api(`/v1/streams/${id}`);
+    renderLiveStreamResults(payload);
+    renderPayload("streams", "#streams-json", payload);
   }));
   qs("#stream-start-button").addEventListener("click", wrapHandler(async () => {
     const id = encodedInput("#stream-id-input", "视频流 ID");
     if (!id) return;
-    renderPayload("streams", "#streams-json", await api(`/v1/streams/${id}/start`, { method: "POST" }));
+    const payload = await api(`/v1/streams/${id}/start`, { method: "POST" });
+    renderLiveStreamResults(payload);
+    renderPayload("streams", "#streams-json", payload);
+    watchJsonSocket("stream", `/ws/streams/${id}`, "#stream-ws-status", "#streams-json");
     await refreshStreams();
   }));
   qs("#stream-stop-button").addEventListener("click", wrapHandler(async () => {
     const id = encodedInput("#stream-id-input", "视频流 ID");
     if (!id) return;
-    renderPayload("streams", "#streams-json", await api(`/v1/streams/${id}/stop`, { method: "POST" }));
+    const payload = await api(`/v1/streams/${id}/stop`, { method: "POST" });
+    renderLiveStreamResults(payload);
+    renderPayload("streams", "#streams-json", payload);
     await refreshStreams();
   }));
   qs("#stream-events-button").addEventListener("click", wrapHandler(async () => {
     const id = encodedInput("#stream-id-input", "视频流 ID");
     if (!id) return;
-    renderPayload("streams", "#streams-json", await api(`/v1/streams/${id}/events`));
+    const payload = await api(`/v1/streams/${id}/events`);
+    renderLiveStreamResults(payload);
+    renderPayload("streams", "#streams-json", payload);
   }));
   qs("#stream-watch-button").addEventListener("click", () => {
     const id = encodedInput("#stream-id-input", "视频流 ID");
