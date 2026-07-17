@@ -426,7 +426,7 @@ def list_analysis_archives(
     if postgres_archive_enabled():
         from app.portrait_postgres import query_analysis_archives
 
-        records, pagination = query_analysis_archives(
+        postgres_records, pagination = query_analysis_archives(
             tenant_id,
             source_type=source_type,
             mode=mode,
@@ -436,15 +436,20 @@ def list_analysis_archives(
         )
         pagination["cursor"] = cursor
         has_more = bool(pagination.get("has_more", False))
-        if has_more and records:
-            last = records[-1]
+        if has_more and postgres_records:
+            last = postgres_records[-1]
             pagination["next_cursor"] = encode_cursor(
-                [-float(last.get("created_at") or 0.0), str(last.get("archive_id") or "")]
+                [
+                    -float(str(last.get("created_at") or 0.0)),
+                    str(last.get("archive_id") or ""),
+                ]
             )
         else:
             pagination["next_cursor"] = None
         pagination["has_more"] = has_more
-        return [AnalysisArchiveRecord.from_state(item) for item in records], pagination
+        return [
+            AnalysisArchiveRecord.from_state(item) for item in postgres_records
+        ], pagination
     cursor_values = decode_cursor(cursor)
     filters = ["tenant_id = ?"]
     params: list[Any] = [tenant_id]
@@ -486,18 +491,20 @@ def list_analysis_archives(
             [*query_params, limit + 1, offset],
         ).fetchall()
     has_more = len(rows) > limit
-    records = [_record_from_sqlite_row(row) for row in rows[:limit]]
+    local_records = [_record_from_sqlite_row(row) for row in rows[:limit]]
     next_cursor = (
-        encode_cursor([-records[-1].created_at, records[-1].archive_id])
-        if has_more and records
+        encode_cursor([-local_records[-1].created_at, local_records[-1].archive_id])
+        if has_more and local_records
         else None
     )
-    return records, {
-        "count": len(records),
+    return local_records, {
+        "count": len(local_records),
         "total": total,
         "limit": limit,
         "offset": offset,
-        "next_offset": None if cursor is not None or not has_more else offset + len(records),
+        "next_offset": None
+        if cursor is not None or not has_more
+        else offset + len(local_records),
         "cursor": cursor,
         "next_cursor": next_cursor,
         "has_more": has_more,
