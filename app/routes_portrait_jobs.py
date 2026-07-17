@@ -28,6 +28,7 @@ from app.portrait_jobs import (
     request_cancel_video_job,
     restore_video_job,
 )
+from app.portrait_runtime_store import video_jobs_snapshots
 from app.portrait_request_context import (
     PortraitRequestContext,
     portrait_request_context,
@@ -61,6 +62,7 @@ router = APIRouter(dependencies=[Depends(require_api_token)])
 async def refresh_video_job_view() -> None:
     if not VIDEO_JOB_WORKER_IN_PROCESS:
         await run_blocking_io(load_video_jobs_state)
+        # Ref: video_jobs_snapshots(tenant_id)
 
 
 def rollback_video_job_snapshot(job: VideoJob, previous_job: VideoJob) -> list[str]:

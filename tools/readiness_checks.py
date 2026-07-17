@@ -94,7 +94,7 @@ def check_capabilities(root: Path) -> list[dict[str, Any]]:
     return checks
 
 
-def check_model_files(root: Path, models_root: Path) -> list[dict[str, Any]]:
+def check_model_files(root: Path, models_root: Path, skip_existence: bool = False) -> list[dict[str, Any]]:
     models, _ = model_config_entries(root)
     checks = []
     for model_id, config in sorted(models.items()):
@@ -102,7 +102,7 @@ def check_model_files(root: Path, models_root: Path) -> list[dict[str, Any]]:
         checks.append(
             {
                 "name": f"model_file:{model_id}",
-                "ok": bool(path and path.is_file() and not error),
+                "ok": bool(path and (skip_existence or path.is_file()) and not error),
                 "path": str(path) if path else None,
                 "error": error,
             }

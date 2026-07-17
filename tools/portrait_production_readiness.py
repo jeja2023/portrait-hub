@@ -69,7 +69,7 @@ def main() -> int:
                 "reason": "scope=platform skips real model capability status",
             }
         )
-    checks.extend(check_model_files(root, models_root))
+    checks.extend(check_model_files(root, models_root, skip_existence=(args.scope == "platform")))
     strict_failures = [item for item in checks if not item["ok"]]
     output = {
         "ok": not strict_failures if args.strict else True,

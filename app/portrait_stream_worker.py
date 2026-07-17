@@ -210,9 +210,8 @@ def emit_stream_event(
 ) -> None:
     previous_stream = deepcopy(stream)
     stream.add_event(event_type, message, payload or {})
-    persisted_payload = redact_sensitive_fields(
-        payload_without_embedded_images(payload or {})
-    )
+    persisted_payload = redact_sensitive_fields(payload or {})
+    persisted_payload = payload_without_embedded_images(persisted_payload)
     append_jsonl(
         STREAM_EVENT_STATE_PATH,
         {
@@ -230,7 +229,6 @@ def emit_stream_event(
         restore_stream(stream, previous_stream)
         restore_stream_snapshot_in_store(stream)
         raise
-
 
 def stream_session_key(stream: StreamRecord) -> tuple[str, str]:
     return (stream.tenant_id, stream.stream_id)
