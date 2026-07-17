@@ -6,6 +6,7 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 from enum import StrEnum
 from io import BytesIO
+from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
@@ -15,6 +16,12 @@ from app.inference_tracks import infer_detections_and_embeddings
 from app.media.quality import assess_image_quality
 from app.model_refs import validate_model_reference_parts
 from app.observability import logger, wall_time
+from app.portrait_analysis_archive import (
+    AnalysisArtifact,
+    create_analysis_archive,
+    payload_without_embedded_images,
+    store_analysis_source_file,
+)
 from app.portrait_async import run_blocking_io
 from app.portrait_response import exception_log_summary
 from app.portrait_state import (
@@ -24,6 +31,7 @@ from app.portrait_state import (
 )
 from app.routes_inference_common import validate_detection_parameters
 from app.settings import (
+    ANALYSIS_ARCHIVE_ENABLED,
     DEFAULT_CONFIDENCE,
     DEFAULT_DETECTOR_ARTIFACT,
     DEFAULT_DETECTOR_PROJECT,
@@ -43,6 +51,14 @@ from app.video_io import (
 )
 
 VIDEO_JOB_ERROR_MESSAGE = "视频任务失败"
+VIDEO_MEDIA_TYPES = {
+    ".avi": "video/x-msvideo",
+    ".m4v": "video/x-m4v",
+    ".mkv": "video/x-matroska",
+    ".mov": "video/quicktime",
+    ".mp4": "video/mp4",
+    ".webm": "video/webm",
+}
 
 
 class JobStatus(StrEnum):
@@ -183,6 +199,8 @@ class VideoJob:
             if lightweight_result
             else public_video_job_result(self.result)
         )
+        if isinstance(result, dict):
+            result = payload_without_embedded_images(result)
         return {
             "job_id": self.job_id,
             "tenant_id": self.tenant_id,
@@ -568,8 +586,11 @@ async def run_video_job(
             else:
                 raise ValueError("视频任务缺少输入引用")
 
+            source_artifact: AnalysisArtifact | None = None
+
             # 按批提特征，收集所有帧结果
             all_frames: list[dict[str, Any]] = []
+            all_archive_images: list[Image.Image] = []
             all_source_indexes: list[int] = []
             all_source_seconds: list[float] = []
             fps_value = 0.0
@@ -638,6 +659,7 @@ async def run_video_job(
                         frame["thumbnail"] = image_thumbnail_data_url(image)
                         frame["quality"] = assess_image_quality(image)
                         all_frames.append(frame)
+                        all_archive_images.append(image.copy())
                         all_source_indexes.append(src_idx)
                         all_source_seconds.append(src_seconds)
                     frame_index_offset += len(batch_images)
@@ -666,6 +688,18 @@ async def run_video_job(
                     if persist_interval <= 0 or (job.updated_at - last_progress_persist_at) >= persist_interval:
                         await run_blocking_io(persist_video_job, job, lightweight_result=VIDEO_JOB_WORKER_IN_PROCESS)
                         last_progress_persist_at = job.updated_at
+                if ANALYSIS_ARCHIVE_ENABLED and all_frames:
+                    source_artifact = await run_blocking_io(
+                        store_analysis_source_file,
+                        tenant_id,
+                        f"archive_video_{job.job_id}",
+                        source_path,
+                        filename or Path(source_path).name,
+                        VIDEO_MEDIA_TYPES.get(
+                            Path(source_path).suffix.lower(),
+                            "application/octet-stream",
+                        ),
+                    )
             finally:
                 if data is not None:
                     import os as _os
@@ -712,6 +746,19 @@ async def run_video_job(
             job.status = JobStatus.COMPLETED
             job.progress = 1.0
             job.updated_at = wall_time()
+            await run_blocking_io(
+                create_analysis_archive,
+                tenant_id=job.tenant_id,
+                request_id=job.job_id,
+                source_type="video",
+                source_ref=job.job_id,
+                mode="person_tracks",
+                endpoint="/v1/jobs/video",
+                payload=job.result or {},
+                images=all_archive_images,
+                source_artifacts=[source_artifact] if source_artifact else [],
+                archive_id=f"archive_video_{job.job_id}",
+            )
             await run_blocking_io(persist_video_job, job)
             return
         except Exception as exc:

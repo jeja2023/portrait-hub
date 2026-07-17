@@ -7,7 +7,6 @@ from fastapi import (
     File,
     Form,
     HTTPException,
-    Query,
     UploadFile,
     status,
 )
@@ -23,13 +22,9 @@ from app.metrics import observe
 from app.model_config import model_config, model_task, resolve_model_reference
 from app.model_package import get_model_path, model_package_info
 from app.observability import log_json, now
+from app.portrait_analysis_archive import create_analysis_archive
 from app.portrait_async import run_blocking_io
 from app.portrait_auth import permission_dependency
-from app.portrait_image_results import (
-    create_image_analysis_result,
-    image_analysis_results_snapshot,
-)
-from app.portrait_pagination import normalize_list_pagination, page_items_keyset
 from app.portrait_request_context import PortraitRequestContext, portrait_request_context
 from app.portrait_request_validation import validate_int_range
 from app.portrait_response import portrait_success
@@ -109,42 +104,6 @@ async def _run_reid_task(
             ]
         results.append(item)
     return results, infer_meta, len(results)
-
-
-@router.get(
-    "/v1/vision/results",
-    dependencies=[Depends(require_api_token), Depends(permission_dependency("infer"))],
-)
-async def v1_list_image_analysis_results(
-    limit: int | None = Query(None),
-    offset: int | None = Query(None),
-    cursor: str | None = Query(None),
-    ctx: PortraitRequestContext = Depends(portrait_request_context),
-) -> dict[str, Any]:
-    pagination_request = normalize_list_pagination(limit, offset, cursor)
-    items: list[dict[str, Any]] = [
-        {
-            "sort_key": -float(record.created_at),
-            "result_id": record.result_id,
-            "record": record,
-        }
-        for record in image_analysis_results_snapshot(ctx.tenant_id)
-    ]
-    items.sort(key=lambda item: (item["sort_key"], item["result_id"]))
-    page, pagination = page_items_keyset(
-        items,
-        limit=pagination_request.limit,
-        offset=pagination_request.offset,
-        cursor=pagination_request.cursor,
-        key_fields=["sort_key", "result_id"],
-    )
-    return portrait_success(
-        ctx.request_id,
-        {
-            "results": [item["record"].public_dict() for item in page],
-            **pagination,
-        },
-    )
 
 
 @router.post(
@@ -287,13 +246,14 @@ async def vision_infer(
         "result_count": result_count,
     }
     await run_blocking_io(
-        create_image_analysis_result,
+        create_analysis_archive,
         tenant_id=ctx.tenant_id,
         request_id=request_id,
+        source_type="image",
+        source_ref=request_id,
         mode=task_name,
         endpoint="/v1/vision/infer",
         payload=response_data,
         images=images,
-        filenames=filenames,
     )
     return portrait_success(request_id, response_data)

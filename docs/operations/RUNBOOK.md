@@ -26,5 +26,23 @@
 2. 若事件停在 `stream_worker_session_started` 且 `processed_frames=0`，检查 `portrait-stream-worker` 进程或容器、拉流日志和 RTSP 连通性。
 3. 检查 stream 状态中的 `worker_lease_active`。未激活通常表示 daemon 没有接管；反复过期则检查 worker 健康、`STREAM_WORKER_LOCK_DIR` 权限和残留 lock。
 4. 确认 API 与 worker 使用相同的 `.env`、租户、存储后端和 `PORTRAIT_STREAMS_STATE_PATH`/共享数据卷，并核对 `ALLOW_STREAM_URLS`、`ALLOW_PRIVATE_STREAM_HOSTS`、`STREAM_ALLOWED_HOSTS`。
-5. 若事件已包含 `stream_analysis_completed`，检查 payload 的 `thumbnails` 是否非空；服务端有图而页面未更新时，刷新 WebSocket 连接并查看浏览器网络/控制台错误。
+5. 若事件已包含 `stream_analysis_completed`，使用 `GET /v1/analysis/results?source_type=stream&limit=20` 查找 `source_ref` 等于该 `stream_id` 的档案。流事件的持久化载荷不再保存 Base64 图片，结果图应从统一档案读取。
 6. CPU 兜底推理首批通常需要 20～60 秒。等待至少一个完整 batch 后再判断；本地 `python dev_start.py` 会同时启动 API 和流 worker。
+
+## 解析档案健康与容量
+
+统一档案没有每租户数量上限，也不会因为流事件环形历史淘汰而删除。生产环境必须把数据库增长、对象数量和对象存储字节数纳入容量告警。
+
+日常检查：
+
+1. 将 `source_type` 分别设为 `image`、`video` 和 `stream` 请求 `GET /v1/analysis/results?source_type=<type>&limit=1`，确认三种来源可查询且 `content_url` 能在相同租户凭证下读取。
+2. PostgreSQL 后端检查 `portrait_analysis_archives` 的租户记录数和最新 `created_at`；本地后端检查 `PORTRAIT_ANALYSIS_ARCHIVE_DB_PATH` 及其 `-wal`、`-shm` 文件所在磁盘空间。
+3. 监控 S3 bucket 或 `OBJECT_STORAGE_DIR` 的对象数、总字节数、写入失败和读取失败。数据库有记录但对象接口返回 404/5xx，通常表示对象被外部删除、存储凭证变化或数据库与对象存储恢复点不一致。
+4. 确认 API、视频 worker 和流 worker 的 `PORTRAIT_STORAGE_BACKEND`、`POSTGRES_DSN`、`PORTRAIT_OBJECT_STORAGE_BACKEND`、S3 配置、`ENCRYPTION_KEY_ID` 和 `ENCRYPTION_KEYRING` 一致。
+
+备份与恢复：
+
+1. 同一备份窗口内保存 PostgreSQL/SQLite 索引和对象存储；仅使用 `/v1/admin/backup` 的元数据导出不能替代解析对象备份。
+2. 恢复时先恢复对象存储及历史解密密钥，再恢复数据库索引，最后启动 API 和 worker。
+3. 恢复后从三个 `source_type` 各抽样档案，读取预览和完整对象并核对租户隔离。
+4. 任何主动保留或删除策略都必须同时删除索引行、完整对象和预览对象；当前版本默认长期保留，不自动清理解析档案。

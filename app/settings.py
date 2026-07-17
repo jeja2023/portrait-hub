@@ -48,7 +48,7 @@ def parse_csv_env(name: str, default: str = "") -> list[str]:
     return [item.strip() for item in os.getenv(name, default).split(",") if item.strip()]
 
 
-APP_VERSION = "0.8.4"
+APP_VERSION = "0.9.0"
 PORTRAIT_RUNTIME_PROFILE = os.getenv("PORTRAIT_RUNTIME_PROFILE", os.getenv("APP_ENV", "development")).strip().lower() or "development"
 PRODUCTION_EXTERNAL_SERVICES_REQUIRED = parse_bool_env("PRODUCTION_EXTERNAL_SERVICES_REQUIRED", True)
 MODELS_ROOT = Path(os.getenv("MODELS_ROOT", "models")).resolve()
@@ -133,17 +133,15 @@ PORTRAIT_THRESHOLDS_STATE_PATH = Path(
 PORTRAIT_AUDIT_PATH = Path(os.getenv("PORTRAIT_AUDIT_PATH", str(RUNTIME_STATE_DIR / "portrait-audit.jsonl")))
 AUDIT_WRITE_FAIL_CLOSED = parse_bool_env("AUDIT_WRITE_FAIL_CLOSED", True)
 PORTRAIT_JOBS_STATE_PATH = Path(os.getenv("PORTRAIT_JOBS_STATE_PATH", str(RUNTIME_STATE_DIR / "portrait-jobs.json")))
-PORTRAIT_IMAGE_RESULTS_STATE_PATH = Path(
+PORTRAIT_ANALYSIS_ARCHIVE_DB_PATH = Path(
     os.getenv(
-        "PORTRAIT_IMAGE_RESULTS_STATE_PATH",
-        str(RUNTIME_STATE_DIR / "portrait-image-results.json"),
+        "PORTRAIT_ANALYSIS_ARCHIVE_DB_PATH",
+        str(RUNTIME_STATE_DIR / "portrait-analysis-archive.sqlite3"),
     )
 )
-MAX_IMAGE_ANALYSIS_RESULTS_PER_TENANT = parse_int_env(
-    "MAX_IMAGE_ANALYSIS_RESULTS_PER_TENANT", 24
-)
-IMAGE_ANALYSIS_THUMBNAIL_MAX_SIDE = parse_int_env(
-    "IMAGE_ANALYSIS_THUMBNAIL_MAX_SIDE", 480
+ANALYSIS_ARCHIVE_ENABLED = parse_bool_env("ANALYSIS_ARCHIVE_ENABLED", True)
+ANALYSIS_ARCHIVE_PREVIEW_MAX_SIDE = parse_int_env(
+    "ANALYSIS_ARCHIVE_PREVIEW_MAX_SIDE", 480
 )
 VIDEO_JOB_INPUT_DIR = Path(os.getenv("VIDEO_JOB_INPUT_DIR", str(RUNTIME_STATE_DIR / "video-job-inputs")))
 PORTRAIT_STREAMS_STATE_PATH = Path(os.getenv("PORTRAIT_STREAMS_STATE_PATH", str(RUNTIME_STATE_DIR / "portrait-streams.json")))

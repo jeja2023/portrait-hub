@@ -184,6 +184,7 @@ async def test_run_video_job_is_tenant_scoped(monkeypatch) -> None:
     VIDEO_JOBS[job_key("tenant-a", "job_same")] = VideoJob(job_id="job_same", tenant_id="tenant-a", filename="a.mp4")
     VIDEO_JOBS[job_key("tenant-b", "job_same")] = VideoJob(job_id="job_same", tenant_id="tenant-b", filename="b.mp4")
     fake_image = Image.new("RGB", (8, 8), (20, 40, 60))
+    archives = []
 
     async def fake_iter_batches(source, sample_interval_seconds, batch_size):
         yield [fake_image], [0], [0.0], 25.0, 1
@@ -198,6 +199,16 @@ async def test_run_video_job_is_tenant_scoped(monkeypatch) -> None:
     monkeypatch.setattr("app.portrait_jobs.infer_detections_and_embeddings", fake_infer_detections)
     monkeypatch.setattr("app.portrait_jobs.assess_image_quality", lambda image: {"score": 0.9})
     monkeypatch.setattr("app.portrait_jobs.persist_video_job", lambda job, **kwargs: None)
+    monkeypatch.setattr("app.portrait_jobs.ANALYSIS_ARCHIVE_ENABLED", True)
+    source_artifact = object()
+    monkeypatch.setattr(
+        "app.portrait_jobs.store_analysis_source_file",
+        lambda *args, **kwargs: source_artifact,
+    )
+    monkeypatch.setattr(
+        "app.portrait_jobs.create_analysis_archive",
+        lambda **kwargs: archives.append(kwargs),
+    )
 
     await run_video_job("job_same", "tenant-b", b"video", "b.mp4", 1.0, 1)
 
@@ -209,6 +220,11 @@ async def test_run_video_job_is_tenant_scoped(monkeypatch) -> None:
     assert "embedding" not in frame["persons"][0]
     assert VIDEO_JOBS[job_key("tenant-b", "job_same")].result["analysis_mode"] == "person_tracks"
     assert VIDEO_JOBS[job_key("tenant-b", "job_same")].result["track_count"] >= 0
+    assert len(archives) == 1
+    assert archives[0]["source_type"] == "video"
+    assert archives[0]["source_ref"] == "job_same"
+    assert archives[0]["source_artifacts"] == [source_artifact]
+    assert len(archives[0]["images"]) == 1
 
 
 @pytest.mark.asyncio

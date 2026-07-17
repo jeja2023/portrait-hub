@@ -8,7 +8,6 @@ from fastapi import (
     File,
     Form,
     HTTPException,
-    Query,
     UploadFile,
     status,
 )
@@ -19,19 +18,16 @@ from app.portrait_async import run_blocking_io
 from app.portrait_audit import audit_event
 from app.portrait_auth import permission_dependency
 from app.portrait_jobs import (
-    JobStatus,
     VideoJob,
     create_video_job,
     get_video_job,
     load_video_jobs_state,
-    normalize_job_status,
     persist_video_job,
     public_video_job_result,
     remove_video_job,
     request_cancel_video_job,
     restore_video_job,
 )
-from app.portrait_pagination import normalize_list_pagination, page_items_keyset
 from app.portrait_request_context import (
     PortraitRequestContext,
     portrait_request_context,
@@ -42,7 +38,6 @@ from app.portrait_response import (
     portrait_success,
     raise_rollback_failure,
 )
-from app.portrait_runtime_store import video_jobs_snapshots
 from app.portrait_security import validate_job_id
 from app.portrait_task_queue import TASK_QUEUE
 from app.routes_inference_common import validate_detection_parameters
@@ -170,52 +165,6 @@ async def v1_create_video_job(
             "queue_message": queue_message.public_dict(),
         },
     )
-
-
-@router.get(
-    "/v1/jobs/video/results", dependencies=[Depends(permission_dependency("jobs:read"))]
-)
-async def v1_list_video_job_results(
-    limit: int | None = Query(None),
-    offset: int | None = Query(None),
-    cursor: str | None = Query(None),
-    ctx: PortraitRequestContext = Depends(portrait_request_context),
-) -> dict[str, Any]:
-    request_id = ctx.request_id
-    tenant_id = ctx.tenant_id
-    await refresh_video_job_view()
-    pagination_request = normalize_list_pagination(limit, offset, cursor)
-    items: list[dict[str, Any]] = []
-    for job in video_jobs_snapshots(tenant_id):
-        result = job.result if isinstance(job.result, dict) else None
-        frames = result.get("frames") if isinstance(result, dict) else None
-        if not isinstance(frames, list) or not frames:
-            continue
-        if normalize_job_status(job.status) in {JobStatus.FAILED, JobStatus.CANCELLED}:
-            continue
-        items.append(
-            {
-                "sort_key": -float(job.updated_at or job.created_at or 0.0),
-                "job_id": job.job_id,
-                "job": job,
-            }
-        )
-    items.sort(key=lambda item: (item["sort_key"], item["job_id"]))
-    page, pagination = page_items_keyset(
-        items,
-        limit=pagination_request.limit,
-        offset=pagination_request.offset,
-        cursor=pagination_request.cursor,
-        key_fields=["sort_key", "job_id"],
-    )
-    results = [
-        {
-            "job": item["job"].public_dict(include_result=False),
-            "result": public_video_job_result(item["job"].result),
-        }
-        for item in page
-    ]
-    return portrait_success(request_id, {"results": results, **pagination})
 
 
 @router.get(

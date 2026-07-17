@@ -1,12 +1,17 @@
 import json
+from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
+from PIL import Image
 
 from app import (
+    portrait_analysis_archive,
     portrait_audit,
     portrait_auth,
-    portrait_image_results,
+    portrait_object_storage,
     rollout_audit,
+    routes_person_tracks,
+    routes_portrait_infer,
     routes_vision,
     security,
 )
@@ -28,15 +33,15 @@ def test_v1_vision_results_are_persisted_and_tenant_scoped(
     monkeypatch.setattr(security, "AUTH_REQUIRED", False)
     monkeypatch.setattr(portrait_auth, "RBAC_ENABLED", False)
     monkeypatch.setattr(
-        portrait_image_results,
-        "PORTRAIT_IMAGE_RESULTS_STATE_PATH",
-        workspace_tmp_path / "image-results.json",
+        portrait_analysis_archive,
+        "PORTRAIT_ANALYSIS_ARCHIVE_DB_PATH",
+        workspace_tmp_path / "analysis-archive.sqlite3",
     )
-    monkeypatch.setattr(portrait_image_results, "PORTRAIT_STORAGE_BACKEND", "local")
+    monkeypatch.setattr(portrait_analysis_archive, "PORTRAIT_STORAGE_BACKEND", "local")
+    monkeypatch.setattr(portrait_analysis_archive, "ANALYSIS_ARCHIVE_ENABLED", True)
     monkeypatch.setattr(
-        portrait_image_results, "MAX_IMAGE_ANALYSIS_RESULTS_PER_TENANT", 4
+        portrait_object_storage, "OBJECT_STORAGE_DIR", workspace_tmp_path / "objects"
     )
-    portrait_image_results.IMAGE_ANALYSIS_RESULTS.clear()
     client = TestClient(app, raise_server_exceptions=False)
 
     async def fake_get_or_load_model(*args, **kwargs):
@@ -105,11 +110,11 @@ def test_v1_vision_results_are_persisted_and_tenant_scoped(
             files={"files": ("secret.png", b"fake", "image/png")},
         )
         listed = client.get(
-            "/v1/vision/results?limit=10",
+            "/v1/analysis/results?source_type=image&limit=10",
             headers={"x-tenant-id": "tenant-a"},
         )
         other_tenant = client.get(
-            "/v1/vision/results?limit=10",
+            "/v1/analysis/results?source_type=image&limit=10",
             headers={"x-tenant-id": "tenant-b"},
         )
 
@@ -124,11 +129,240 @@ def test_v1_vision_results_are_persisted_and_tenant_scoped(
         assert record["endpoint"] == "/v1/vision/infer"
         assert record["payload"]["result_count"] == 1
         assert record["previews"][0]["src"].startswith("data:image/jpeg;base64,")
+        assert "object_key" not in listed.text
         assert "secret.png" not in listed.text
+        content = client.get(
+            record["previews"][0]["content_url"],
+            headers={"x-tenant-id": "tenant-a"},
+        )
+        assert content.status_code == 200
+        assert content.headers["content-type"] == "image/jpeg"
+        assert content.content.startswith(b"\xff\xd8")
+        other_content = client.get(
+            record["previews"][0]["content_url"],
+            headers={"x-tenant-id": "tenant-b"},
+        )
+        assert other_content.status_code == 404
         assert other_tenant.status_code == 200
         assert other_tenant.json()["data"]["total"] == 0
     finally:
-        portrait_image_results.IMAGE_ANALYSIS_RESULTS.clear()
+        (workspace_tmp_path / "analysis-archive.sqlite3").unlink(missing_ok=True)
+
+
+def test_v1_track_results_restore_persisted_previews_across_requests(
+    monkeypatch, workspace_tmp_path
+) -> None:
+    state_path = workspace_tmp_path / "track-analysis-archive.sqlite3"
+    monkeypatch.setattr(security, "RBAC_ENABLED", False)
+    monkeypatch.setattr(security, "AUTH_REQUIRED", False)
+    monkeypatch.setattr(portrait_auth, "RBAC_ENABLED", False)
+    monkeypatch.setattr(
+        portrait_analysis_archive,
+        "PORTRAIT_ANALYSIS_ARCHIVE_DB_PATH",
+        state_path,
+    )
+    monkeypatch.setattr(portrait_analysis_archive, "PORTRAIT_STORAGE_BACKEND", "local")
+    monkeypatch.setattr(portrait_analysis_archive, "ANALYSIS_ARCHIVE_ENABLED", True)
+    monkeypatch.setattr(
+        portrait_object_storage,
+        "OBJECT_STORAGE_DIR",
+        workspace_tmp_path / "track-objects",
+    )
+    client = TestClient(app, raise_server_exceptions=False)
+
+    async def fake_load_images(files):
+        from PIL import Image
+
+        return (
+            [
+                Image.new("RGB", (20, 16), color="red"),
+                Image.new("RGB", (20, 16), color="blue"),
+            ],
+            ["private-frame-1.png", "private-frame-2.png"],
+            0.01,
+        )
+
+    async def fake_infer_tracks_for_images(*args, **kwargs):
+        timing = {
+            "preprocess_seconds": 0.01,
+            "queue_seconds": 0.0,
+            "inference_seconds": 0.02,
+            "postprocess_seconds": 0.01,
+        }
+        return {
+            "detector_key": "portrait/person_detector.onnx",
+            "reid_key": "portrait/person_reid.onnx",
+            "detector_cold_loaded": False,
+            "reid_cold_loaded": False,
+            "detector_load_seconds": 0.0,
+            "reid_load_seconds": 0.0,
+            "detector_meta": {
+                "input_shape": [2, 3, 640, 640],
+                "output_shapes": [[2, 1, 6]],
+                "inference_mode": "test",
+                "timing": timing,
+            },
+            "embedding_meta": {
+                "input_shape": [1, 3, 256, 128],
+                "output_shapes": [[1, 512]],
+                "inference_mode": "test",
+                "embedding_dim": 512,
+                "timing": timing,
+            },
+            "frames": [
+                {
+                    "image_index": index,
+                    "width": 20,
+                    "height": 16,
+                    "persons": [],
+                    "person_count": 0,
+                }
+                for index in range(2)
+            ],
+            "tracks": [{"track_id": "track-1", "observations": []}],
+            "track_count": 1,
+            "tracker": {"algorithm": "test"},
+            "person_count": 0,
+            "embedding_count": 0,
+        }
+
+    monkeypatch.setattr(routes_person_tracks, "load_images", fake_load_images)
+    monkeypatch.setattr(
+        routes_person_tracks,
+        "infer_tracks_for_images",
+        fake_infer_tracks_for_images,
+    )
+
+    try:
+        response = client.post(
+            "/v1/infer/tracks",
+            headers={"x-tenant-id": "tenant-a", "x-request-id": "req-tracks"},
+            files=[
+                ("files", ("frame-1.png", b"fake-1", "image/png")),
+                ("files", ("frame-2.png", b"fake-2", "image/png")),
+            ],
+        )
+
+        assert response.status_code == 200
+        assert response.json()["data"]["track_count"] == 1
+        assert "result_id" not in response.json()["data"]
+        assert state_path.exists()
+
+        portrait_analysis_archive.load_analysis_archives_state()
+        listed = client.get(
+            "/v1/analysis/results?source_type=image&limit=10",
+            headers={"x-tenant-id": "tenant-a"},
+        )
+
+        assert listed.status_code == 200
+        payload = listed.json()["data"]
+        assert payload["total"] == 1
+        record = payload["results"][0]
+        assert record["request_id"] == "req-tracks"
+        assert record["mode"] == "tracks"
+        assert record["endpoint"] == "/v1/infer/tracks"
+        assert record["payload"]["track_count"] == 1
+        assert len(record["previews"]) == 2
+        assert all(
+            preview["src"].startswith("data:image/jpeg;base64,")
+            for preview in record["previews"]
+        )
+        assert "private-frame" not in listed.text
+    finally:
+        state_path.unlink(missing_ok=True)
+
+
+def test_all_portrait_image_modes_write_unified_archives(
+    monkeypatch, workspace_tmp_path
+) -> None:
+    monkeypatch.setattr(security, "RBAC_ENABLED", False)
+    monkeypatch.setattr(security, "AUTH_REQUIRED", False)
+    monkeypatch.setattr(portrait_auth, "RBAC_ENABLED", False)
+    monkeypatch.setattr(
+        portrait_analysis_archive,
+        "PORTRAIT_ANALYSIS_ARCHIVE_DB_PATH",
+        workspace_tmp_path / "all-image-modes.sqlite3",
+    )
+    monkeypatch.setattr(portrait_analysis_archive, "PORTRAIT_STORAGE_BACKEND", "local")
+    monkeypatch.setattr(portrait_analysis_archive, "ANALYSIS_ARCHIVE_ENABLED", True)
+    monkeypatch.setattr(
+        portrait_object_storage,
+        "OBJECT_STORAGE_DIR",
+        workspace_tmp_path / "all-image-mode-objects",
+    )
+
+    class Frame:
+        def to_dict(self):
+            return {
+                "source_type": "image",
+                "source_id": "source-test",
+                "frame_index": 0,
+                "pts_ms": 0,
+                "width": 18,
+                "height": 14,
+            }
+
+    decoded = [
+        SimpleNamespace(
+            image=Image.new("RGB", (18, 14), color="white"),
+            frame=Frame(),
+        )
+    ]
+
+    async def fake_decode(files):
+        return decoded
+
+    async def fake_faces(*args, **kwargs):
+        return []
+
+    async def fake_body(*args, **kwargs):
+        return {"box": [0, 0, 18, 14], "model_status": "test"}
+
+    async def fake_pose(*args, **kwargs):
+        return {"keypoints": []}
+
+    async def fake_appearance(*args, **kwargs):
+        return {"box": [0, 0, 18, 14], "model_status": "test"}
+
+    async def fake_gait(*args, **kwargs):
+        return None, {"model_status": "test", "embedding_dim": 0}
+
+    monkeypatch.setattr(routes_portrait_infer, "decode_upload_images", fake_decode)
+    monkeypatch.setattr(routes_portrait_infer, "infer_face_records_for_image", fake_faces)
+    monkeypatch.setattr(routes_portrait_infer, "face_model_summary", lambda *args, **kwargs: {"status": "test"})
+    monkeypatch.setattr(routes_portrait_infer, "infer_body_record_for_image", fake_body)
+    monkeypatch.setattr(routes_portrait_infer, "infer_pose_record_for_image", fake_pose)
+    monkeypatch.setattr(
+        routes_portrait_infer, "infer_appearance_record_for_image", fake_appearance
+    )
+    monkeypatch.setattr(routes_portrait_infer, "infer_gait_embedding_for_images", fake_gait)
+    client = TestClient(app, raise_server_exceptions=False)
+
+    try:
+        for mode in ["faces", "persons", "pose", "appearance", "gait"]:
+            response = client.post(
+                f"/v1/infer/{mode}",
+                headers={"x-tenant-id": "tenant-a", "x-request-id": f"req-{mode}"},
+                files={"files": (f"{mode}.png", b"fake", "image/png")},
+            )
+            assert response.status_code == 200, response.text
+
+        listed = client.get(
+            "/v1/analysis/results?source_type=image&limit=10",
+            headers={"x-tenant-id": "tenant-a"},
+        )
+        assert listed.status_code == 200
+        records = listed.json()["data"]["results"]
+        assert {record["mode"] for record in records} == {
+            "faces",
+            "persons",
+            "pose",
+            "appearance",
+            "gait",
+        }
+        assert all(record["previews"] for record in records)
+    finally:
+        (workspace_tmp_path / "all-image-modes.sqlite3").unlink(missing_ok=True)
 
 
 def test_admin_audit_verify_endpoint_redacts_path_and_reports_chain(

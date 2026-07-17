@@ -30,7 +30,7 @@ LOCAL_DEV_STATE_PATH_KEYS = {
     "PORTRAIT_THRESHOLDS_STATE_PATH": "portrait-thresholds.json",
     "PORTRAIT_AUDIT_PATH": "portrait-audit.jsonl",
     "PORTRAIT_JOBS_STATE_PATH": "portrait-jobs.json",
-    "PORTRAIT_IMAGE_RESULTS_STATE_PATH": "portrait-image-results.json",
+    "PORTRAIT_ANALYSIS_ARCHIVE_DB_PATH": "portrait-analysis-archive.sqlite3",
     "PORTRAIT_STREAMS_STATE_PATH": "portrait-streams.json",
     "TASK_QUEUE_STATE_PATH": "portrait-task-queue.jsonl",
     "STREAM_EVENT_STATE_PATH": "portrait-stream-events.jsonl",

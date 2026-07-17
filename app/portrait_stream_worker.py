@@ -13,6 +13,10 @@ from app.media.stream_decode import validate_media_stream_url
 from app.metrics import observe_video_sampling_metrics
 from app.model_refs import validate_model_reference_parts
 from app.observability import logger, wall_time
+from app.portrait_analysis_archive import (
+    create_analysis_archive,
+    payload_without_embedded_images,
+)
 from app.portrait_jobs import image_thumbnail_data_url
 from app.portrait_request_validation import validate_int_range
 from app.portrait_response import exception_log_summary
@@ -198,10 +202,17 @@ def stream_identifier_fingerprint(value: str) -> str:
     return hashlib.sha256(str(value).encode("utf-8")).hexdigest()[:16]
 
 
-def emit_stream_event(stream: StreamRecord, event_type: str, message: str, payload: dict[str, Any] | None = None) -> None:
+def emit_stream_event(
+    stream: StreamRecord,
+    event_type: str,
+    message: str,
+    payload: dict[str, Any] | None = None,
+) -> None:
     previous_stream = deepcopy(stream)
     stream.add_event(event_type, message, payload or {})
-    persisted_payload = redact_sensitive_fields(payload or {})
+    persisted_payload = redact_sensitive_fields(
+        payload_without_embedded_images(payload or {})
+    )
     append_jsonl(
         STREAM_EVENT_STATE_PATH,
         {
@@ -421,7 +432,25 @@ async def run_stream_worker_session(
                 worker_session["last_analysis_at"] = wall_time()
                 worker_session["last_person_count"] = int(analysis.get("person_count", 0))
                 worker_session["last_track_count"] = int(analysis.get("track_count", 0))
-                emit_stream_event(stream, "stream_analysis_completed", "stream analysis completed", analysis)
+                archive = await asyncio.to_thread(
+                    create_analysis_archive,
+                    tenant_id=stream.tenant_id,
+                    request_id="",
+                    source_type="stream",
+                    source_ref=stream.stream_id,
+                    mode=str(analysis.get("analysis_mode") or "person_tracks"),
+                    endpoint="/v1/streams/{stream_id}/events",
+                    payload=analysis,
+                    images=batch_images,
+                )
+                if archive is not None:
+                    analysis["archive_id"] = archive.archive_id
+                emit_stream_event(
+                    stream,
+                    "stream_analysis_completed",
+                    "stream analysis completed",
+                    analysis,
+                )
                 emit_stream_event(
                     stream,
                     "stream_worker_heartbeat",

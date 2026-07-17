@@ -376,10 +376,11 @@
           <div class="result-panel">
             <div class="section-title">
               <h3>图片解析结果</h3>
-              <p>展示当前租户最近完成的图片解析结果，刷新页面后仍可查看。</p>
+              <p>展示当前租户已归档的全部图片解析结果。</p>
             </div>
             <div id="image-results-summary" class="result-summary"></div>
             <div id="image-results-visuals" class="result-visual-grid"></div>
+            <button type="button" class="ghost hidden" data-results-load-more="image">加载更多图片结果</button>
             <div id="image-results-json" class="json-view data-viewer" role="region" aria-label="图片解析结果数据"></div>
           </div>
         </div>
@@ -387,10 +388,11 @@
           <div class="result-panel">
             <div class="section-title">
               <h3>视频解析结果</h3>
-              <p>汇总当前租户已完成视频任务的解析帧缩略图。</p>
+              <p>汇总当前租户已归档视频任务的解析帧。</p>
             </div>
             <div id="video-results-summary" class="result-summary"></div>
             <div id="video-results-visuals" class="result-visual-grid"></div>
+            <button type="button" class="ghost hidden" data-results-load-more="video">加载更多视频结果</button>
             <div id="video-results-json" class="json-view data-viewer" role="region" aria-label="视频解析结果数据"></div>
           </div>
         </div>
@@ -398,10 +400,11 @@
           <div class="result-panel">
             <div class="section-title">
               <h3>视频流解析结果</h3>
-              <p>展示视频流注册状态、worker 会话和最近事件快照。</p>
+              <p>展示每个已归档视频流解析批次，不受实时事件窗口限制。</p>
             </div>
             <div id="stream-results-summary" class="result-summary"></div>
             <div id="stream-results-visuals" class="result-visual-grid"></div>
+            <button type="button" class="ghost hidden" data-results-load-more="stream">加载更多视频流结果</button>
             <div id="stream-results-list" class="stream-result-list"></div>
             <div id="stream-results-json" class="json-view data-viewer" role="region" aria-label="视频流解析结果数据"></div>
           </div>

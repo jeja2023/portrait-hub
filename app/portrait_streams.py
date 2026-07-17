@@ -50,6 +50,22 @@ class StreamEvent:
             "payload": redact_sensitive_fields(self.payload),
         }
 
+    def state_dict(self) -> dict[str, Any]:
+        payload = deepcopy(self.payload)
+        frames = payload.get("frames")
+        if isinstance(frames, list):
+            for frame in frames:
+                if isinstance(frame, dict):
+                    for key in ("thumbnail", "image", "preview"):
+                        frame.pop(key, None)
+        return {
+            "event_id": self.event_id,
+            "type": self.type,
+            "message": self.message,
+            "created_at": self.created_at,
+            "payload": redact_sensitive_fields(payload),
+        }
+
     @classmethod
     def from_state(cls, payload: dict[str, Any]) -> "StreamEvent":
         event_payload = payload.get("payload")
@@ -121,7 +137,7 @@ class StreamRecord:
             "updated_at": self.updated_at,
             "worker_lease_owner": self.worker_lease_owner,
             "worker_lease_expires_at": self.worker_lease_expires_at,
-            "events": [event.public_dict() for event in self.events],
+            "events": [event.state_dict() for event in self.events],
         }
 
     @classmethod

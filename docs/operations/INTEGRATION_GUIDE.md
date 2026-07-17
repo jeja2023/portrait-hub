@@ -23,12 +23,39 @@
 | 图片解析 | `POST /v1/infer/persons` |
 | 离线视频任务 | `POST /v1/jobs/video`、`GET /v1/jobs/{job_id}`、`GET /v1/jobs/{job_id}/result` |
 | 实时流 | `POST /v1/streams`、`POST /v1/streams/{stream_id}/start`、`GET /v1/streams/{stream_id}/events` |
+| 解析档案 | `GET /v1/analysis/results`、`GET /v1/analysis/artifacts/{archive_id}/{artifact_id}` |
 | 模型状态 | `GET /v1/models` |
 | 阈值 | `GET /v1/thresholds` |
 | 多模态融合 | `POST /v1/fusion/compare` |
 | 租户目录 | `GET /v1/access/tenants`、`POST /v1/access/tenants` |
 | 接入应用 | `GET /v1/access/applications`、`POST /v1/access/applications`、`PATCH /v1/access/applications/{app_id}`、`POST /v1/access/applications/{app_id}/rotate` |
 | Webhook | `GET /v1/access/webhooks`、`POST /v1/access/webhooks`、`PATCH /v1/access/webhooks/{webhook_id}`、`POST /v1/access/webhooks/{webhook_id}/rotate`、`POST /v1/access/webhooks/{webhook_id}/sample` |
+
+## 解析档案
+
+`0.9.0` 起，图片、离线视频和实时视频流的解析历史只通过统一档案接口读取。`/v1/vision/results` 与 `/v1/jobs/video/results` 已删除，不提供兼容回退；`GET /v1/jobs/{job_id}/result` 仍用于读取单个视频任务的业务结果，但不承担历史列表职责。
+
+按来源类型分页读取：
+
+```bash
+curl -G "https://portrait.internal.example/v1/analysis/results" \
+  -H "X-API-Key: ${PORTRAIT_HUB_API_TOKEN}" \
+  --data-urlencode "source_type=stream" \
+  --data-urlencode "limit=50" \
+  --data-urlencode "cursor=${NEXT_CURSOR}"
+```
+
+`source_type` 可取 `image`、`video` 或 `stream`，还可传 `mode` 过滤解析模式。响应中的 `next_cursor` 非空时继续请求下一页；每条档案包含 `archive_id`、结构化 `payload`、预览信息和完整对象的 `content_url`。
+
+读取完整图片或视频对象时必须继续携带同一租户凭证，不能把 `content_url` 当作公开静态地址：
+
+```bash
+curl "https://portrait.internal.example/v1/analysis/artifacts/${ARCHIVE_ID}/${ARTIFACT_ID}" \
+  -H "X-API-Key: ${PORTRAIT_HUB_API_TOKEN}" \
+  --output result.bin
+```
+
+解析档案按租户隔离且不设数量上限。接入方应使用游标分页，不应一次拉取全部记录；生产运维必须同时备份数据库索引和对象存储，缺少任一部分都不能完整恢复档案。
 
 ## 鉴权与租户
 

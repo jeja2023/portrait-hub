@@ -617,6 +617,7 @@ def check_production_integrations(root: Path, report: DeployReport) -> None:
         "embedding_vector vector",
         "portrait_thresholds",
         "portrait_objects",
+        "portrait_analysis_archives",
         "portrait_stream_events",
         "portrait_task_messages",
         "object_info JSONB",

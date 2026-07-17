@@ -12,23 +12,24 @@ function renderTrackReviewAnnotations(annotations) {
 }
 async function refreshTrackReview() {
   const [payload, reviewPayload] = await Promise.all([
-    api("/v1/jobs/video/results?limit=24"),
+    api("/v1/analysis/results?source_type=video&limit=24"),
     api("/v1/evaluation/track-reviews?limit=100").catch((error) => ({ data: { annotations: [], warning: error.message || String(error) } })),
   ]);
   const annotations = payloadData(reviewPayload)?.annotations || reviewPayload.annotations || [];
-  const info = videoResultsVisualInfo(payload);
-  const tracks = info.results.flatMap((entry) => {
-    const frames = Array.isArray(entry.result?.frames) ? entry.result.frames : [];
+  const records = archivePayloadRecords(payload);
+  const visuals = records.flatMap((record) => record.visuals || []);
+  const tracks = records.flatMap((record) => {
+    const frames = Array.isArray(record.payload?.frames) ? record.payload.frames : [];
     return frames.flatMap((frame) => frame.persons || frame.tracks || []);
   });
   renderSummary("#track-review-summary", [
-    { label: "任务数", value: info.results.length },
-    { label: "关键帧", value: info.visuals.length },
+    { label: "任务数", value: records.length },
+    { label: "关键帧", value: visuals.length },
     { label: "轨迹/人体", value: tracks.length },
     { label: "人工标注", value: annotations.length },
   ]);
   renderTrackReviewAnnotations(annotations);
-  renderVideoVisualGrid("#track-review-visuals", info.visuals, "暂无可审阅轨迹，请先完成视频解析任务", {
+  renderVideoVisualGrid("#track-review-visuals", visuals, "暂无可审阅轨迹，请先完成视频解析任务", {
     variant: "video",
     maxWidth: 260,
     maxHeight: 180,

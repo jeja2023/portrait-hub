@@ -8,8 +8,8 @@ _STATE_LOAD_LOCK: asyncio.Lock | None = None
 
 def load_portrait_runtime_state() -> None:
     from app.portrait_access import load_access_state
+    from app.portrait_analysis_archive import load_analysis_archives_state
     from app.portrait_gallery import load_gallery_state
-    from app.portrait_image_results import load_image_analysis_results_state
     from app.portrait_jobs import load_video_jobs_state
     from app.portrait_review import load_review_state
     from app.portrait_streams import load_streams_state
@@ -18,7 +18,7 @@ def load_portrait_runtime_state() -> None:
     load_threshold_state()
     load_access_state()
     load_gallery_state()
-    load_image_analysis_results_state()
+    load_analysis_archives_state()
     load_video_jobs_state()
     load_review_state()
     load_streams_state()

@@ -24,6 +24,11 @@ const state = {
     video: null,
     stream: null,
   },
+  analysisResultsPagination: {
+    image: null,
+    video: null,
+    stream: null,
+  },
   alertConfig: loadAlertConfig(),
   sockets: {},
   visionPreviews: [],
@@ -31,6 +36,7 @@ const state = {
   visionResultVisuals: [],
   visionLightboxIndex: null,
   visionLightboxReturnFocus: null,
+  visionLightboxObjectUrl: null,
   comparePreviews: { A: [], B: [] },
 };
 
@@ -541,6 +547,7 @@ function setupEvents() {
     watchJsonSocket("job", `/ws/jobs/${id}`, "#job-ws-status", "#jobs-json");
   });
   qs("#video-results-refresh-button").addEventListener("click", wrapHandler(refreshActiveAnalysisResults));
+  qsa("[data-results-load-more]").forEach((button) => button.addEventListener("click", wrapHandler(() => loadMoreAnalysisResults(button.dataset.resultsLoadMore))));
   qsa("[data-results-tab]").forEach((button) => button.addEventListener("click", () => {
     renderAnalysisResultsTab(button.dataset.resultsTab);
     if (state.isLoggedIn && state.view === "video-results") wrapHandler(refreshActiveAnalysisResults)();

@@ -1,9 +1,10 @@
 from typing import Any
 
-from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Form, UploadFile
 
 from app.media.image_decode import decode_upload_images
-from app.observability import request_id_from_headers
+from app.portrait_analysis_archive import create_analysis_archive
+from app.portrait_async import run_blocking_io
 from app.portrait_auth import permission_dependency
 from app.portrait_embeddings import (
     FALLBACK_EMBEDDING_MODEL_ID,
@@ -17,11 +18,34 @@ from app.portrait_model_runtime import (
     infer_gait_embedding_for_images,
     infer_pose_record_for_image,
 )
+from app.portrait_request_context import PortraitRequestContext, portrait_request_context
 from app.portrait_response import portrait_success
 from app.security import require_api_token
 from app.settings import MAX_VIDEO_FRAME_UPLOADS, MAX_VISION_IMAGES
 
 router = APIRouter(dependencies=[Depends(require_api_token)])
+
+
+async def archive_image_response(
+    ctx: PortraitRequestContext,
+    *,
+    mode: str,
+    endpoint: str,
+    payload: dict[str, Any],
+    decoded: list[Any],
+) -> dict[str, Any]:
+    await run_blocking_io(
+        create_analysis_archive,
+        tenant_id=ctx.tenant_id,
+        request_id=ctx.request_id,
+        source_type="image",
+        source_ref=ctx.request_id,
+        mode=mode,
+        endpoint=endpoint,
+        payload=payload,
+        images=[item.image for item in decoded],
+    )
+    return portrait_success(ctx.request_id, payload)
 
 
 def validate_file_count(files: list[UploadFile], limit: int) -> None:
@@ -38,12 +62,11 @@ def validate_file_count(files: list[UploadFile], limit: int) -> None:
 
 @router.post("/v1/infer/faces", dependencies=[Depends(permission_dependency("infer"))])
 async def v1_infer_faces(
-    request: Request,
     files: list[UploadFile] = File(...),
     include_embeddings: bool = Form(False),
     fallback_to_image: bool = Form(False),
+    ctx: PortraitRequestContext = Depends(portrait_request_context),
 ) -> dict[str, Any]:
-    request_id = request_id_from_headers(request)
     validate_file_count(files, MAX_VISION_IMAGES)
     decoded = await decode_upload_images(files)
     frames = []
@@ -59,29 +82,32 @@ async def v1_infer_faces(
         frame["faces"] = faces
         frame["face_count"] = len(faces)
         frames.append(frame)
-    return portrait_success(
-        request_id,
-        {
-            "frames": frames,
-            "frame_count": len(frames),
-            "face_count": face_count,
-            "model": model_summary
-            or {
-                "id": "opencv/haarcascade_frontalface_default",
-                "fallback_embedding_model_id": FALLBACK_EMBEDDING_MODEL_ID if include_embeddings else None,
-                "version": FALLBACK_EMBEDDING_VERSION,
-            },
+    response_data = {
+        "frames": frames,
+        "frame_count": len(frames),
+        "face_count": face_count,
+        "model": model_summary
+        or {
+            "id": "opencv/haarcascade_frontalface_default",
+            "fallback_embedding_model_id": FALLBACK_EMBEDDING_MODEL_ID if include_embeddings else None,
+            "version": FALLBACK_EMBEDDING_VERSION,
         },
+    }
+    return await archive_image_response(
+        ctx,
+        mode="faces",
+        endpoint="/v1/infer/faces",
+        payload=response_data,
+        decoded=decoded,
     )
 
 
 @router.post("/v1/infer/persons", dependencies=[Depends(permission_dependency("infer"))])
 async def v1_infer_persons(
-    request: Request,
     files: list[UploadFile] = File(...),
     include_embeddings: bool = Form(False),
+    ctx: PortraitRequestContext = Depends(portrait_request_context),
 ) -> dict[str, Any]:
-    request_id = request_id_from_headers(request)
     validate_file_count(files, MAX_VISION_IMAGES)
     decoded = await decode_upload_images(files)
     frames = []
@@ -101,29 +127,32 @@ async def v1_infer_persons(
         frame["persons"] = [person]
         frame["person_count"] = 1
         frames.append(frame)
-    return portrait_success(
-        request_id,
-        {
-            "frames": frames,
-            "frame_count": len(frames),
-            "person_count": len(frames),
-            "model": model_summary
-            or {
-                "id": FALLBACK_EMBEDDING_MODEL_ID,
-                "version": FALLBACK_EMBEDDING_VERSION,
-                "status": "whole_image_fallback",
-                "embedding_dim": 0,
-            },
+    response_data = {
+        "frames": frames,
+        "frame_count": len(frames),
+        "person_count": len(frames),
+        "model": model_summary
+        or {
+            "id": FALLBACK_EMBEDDING_MODEL_ID,
+            "version": FALLBACK_EMBEDDING_VERSION,
+            "status": "whole_image_fallback",
+            "embedding_dim": 0,
         },
+    }
+    return await archive_image_response(
+        ctx,
+        mode="persons",
+        endpoint="/v1/infer/persons",
+        payload=response_data,
+        decoded=decoded,
     )
 
 
 @router.post("/v1/infer/pose", dependencies=[Depends(permission_dependency("infer"))])
 async def v1_infer_pose(
-    request: Request,
     files: list[UploadFile] = File(...),
+    ctx: PortraitRequestContext = Depends(portrait_request_context),
 ) -> dict[str, Any]:
-    request_id = request_id_from_headers(request)
     validate_file_count(files, MAX_VISION_IMAGES)
     decoded = await decode_upload_images(files)
     results = []
@@ -132,23 +161,29 @@ async def v1_infer_pose(
         frame["image_index"] = index
         frame["pose"] = await infer_pose_record_for_image(item.image)
         results.append(frame)
-    return portrait_success(
-        request_id,
-        {
-            "frames": results,
-            "frame_count": len(results),
-            "model": {"id": "portrait_hub/geometric_pose_placeholder", "status": "placeholder"},
+    response_data = {
+        "frames": results,
+        "frame_count": len(results),
+        "model": {
+            "id": "portrait_hub/geometric_pose_placeholder",
+            "status": "placeholder",
         },
+    }
+    return await archive_image_response(
+        ctx,
+        mode="pose",
+        endpoint="/v1/infer/pose",
+        payload=response_data,
+        decoded=decoded,
     )
 
 
 @router.post("/v1/infer/appearance", dependencies=[Depends(permission_dependency("infer"))])
 async def v1_infer_appearance(
-    request: Request,
     files: list[UploadFile] = File(...),
     include_embeddings: bool = Form(False),
+    ctx: PortraitRequestContext = Depends(portrait_request_context),
 ) -> dict[str, Any]:
-    request_id = request_id_from_headers(request)
     validate_file_count(files, MAX_VISION_IMAGES)
     decoded = await decode_upload_images(files)
     results = []
@@ -167,29 +202,32 @@ async def v1_infer_appearance(
         frame["image_index"] = index
         frame["appearance"] = appearance
         results.append(frame)
-    return portrait_success(
-        request_id,
-        {
-            "frames": results,
-            "frame_count": len(results),
-            "model": model_summary
-            or {
-                "id": FALLBACK_EMBEDDING_MODEL_ID,
-                "version": FALLBACK_EMBEDDING_VERSION,
-                "status": "color_histogram_fallback",
-                "embedding_dim": 0,
-            },
+    response_data = {
+        "frames": results,
+        "frame_count": len(results),
+        "model": model_summary
+        or {
+            "id": FALLBACK_EMBEDDING_MODEL_ID,
+            "version": FALLBACK_EMBEDDING_VERSION,
+            "status": "color_histogram_fallback",
+            "embedding_dim": 0,
         },
+    }
+    return await archive_image_response(
+        ctx,
+        mode="appearance",
+        endpoint="/v1/infer/appearance",
+        payload=response_data,
+        decoded=decoded,
     )
 
 
 @router.post("/v1/infer/gait", dependencies=[Depends(permission_dependency("infer"))])
 async def v1_infer_gait(
-    request: Request,
     files: list[UploadFile] = File(...),
     include_embedding: bool = Form(False),
+    ctx: PortraitRequestContext = Depends(portrait_request_context),
 ) -> dict[str, Any]:
-    request_id = request_id_from_headers(request)
     validate_file_count(files, MAX_VIDEO_FRAME_UPLOADS)
     decoded = await decode_upload_images(files)
     embedding, meta = await infer_gait_embedding_for_images([item.image for item in decoded])
@@ -208,4 +246,10 @@ async def v1_infer_gait(
     }
     if include_embedding and embedding is not None:
         result["tracklet"]["embedding"] = embedding
-    return portrait_success(request_id, result)
+    return await archive_image_response(
+        ctx,
+        mode="gait",
+        endpoint="/v1/infer/gait",
+        payload=result,
+        decoded=decoded,
+    )

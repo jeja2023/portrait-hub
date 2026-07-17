@@ -7,7 +7,7 @@ from urllib.parse import quote
 from uuid import uuid4
 
 from app.observability import logger
-from app.portrait_crypto import encrypt_bytes
+from app.portrait_crypto import decrypt_bytes, encrypt_bytes
 from app.portrait_response import OBJECT_DELETE_FAILED, exception_log_summary
 from app.settings import (
     OBJECT_STORAGE_DIR,
@@ -33,6 +33,9 @@ class ObjectStore(Protocol):
         ...
 
     def delete_object(self, info: dict[str, Any]) -> dict[str, Any]:
+        ...
+
+    def get_bytes(self, info: dict[str, Any]) -> bytes:
         ...
 
     def health(self) -> dict[str, Any]:
@@ -157,6 +160,17 @@ class LocalObjectStore:
             }
         return {"backend": self.backend_name, "deleted": True}
 
+    def get_bytes(self, info: dict[str, Any]) -> bytes:
+        object_key = str(info.get("object_key") or "")
+        if not object_key:
+            raise ValueError("对象引用缺少 object_key")
+        target = local_object_path(object_key)
+        with target.open("r", encoding="utf-8") as file:
+            payload = json.load(file)
+        if not isinstance(payload, dict):
+            raise ValueError("对象载荷无效")
+        return decrypt_bytes(payload)
+
     def health(self) -> dict[str, Any]:
         return {
             "backend": self.backend_name,
@@ -231,6 +245,17 @@ class S3ObjectStore(LocalObjectStore):
             )
             return {"backend": self.backend_name, "deleted": False, "reason": OBJECT_DELETE_FAILED}
         return {"backend": self.backend_name, "deleted": True}
+
+    def get_bytes(self, info: dict[str, Any]) -> bytes:
+        object_key = str(info.get("object_key") or "")
+        if not object_key:
+            raise ValueError("对象引用缺少 object_key")
+        response = self._client().get_object(Bucket=S3_BUCKET, Key=object_key)
+        body = response["Body"].read()
+        payload = json.loads(body.decode("utf-8"))
+        if not isinstance(payload, dict):
+            raise ValueError("对象载荷无效")
+        return decrypt_bytes(payload)
 
     def health(self) -> dict[str, Any]:
         return {

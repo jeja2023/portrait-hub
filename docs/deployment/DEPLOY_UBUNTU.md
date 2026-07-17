@@ -211,6 +211,20 @@ RUNTIME_STATE_HOST_DIR=./runtime-state
 STREAM_WORKER_LOCK_DIR=/workspace/runtime-state/stream-worker-locks
 STATE_READ_FAIL_CLOSED=true
 ROLLOUT_AUDIT_PATH=/workspace/runtime-state/rollout-audit.jsonl
+PORTRAIT_STORAGE_BACKEND=postgres
+POSTGRES_DSN=postgresql://portrait:change-me@postgres.internal:5432/portrait
+PORTRAIT_OBJECT_STORAGE_BACKEND=s3
+S3_ENDPOINT_URL=https://minio.internal
+S3_REGION=us-east-1
+S3_BUCKET=portrait-hub
+S3_ACCESS_KEY_ID=change-me
+S3_SECRET_ACCESS_KEY=change-me
+ENCRYPTION_KEY=change-me-to-a-different-long-random-secret
+ENCRYPTION_KEY_ID=primary
+ENCRYPTION_KEYRING=
+REQUIRE_ENCRYPTION=true
+ANALYSIS_ARCHIVE_ENABLED=true
+ANALYSIS_ARCHIVE_PREVIEW_MAX_SIDE=480
 WARMUP_MODELS=
 API_TOKEN=change-me-to-a-long-random-token
 GPU_WORKER_0_DEVICE=0
@@ -224,11 +238,43 @@ GPU_WORKER_1_DEVICE=1
 - `MODEL_CONFIG_READ_FAIL_CLOSED=true` 会让缺失、损坏或根节点格式错误的 `models.yml` 直接导致启动/重载失败，避免静默退化为空配置。
 - `RUNTIME_STATE_HOST_DIR` 默认保存审计日志等运行期文件，容器重建后不会丢失。
 - `STATE_READ_FAIL_CLOSED=true` 会让已有 JSON 状态文件损坏或根结构错误时直接失败，避免重启后静默丢失 gallery、任务、流和阈值状态。
+- `ANALYSIS_ARCHIVE_ENABLED=true` 会让图片、离线视频和每个实时流完成批次写入统一解析档案。生产使用 `PORTRAIT_STORAGE_BACKEND=postgres` 时索引进入 PostgreSQL；本地 JSON 存储配置下索引位于 `PORTRAIT_ANALYSIS_ARCHIVE_DB_PATH` 指定的 SQLite 文件。
+- `PORTRAIT_OBJECT_STORAGE_BACKEND=s3` 用于长期保存完整结果图、预览图和视频源文件。API、视频 worker 与流 worker 必须共享同一个 PostgreSQL、S3 bucket 和加密密钥配置。
+- `REQUIRE_ENCRYPTION=true` 时必须设置 `ENCRYPTION_KEY`。它与 `API_TOKEN` 必须使用不同的随机值；轮换后把旧密钥按 `key_id=secret` 写入 `ENCRYPTION_KEYRING`，直到全部历史对象完成重写。详细格式见 `docs/security/docs-security.md`。
 - `STREAM_WORKER_LOCK_DIR` 建议跟随 `RUNTIME_STATE_HOST_DIR` 持久化；多个 stream daemon 共享同一运行期状态时，应共享该 lock 目录，`STREAM_WORKER_LEASE_TTL_SECONDS` 和 `STREAM_WORKER_PROCESS_LOCK_STALE_SECONDS` 控制 lease 过期与 stale lock 回收。
 - `WARMUP_MODELS` 可写成 `portrait_hub/yolov8n.onnx,portrait_hub/osnet_ibn_x1_0.onnx`。
 - `MODEL_CONCURRENCY_LIMIT` 和 `GPU_QUEUE_LIMIT` 建议先保持 `1`，压测后再提高。
 - `ENABLE_TENSORRT=true` 只在确认容器内 ONNX Runtime 暴露 `TensorrtExecutionProvider` 后开启。
 - 如果服务器只有 1 张 GPU，先删除或注释 `docker-compose.yml` 里的 `gpu-worker-1` 服务，或者只启动 `gpu-worker-0`。
+
+### 6.1 从 0.8.x 升级到 0.9.0
+
+`0.9.0` 删除旧结果历史接口和存储实现，不迁移旧记录，也不会读取旧 JSON/PostgreSQL 图片历史。升级窗口按以下顺序执行：
+
+1. 停止所有 API、视频 worker 和流 worker，备份当前 PostgreSQL、`runtime-state` 和对象存储。
+2. 更新代码与镜像，确认 `.env` 已启用 PostgreSQL 索引和持久对象存储，并让所有服务使用相同配置。
+3. 幂等应用数据库架构：
+
+```bash
+psql "$POSTGRES_DSN" -v ON_ERROR_STOP=1 -f tools/portrait_postgres_schema.sql
+```
+
+4. 重新构建并启动服务：
+
+```bash
+docker compose up -d --build
+```
+
+5. 分别完成一次图片解析、视频任务和视频流批次，然后检查：
+
+```bash
+curl -G "http://127.0.0.1:9001/v1/analysis/results" \
+  -H "X-API-Key: ${API_TOKEN}" \
+  --data-urlencode "source_type=image" \
+  --data-urlencode "limit=1"
+```
+
+把 `source_type` 依次改为 `video` 和 `stream`，并使用响应中的 `content_url` 验证完整对象可读取。档案默认不设数量上限，上线前应为 PostgreSQL、S3 bucket 或 `OBJECT_STORAGE_DIR` 配置容量告警和联合备份。
 
 生成随机 token 示例：
 

@@ -252,6 +252,12 @@ function renderVisionVisuals(payload, items) {
 }
 function closeVisionLightbox() {
   const returnFocus = state.visionLightboxReturnFocus;
+  if (state.visionLightboxObjectUrl) {
+    const visual = state.visionResultVisuals[state.visionLightboxIndex];
+    if (visual?.item?.lightboxSrc === state.visionLightboxObjectUrl) delete visual.item.lightboxSrc;
+    URL.revokeObjectURL(state.visionLightboxObjectUrl);
+  }
+  state.visionLightboxObjectUrl = null;
   state.visionLightboxIndex = null;
   state.visionLightboxReturnFocus = null;
   const node = qs("#vision-lightbox");
@@ -285,11 +291,29 @@ function renderVisionLightbox() {
   node.querySelector(".vision-lightbox-close")?.focus();
 }
 
-function openVisionLightbox(index, trigger = document.activeElement) {
+async function openVisionLightbox(index, trigger = document.activeElement) {
   if (!Number.isInteger(index) || index < 0 || index >= state.visionResultVisuals.length) return;
   state.visionLightboxReturnFocus = trigger instanceof HTMLElement ? trigger : null;
   state.visionLightboxIndex = index;
   renderVisionLightbox();
+  const visual = state.visionResultVisuals[index];
+  const contentUrl = visual?.item?.content_url;
+  if (!contentUrl) return;
+  try {
+    const response = await fetch(contentUrl, { headers: headers() });
+    if (!response.ok) return;
+    const objectUrl = URL.createObjectURL(await response.blob());
+    if (state.visionLightboxIndex !== index) {
+      URL.revokeObjectURL(objectUrl);
+      return;
+    }
+    if (state.visionLightboxObjectUrl) URL.revokeObjectURL(state.visionLightboxObjectUrl);
+    state.visionLightboxObjectUrl = objectUrl;
+    visual.item.lightboxSrc = objectUrl;
+    renderVisionLightbox();
+  } catch {
+    // 缩略图已经可用，完整对象加载失败时保持当前预览。
+  }
 }
 
 function trapVisionLightboxFocus(event) {

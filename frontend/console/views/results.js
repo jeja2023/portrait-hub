@@ -175,95 +175,89 @@ function renderJobVisuals(payload) {
   });
 }
 
-function videoResultsVisualInfo(payload) {
-  const data = payloadData(payload);
-  const results = Array.isArray(data.results) ? data.results : [];
-  const visuals = [];
-  results.forEach((entry) => {
-    const job = entry.job || {};
-    const result = entry.result || {};
-    const frames = Array.isArray(result.frames) ? result.frames : [];
-    const jobLabel = job.job_id || "视频任务";
-    frames.forEach((frame, index) => {
-      const visual = videoFrameVisual(frame, index, jobLabel);
-      if (visual) visuals.push(visual);
-    });
-  });
-  return { data, results, visuals };
-}
-
 function renderVideoResults(payload) {
-  const info = videoResultsVisualInfo(payload);
+  const records = Array.isArray(payload?.archive_results) ? payload.archive_results : [];
+  const visuals = records.flatMap((record) => record.visuals || []);
   state.analysisResults.video = payload;
   renderSummary("#video-results-summary", [
-    { label: "任务数", value: info.results.length },
-    { label: "图片数", value: info.visuals.length },
+    { label: "结果批次", value: records.length },
+    { label: "结果图片", value: visuals.length },
+    { label: "全部批次", value: state.analysisResultsPagination.video?.total ?? records.length },
     { label: "租户", value: state.tenantId || "--" },
   ]);
-  renderVideoVisualGrid("#video-results-visuals", info.visuals, "暂无已完成的视频解析图片", {
+  renderVideoVisualGrid("#video-results-visuals", visuals, "暂无已归档的视频解析图片", {
     variant: "video",
     maxWidth: 260,
     maxHeight: 180,
   });
-  renderPayload("video-results", "#video-results-json", payload);
+  renderPayload("video-results", "#video-results-json", {
+    results: records.map(({ visuals: _visuals, ...record }) => record),
+  });
+  updateArchiveLoadMore("video");
 }
 
 async function refreshVideoResults() {
-  const payload = await api("/v1/jobs/video/results?limit=48");
-  renderVideoResults(payload);
-  return payload;
+  return refreshArchivedResults("video");
 }
 
 function visionModeLabel(mode) {
   return localizeValue(mode || "image") || "图片解析";
 }
 
-function imageAnalysisVisuals(mode, payload, previews) {
+function imageAnalysisVisuals(mode, payload, previews, sourceType = "image") {
+  const sourceLabel = { image: "图片", video: "视频", stream: "视频流" }[sourceType] || "解析";
   return visionVisualEntries(payload, previews).map((entry) => ({
     ...entry,
     item: {
       ...entry.item,
-      label: `图片 / ${visionModeLabel(mode)} / ${entry.item?.label || `#${(entry.frameIndex ?? 0) + 1}`}`,
+      label: `${sourceLabel} / ${visionModeLabel(mode)} / ${entry.item?.label || `#${(entry.frameIndex ?? 0) + 1}`}`,
       name: entry.item?.name || entry.item?.label || "图片解析结果",
     },
   }));
 }
 
-function imageAnalysisRecordFromServer(record) {
+function archivedAnalysisRecord(record) {
   const payload = record?.payload || {};
   const mode = record?.mode || payload?.model?.task || "image";
+  const sourceType = record?.source_type || "image";
   const previews = Array.isArray(record?.previews) ? record.previews : [];
-  const visuals = imageAnalysisVisuals(mode, payload, previews);
+  const visuals = imageAnalysisVisuals(mode, payload, previews, sourceType);
   return {
-    id: record?.result_id || record?.request_id || `image_${Date.now()}`,
+    id: record?.archive_id || `archive_${Date.now()}`,
+    archive_id: record?.archive_id,
     result_id: record?.result_id,
     request_id: record?.request_id,
     created_at: Number(record?.created_at || 0) * 1000 || Date.now(),
     mode,
     mode_label: visionModeLabel(mode),
     endpoint: record?.endpoint || "/v1/vision/infer",
+    source_type: sourceType,
+    source_ref: record?.source_ref || "",
     payload,
+    artifact_count: Number(record?.artifact_count || visuals.length),
     visual_count: visuals.length,
     frame_count: visuals.length,
     visuals,
   };
 }
 
-function addImageAnalysisResult(mode, endpoint, payload, previews) {
-  const visuals = imageAnalysisVisuals(mode, payload, previews);
-  state.analysisResults.image.unshift({
-    id: payload?.request_id || payload?.data?.request_id || `image_${Date.now()}`,
-    created_at: Date.now(),
-    mode,
-    mode_label: visionModeLabel(mode),
-    endpoint,
-    payload,
-    visual_count: visuals.length,
-    frame_count: visuals.length,
-    visuals,
-  });
-  state.analysisResults.image = state.analysisResults.image.slice(0, 12);
-  if (state.view === "video-results" || state.analysisResultsTab === "image") renderImageResults();
+function archivePayloadRecords(payload) {
+  const records = Array.isArray(payload?.results) ? payload.results : [];
+  return records.map(archivedAnalysisRecord);
+}
+
+function archivePayloadPagination(payload) {
+  return {
+    next_cursor: payload?.next_cursor || null,
+    has_more: Boolean(payload?.has_more && payload?.next_cursor),
+    total: Number(payload?.total || 0),
+  };
+}
+
+function updateArchiveLoadMore(sourceType) {
+  const button = qs(`[data-results-load-more="${sourceType}"]`);
+  if (!button) return;
+  button.classList.toggle("hidden", !state.analysisResultsPagination[sourceType]?.has_more);
 }
 
 function renderImageResults() {
@@ -273,6 +267,7 @@ function renderImageResults() {
   renderSummary("#image-results-summary", [
     { label: "结果批次", value: records.length },
     { label: "图片数", value: visuals.length },
+    { label: "全部批次", value: state.analysisResultsPagination.image?.total ?? records.length },
     { label: "最近能力", value: latest?.mode_label || "--" },
     { label: "租户", value: state.tenantId || "--" },
   ]);
@@ -285,35 +280,11 @@ function renderImageResults() {
   renderPayload("image-results", "#image-results-json", {
     results: records.map(({ visuals: _visuals, ...record }) => ({ ...record, visual_count: record.visual_count || 0 })),
   });
-}
-
-function streamEventPayloads(results) {
-  return results.map((result) => (result.status === "fulfilled" ? result.value : { events: [], error: String(result.reason || "events unavailable") }));
+  updateArchiveLoadMore("image");
 }
 
 function latestStreamEvent(events) {
   return [...events].sort((left, right) => Number(right.created_at || 0) - Number(left.created_at || 0))[0] || null;
-}
-
-function streamResultVisuals(streams, eventPayloads) {
-  const streamMap = new Map(streams.map((stream) => [stream.stream_id, stream]));
-  const visuals = [];
-  eventPayloads.forEach((item) => {
-    const stream = streamMap.get(item.stream_id) || {};
-    const streamLabel = stream.name || item.stream_id || "视频流";
-    const events = Array.isArray(item.events) ? item.events : [];
-    const event = latestStreamEvent(events.filter((entry) => entry.type === "stream_analysis_completed"));
-    if (!event) return;
-    const frames = Array.isArray(event.payload?.frames) ? event.payload.frames : [];
-    frames.forEach((frame, index) => {
-      const visual = videoFrameVisual(frame, index, streamLabel);
-      if (!visual) return;
-      visual.stream = stream;
-      visual.event = event;
-      visuals.push(visual);
-    });
-  });
-  return visuals;
 }
 
 function renderLiveStreamResults(payload) {
@@ -355,76 +326,30 @@ function renderLiveStreamResults(payload) {
 }
 
 function renderStreamResults(payload) {
+  const records = Array.isArray(payload?.archive_results) ? payload.archive_results : [];
+  const visuals = records.flatMap((record) => record.visuals || []);
   state.analysisResults.stream = payload;
-  const streams = Array.isArray(payload.streams) ? payload.streams : [];
-  const eventPayloads = Array.isArray(payload.event_payloads) ? payload.event_payloads : [];
-  const events = eventPayloads.flatMap((item) => Array.isArray(item.events) ? item.events : []);
-  const visuals = streamResultVisuals(streams, eventPayloads);
-  const sessions = Array.isArray(payload.stream_worker?.sessions) ? payload.stream_worker.sessions : [];
-  const runningCount = streams.filter((stream) => stream.status === "running").length;
   renderSummary("#stream-results-summary", [
-    { label: "视频流数", value: payload.total ?? streams.length },
-    { label: "运行中", value: runningCount },
-    { label: "最近事件", value: events.length },
+    { label: "结果批次", value: records.length },
     { label: "结果图片", value: visuals.length },
-    { label: "活跃会话", value: payload.stream_worker?.active_sessions ?? sessions.length ?? 0 },
+    { label: "全部批次", value: state.analysisResultsPagination.stream?.total ?? records.length },
+    { label: "租户", value: state.tenantId || "--" },
   ]);
-  renderVideoVisualGrid("#stream-results-visuals", visuals, "暂无视频流解析图片，请先启动视频流解析", {
+  renderVideoVisualGrid("#stream-results-visuals", visuals, "暂无已归档的视频流解析图片", {
     variant: "video",
     maxWidth: 260,
     maxHeight: 180,
   });
   const list = qs("#stream-results-list");
-  if (list) {
-    if (!streams.length) {
-      list.innerHTML = `<div class="result-empty">暂无视频流解析结果，请先注册并启动视频流解析</div>`;
-    } else {
-      const eventMap = new Map(eventPayloads.map((item) => [item.stream_id, Array.isArray(item.events) ? item.events : []]));
-      const sessionMap = new Map(sessions.map((session) => [session.stream_id, session]));
-      list.innerHTML = streams.slice(0, 24).map((stream) => {
-        const streamEvents = eventMap.get(stream.stream_id) || [];
-        const latest = latestStreamEvent(streamEvents);
-        const session = sessionMap.get(stream.stream_id) || {};
-        const title = stream.name || stream.stream_id;
-        return `
-          <article class="stream-result-card">
-            <div class="stream-result-head">
-              <strong title="${escapeHtml(stream.stream_id)}">视频流 / ${escapeHtml(title)}</strong>
-              <span class="badge ${stream.status === "running" ? "ok" : stream.status === "failed" ? "danger" : ""}">${escapeHtml(localizeValue(stream.status || "--"))}</span>
-            </div>
-            <div class="stream-result-meta">
-              <span>流地址：${escapeHtml(stream.stream_url || "--")}</span>
-              <span>处理帧：${escapeHtml(session.frames_processed ?? "--")}</span>
-              <span>最近事件：${escapeHtml(latest?.type || "--")}</span>
-              <span>更新时间：${escapeHtml(stream.updated_at ? formatDateTime(stream.updated_at) : "--")}</span>
-            </div>
-          </article>`;
-      }).join("");
-    }
-  }
-  renderPayload("stream-results", "#stream-results-json", payload);
+  if (list) list.innerHTML = "";
+  renderPayload("stream-results", "#stream-results-json", {
+    results: records.map(({ visuals: _visuals, ...record }) => record),
+  });
+  updateArchiveLoadMore("stream");
 }
 
 async function refreshStreamResults() {
-  const streamsPayload = await api("/v1/streams?limit=50");
-  const streams = Array.isArray(streamsPayload.streams) ? streamsPayload.streams : [];
-  const [statusResult, eventResults] = await Promise.all([
-    api("/v1/admin/status").catch(() => ({})),
-    Promise.allSettled(streams.slice(0, 24).map((stream) => api(`/v1/streams/${encodeURIComponent(stream.stream_id)}/events?limit=200`))),
-  ]);
-  const eventPayloads = streamEventPayloads(eventResults).map((item, index) => ({
-    stream_id: item.stream_id || streams[index]?.stream_id,
-    events: Array.isArray(item.events) ? item.events : [],
-    error: item.error,
-  }));
-  const payload = {
-    ...streamsPayload,
-    streams,
-    stream_worker: statusResult.stream_worker || {},
-    event_payloads: eventPayloads,
-  };
-  renderStreamResults(payload);
-  return payload;
+  return refreshArchivedResults("stream");
 }
 
 function renderAnalysisResultsTab(tab = state.analysisResultsTab) {
@@ -442,16 +367,38 @@ function renderAnalysisResultsTab(tab = state.analysisResultsTab) {
   } else if (nextTab === "video") {
     renderVideoResults(state.analysisResults.video || { results: [] });
   } else if (nextTab === "stream") {
-    renderStreamResults(state.analysisResults.stream || { streams: [], stream_worker: {}, event_payloads: [] });
+    renderStreamResults(state.analysisResults.stream || { archive_results: [] });
   }
 }
 
 async function refreshImageResults() {
-  const payload = await api("/v1/vision/results?limit=24");
-  const records = Array.isArray(payload.results) ? payload.results : [];
-  state.analysisResults.image = records.map(imageAnalysisRecordFromServer);
-  renderImageResults();
+  return refreshArchivedResults("image");
+}
+
+async function refreshArchivedResults(sourceType, options = {}) {
+  const append = Boolean(options.append);
+  const pagination = state.analysisResultsPagination[sourceType];
+  const params = new URLSearchParams({ source_type: sourceType, limit: "24" });
+  if (append && pagination?.next_cursor) params.set("cursor", pagination.next_cursor);
+  const payload = await api(`/v1/analysis/results?${params.toString()}`);
+  const incoming = archivePayloadRecords(payload);
+  state.analysisResultsPagination[sourceType] = archivePayloadPagination(payload);
+  if (sourceType === "image") {
+    state.analysisResults.image = append ? [...state.analysisResults.image, ...incoming] : incoming;
+    renderImageResults();
+  } else {
+    const previous = append ? state.analysisResults[sourceType]?.archive_results || [] : [];
+    const resultPayload = { ...payload, archive_results: [...previous, ...incoming] };
+    if (sourceType === "video") renderVideoResults(resultPayload);
+    else renderStreamResults(resultPayload);
+  }
   return payload;
+}
+
+async function loadMoreAnalysisResults(sourceType) {
+  if (!["image", "video", "stream"].includes(sourceType)) return null;
+  if (!state.analysisResultsPagination[sourceType]?.has_more) return null;
+  return refreshArchivedResults(sourceType, { append: true });
 }
 
 async function refreshAnalysisResults() {
@@ -511,7 +458,7 @@ async function submitVision(event) {
   renderVisionSummary(payload);
   renderVisionVisuals(payload, state.visionPreviews);
   renderPayload("vision", "#vision-json", payload);
-  await refreshImageResults().catch(() => addImageAnalysisResult(mode, endpoint, payload, state.visionPreviews));
+  await refreshImageResults();
 }
 
 async function submitCompare(event) {

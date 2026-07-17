@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import threading
 
+from app import postgres_analysis_archive as _analysis_archive
 from app import postgres_audit as _audit
 from app import postgres_core as _core
 from app import postgres_gallery as _gallery
-from app import postgres_image_results as _image_results
 from app import postgres_jobs as _jobs
 from app import postgres_objects as _objects
 from app import postgres_streams as _streams
@@ -131,18 +131,36 @@ def insert_audit_event(payload: dict[str, object]) -> None:
     _audit.insert_audit_event(payload)
 
 
-def upsert_image_analysis_result(
-    payload: dict[str, object], *, max_results: int
-) -> None:
+def upsert_analysis_archive(payload: dict[str, object]) -> None:
     _sync_core_dependencies()
-    _image_results.upsert_image_analysis_result(
-        payload, max_results=max_results
+    _analysis_archive.upsert_analysis_archive(payload)
+
+
+def query_analysis_archives(
+    tenant_id: str,
+    *,
+    source_type: str | None,
+    mode: str | None,
+    limit: int,
+    offset: int,
+    cursor_values: list[object] | None,
+) -> tuple[list[dict[str, object]], dict[str, object]]:
+    _sync_core_dependencies()
+    return _analysis_archive.query_analysis_archives(
+        tenant_id,
+        source_type=source_type,
+        mode=mode,
+        limit=limit,
+        offset=offset,
+        cursor_values=cursor_values,
     )
 
 
-def load_image_analysis_results_snapshot() -> list[dict[str, object]]:
+def get_analysis_archive(
+    tenant_id: str, archive_id: str
+) -> dict[str, object] | None:
     _sync_core_dependencies()
-    return _image_results.load_image_analysis_results_snapshot()
+    return _analysis_archive.get_analysis_archive(tenant_id, archive_id)
 
 
 def upsert_video_job(payload: dict[str, object]) -> None:
@@ -198,12 +216,12 @@ __all__ = [
     "delete_video_job",
     "dict_row",
     "embedding_bytes",
+    "get_analysis_archive",
     "get_postgres_pool",
     "insert_audit_event",
     "insert_object_record",
     "jsonb",
     "load_gallery_snapshot",
-    "load_image_analysis_results_snapshot",
     "load_streams_snapshot",
     "load_threshold_snapshot",
     "load_video_job_record",
@@ -214,13 +232,14 @@ __all__ = [
     "postgres_driver_available",
     "postgres_health",
     "postgres_pool_available",
+    "query_analysis_archives",
     "replace_gallery_snapshot",
     "require_postgres",
     "save_threshold_snapshot",
     "search_pgvector",
+    "upsert_analysis_archive",
     "upsert_gallery_feature",
     "upsert_gallery_person",
-    "upsert_image_analysis_result",
     "upsert_stream",
     "upsert_video_job",
     "vector_literal",

@@ -1,5 +1,6 @@
 import asyncio
 import json
+import sqlite3
 
 import numpy as np
 import pytest
@@ -7,8 +8,8 @@ from fastapi import HTTPException
 from PIL import Image
 
 from app import (
+    portrait_analysis_archive,
     portrait_audit,
-    portrait_image_results,
     portrait_model_capabilities,
     portrait_object_storage,
     portrait_state,
@@ -23,48 +24,157 @@ from app.portrait_task_queue import (
 from app.portrait_vector_store import PgvectorVectorStore, QdrantVectorStore
 
 
-def test_local_image_analysis_results_are_capped_and_reloadable(
+def test_local_analysis_archive_is_uncapped_object_backed_and_reloadable(
     monkeypatch, workspace_tmp_path
 ) -> None:
-    state_path = workspace_tmp_path / "image-results.json"
+    state_path = workspace_tmp_path / "analysis-archive.sqlite3"
+    object_root = workspace_tmp_path / "objects"
     monkeypatch.setattr(
-        portrait_image_results, "PORTRAIT_IMAGE_RESULTS_STATE_PATH", state_path
+        portrait_analysis_archive, "PORTRAIT_ANALYSIS_ARCHIVE_DB_PATH", state_path
     )
-    monkeypatch.setattr(portrait_image_results, "PORTRAIT_STORAGE_BACKEND", "local")
+    monkeypatch.setattr(portrait_analysis_archive, "PORTRAIT_STORAGE_BACKEND", "local")
+    monkeypatch.setattr(portrait_analysis_archive, "ANALYSIS_ARCHIVE_ENABLED", True)
+    monkeypatch.setattr(portrait_analysis_archive, "ANALYSIS_ARCHIVE_PREVIEW_MAX_SIDE", 16)
+    monkeypatch.setattr(portrait_object_storage, "OBJECT_STORAGE_DIR", object_root)
+    for index, color in enumerate(["red", "green", "blue"]):
+        portrait_analysis_archive.create_analysis_archive(
+            tenant_id="tenant-a",
+            request_id=f"req-{index}",
+            source_type="image",
+            source_ref=f"req-{index}",
+            mode="detection",
+            endpoint="/v1/vision/infer",
+            payload={"index": index},
+            images=[Image.new("RGB", (32, 24), color=color)],
+        )
+
+    snapshot, pagination = portrait_analysis_archive.list_analysis_archives(
+        "tenant-a", source_type="image", mode=None, limit=2, offset=0, cursor=None
+    )
+    assert len(snapshot) == 2
+    assert pagination["total"] == 3
+    assert pagination["next_cursor"]
+    next_page, next_pagination = portrait_analysis_archive.list_analysis_archives(
+        "tenant-a",
+        source_type="image",
+        mode=None,
+        limit=2,
+        offset=0,
+        cursor=pagination["next_cursor"],
+    )
+    all_records = [*snapshot, *next_page]
+    assert len(next_page) == 1
+    assert next_pagination["next_cursor"] is None
+    assert {record.request_id for record in all_records} == {
+        "req-0",
+        "req-1",
+        "req-2",
+    }
+    assert all(len(record.artifacts) == 1 for record in all_records)
+
+    with sqlite3.connect(state_path) as connection:
+        rows = connection.execute(
+            "SELECT payload_json, artifacts_json FROM analysis_archives"
+        ).fetchall()
+    assert len(rows) == 3
+    assert "data:image" not in "".join(str(value) for row in rows for value in row)
+    assert len(list(object_root.rglob("*.json"))) == 6
+
+    portrait_analysis_archive.load_analysis_archives_state()
+    restored, _ = portrait_analysis_archive.list_analysis_archives(
+        "tenant-a", source_type="image", mode=None, limit=10, offset=0, cursor=None
+    )
+    assert len(restored) == 3
+    assert {record.payload["index"] for record in restored} == {0, 1, 2}
+    public = portrait_analysis_archive.public_analysis_archive(restored[0])
+    assert public["previews"][0]["src"].startswith("data:image/jpeg;base64,")
+    artifact = restored[0].artifacts[0]
+    assert portrait_analysis_archive.OBJECT_STORE.get_bytes(
+        artifact.object_info
+    ).startswith(b"\xff\xd8")
+
+
+def test_analysis_archive_retains_video_source_object(
+    monkeypatch, workspace_tmp_path
+) -> None:
+    state_path = workspace_tmp_path / "video-archive.sqlite3"
+    object_root = workspace_tmp_path / "video-objects"
+    source_path = workspace_tmp_path / "source.mp4"
+    source_path.write_bytes(b"video-source-bytes")
     monkeypatch.setattr(
-        portrait_image_results, "MAX_IMAGE_ANALYSIS_RESULTS_PER_TENANT", 2
+        portrait_analysis_archive, "PORTRAIT_ANALYSIS_ARCHIVE_DB_PATH", state_path
     )
-    monkeypatch.setattr(portrait_image_results, "IMAGE_ANALYSIS_THUMBNAIL_MAX_SIDE", 16)
-    portrait_image_results.IMAGE_ANALYSIS_RESULTS.clear()
+    monkeypatch.setattr(portrait_analysis_archive, "PORTRAIT_STORAGE_BACKEND", "local")
+    monkeypatch.setattr(portrait_analysis_archive, "ANALYSIS_ARCHIVE_ENABLED", True)
+    monkeypatch.setattr(portrait_object_storage, "OBJECT_STORAGE_DIR", object_root)
+    source = portrait_analysis_archive.store_analysis_source_file(
+        "tenant-a",
+        "archive-video-test",
+        source_path,
+        "source.mp4",
+        "video/mp4",
+    )
+    record = portrait_analysis_archive.create_analysis_archive(
+        tenant_id="tenant-a",
+        request_id="job-video-test",
+        source_type="video",
+        source_ref="job-video-test",
+        mode="person_tracks",
+        endpoint="/v1/jobs/video",
+        payload={"frames": [], "frame_count": 0},
+        source_artifacts=[source],
+        archive_id="archive-video-test",
+    )
 
-    try:
-        for index, color in enumerate(["red", "green", "blue"]):
-            portrait_image_results.create_image_analysis_result(
-                tenant_id="tenant-a",
-                request_id=f"req-{index}",
-                mode="detection",
-                endpoint="/v1/vision/infer",
-                payload={"index": index},
-                images=[Image.new("RGB", (32, 24), color=color)],
-                filenames=[f"input-{index}.png"],
-            )
+    assert record is not None
+    public = portrait_analysis_archive.public_analysis_archive(record)
+    assert public["source_artifacts"][0]["media_type"] == "video/mp4"
+    assert portrait_analysis_archive.OBJECT_STORE.get_bytes(
+        record.artifacts[0].object_info
+    ) == b"video-source-bytes"
+    assert "object_key" not in json.dumps(public)
 
-        snapshot = portrait_image_results.image_analysis_results_snapshot("tenant-a")
-        assert len(snapshot) == 2
-        assert {record.request_id for record in snapshot} == {"req-1", "req-2"}
-        assert all(record.previews[0]["src"].startswith("data:image/jpeg;base64,") for record in snapshot)
 
-        raw_state = json.loads(state_path.read_text(encoding="utf-8"))
-        assert raw_state["version"] == 1
-        assert len(raw_state["results"]) == 2
+def test_postgres_analysis_archive_pagination_keeps_has_more(monkeypatch) -> None:
+    import app.portrait_postgres as portrait_postgres
 
-        portrait_image_results.IMAGE_ANALYSIS_RESULTS.clear()
-        portrait_image_results.load_image_analysis_results_state()
-        restored = portrait_image_results.image_analysis_results_snapshot("tenant-a")
-        assert len(restored) == 2
-        assert {record.payload["index"] for record in restored} == {1, 2}
-    finally:
-        portrait_image_results.IMAGE_ANALYSIS_RESULTS.clear()
+    monkeypatch.setattr(portrait_analysis_archive, "PORTRAIT_STORAGE_BACKEND", "postgres")
+    monkeypatch.setattr(
+        portrait_postgres,
+        "query_analysis_archives",
+        lambda *args, **kwargs: (
+            [
+                {
+                    "archive_id": "archive-postgres",
+                    "tenant_id": "tenant-a",
+                    "request_id": "req-postgres",
+                    "source_type": "image",
+                    "source_ref": "req-postgres",
+                    "mode": "persons",
+                    "endpoint": "/v1/infer/persons",
+                    "payload": {},
+                    "artifacts": [],
+                    "created_at": 100.0,
+                }
+            ],
+            {
+                "count": 1,
+                "total": 2,
+                "limit": 1,
+                "offset": 0,
+                "next_offset": 1,
+                "has_more": True,
+            },
+        ),
+    )
+
+    records, pagination = portrait_analysis_archive.list_analysis_archives(
+        "tenant-a", source_type="image", mode=None, limit=1, offset=0, cursor=None
+    )
+
+    assert records[0].archive_id == "archive-postgres"
+    assert pagination["has_more"] is True
+    assert pagination["next_cursor"]
 
 
 def test_postgres_health_is_safe_without_external_database() -> None:

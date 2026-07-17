@@ -108,9 +108,8 @@ def test_detached_stream_worker_snapshot_is_persisted(monkeypatch, workspace_tmp
 
     stored = STREAMS[stream_key("tenant-a", created.stream_id)]
     assert stored.events[-1].type == "stream_analysis_completed"
-    assert stored.events[-1].payload["frames"][0]["thumbnail"].startswith(
-        "data:image/jpeg;base64,"
-    )
+    assert "thumbnail" not in stored.events[-1].payload["frames"][0]
+    assert "data:image" not in state_path.read_text(encoding="utf-8")
 
 
 def test_streams_json_state_protects_stream_url(
@@ -472,6 +471,7 @@ async def test_stream_worker_runs_analysis_and_emits_result(monkeypatch) -> None
     )
     stream.status = "running"
     events = []
+    archives = []
     monkeypatch.setattr(
         portrait_stream_worker, "validate_media_stream_url", lambda url: None
     )
@@ -512,6 +512,14 @@ async def test_stream_worker_runs_analysis_and_emits_result(monkeypatch) -> None
 
     monkeypatch.setattr(portrait_stream_worker, "emit_stream_event", capture_emit)
 
+    def capture_archive(**kwargs):
+        archives.append(kwargs)
+        return type("Archive", (), {"archive_id": "archive-stream-test"})()
+
+    monkeypatch.setattr(
+        portrait_stream_worker, "create_analysis_archive", capture_archive
+    )
+
     report = await portrait_stream_worker.run_stream_worker_session(
         stream, max_reconnects=0
     )
@@ -530,6 +538,11 @@ async def test_stream_worker_runs_analysis_and_emits_result(monkeypatch) -> None
     assert analysis["frames"][0]["source_seconds"] == 0.28
     assert analysis["frames"][0]["thumbnail"].startswith("data:image/jpeg;base64,")
     assert analysis["frames"][0]["quality"]["score"] >= 0
+    assert analysis["archive_id"] == "archive-stream-test"
+    assert len(archives) == 1
+    assert archives[0]["source_type"] == "stream"
+    assert archives[0]["source_ref"] == stream.stream_id
+    assert len(archives[0]["images"]) == 1
 
 
 async def test_stream_worker_revalidates_url_before_pull(monkeypatch) -> None:

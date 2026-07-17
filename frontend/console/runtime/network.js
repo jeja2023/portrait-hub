@@ -64,19 +64,10 @@ function watchJsonSocket(name, path, statusSelector, outputSelector) {
           refreshVideoResults().catch(() => {});
         }
       } else if (name === "stream") {
-        const streamPayload = {
-          streams: payload.stream ? [payload.stream] : [],
-          total: payload.stream ? 1 : 0,
-          stream_worker: state.analysisResults.stream?.stream_worker || {},
-          event_payloads: [
-            {
-              stream_id: payload.stream?.stream_id || payload.stream_id,
-              events: Array.isArray(payload.events) ? payload.events : [],
-            },
-          ],
-        };
         renderLiveStreamResults(payload);
-        renderStreamResults(streamPayload);
+        if (state.view === "video-results" && state.analysisResultsTab === "stream") {
+          refreshStreamResults().catch(() => {});
+        }
         renderPayload("streams", outputSelector, payload);
       } else {
         renderDataViewer(outputSelector, payload, name);
@@ -203,4 +194,3 @@ function parsePrometheus(text) {
     })
     .filter(Boolean);
 }
-

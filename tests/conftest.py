@@ -19,6 +19,7 @@ _TEST_ENV_DEFAULTS = {
     "TRUSTED_HOSTS": "*",
     "REQUIRE_ENCRYPTION": "false",
     "HSTS_ENABLED": "false",
+    "ANALYSIS_ARCHIVE_ENABLED": "false",
 }
 for _key, _value in _TEST_ENV_DEFAULTS.items():
     os.environ[_key] = _value

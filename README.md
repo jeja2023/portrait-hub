@@ -2,15 +2,27 @@
 
 面向 Ubuntu + Docker + NVIDIA GPU 的 ONNX 推理服务。服务通过 FastAPI 暴露接口，按 GPU 拆成多个 worker，适合给人像识别、人像检索、ReID 等业务项目提供共享推理能力。
 
-当前版本：`0.8.4`。本补丁修复实时视频流已启动但控制台没有解析图片的问题：流分析事件会跨 API/worker 进程及时同步，实时视频流详情与“解析结果”页面会展示最新批次缩略图，本地启动器也会同时托管 API 与流 worker daemon。
+当前版本：`0.9.0`。本版本将图片、离线视频和实时视频流的解析结果统一升级为“数据库索引 + 加密对象存储”档案：本地使用 SQLite WAL，生产使用 PostgreSQL；完整结果图、缩略图和视频源文件进入本地或 S3 兼容对象存储，控制台可分页查看全部历史并在刷新后恢复。
+
+> `0.9.0` 是破坏性升级。旧的 `/v1/vision/results`、`/v1/jobs/video/results` 及有限图片历史实现已删除，不提供兼容回退或旧记录自动迁移；接入方必须切换到统一档案接口。
 
 拆分后的模块映射、维护边界和验证命令见 [大型文件拆分维护指南](docs/maintenance/LARGE_FILE_SPLIT.md)，完整发布记录见 [更新日志](更新日志.md)。
+
+## 统一解析档案
+
+- 图片：`/v1/vision/infer`、`/v1/infer/tracks` 以及人脸、人体、姿态、衣着、步态解析成功后写入档案。
+- 视频：离线视频任务完成后保存结构化结果、全部入选结果帧以及上传的视频源文件。
+- 视频流：每个已完成分析批次独立入档，不再受流事件环形历史长度影响。
+- 查询：`GET /v1/analysis/results` 支持按 `source_type=image|video|stream`、`mode` 和游标分页；`GET /v1/analysis/artifacts/{archive_id}/{artifact_id}` 在租户鉴权后返回完整图片或视频对象。
+- 存储：数据库仅保存租户隔离的结构化索引和对象引用；对象载荷使用现有加密对象存储。系统不再把 Base64 图片写入任务或流状态，也不对解析档案设置每租户数量上限。
+
+生产升级前必须先应用 [PostgreSQL 架构](tools/portrait_postgres_schema.sql)，并确保 API、视频 worker 和流 worker 使用同一 `POSTGRES_DSN`、对象存储后端、存储桶及加密密钥。完整升级顺序见 [Ubuntu 部署教程](docs/deployment/DEPLOY_UBUNTU.md)，容量、备份和恢复要求见 [运维手册](docs/operations/RUNBOOK.md)。
 
 ## PortraitHub v1 平台接口
 
 服务现在还提供 PortraitHub v1 接口，用于人像中台方案：
 
-- `/v1/vision/infer`、`/v1/vision/results`、`/v1/infer/tracks`、`/v1/infer/faces`、`/v1/infer/persons`、`/v1/infer/pose`、`/v1/infer/appearance`、`/v1/infer/gait`
+- `/v1/vision/infer`、`/v1/analysis/results`、`/v1/analysis/artifacts/{archive_id}/{artifact_id}`、`/v1/infer/tracks`、`/v1/infer/faces`、`/v1/infer/persons`、`/v1/infer/pose`、`/v1/infer/appearance`、`/v1/infer/gait`
 - `/v1/compare/faces`、`/v1/compare/persons`、`/v1/compare/gait`、`/v1/fusion/compare`
 - `/v1/gallery/enroll`、`/v1/gallery/search`、`/v1/gallery/{person_id}`、`/v1/gallery/reindex`
 - `/v1/jobs/video`、`/v1/jobs/{job_id}`、`/v1/jobs/{job_id}/result`、`/v1/jobs/{job_id}/cancel`
@@ -100,7 +112,7 @@ v1 已加入的生产加固：
 
 - `requirements/prod-optional.txt` 列出 PostgreSQL 连接池、pgvector、Qdrant、S3、JWT、Redis 风格队列和 OpenTelemetry 所需的可选驱动。
 - 通过设置 `INSTALL_PROD_OPTIONAL=true` 可以把这些可选驱动安装进 Docker 镜像。
-- `tools/portrait_postgres_schema.sql` 提供 PostgreSQL/pgvector 的 schema，覆盖租户、人员、特征、阈值、任务、流、对象和审计事件。
+- `tools/portrait_postgres_schema.sql` 提供 PostgreSQL/pgvector 的 schema，覆盖租户、人员、特征、阈值、统一解析档案、任务、流、对象和审计事件。
 - `tools/qdrant_collections.json` 记录人脸、人体、步态和衣着向量的 Qdrant collection 定义。
 - `tools/portrait_production_readiness.py` 会报告模型文件、核心 SDK、模板和能力状态；在生产切换前请使用 `--strict`。
 - `app/portrait_model_runtime.py` 通过现有 ONNXRuntime 注册表、GPU 队列、产物 hash 校验和 LRU 卸载路径接入 SCRFD、ArcFace、RTMPose、OpenGait、YOLO 人体检测、OSNet ReID 和 attribute ReID/衣着属性的生产适配器。
@@ -284,7 +296,7 @@ POST /v1/models/{model_id}/unload
 GET  /v1/models/{model_id}
 ```
 
-控制台 `/console` 的侧栏按「总览 / 智能分析 / 比对检索 / 人员库 / 接入中心 / 模型与评估 / 运维合规」组织，导航配置由 `frontend/console/views/navigation.js` 统一维护。总览页提供图片解析、视频任务、实时视频流、人像比对、以图搜人、人员注册、接入配置和模型管理等主流程快捷入口。“解析结果”视图会集中展示图片解析、视频解析和视频流解析输出：图片解析会从 `/v1/vision/results` 读取当前租户最近结果，视频解析汇总已完成任务的人像帧缩略图，视频流解析展示流状态、worker 会话和最近事件快照。人员库入库生成的底库特征缩略图会随人员详情返回，并在人员管理页的“特征图片列表”中按模态、质量分和模型信息展示；人员库还提供独立“特征重建”页，复用 `/v1/gallery/reindex` 按模态和模型重建向量索引，默认以预演模式核验影响范围。
+控制台 `/console` 的侧栏按「总览 / 智能分析 / 比对检索 / 人员库 / 接入中心 / 模型与评估 / 运维合规」组织，导航配置由 `frontend/console/views/navigation.js` 统一维护。总览页提供图片解析、视频任务、实时视频流、人像比对、以图搜人、人员注册、接入配置和模型管理等主流程快捷入口。“解析结果”视图通过 `/v1/analysis/results` 分页展示当前租户全部图片、视频和视频流解析档案；索引只保存结构化结果和对象引用，完整结果图、缩略图及视频源文件保存在加密对象存储中，点击图片时再通过鉴权对象接口读取完整内容。人员库入库生成的底库特征缩略图会随人员详情返回，并在人员管理页的“特征图片列表”中按模态、质量分和模型信息展示；人员库还提供独立“特征重建”页，复用 `/v1/gallery/reindex` 按模态和模型重建向量索引，默认以预演模式核验影响范围。
 
 解析结果灯箱打开后会将焦点移到关闭按钮，在弹窗内循环 Tab 焦点，并在 Escape 或点击遮罩关闭后把焦点还给原缩略图。
 

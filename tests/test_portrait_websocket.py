@@ -112,7 +112,8 @@ def test_stream_websocket_refreshes_worker_events_from_persisted_state(
 
         analysis_events = [event for event in payload["events"] if event["type"] == "stream_analysis_completed"]
         assert analysis_events
-        assert analysis_events[-1]["payload"]["frames"][0]["thumbnail"].startswith("data:image/jpeg;base64,")
+        assert analysis_events[-1]["payload"]["frame_count"] == 1
+        assert "thumbnail" not in analysis_events[-1]["payload"]["frames"][0]
     finally:
         STREAMS.clear()
         STREAMS.update(snapshot)

@@ -109,20 +109,25 @@ CREATE TABLE IF NOT EXISTS portrait_video_jobs (
   PRIMARY KEY (tenant_id, job_id)
 );
 
-CREATE TABLE IF NOT EXISTS portrait_image_results (
+CREATE TABLE IF NOT EXISTS portrait_analysis_archives (
   tenant_id TEXT NOT NULL,
-  result_id TEXT NOT NULL,
+  archive_id TEXT NOT NULL,
   request_id TEXT NOT NULL,
+  source_type TEXT NOT NULL,
+  source_ref TEXT NOT NULL DEFAULT '',
   mode TEXT NOT NULL,
   endpoint TEXT NOT NULL,
   payload JSONB NOT NULL DEFAULT '{}'::jsonb,
-  previews JSONB NOT NULL DEFAULT '[]'::jsonb,
+  artifacts JSONB NOT NULL DEFAULT '[]'::jsonb,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  PRIMARY KEY (tenant_id, result_id)
+  PRIMARY KEY (tenant_id, archive_id)
 );
 
-CREATE INDEX IF NOT EXISTS portrait_image_results_tenant_created_idx
-  ON portrait_image_results (tenant_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS portrait_analysis_archives_tenant_source_created_idx
+  ON portrait_analysis_archives (tenant_id, source_type, created_at DESC, archive_id);
+
+CREATE INDEX IF NOT EXISTS portrait_analysis_archives_tenant_mode_created_idx
+  ON portrait_analysis_archives (tenant_id, mode, created_at DESC, archive_id);
 
 CREATE TABLE IF NOT EXISTS portrait_streams (
   tenant_id TEXT NOT NULL,

@@ -1,14 +1,17 @@
 import logging
 from typing import Any
 
-from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Form, UploadFile
 
 from app.image_io import load_images
 from app.inference_tracks import infer_tracks_for_images
 from app.metrics import observe
 from app.model_refs import validate_model_reference_parts
-from app.observability import log_json, now, request_id_from_headers
+from app.observability import log_json, now
+from app.portrait_analysis_archive import create_analysis_archive
+from app.portrait_async import run_blocking_io
 from app.portrait_auth import permission_dependency
+from app.portrait_request_context import PortraitRequestContext, portrait_request_context
 from app.portrait_response import portrait_success
 from app.routes_inference_common import (
     inference_error_boundary,
@@ -33,7 +36,6 @@ router = APIRouter()
     dependencies=[Depends(require_api_token), Depends(permission_dependency("infer"))],
 )
 async def infer_person_tracks(
-    request: Request,
     files: list[UploadFile] = File(...),
     detector_project_name: str = Form(DEFAULT_DETECTOR_PROJECT),
     detector_artifact_name: str = Form(
@@ -45,8 +47,9 @@ async def infer_person_tracks(
     iou: float = Form(DEFAULT_IOU),
     max_detections: int = Form(100),
     include_embeddings: bool = Form(False),
+    ctx: PortraitRequestContext = Depends(portrait_request_context),
 ) -> dict[str, Any]:
-    request_id = request_id_from_headers(request)
+    request_id = ctx.request_id
     observe("tracks_requests_total")
     total_start = now()
 
@@ -110,41 +113,50 @@ async def infer_person_tracks(
             total_seconds=round(total_seconds, 6),
         )
 
-    return portrait_success(
-        request_id,
-        {
-            "detector_model": result["detector_key"],
-            "reid_model": result["reid_key"],
-            "cold_loaded": {
-                "detector": result["detector_cold_loaded"],
-                "reid": result["reid_cold_loaded"],
-            },
-            "timing": {
-                "decode_seconds": decode_seconds,
-                "detector_load_seconds": result["detector_load_seconds"],
-                "reid_load_seconds": result["reid_load_seconds"],
-                "detector": detector_meta["timing"],
-                "reid": embedding_meta["timing"],
-                "total_seconds": total_seconds,
-            },
-            "detector": {
-                "input_shape": detector_meta["input_shape"],
-                "output_shapes": detector_meta["output_shapes"],
-                "inference_mode": detector_meta["inference_mode"],
-            },
-            "reid": {
-                "input_shape": embedding_meta["input_shape"],
-                "output_shapes": embedding_meta["output_shapes"],
-                "inference_mode": embedding_meta["inference_mode"],
-                "embedding_dim": embedding_meta["embedding_dim"],
-                "embedding_count": result["embedding_count"],
-            },
-            "frames": result["frames"],
-            "tracks": result["tracks"],
-            "track_count": result["track_count"],
-            "tracker": result["tracker"],
-            "frame_count": len(result["frames"]),
-            "person_count": result["person_count"],
+    response_data = {
+        "detector_model": result["detector_key"],
+        "reid_model": result["reid_key"],
+        "cold_loaded": {
+            "detector": result["detector_cold_loaded"],
+            "reid": result["reid_cold_loaded"],
+        },
+        "timing": {
+            "decode_seconds": decode_seconds,
+            "detector_load_seconds": result["detector_load_seconds"],
+            "reid_load_seconds": result["reid_load_seconds"],
+            "detector": detector_meta["timing"],
+            "reid": embedding_meta["timing"],
+            "total_seconds": total_seconds,
+        },
+        "detector": {
+            "input_shape": detector_meta["input_shape"],
+            "output_shapes": detector_meta["output_shapes"],
+            "inference_mode": detector_meta["inference_mode"],
+        },
+        "reid": {
+            "input_shape": embedding_meta["input_shape"],
+            "output_shapes": embedding_meta["output_shapes"],
+            "inference_mode": embedding_meta["inference_mode"],
+            "embedding_dim": embedding_meta["embedding_dim"],
             "embedding_count": result["embedding_count"],
         },
+        "frames": result["frames"],
+        "tracks": result["tracks"],
+        "track_count": result["track_count"],
+        "tracker": result["tracker"],
+        "frame_count": len(result["frames"]),
+        "person_count": result["person_count"],
+        "embedding_count": result["embedding_count"],
+    }
+    await run_blocking_io(
+        create_analysis_archive,
+        tenant_id=ctx.tenant_id,
+        request_id=request_id,
+        source_type="image",
+        source_ref=request_id,
+        mode="tracks",
+        endpoint="/v1/infer/tracks",
+        payload=response_data,
+        images=images,
     )
+    return portrait_success(request_id, response_data)

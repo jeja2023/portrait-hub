@@ -217,6 +217,8 @@ def test_openapi_keeps_core_routes() -> None:
         "/predict",
         "/debug/model-output",
         "/v1/vision/infer",
+        "/v1/analysis/results",
+        "/v1/analysis/artifacts/{archive_id}/{artifact_id}",
         "/v1/infer/tracks",
         "/v1/admin/models/warmup",
         "/v1/admin/models/reload",
@@ -532,8 +534,14 @@ def test_console_assets_use_light_structured_response_panels() -> None:
     assert "视频解析结果" in views_union
     assert "视频流解析" in views_union
     assert "stream-results-visuals" in views_union
-    assert "streamResultVisuals" in results_body
-    assert "/events?limit=200" in results_body
+    assert "/v1/analysis/results?${params.toString()}" in results_body
+    assert "loadMoreAnalysisResults" in results_body
+    assert 'data-results-load-more="image"' in template_core_body
+    assert 'data-results-load-more="video"' in template_core_body
+    assert 'data-results-load-more="stream"' in template_core_body
+    assert "fetch(contentUrl, { headers: headers() })" in result_visuals_body
+    assert "/v1/vision/results" not in results_body
+    assert "/events?limit=200" not in results_body
     assert "stream-live-summary" in template_access_body
     assert "stream-live-visuals" in template_access_body
     assert "renderLiveStreamResults(payload)" in network_body
@@ -541,5 +549,3 @@ def test_console_assets_use_light_structured_response_panels() -> None:
     assert "人员库查询" not in navigation_body
     assert "智能解析" not in navigation_body
     assert "视频分析" not in navigation_body
-
-
