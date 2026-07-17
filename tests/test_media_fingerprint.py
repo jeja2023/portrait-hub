@@ -1,7 +1,5 @@
 from io import BytesIO
 
-import pytest
-from fastapi import HTTPException
 from PIL import Image
 
 from app.media.image_decode import decode_image_bytes, mark_near_duplicates
@@ -34,10 +32,8 @@ def test_mark_near_duplicates_uses_first_seen_source() -> None:
     assert second.frame.duplicate_distance == 0
 
 
-def test_decode_image_rejects_extension_content_mismatch() -> None:
-    with pytest.raises(HTTPException) as exc_info:
-        decode_image_bytes(png_bytes((20, 40, 80)), "secret-token.jpg")
+def test_decode_image_accepts_extension_content_mismatch() -> None:
+    decoded = decode_image_bytes(png_bytes((20, 40, 80)), "secret-token.jpg")
 
-    assert exc_info.value.status_code == 400
-    assert "不匹配" in exc_info.value.detail
-    assert "secret-token" not in exc_info.value.detail
+    assert decoded.format == "png"
+    assert decoded.image.mode == "RGB"

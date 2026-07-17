@@ -84,6 +84,16 @@ def test_production_profile_accepts_externalized_pgvector_stack(monkeypatch) -> 
     production_gates.validate_production_externalization()
 
 
+def test_production_profile_rejects_request_limit_below_video_limit(monkeypatch) -> None:
+    monkeypatch.setattr(settings, "PORTRAIT_RUNTIME_PROFILE", "production")
+    monkeypatch.setattr(settings, "PRODUCTION_EXTERNAL_SERVICES_REQUIRED", True)
+    monkeypatch.setattr(settings, "MAX_VIDEO_BYTES", 1024 * 1024 * 1024)
+    monkeypatch.setattr(settings, "MAX_REQUEST_BODY_BYTES", 112 * 1024 * 1024)
+
+    failures = production_gates.production_externalization_failures()
+
+    assert "生产环境中 MAX_REQUEST_BODY_BYTES 必须至少比 MAX_VIDEO_BYTES 大 1 MiB" in failures
+
 def test_production_profile_requires_credential_backend(monkeypatch) -> None:
     monkeypatch.setattr(settings, "PORTRAIT_RUNTIME_PROFILE", "production")
     monkeypatch.setattr(settings, "PRODUCTION_EXTERNAL_SERVICES_REQUIRED", True)

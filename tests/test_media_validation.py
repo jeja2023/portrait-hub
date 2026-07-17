@@ -7,11 +7,12 @@ from pathlib import Path
 
 import pytest
 from fastapi import HTTPException, UploadFile
+from PIL import Image
 
 from app import video_io
 from app.image_io import read_image_file as read_legacy_image_file
 from app.media import stream_decode
-from app.media.image_decode import read_limited_upload, validate_image_content
+from app.media.image_decode import decode_image_bytes, read_limited_upload, validate_image_content
 from app.media.stream_decode import mask_stream_url
 from app.video_io import (
     aiter_video_frame_batches,
@@ -42,23 +43,29 @@ def test_video_validation_rejects_extension_container_mismatch() -> None:
     assert "avi" not in exc_info.value.detail
 
 
-def test_image_validation_redacts_extension_and_detected_format() -> None:
-    png_bytes = b"\x89PNG\r\n\x1a\n" + b"\x00" * 16
+def test_image_validation_uses_supported_content_despite_filename_extension(caplog) -> None:
+    buffer = BytesIO()
+    Image.new("RGBA", (2, 3), (255, 0, 0, 128)).save(buffer, format="PNG")
+    png_bytes = buffer.getvalue()
 
-    with pytest.raises(HTTPException) as unsupported:
-        validate_image_content(png_bytes, "secret-token.evil")
-    with pytest.raises(HTTPException) as mismatch:
-        validate_image_content(png_bytes, "secret-token.jpg")
+    assert validate_image_content(png_bytes, "secret-token.evil") == "PNG"
+    assert validate_image_content(png_bytes, "secret-token.jpg") == "PNG"
 
-    assert unsupported.value.status_code == 400
-    assert unsupported.value.detail == "不支持的图片扩展名"
-    assert "secret-token" not in unsupported.value.detail
-    assert ".evil" not in unsupported.value.detail
-    assert mismatch.value.status_code == 400
-    assert mismatch.value.detail == "图片扩展名与检测到的内容不匹配"
-    assert "secret-token" not in mismatch.value.detail
-    assert "png" not in mismatch.value.detail.lower()
-    assert "jpg" not in mismatch.value.detail.lower()
+    decoded = decode_image_bytes(png_bytes, "secret-token.jpg")
+
+    assert decoded.format == "png"
+    assert decoded.image.mode == "RGB"
+    assert decoded.image.size == (2, 3)
+    assert "image filename format mismatch ignored" in caplog.text
+    assert "secret-token" not in caplog.text
+
+
+def test_image_validation_rejects_unsupported_content_despite_filename() -> None:
+    with pytest.raises(HTTPException) as exc_info:
+        validate_image_content(b"not-an-image", "sample.jpg")
+
+    assert exc_info.value.status_code == 400
+    assert exc_info.value.detail == "上传文件包含不支持的图片内容"
 
 
 def test_video_validation_redacts_extension_and_detected_container() -> None:
@@ -181,7 +188,9 @@ def test_legacy_stream_validation_uses_ssrf_rules_and_masks_credentials() -> Non
     assert exc_info.value.status_code == 400
     assert "SSRF" in exc_info.value.detail
     assert mask_stream_url("rtsp://user:secret@example.com/live") == "rtsp://***:***@example.com/live"
-    assert mask_stream_url("rtsp://example.com/live?token=secret#frag") == "rtsp://example.com/live?<redacted>#<redacted>"
+    assert (
+        mask_stream_url("rtsp://example.com/live?token=secret#frag") == "rtsp://example.com/live?<redacted>#<redacted>"
+    )
 
 
 def test_stream_validation_rejects_hosts_resolving_to_private_addresses(monkeypatch) -> None:
@@ -232,6 +241,7 @@ def test_public_video_metadata_omits_stable_fingerprints_and_source_file_details
     )
 
     assert public == {"source_frame_indexes": [0], "selected_frame_hash_distances": [0]}
+
 
 @pytest.mark.asyncio
 async def test_video_job_upload_is_streamed_to_private_staging(monkeypatch, workspace_tmp_path) -> None:

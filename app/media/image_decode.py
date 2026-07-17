@@ -9,6 +9,7 @@ from PIL import Image, ImageOps, UnidentifiedImageError
 from app.media.fingerprint import hamming_hex, perceptual_hash_payload
 from app.media.media_schema import DecodedImage, MediaFrame
 from app.media.quality import assess_image_quality
+from app.observability import logger
 from app.portrait_async import gather_limited
 from app.settings import MAX_IMAGE_BYTES, MAX_IMAGE_DECODE_CONCURRENCY, MAX_IMAGE_PIXELS
 
@@ -57,18 +58,19 @@ def sniff_image_format(data: bytes) -> str | None:
 
 
 def validate_image_content(data: bytes, filename: str | None = None) -> str:
-    validate_image_filename(filename)
     detected = sniff_image_format(data)
     if detected is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="上传文件包含不支持的图片内容",
         )
+    suffix = Path(filename).suffix.lower() if filename else ""
     expected = expected_format_from_filename(filename)
-    if expected is not None and expected != detected:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="图片扩展名与检测到的内容不匹配",
+    if suffix and expected != detected:
+        logger.warning(
+            "image filename format mismatch ignored: extension_supported=%s detected_format=%s",
+            expected is not None,
+            detected,
         )
     return detected
 

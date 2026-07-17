@@ -20,22 +20,16 @@ def v1_validation_issues(response) -> list[dict[str, object]]:
     return response.json()["error"]["details"]["issues"]
 
 
-def test_env_hot_reload_updates_loaded_settings_modules(
-    monkeypatch, workspace_tmp_path
-) -> None:
+def test_env_hot_reload_updates_loaded_settings_modules(monkeypatch, workspace_tmp_path) -> None:
     env_path = workspace_tmp_path / ".env"
     env_path.write_text("RATE_LIMIT_PER_MINUTE=37\n", encoding="utf-8")
     original_env = settings.RATE_LIMIT_PER_MINUTE
     original_rate_limit = rate_limit.RATE_LIMIT_PER_MINUTE
     monkeypatch.setattr(config_hot_reload, "ENV_PATH", env_path)
-    monkeypatch.setattr(
-        config_hot_reload, "audit_config_reload", lambda source, result: None
-    )
+    monkeypatch.setattr(config_hot_reload, "audit_config_reload", lambda source, result: None)
 
     try:
-        result = config_hot_reload.reload_runtime_config(
-            source="test-env", include_env=True
-        )
+        result = config_hot_reload.reload_runtime_config(source="test-env", include_env=True)
 
         assert result["env_loaded"] is True
         assert result["env_changed_key_count"] == 1
@@ -65,6 +59,7 @@ def test_dev_start_local_env_clears_api_token_for_browser_console(
     assert values["API_TOKEN"] == ""
     assert values["AUTH_REQUIRED"] == "false"
     assert values["RBAC_ENABLED"] == "false"
+    assert values["VIDEO_JOB_WORKER_IN_PROCESS"] == "true"
     assert values["ALLOW_PRIVATE_STREAM_HOSTS"] == "true"
 
 
@@ -124,9 +119,7 @@ def test_dev_start_runs_stream_worker_with_api(
     assert all(process.terminated for process in processes)
 
 
-def test_env_hot_reload_updates_model_capabilities(
-    monkeypatch, workspace_tmp_path
-) -> None:
+def test_env_hot_reload_updates_model_capabilities(monkeypatch, workspace_tmp_path) -> None:
     capabilities_path = workspace_tmp_path / "model-capabilities.yml"
     capabilities_path.write_text(
         """
@@ -141,36 +134,24 @@ capabilities:
     )
     env_path = workspace_tmp_path / ".env"
     env_path.write_text(
-        f"MODEL_CAPABILITIES_PATH={capabilities_path}\n"
-        "PORTRAIT_REQUIRE_PRODUCTION_MODEL_CAPABILITIES=false\n",
+        f"MODEL_CAPABILITIES_PATH={capabilities_path}\nPORTRAIT_REQUIRE_PRODUCTION_MODEL_CAPABILITIES=false\n",
         encoding="utf-8",
     )
     original_env = os.environ.get("MODEL_CAPABILITIES_PATH")
-    original_require_env = os.environ.get(
-        "PORTRAIT_REQUIRE_PRODUCTION_MODEL_CAPABILITIES"
-    )
+    original_require_env = os.environ.get("PORTRAIT_REQUIRE_PRODUCTION_MODEL_CAPABILITIES")
     original_capabilities = dict(portrait_model_capabilities.MODEL_CAPABILITIES)
     monkeypatch.setattr(config_hot_reload, "ENV_PATH", env_path)
-    monkeypatch.setattr(
-        config_hot_reload, "audit_config_reload", lambda source, result: None
-    )
+    monkeypatch.setattr(config_hot_reload, "audit_config_reload", lambda source, result: None)
 
     try:
-        result = config_hot_reload.reload_runtime_config(
-            source="test-capabilities", include_env=True
-        )
+        result = config_hot_reload.reload_runtime_config(source="test-capabilities", include_env=True)
 
         assert result["model_capabilities_reloaded"] is True
         assert (
             portrait_model_capabilities.MODEL_CAPABILITIES["face_embedding"]["model_id"]
             == "portrait_hub/arcface_r100.onnx"
         )
-        assert (
-            portrait_model_capabilities.MODEL_CAPABILITIES["face_embedding"][
-                "embedding_dim"
-            ]
-            == 512
-        )
+        assert portrait_model_capabilities.MODEL_CAPABILITIES["face_embedding"]["embedding_dim"] == 512
     finally:
         if original_env is None:
             os.environ.pop("MODEL_CAPABILITIES_PATH", None)
@@ -179,9 +160,7 @@ capabilities:
         if original_require_env is None:
             os.environ.pop("PORTRAIT_REQUIRE_PRODUCTION_MODEL_CAPABILITIES", None)
         else:
-            os.environ["PORTRAIT_REQUIRE_PRODUCTION_MODEL_CAPABILITIES"] = (
-                original_require_env
-            )
+            os.environ["PORTRAIT_REQUIRE_PRODUCTION_MODEL_CAPABILITIES"] = original_require_env
         config_hot_reload.reload_settings_modules()
         portrait_model_capabilities.MODEL_CAPABILITIES.clear()
         portrait_model_capabilities.MODEL_CAPABILITIES.update(original_capabilities)
@@ -308,9 +287,9 @@ def test_openapi_keeps_core_routes() -> None:
 
 def test_video_job_openapi_uses_time_sampling_batch_contract() -> None:
     schema = app.openapi()
-    request_schema = schema["paths"]["/v1/jobs/video"]["post"]["requestBody"]["content"][
-        "multipart/form-data"
-    ]["schema"]
+    request_schema = schema["paths"]["/v1/jobs/video"]["post"]["requestBody"]["content"]["multipart/form-data"][
+        "schema"
+    ]
     component_name = request_schema["$ref"].rsplit("/", 1)[-1]
     properties = schema["components"]["schemas"][component_name]["properties"]
 
@@ -337,6 +316,9 @@ def test_console_is_product_admin_shell_with_strict_inline_policy() -> None:
     assert 'style="' not in body
     assert "onclick" not in body
     assert "/assets/console/views/navigation.js" in body
+    assert "/assets/console/styles/components.css?v=unified-media-cards" in body
+    assert "/assets/console/visuals/results.js?v=unified-media-cards" in body
+    assert "/assets/console/views/results.js?v=unified-media-cards" in body
 
 
 def test_console_assets_use_light_structured_response_panels() -> None:
@@ -365,6 +347,9 @@ def test_console_assets_use_light_structured_response_panels() -> None:
     responsive_css = client.get("/assets/console/styles/responsive.css")
 
     assert config_js.status_code == 200
+    assert config_js.headers["Cache-Control"] == "no-cache"
+    assert template_core_js.headers["Cache-Control"] == "no-cache"
+    assert css.headers["Cache-Control"] == "no-cache"
     assert js.status_code == 200
     assert runtime_js.status_code == 200
     assert template_core_js.status_code == 200
@@ -402,9 +387,7 @@ def test_console_assets_use_light_structured_response_panels() -> None:
     observability_body = observability_js.text
     governance_body = governance_js.text
     results_body = results_js.text
-    css_body = "\n".join(
-        [css.text, components_css.text, data_viewer_css.text, responsive_css.text]
-    )
+    css_body = "\n".join([css.text, components_css.text, data_viewer_css.text, responsive_css.text])
     # The union preserves content contracts while implementation and templates live in focused assets.
     views_union = "\n".join(
         [
@@ -426,6 +409,11 @@ def test_console_assets_use_light_structured_response_panels() -> None:
     assert "PortraitConsoleConfig" in config_body
     assert "/v1/infer/faces" in config_body
     assert "PortraitConsoleRuntime" in js_body
+    assert ".result-visual-card--video .result-visual-stage text" in css_body
+    assert "function archivedMediaFrameVisuals" in results_body
+    assert 'const unit = sourceType === "image" ? "张" : "帧"' in results_body
+    assert '["image", "video", "stream"].includes(sourceType)' in results_body
+    assert 'accept="video/*,.mp4,.mov,.m4v,.avi,.mkv,.webm"' in template_core_body
     assert "const endpointMap = consoleConfig.endpointMap" in views_union
     assert "fallbackNavigation" in views_union
     assert "data-viewer" in views_union
@@ -482,9 +470,7 @@ def test_console_assets_use_light_structured_response_panels() -> None:
     assert "path_hash" in views_union
     assert "auditChainErrorCount" in governance_body
     assert "/v1/admin/audit/events?limit=20" not in views_union
-    assert (
-        "/v1/admin/audit/events?${auditEventQueryParams().toString()}" in governance_body
-    )
+    assert "/v1/admin/audit/events?${auditEventQueryParams().toString()}" in governance_body
     assert "auditEventQueryParams" in governance_body
     assert "audit-event-filter-button" in views_union
     assert "audit-category-filter-input" in views_union

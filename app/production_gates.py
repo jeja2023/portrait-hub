@@ -56,6 +56,8 @@ def production_externalization_failures() -> list[str]:
         failures.append("生产环境中 ENABLE_API_DOCS 必须为 false")
     if settings.RATE_LIMIT_PER_MINUTE <= 0:
         failures.append("生产环境中 RATE_LIMIT_PER_MINUTE 必须大于 0")
+    if settings.MAX_REQUEST_BODY_BYTES < settings.MAX_VIDEO_BYTES + 1024 * 1024:
+        failures.append("生产环境中 MAX_REQUEST_BODY_BYTES 必须至少比 MAX_VIDEO_BYTES 大 1 MiB")
     if settings.MAX_REQUEST_BODY_BYTES > settings.MAX_VIDEO_BYTES + 16 * 1024 * 1024:
         failures.append("生产环境中 MAX_REQUEST_BODY_BYTES 不应显著超过 MAX_VIDEO_BYTES")
     if settings.VIDEO_JOB_WORKER_IN_PROCESS:

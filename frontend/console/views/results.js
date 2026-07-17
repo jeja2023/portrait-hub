@@ -108,11 +108,11 @@ function renderCompareSummary(payload) {
 }
 
 
-function videoFrameVisual(frame, frameIndex, jobLabel) {
+function videoFrameVisual(frame, frameIndex, jobLabel, unit = "帧") {
   const displaySrc = frame?.thumbnail || frame?.image || frame?.preview || "";
   if (!displaySrc) return null;
   const lightboxSrc = frame?.preview || frame?.image || frame?.thumbnail || displaySrc;
-  const label = `第 ${frameIndex + 1} 帧`;
+  const label = `第 ${frameIndex + 1} ${unit}`;
   const title = jobLabel ? `${jobLabel} / ${label}` : label;
   return {
     item: {
@@ -216,12 +216,36 @@ function imageAnalysisVisuals(mode, payload, previews, sourceType = "image") {
   }));
 }
 
+function archivedMediaFrameVisuals(record, payload, previews) {
+  const frames = Array.isArray(payload?.frames) ? payload.frames : [];
+  if (!frames.length) return [];
+  const sourceType = record?.source_type || "image";
+  const defaultLabel = { image: "图片解析", video: "视频任务", stream: "视频流" }[sourceType] || "解析结果";
+  const mediaLabel = record?.source_ref || defaultLabel;
+  const unit = sourceType === "image" ? "张" : "帧";
+  return frames.map((frame, index) => {
+    const previewIndex = frameImageIndex(frame, index);
+    const preview = previews[previewIndex] || previews[index];
+    if (!preview?.src) return null;
+    return videoFrameVisual({
+      ...frame,
+      thumbnail: preview.src,
+      preview: preview.src,
+      width: frame.width || preview.width || 1,
+      height: frame.height || preview.height || 1,
+    }, index, mediaLabel, unit);
+  }).filter(Boolean);
+}
+
 function archivedAnalysisRecord(record) {
   const payload = record?.payload || {};
   const mode = record?.mode || payload?.model?.task || "image";
   const sourceType = record?.source_type || "image";
   const previews = Array.isArray(record?.previews) ? record.previews : [];
-  const visuals = imageAnalysisVisuals(mode, payload, previews, sourceType);
+  const mediaFrameVisuals = ["image", "video", "stream"].includes(sourceType)
+    ? archivedMediaFrameVisuals(record, payload, previews)
+    : [];
+  const visuals = mediaFrameVisuals.length ? mediaFrameVisuals : imageAnalysisVisuals(mode, payload, previews, sourceType);
   return {
     id: record?.archive_id || `archive_${Date.now()}`,
     archive_id: record?.archive_id,
@@ -272,9 +296,9 @@ function renderImageResults() {
     { label: "租户", value: state.tenantId || "--" },
   ]);
   renderVideoVisualGrid("#image-results-visuals", visuals, "暂无图片解析结果，请先在图片解析页完成一次解析", {
-    variant: "analysis",
-    maxWidth: 420,
-    maxHeight: 320,
+    variant: "video",
+    maxWidth: 260,
+    maxHeight: 180,
     allowUpscale: true,
   });
   renderPayload("image-results", "#image-results-json", {

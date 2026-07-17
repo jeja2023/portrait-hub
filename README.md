@@ -2,11 +2,18 @@
 
 面向 Ubuntu + Docker + NVIDIA GPU 的 ONNX 推理服务。服务通过 FastAPI 暴露接口，按 GPU 拆成多个 worker，适合给人像识别、人像检索、ReID 等业务项目提供共享推理能力。
 
-当前版本：`0.9.0`。本版本将图片、离线视频和实时视频流的解析结果统一升级为“数据库索引 + 加密对象存储”档案：本地使用 SQLite WAL，生产使用 PostgreSQL；完整结果图、缩略图和视频源文件进入本地或 S3 兼容对象存储，控制台可分页查看全部历史并在刷新后恢复。
+当前版本：`0.9.1`。本补丁提升图片和视频上传兼容性，统一图片、离线视频和实时视频流的归档结果卡片，并修正本地视频任务 worker 与控制台静态资源缓存行为。
 
 > `0.9.0` 是破坏性升级。旧的 `/v1/vision/results`、`/v1/jobs/video/results` 及有限图片历史实现已删除，不提供兼容回退或旧记录自动迁移；接入方必须切换到统一档案接口。
 
 拆分后的模块映射、维护边界和验证命令见 [大型文件拆分维护指南](docs/maintenance/LARGE_FILE_SPLIT.md)，完整发布记录见 [更新日志](更新日志.md)。
+
+## 0.9.1 媒体上传与结果展示
+
+- 图片校验改为以文件内容为准：受支持的 JPEG、PNG、WebP 和 BMP 即使扩展名缺失或不匹配也可继续解析，服务端仅记录脱敏告警；文件签名、实际解码格式、尺寸、像素数和损坏检查仍然生效。
+- 视频选择器同时接受浏览器 MIME 类型和 `.mp4`、`.mov`、`.m4v`、`.avi`、`.mkv`、`.webm` 扩展名；生产环境要求全局请求体上限至少比视频上限多 `1 MiB`、且最多多 `16 MiB`，用于容纳 multipart 元数据。
+- 图片、视频和视频流归档结果共用同一套卡片：图片显示“第 N 张”，视频与视频流显示“第 N 帧”，并统一展示检测框、标注数量或“无可绘制标注”。
+- 控制台资源使用 `no-cache` 和版本化资源地址，普通刷新即可取得新版样式；`python dev_start.py` 会在本地启用进程内视频任务 worker，生产部署仍使用独立 worker。
 
 ## 统一解析档案
 
@@ -99,7 +106,7 @@ v1 已加入的生产加固：
 - `MODEL_CONFIG_READ_FAIL_CLOSED` 会让缺失、不可读或格式错误的 `models.yml` 在启动/重载时默认失败关闭，而不是静默以空配置运行。
 - `RATE_LIMIT_PER_MINUTE` 和 `RATE_LIMIT_BURST` 开启按租户/路径的令牌桶限流；Docker Compose 默认每分钟 `120`，突发 `240`。
 - `RATE_LIMIT_MAX_BUCKETS` 和 `RATE_LIMIT_BUCKET_TTL_SECONDS` 限定本地限流桶内存。
-- `MAX_REQUEST_BODY_BYTES` 在路由处理器解析 JSON 或 multipart 之前就应用全局 HTTP 请求体上限；Docker Compose 默认 `805306368` 字节。
+- `MAX_REQUEST_BODY_BYTES` 在路由处理器解析 JSON 或 multipart 之前就应用全局 HTTP 请求体上限；Docker Compose 默认 `117440512` 字节（112 MiB）。生产配置必须处于 `MAX_VIDEO_BYTES + 1 MiB` 到 `MAX_VIDEO_BYTES + 16 MiB` 之间。
 - `STATE_READ_FAIL_CLOSED` 会让现有本地 JSON 状态读取或结构失败默认失败关闭，而不是静默丢弃已持久化状态。
 - `STATE_WRITE_FAIL_CLOSED` 会让本地 JSON 状态写入默认失败关闭。
 - `SECURITY_HEADERS_ENABLED`、`CONTENT_SECURITY_POLICY` 和 `HSTS_*` 会加入加固后的默认 HTTP 响应头、CSP、跨域隔离头以及生产 HSTS。
@@ -773,7 +780,7 @@ http://gpu-worker-1:8000/predict
 - `VIDEO_JOB_WORKER_IN_PROCESS`: 本地开发可启用内置 worker；生产必须设为 `false` 并运行独立 worker。
 - `ACCESS_STATS_FLUSH_INTERVAL_SECONDS`: 应用调用统计批量落盘周期；配置变更和服务关闭仍会立即刷新。
 - `MAX_VIDEO_FRAME_UPLOADS`: 图片帧序列上传接口的单次文件数限制，默认 `64`。
-- `MAX_REQUEST_BODY_BYTES`: 全局 HTTP 请求体大小上限，默认 `805306368`；设为 `0` 可关闭。
+- `MAX_REQUEST_BODY_BYTES`: 全局 HTTP 请求体大小上限，默认 `117440512`（112 MiB）；本地可设为 `0` 关闭，生产环境必须比 `MAX_VIDEO_BYTES` 多 `1` 至 `16 MiB`。
 - `STREAM_SAMPLE_INTERVAL_SECONDS`: 视频流按媒体时间轴采样的秒间隔，默认 `1.0`。
 - `STREAM_INFERENCE_BATCH_SIZE`: 视频流 rolling batch 的每批推理帧数，默认 `8`。
 - `STREAM_READ_TIMEOUT_SECONDS`: 视频流单次读取软超时，默认 `10`。

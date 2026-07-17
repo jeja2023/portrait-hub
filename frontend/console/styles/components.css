@@ -503,6 +503,10 @@
   vector-effect: non-scaling-stroke;
 }
 
+.result-visual-card--video .result-visual-stage text {
+  display: none;
+}
+
 .result-visual-card--lightbox .result-visual-stage text {
   stroke-width: 4;
   font-size: 14px;

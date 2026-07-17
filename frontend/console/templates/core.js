@@ -338,7 +338,7 @@
           <button type="button" id="video-copy-button">复制调用示例</button>
         </div>
         <form id="video-form" class="form-grid">
-          <label class="span-2">视频文件 <input id="job-file-input" name="file" type="file" accept="video/*" /></label>
+          <label class="span-2">视频文件 <input id="job-file-input" name="file" type="file" accept="video/*,.mp4,.mov,.m4v,.avi,.mkv,.webm" /></label>
           <label>采样间隔（秒） <input id="job-sample-interval-input" name="sample_interval_seconds" type="number" min="0.1" step="0.1" value="1.0" /></label>
           <label>批次大小 <input id="job-batch-size-input" name="batch_size" type="number" min="1" value="16" /></label>
           <button type="submit" class="primary">创建任务</button>
