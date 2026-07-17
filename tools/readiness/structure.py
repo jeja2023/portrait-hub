@@ -28,6 +28,13 @@ def check_templates(root: Path) -> list[dict[str, Any]]:
         "app/runtime_appearance.py",
         "app/runtime_common.py",
         "frontend/console/console.html",
+        "frontend/console-next/package.json",
+        "frontend/console-next/vite.config.ts",
+        "frontend/console-next/src/main.ts",
+        "frontend/console-next/src/auth/session.ts",
+        "frontend/console-next/src/api/generated.ts",
+        "frontend/console-next/dist/index.html",
+        "frontend/console-next/dist/.vite/manifest.json",
         "frontend/console/console.css",
         "frontend/console/styles/components.css",
         "frontend/console/styles/data-viewer.css",
@@ -92,33 +99,24 @@ def check_templates(root: Path) -> list[dict[str, Any]]:
         ".github/workflows/security-audit.yml",
         "requirements/prod-optional.txt",
         "package.json",
+        "package-lock.json",
         "sdk/python/portrait_hub_client.py",
         "sdk/node/portraitHubClient.js",
     ]
-    return [
-        {"name": f"template:{item}", "ok": (root / item).is_file()} for item in required
-    ]
+    return [{"name": f"template:{item}", "ok": (root / item).is_file()} for item in required]
 
 
 def check_data_stack(root: Path) -> list[dict[str, Any]]:
     optional_path = root / "requirements" / "prod-optional.txt"
-    optional = (
-        optional_path.read_text(encoding="utf-8") if optional_path.is_file() else ""
-    )
+    optional = optional_path.read_text(encoding="utf-8") if optional_path.is_file() else ""
     schema = (
         (root / "tools" / "portrait_postgres_schema.sql").read_text(encoding="utf-8")
         if (root / "tools" / "portrait_postgres_schema.sql").is_file()
         else ""
     )
-    dockerfile = (
-        (root / "Dockerfile").read_text(encoding="utf-8")
-        if (root / "Dockerfile").is_file()
-        else ""
-    )
+    dockerfile = (root / "Dockerfile").read_text(encoding="utf-8") if (root / "Dockerfile").is_file() else ""
     compose = (
-        (root / "docker-compose.yml").read_text(encoding="utf-8")
-        if (root / "docker-compose.yml").is_file()
-        else ""
+        (root / "docker-compose.yml").read_text(encoding="utf-8") if (root / "docker-compose.yml").is_file() else ""
     )
     checks = [
         {
@@ -127,8 +125,7 @@ def check_data_stack(root: Path) -> list[dict[str, Any]]:
         },
         {
             "name": "data_stack:pgvector_driver",
-            "ok": "pgvector" in optional
-            and "CREATE EXTENSION IF NOT EXISTS vector" in schema,
+            "ok": "pgvector" in optional and "CREATE EXTENSION IF NOT EXISTS vector" in schema,
         },
         {
             "name": "data_stack:qdrant_driver",

@@ -6,7 +6,7 @@
 
   <groupId>com.portraithub</groupId>
   <artifactId>portrait-hub-sdk-java</artifactId>
-  <version>0.9.1</version>
+  <version>0.10.0</version>
   <packaging>jar</packaging>
 
   <name>PortraitHub Java SDK</name>

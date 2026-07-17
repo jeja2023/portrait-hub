@@ -299,10 +299,10 @@ def test_video_job_openapi_uses_time_sampling_batch_contract() -> None:
     assert "max_frames" not in properties
 
 
-def test_console_is_product_admin_shell_with_strict_inline_policy() -> None:
+def test_legacy_console_is_product_admin_shell_with_strict_inline_policy() -> None:
     client = TestClient(app)
 
-    response = client.get("/console")
+    response = client.get("/console/legacy")
 
     assert response.status_code == 200
     body = response.text

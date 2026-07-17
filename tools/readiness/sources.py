@@ -15,14 +15,10 @@ from tools.readiness.common import text_between
 
 def load_sources(root: Path) -> dict[str, Any]:
     settings = (
-        (root / "app" / "settings.py").read_text(encoding="utf-8")
-        if (root / "app" / "settings.py").is_file()
-        else ""
+        (root / "app" / "settings.py").read_text(encoding="utf-8") if (root / "app" / "settings.py").is_file() else ""
     )
     security = (
-        (root / "app" / "security.py").read_text(encoding="utf-8")
-        if (root / "app" / "security.py").is_file()
-        else ""
+        (root / "app" / "security.py").read_text(encoding="utf-8") if (root / "app" / "security.py").is_file() else ""
     )
     portrait_auth = (
         (root / "app" / "portrait_auth.py").read_text(encoding="utf-8")
@@ -74,26 +70,14 @@ def load_sources(root: Path) -> dict[str, Any]:
         if (root / "app" / "routes_health.py").is_file()
         else ""
     )
-    server = (
-        (root / "app" / "server.py").read_text(encoding="utf-8")
-        if (root / "app" / "server.py").is_file()
-        else ""
-    )
+    server = (root / "app" / "server.py").read_text(encoding="utf-8") if (root / "app" / "server.py").is_file() else ""
     observability = (
         (root / "app" / "observability.py").read_text(encoding="utf-8")
         if (root / "app" / "observability.py").is_file()
         else ""
     )
-    core = (
-        (root / "app" / "core.py").read_text(encoding="utf-8")
-        if (root / "app" / "core.py").is_file()
-        else ""
-    )
-    pyproject = (
-        (root / "pyproject.toml").read_text(encoding="utf-8")
-        if (root / "pyproject.toml").is_file()
-        else ""
-    )
+    core = (root / "app" / "core.py").read_text(encoding="utf-8") if (root / "app" / "core.py").is_file() else ""
+    pyproject = (root / "pyproject.toml").read_text(encoding="utf-8") if (root / "pyproject.toml").is_file() else ""
     dev_requirements = (
         (root / "requirements" / "dev.txt").read_text(encoding="utf-8")
         if (root / "requirements" / "dev.txt").is_file()
@@ -109,10 +93,7 @@ def load_sources(root: Path) -> dict[str, Any]:
         if (root / "tools" / "type_check.py").is_file()
         else ""
     )
-    route_modules = "\n".join(
-        path.read_text(encoding="utf-8")
-        for path in sorted((root / "app").glob("routes*.py"))
-    )
+    route_modules = "\n".join(path.read_text(encoding="utf-8") for path in sorted((root / "app").glob("routes*.py")))
     model_lifecycle_routes = (
         (root / "app" / "routes_model_lifecycle.py").read_text(encoding="utf-8")
         if (root / "app" / "routes_model_lifecycle.py").is_file()
@@ -164,14 +145,10 @@ def load_sources(root: Path) -> dict[str, Any]:
         else ""
     )
     image_io = (
-        (root / "app" / "image_io.py").read_text(encoding="utf-8")
-        if (root / "app" / "image_io.py").is_file()
-        else ""
+        (root / "app" / "image_io.py").read_text(encoding="utf-8") if (root / "app" / "image_io.py").is_file() else ""
     )
     schemas = (
-        (root / "app" / "schemas.py").read_text(encoding="utf-8")
-        if (root / "app" / "schemas.py").is_file()
-        else ""
+        (root / "app" / "schemas.py").read_text(encoding="utf-8") if (root / "app" / "schemas.py").is_file() else ""
     )
     person_tracks_routes = (
         (root / "app" / "routes_person_tracks.py").read_text(encoding="utf-8")
@@ -219,9 +196,7 @@ def load_sources(root: Path) -> dict[str, Any]:
         else ""
     )
     video_io = (
-        (root / "app" / "video_io.py").read_text(encoding="utf-8")
-        if (root / "app" / "video_io.py").is_file()
-        else ""
+        (root / "app" / "video_io.py").read_text(encoding="utf-8") if (root / "app" / "video_io.py").is_file() else ""
     )
     media_image_decode = (
         (root / "app" / "media" / "image_decode.py").read_text(encoding="utf-8")
@@ -528,9 +503,7 @@ def load_sources(root: Path) -> dict[str, Any]:
         else ""
     )
     compose = (
-        (root / "docker-compose.yml").read_text(encoding="utf-8")
-        if (root / "docker-compose.yml").is_file()
-        else ""
+        (root / "docker-compose.yml").read_text(encoding="utf-8") if (root / "docker-compose.yml").is_file() else ""
     )
     cpu_compose = (
         (root / "docker-compose.cpu.yml").read_text(encoding="utf-8")
@@ -538,49 +511,25 @@ def load_sources(root: Path) -> dict[str, Any]:
         else ""
     )
     cpu_dockerfile = (
-        (root / "Dockerfile.cpu").read_text(encoding="utf-8")
-        if (root / "Dockerfile.cpu").is_file()
-        else ""
+        (root / "Dockerfile.cpu").read_text(encoding="utf-8") if (root / "Dockerfile.cpu").is_file() else ""
     )
-    env_example = (
-        (root / ".env.example").read_text(encoding="utf-8")
-        if (root / ".env.example").is_file()
-        else ""
-    )
-    readme = (
-        (root / "README.md").read_text(encoding="utf-8")
-        if (root / "README.md").is_file()
-        else ""
-    )
+    env_example = (root / ".env.example").read_text(encoding="utf-8") if (root / ".env.example").is_file() else ""
+    readme = (root / "README.md").read_text(encoding="utf-8") if (root / "README.md").is_file() else ""
     deploy_ubuntu_path = root / "docs" / "deployment" / "DEPLOY_UBUNTU.md"
     model_training_plan_path = root / "docs" / "plans" / "MODEL_RND_TRAINING_PLAN.md"
-    inference_upgrade_plan_path = (
-        root / "docs" / "plans" / "INFERENCE_SERVICE_UPGRADE_PLAN.md"
-    )
-    deploy_ubuntu = (
-        deploy_ubuntu_path.read_text(encoding="utf-8")
-        if deploy_ubuntu_path.is_file()
-        else ""
-    )
+    inference_upgrade_plan_path = root / "docs" / "plans" / "INFERENCE_SERVICE_UPGRADE_PLAN.md"
+    deploy_ubuntu = deploy_ubuntu_path.read_text(encoding="utf-8") if deploy_ubuntu_path.is_file() else ""
     model_training_plan = (
-        model_training_plan_path.read_text(encoding="utf-8")
-        if model_training_plan_path.is_file()
-        else ""
+        model_training_plan_path.read_text(encoding="utf-8") if model_training_plan_path.is_file() else ""
     )
     inference_upgrade_plan = (
-        inference_upgrade_plan_path.read_text(encoding="utf-8")
-        if inference_upgrade_plan_path.is_file()
-        else ""
+        inference_upgrade_plan_path.read_text(encoding="utf-8") if inference_upgrade_plan_path.is_file() else ""
     )
-    project_docs = "\n".join(
-        [readme, deploy_ubuntu, model_training_plan, inference_upgrade_plan]
-    )
+    project_docs = "\n".join([readme, deploy_ubuntu, model_training_plan, inference_upgrade_plan])
     legacy_cross_camera_namespace = "cross_camera" + "_tracking"
     legacy_parent_models_path = "../" + "models"
     requirements = (
-        (root / "requirements.txt").read_text(encoding="utf-8")
-        if (root / "requirements.txt").is_file()
-        else ""
+        (root / "requirements.txt").read_text(encoding="utf-8") if (root / "requirements.txt").is_file() else ""
     )
     base_lock = (
         (root / "requirements" / "base.lock").read_text(encoding="utf-8")
@@ -588,9 +537,7 @@ def load_sources(root: Path) -> dict[str, Any]:
         else ""
     )
     requirements_lock = (
-        (root / "requirements.lock").read_text(encoding="utf-8")
-        if (root / "requirements.lock").is_file()
-        else ""
+        (root / "requirements.lock").read_text(encoding="utf-8") if (root / "requirements.lock").is_file() else ""
     )
     base_in = (
         (root / "requirements" / "base.in").read_text(encoding="utf-8")
@@ -608,9 +555,7 @@ def load_sources(root: Path) -> dict[str, Any]:
         else ""
     )
     console_config_js = (
-        (root / "frontend" / "console" / "console.config.js").read_text(
-            encoding="utf-8"
-        )
+        (root / "frontend" / "console" / "console.config.js").read_text(encoding="utf-8")
         if (root / "frontend" / "console" / "console.config.js").is_file()
         else ""
     )
@@ -646,24 +591,34 @@ def load_sources(root: Path) -> dict[str, Any]:
         ]
         if (root / "frontend" / "console" / item).is_file()
     )
+    console_next_package = (
+        (root / "frontend" / "console-next" / "package.json").read_text(encoding="utf-8")
+        if (root / "frontend" / "console-next" / "package.json").is_file()
+        else ""
+    )
+    console_next_vite = (
+        (root / "frontend" / "console-next" / "vite.config.ts").read_text(encoding="utf-8")
+        if (root / "frontend" / "console-next" / "vite.config.ts").is_file()
+        else ""
+    )
+    console_next_session = (
+        (root / "frontend" / "console-next" / "src" / "auth" / "session.ts").read_text(encoding="utf-8")
+        if (root / "frontend" / "console-next" / "src" / "auth" / "session.ts").is_file()
+        else ""
+    )
+    console_next_manifest = (
+        (root / "frontend" / "console-next" / "dist" / ".vite" / "manifest.json").read_text(encoding="utf-8")
+        if (root / "frontend" / "console-next" / "dist" / ".vite" / "manifest.json").is_file()
+        else ""
+    )
     regression_open_case_files = ""
     if "def open_case_files" in regression_check:
-        regression_open_case_files = regression_check.split("def open_case_files", 1)[
-            1
-        ].split("def run_case", 1)[0]
-    ready_deep_section = text_between(
-        health_routes, '@router.get("/ready/deep"', '@router.get("/metrics"'
-    )
+        regression_open_case_files = regression_check.split("def open_case_files", 1)[1].split("def run_case", 1)[0]
+    ready_deep_section = text_between(health_routes, '@router.get("/ready/deep"', '@router.get("/metrics"')
     portrait_gallery_impl = "\n".join([portrait_gallery, gallery_state, gallery_search])
-    portrait_gallery_mutation_text = "\n".join(
-        [portrait_gallery_routes, portrait_gallery_mutations]
-    )
-    portrait_gallery_route_orchestration = "\n".join(
-        [portrait_gallery_routes, portrait_gallery_orchestration]
-    )
-    portrait_admin_runtime_text = "\n".join(
-        [portrait_admin_routes, portrait_runtime_store]
-    )
+    portrait_gallery_mutation_text = "\n".join([portrait_gallery_routes, portrait_gallery_mutations])
+    portrait_gallery_route_orchestration = "\n".join([portrait_gallery_routes, portrait_gallery_orchestration])
+    portrait_admin_runtime_text = "\n".join([portrait_admin_routes, portrait_runtime_store])
     portrait_postgres_impl = "\n".join(
         [
             portrait_postgres,
@@ -675,30 +630,16 @@ def load_sources(root: Path) -> dict[str, Any]:
             postgres_thresholds,
         ]
     )
-    postgres_health_section = text_between(
-        postgres_core, "def postgres_health", "def jsonb"
-    )
-    redis_health_section = text_between(
-        portrait_task_queue, "class RedisTaskQueue", "def configured_task_queue"
-    )
-    local_object_store_section = text_between(
-        portrait_object_storage, "class LocalObjectStore", "class S3ObjectStore"
-    )
+    postgres_health_section = text_between(postgres_core, "def postgres_health", "def jsonb")
+    redis_health_section = text_between(portrait_task_queue, "class RedisTaskQueue", "def configured_task_queue")
+    local_object_store_section = text_between(portrait_object_storage, "class LocalObjectStore", "class S3ObjectStore")
     s3_object_store_section = text_between(
         portrait_object_storage, "class S3ObjectStore", "def configured_object_store"
     )
-    local_object_delete_section = text_between(
-        local_object_store_section, "def delete_object", "def health"
-    )
-    s3_object_delete_section = text_between(
-        s3_object_store_section, "def delete_object", "def health"
-    )
-    object_delete_sections = "\n".join(
-        [local_object_delete_section, s3_object_delete_section]
-    )
-    local_object_health_section = text_between(
-        local_object_store_section, "def health", ""
-    )
+    local_object_delete_section = text_between(local_object_store_section, "def delete_object", "def health")
+    s3_object_delete_section = text_between(s3_object_store_section, "def delete_object", "def health")
+    object_delete_sections = "\n".join([local_object_delete_section, s3_object_delete_section])
+    local_object_health_section = text_between(local_object_store_section, "def health", "")
     s3_health_section = text_between(s3_object_store_section, "def health", "")
     rollback_route_text = "\n".join(
         [

@@ -63,10 +63,7 @@ def source_files_for_encoding(root: Path) -> list[Path]:
         else:
             continue
         for candidate in candidates:
-            if (
-                candidate.is_file()
-                and candidate.suffix.lower() in SOURCE_ENCODING_SUFFIXES
-            ):
+            if candidate.is_file() and candidate.suffix.lower() in SOURCE_ENCODING_SUFFIXES:
                 files.append(candidate)
     return sorted(dict.fromkeys(files))
 
@@ -78,9 +75,7 @@ def check_source_encoding(root: Path, report: DeployReport) -> None:
         try:
             prefix = path.read_bytes()[:3]
         except OSError as exc:
-            bom_files.append(
-                f"{path.relative_to(root)}: 读取失败：{exc.__class__.__name__}"
-            )
+            bom_files.append(f"{path.relative_to(root)}: 读取失败：{exc.__class__.__name__}")
             continue
         if prefix == b"\xef\xbb\xbf":
             bom_files.append(str(path.relative_to(root)).replace("\\", "/"))
@@ -100,6 +95,7 @@ def check_required_files(root: Path, report: DeployReport) -> None:
         "docker-compose.cpu.yml",
         "requirements.txt",
         "package.json",
+        "package-lock.json",
         "requirements/prod-optional.txt",
         "requirements/dev.txt",
         "requirements/base.in",
@@ -132,6 +128,13 @@ def check_required_files(root: Path, report: DeployReport) -> None:
         "app/portrait_video_job_worker.py",
         "app/rollout_audit.py",
         "frontend/console/console.html",
+        "frontend/console-next/package.json",
+        "frontend/console-next/vite.config.ts",
+        "frontend/console-next/src/main.ts",
+        "frontend/console-next/src/auth/session.ts",
+        "frontend/console-next/src/api/generated.ts",
+        "frontend/console-next/dist/index.html",
+        "frontend/console-next/dist/.vite/manifest.json",
         "frontend/console/console.css",
         "frontend/console/styles/components.css",
         "frontend/console/styles/data-viewer.css",
@@ -231,9 +234,7 @@ def check_python_syntax(root: Path, report: DeployReport) -> None:
 
 def check_code_quality(root: Path, report: DeployReport) -> None:
     core = read_text(root / "app" / "core.py")
-    route_modules = "\n".join(
-        read_text(path) for path in sorted((root / "app").glob("routes*.py"))
-    )
+    route_modules = "\n".join(read_text(path) for path in sorted((root / "app").glob("routes*.py")))
     pyproject = read_text(root / "pyproject.toml")
     dev_requirements = read_text(root / "requirements" / "dev.txt")
     ci = read_text(root / ".github" / "workflows" / "ci.yml")
@@ -286,8 +287,7 @@ def check_code_quality(root: Path, report: DeployReport) -> None:
     )
     report.add(
         "expanded_type_check_targets",
-        all(item in type_check for item in ['"app"', '"tools"', '"sdk"', "main.py"])
-        and 'rglob("*.py")' in type_check,
+        all(item in type_check for item in ['"app"', '"tools"', '"sdk"', "main.py"]) and 'rglob("*.py")' in type_check,
         None,
     )
     report.add(
@@ -355,11 +355,7 @@ def check_code_quality(root: Path, report: DeployReport) -> None:
 
 
 def requirement_lines(text: str) -> list[str]:
-    return [
-        line.strip()
-        for line in text.splitlines()
-        if line.strip() and not line.strip().startswith("#")
-    ]
+    return [line.strip() for line in text.splitlines() if line.strip() and not line.strip().startswith("#")]
 
 
 def has_version_range(line: str) -> bool:
@@ -384,30 +380,14 @@ def check_dependency_lock(root: Path, report: DeployReport) -> None:
     requirements_lock = read_text(root / "requirements.lock")
     requirements_cpu = read_text(root / "requirements-cpu.txt")
     requirements_cpu_lock = read_text(root / "requirements-cpu.lock")
-    lock_ranges = [
-        line
-        for line in requirement_lines(base_lock)
-        if has_version_range(line) or "==" not in line
-    ]
+    lock_ranges = [line for line in requirement_lines(base_lock) if has_version_range(line) or "==" not in line]
     root_lock_ranges = [
-        line
-        for line in requirement_lines(requirements_lock)
-        if has_version_range(line) or "==" not in line
+        line for line in requirement_lines(requirements_lock) if has_version_range(line) or "==" not in line
     ]
-    runtime_ranges = [
-        line
-        for line in requirement_lines(requirements)
-        if has_version_range(line) or "==" not in line
-    ]
-    cpu_ranges = [
-        line
-        for line in requirement_lines(requirements_cpu)
-        if has_version_range(line) or "==" not in line
-    ]
+    runtime_ranges = [line for line in requirement_lines(requirements) if has_version_range(line) or "==" not in line]
+    cpu_ranges = [line for line in requirement_lines(requirements_cpu) if has_version_range(line) or "==" not in line]
     cpu_lock_ranges = [
-        line
-        for line in requirement_lines(requirements_cpu_lock)
-        if has_version_range(line) or "==" not in line
+        line for line in requirement_lines(requirements_cpu_lock) if has_version_range(line) or "==" not in line
     ]
     report.add(
         "dependency_lock_exact",
@@ -493,9 +473,7 @@ def check_models_config(root: Path, report: DeployReport) -> None:
             for key, value in models.items()
             if isinstance(value, dict) and not (value.get("task") or value.get("type"))
         ]
-        report.add(
-            "models_yml_task_fields", not missing_task, {"missing_task": missing_task}
-        )
+        report.add("models_yml_task_fields", not missing_task, {"missing_task": missing_task})
 
 
 def check_ci_workflows(root: Path, report: DeployReport) -> None:
@@ -509,6 +487,14 @@ def check_ci_workflows(root: Path, report: DeployReport) -> None:
             item in ci
             for item in [
                 'python-version: "3.12"',
+                'node-version: "22"',
+                "npm ci",
+                "npm run console:generate",
+                "git diff --exit-code -- frontend/console-next/src/api/generated.ts",
+                "npm run console:lint",
+                "npm run console:test",
+                "npm run console:typecheck",
+                "npm run console:build",
                 "python -m pytest -q",
                 "python tools/deploy_check.py --json",
                 "python tools/portrait_model_regression.py",
@@ -519,9 +505,7 @@ def check_ci_workflows(root: Path, report: DeployReport) -> None:
     )
     report.add(
         "ci_security_audit_scheduled",
-        "pip-audit" in audit
-        and "python tools/security_audit.py" in audit
-        and "cron:" in audit,
+        "pip-audit" in audit and "python tools/security_audit.py" in audit and "cron:" in audit,
         {"path": str(audit_path)},
     )
 
@@ -585,13 +569,8 @@ def check_import_app(root: Path, report: DeployReport) -> None:
             {"present": removed_routes_present},
         )
         console_views_dir = root / "frontend" / "console" / "views"
-        console_source = "\n".join(
-            path.read_text(encoding="utf-8")
-            for path in sorted(console_views_dir.glob("*.js"))
-        )
-        duplicate_v1_prefixes = sorted(
-            set(re.findall(r"/v1(?:/[a-z0-9_-]+)*/v1/", console_source))
-        )
+        console_source = "\n".join(path.read_text(encoding="utf-8") for path in sorted(console_views_dir.glob("*.js")))
+        duplicate_v1_prefixes = sorted(set(re.findall(r"/v1(?:/[a-z0-9_-]+)*/v1/", console_source)))
         report.add(
             "console_no_duplicate_v1_prefixes",
             not duplicate_v1_prefixes,
@@ -625,9 +604,7 @@ def check_production_integrations(root: Path, report: DeployReport) -> None:
         "audit_prev_hash TEXT",
     ]
     missing_schema = [item for item in schema_required if item not in schema]
-    report.add(
-        "postgres_pgvector_schema", not missing_schema, {"missing": missing_schema}
-    )
+    report.add("postgres_pgvector_schema", not missing_schema, {"missing": missing_schema})
 
 
 def check_node_sdk_tests(root: Path, report: DeployReport) -> None:
@@ -637,9 +614,7 @@ def check_node_sdk_tests(root: Path, report: DeployReport) -> None:
         return
     node = shutil.which("node")
     if not node:
-        report.add(
-            "node_sdk_contract_tests", True, {"skipped": "未找到 node 可执行文件"}
-        )
+        report.add("node_sdk_contract_tests", True, {"skipped": "未找到 node 可执行文件"})
         return
     completed = subprocess.run(
         [node, str(test_path)],
@@ -682,13 +657,9 @@ def run_checks(args: argparse.Namespace) -> DeployReport:
 def main() -> int:
     parser = argparse.ArgumentParser(description="运行 gpu-services 静态部署检查。")
     parser.add_argument("--root", default=".", help="项目根目录。")
-    parser.add_argument(
-        "--import-app", action="store_true", help="导入 main.app 并校验关键路由。"
-    )
+    parser.add_argument("--import-app", action="store_true", help="导入 main.app 并校验关键路由。")
     parser.add_argument("--json", action="store_true", help="输出机器可读 JSON。")
-    parser.add_argument(
-        "--skip-node", action="store_true", help="跳过 Node.js 契约检查。"
-    )
+    parser.add_argument("--skip-node", action="store_true", help="跳过 Node.js 契约检查。")
     args = parser.parse_args()
 
     report = run_checks(args)

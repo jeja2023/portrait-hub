@@ -16,10 +16,8 @@ class ConsoleAcceptanceError(RuntimeError):
 
 
 REQUIRED_MARKERS = [
-    "console-app",
-    "/assets/console/api/client.js",
-    "/assets/console/state/store.js",
-    "/assets/console/views/app.js",
+    'id="app"',
+    "/assets/console-next/assets/",
 ]
 
 CHROME_CANDIDATES = [
@@ -30,8 +28,9 @@ CHROME_CANDIDATES = [
 ]
 
 
-def _console_url(base_url: str) -> str:
-    return base_url.rstrip("/") + "/console"
+def _console_url(base_url: str, console_path: str) -> str:
+    normalized_path = "/" + console_path.strip("/")
+    return base_url.rstrip("/") + normalized_path
 
 
 def _find_chrome_executable() -> Path | None:
@@ -78,15 +77,38 @@ def _run_playwright_acceptance(*, url: str, output: Path, timeout_ms: int) -> di
             if chrome is None:
                 raise
             browser = playwright.chromium.launch(executable_path=str(chrome))
-        page = browser.new_page(viewport={"width": 1440, "height": 960}, device_scale_factor=1)
+        page = browser.new_page(viewport={"width": 1440, "height": 900}, device_scale_factor=1)
+        console_errors: list[str] = []
+        page.on(
+            "console",
+            lambda message: (console_errors.append(message.text) if message.type == "error" else None),
+        )
+        page.add_init_script(
+            """
+            window.__portraitCspViolations = [];
+            document.addEventListener("securitypolicyviolation", (event) => {
+              window.__portraitCspViolations.push({
+                directive: event.effectiveDirective,
+                blockedURI: event.blockedURI
+              });
+            });
+            """
+        )
         page.goto(url, wait_until="networkidle", timeout=timeout_ms)
-        page.wait_for_selector("#console-app", timeout=timeout_ms)
+        page.wait_for_selector("#app > *", timeout=timeout_ms)
         body_text = page.locator("body").inner_text(timeout=timeout_ms)
         html = page.content()
         missing = _missing_markers(html)
+        csp_violations = page.evaluate("window.__portraitCspViolations || []")
         if missing:
             browser.close()
             raise ConsoleAcceptanceError("控制台 DOM 缺少必要标记: " + ", ".join(missing))
+        if csp_violations:
+            browser.close()
+            raise ConsoleAcceptanceError("控制台存在 CSP 违规: " + json.dumps(csp_violations, ensure_ascii=False))
+        if console_errors:
+            browser.close()
+            raise ConsoleAcceptanceError("控制台存在浏览器错误: " + " | ".join(console_errors[-8:]))
         page.screenshot(path=str(output), full_page=True)
         status = {
             "ok": True,
@@ -94,6 +116,8 @@ def _run_playwright_acceptance(*, url: str, output: Path, timeout_ms: int) -> di
             "url": url,
             "screenshot": str(output),
             "body_text_length": len(body_text),
+            "csp_violations": [],
+            "console_errors": [],
         }
         browser.close()
         return status
@@ -123,7 +147,7 @@ def _run_chrome_acceptance(*, url: str, output: Path, timeout_ms: int) -> dict[s
             "--no-default-browser-check",
             "--no-sandbox",
             f"--user-data-dir={profile}",
-            "--window-size=1440,960",
+            "--window-size=1440,900",
             f"--virtual-time-budget={timeout_ms}",
         ]
         dom = subprocess.run(
@@ -165,15 +189,18 @@ def _run_chrome_acceptance(*, url: str, output: Path, timeout_ms: int) -> dict[s
         "url": url,
         "screenshot": str(output),
         "body_text_length": len(body_text),
+        "csp_violations": "not-observable-in-fallback",
     }
 
 
-def run_console_acceptance(*, base_url: str, output: Path, timeout_ms: int) -> dict[str, Any]:
-    url = _console_url(base_url)
+def run_console_acceptance(*, base_url: str, console_path: str, output: Path, timeout_ms: int) -> dict[str, Any]:
+    url = _console_url(base_url, console_path)
     try:
         return _run_playwright_acceptance(url=url, output=output, timeout_ms=timeout_ms)
     except ImportError:
         return _run_chrome_acceptance(url=url, output=output, timeout_ms=timeout_ms)
+    except ConsoleAcceptanceError:
+        raise
     except Exception as exc:
         try:
             return _run_chrome_acceptance(url=url, output=output, timeout_ms=timeout_ms)
@@ -184,12 +211,18 @@ def run_console_acceptance(*, base_url: str, output: Path, timeout_ms: int) -> d
 def main() -> int:
     parser = argparse.ArgumentParser(description="捕获并校验 PortraitHub 控制台截图。")
     parser.add_argument("--base-url", default="http://127.0.0.1:8000")
+    parser.add_argument("--console-path", default="/console/next")
     parser.add_argument("--output", default="artifacts/console-acceptance.png")
     parser.add_argument("--timeout-ms", type=int, default=15000)
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args()
     try:
-        report = run_console_acceptance(base_url=args.base_url, output=Path(args.output), timeout_ms=args.timeout_ms)
+        report = run_console_acceptance(
+            base_url=args.base_url,
+            console_path=args.console_path,
+            output=Path(args.output),
+            timeout_ms=args.timeout_ms,
+        )
     except ConsoleAcceptanceError as exc:
         report = {"ok": False, "error": str(exc)}
     if args.json:

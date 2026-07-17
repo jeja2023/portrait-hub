@@ -8,6 +8,7 @@ from fastapi import (
     File,
     Form,
     HTTPException,
+    Query,
     UploadFile,
     status,
 )
@@ -18,6 +19,7 @@ from app.portrait_async import run_blocking_io
 from app.portrait_audit import audit_event
 from app.portrait_auth import permission_dependency
 from app.portrait_jobs import (
+    JobStatus,
     VideoJob,
     create_video_job,
     get_video_job,
@@ -28,7 +30,7 @@ from app.portrait_jobs import (
     request_cancel_video_job,
     restore_video_job,
 )
-from app.portrait_runtime_store import video_jobs_snapshots
+from app.portrait_pagination import normalize_list_pagination, page_items_keyset
 from app.portrait_request_context import (
     PortraitRequestContext,
     portrait_request_context,
@@ -39,6 +41,7 @@ from app.portrait_response import (
     portrait_success,
     raise_rollback_failure,
 )
+from app.portrait_runtime_store import video_jobs_snapshots
 from app.portrait_security import validate_job_id
 from app.portrait_task_queue import TASK_QUEUE
 from app.routes_inference_common import validate_detection_parameters
@@ -82,6 +85,56 @@ def raise_job_rollback_failure(
         "视频任务变更失败，且回滚持久化失败", original_error, rollback_errors
     )
 
+
+@router.get("/v1/jobs", dependencies=[Depends(permission_dependency("jobs:read"))])
+async def v1_list_jobs(
+    kind: str | None = Query(None),
+    status_filter: str | None = Query(None, alias="status"),
+    created_since: float | None = Query(None),
+    created_until: float | None = Query(None),
+    limit: int | None = Query(None),
+    offset: int | None = Query(None),
+    cursor: str | None = Query(None),
+    ctx: PortraitRequestContext = Depends(portrait_request_context),
+) -> dict[str, Any]:
+    allowed_kinds = {"video", "batch"}
+    if kind is not None and kind not in allowed_kinds:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="kind 必须为 video 或 batch")
+    allowed_statuses = {str(value) for value in JobStatus}
+    if status_filter is not None and status_filter not in allowed_statuses:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="status 无效")
+    if created_since is not None and created_until is not None and created_since > created_until:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="created_since 不能晚于 created_until")
+
+    await refresh_video_job_view()
+    rows: list[dict[str, Any]] = []
+    for job in video_jobs_snapshots(ctx.tenant_id):
+        job_kind = "batch" if job.job_id.startswith("batch_") else "video"
+        normalized_status = str(job.status)
+        if kind is not None and job_kind != kind:
+            continue
+        if status_filter is not None and normalized_status != status_filter:
+            continue
+        if created_since is not None and job.created_at < created_since:
+            continue
+        if created_until is not None and job.created_at > created_until:
+            continue
+        row = job.public_dict(include_result=False)
+        row["kind"] = job_kind
+        row["sort_created_at"] = -float(job.created_at)
+        rows.append(row)
+
+    rows.sort(key=lambda item: (item["sort_created_at"], item["job_id"]))
+    pagination_request = normalize_list_pagination(limit, offset, cursor)
+    page, pagination = page_items_keyset(
+        rows,
+        limit=pagination_request.limit,
+        offset=pagination_request.offset,
+        cursor=pagination_request.cursor,
+        key_fields=["sort_created_at", "job_id"],
+    )
+    public_page = [{key: value for key, value in item.items() if key != "sort_created_at"} for item in page]
+    return portrait_success(ctx.request_id, {"items": public_page, "jobs": public_page, **pagination})
 
 @router.post("/v1/jobs/video", dependencies=[Depends(permission_dependency("jobs"))])
 async def v1_create_video_job(

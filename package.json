@@ -1,14 +1,26 @@
 {
   "name": "portrait-hub",
-  "version": "0.9.1",
+  "version": "0.10.0",
   "private": true,
   "type": "commonjs",
   "description": "PortraitHub GPU 推理与人像智能服务",
+  "workspaces": [
+    "frontend/console-next"
+  ],
   "scripts": {
-    "check": "node --check frontend/console/console.js && node --check frontend/console/api/client.js && node --check frontend/console/state/store.js && node --check frontend/console/renderers/data-viewer.js && node --check frontend/console/visuals/previews.js && node --check frontend/console/views/navigation.js && node --check frontend/console/templates/core.js && node --check frontend/console/templates/access.js && node --check frontend/console/templates/governance.js && node --check frontend/console/templates/index.js && node --check frontend/console/runtime/formatting.js && node --check frontend/console/runtime/network.js && node --check frontend/console/visuals/results.js && node --check frontend/console/views/analysis.js && node --check frontend/console/views/gallery.js && node --check frontend/console/views/operations.js && node --check frontend/console/views/access.js && node --check frontend/console/views/observability.js && node --check frontend/console/views/governance.js && node --check frontend/console/views/results.js && node --check frontend/console/views/dashboard.js && node --check frontend/console/views/app.js && node --check examples/demo-clients/node_demo_client.js && node tests/test_node_sdk.js",
-    "test:node": "node tests/test_node_sdk.js"
+    "check": "npm run check:legacy && npm run test:node && npm run console:check",
+    "check:legacy": "node --check frontend/console/console.js && node --check frontend/console/api/client.js && node --check frontend/console/state/store.js && node --check frontend/console/renderers/data-viewer.js && node --check frontend/console/visuals/previews.js && node --check frontend/console/views/navigation.js && node --check frontend/console/templates/core.js && node --check frontend/console/templates/access.js && node --check frontend/console/templates/governance.js && node --check frontend/console/templates/index.js && node --check frontend/console/runtime/formatting.js && node --check frontend/console/runtime/network.js && node --check frontend/console/visuals/results.js && node --check frontend/console/views/analysis.js && node --check frontend/console/views/gallery.js && node --check frontend/console/views/operations.js && node --check frontend/console/views/access.js && node --check frontend/console/views/observability.js && node --check frontend/console/views/governance.js && node --check frontend/console/views/results.js && node --check frontend/console/views/dashboard.js && node --check frontend/console/views/app.js",
+    "test:node": "node tests/test_node_sdk.js",
+    "console:dev": "npm run dev -w @portrait-hub/console-next",
+    "console:generate": "python tools/export_openapi.py && npm run generate -w @portrait-hub/console-next && npx prettier --write frontend/console-next/src/api/generated.ts",
+    "console:lint": "npm run lint -w @portrait-hub/console-next",
+    "console:test": "npm run test -w @portrait-hub/console-next",
+    "console:typecheck": "npm run typecheck -w @portrait-hub/console-next",
+    "console:build": "npm run build -w @portrait-hub/console-next",
+    "console:e2e": "npm run e2e -w @portrait-hub/console-next",
+    "console:check": "npm run console:lint && npm run console:test && npm run console:typecheck && npm run console:build"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22.12 <23"
   }
 }

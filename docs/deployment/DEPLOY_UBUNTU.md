@@ -890,3 +890,23 @@ Compose 默认绑定：
 - 已设置 `API_TOKEN`。
 - 已设置调用方超时、重试和日志 request id。
 - 已完成至少一次真实模型压测。
+## 新版控制台灰度与回退
+
+本节适用于 `0.10.0`。该版本默认启用 Console Next，并将根路径 `/` 作为正式登录入口。
+
+构建镜像时，Node 22 builder 会在根 npm workspace 中执行 npm ci 与 npm run console:build；运行镜像只复制 frontend/console 和 frontend/console-next/dist，不安装 Node。非镜像部署必须先在仓库根目录执行相同构建命令，并确认 dist/index.html 与 dist/.vite/manifest.json 存在。
+
+入口与回退：
+
+- /：新版登录入口；已有有效会话时自动进入 /console。
+- /console：登录后的新版业务控制台，CONSOLE_DEFAULT_VERSION 默认 next。
+- /console/next：新版直接验收入口；/console/legacy：观察期回退入口。
+- CONSOLE_WORKBENCH_V2、CONSOLE_DEVELOPER_V2、CONSOLE_ADMIN_V2：分别控制工作台、开发者中心和系统管理。
+- 每组开关均有 PERCENT 与 TENANTS 配置。先用 TENANTS 开内部租户，再按 5%、25%、50%、100% 扩大；停止灰度时设为 false、0 和空列表。
+- 回退不需要删除 dist，也不得删除业务数据。关闭对应能力开关；全站回退时将 CONSOLE_DEFAULT_VERSION 设为 legacy 并重启服务。
+
+上线前执行 npm run console:check、npm run console:e2e、pytest -q tests/test_console_next_contracts.py 和 python tools/deploy_check.py --skip-node。真实 CSP 必须保持 script-src self，禁止 unsafe-inline 与 unsafe-eval。
+
+CONSOLE_WS_TICKET_TTL_SECONDS 默认 60 秒，ticket 单次消费并绑定租户、资源和权限。当前实现使用单进程有界内存，只适用于单 API worker；多 worker 或多副本拓扑必须先接入共享、原子消费、带 TTL 的存储，再扩大新版视频任务和视频流灰度。
+
+生产观察、自动回退阈值和 legacy 删除门槛以根目录《控制台前端重建方案.md》及 docs/frontend/CONSOLE_NEXT_ACCEPTANCE.md 为准。

@@ -6,6 +6,7 @@ from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect, st
 
 from app.portrait_async import run_blocking_io
 from app.portrait_auth import has_permission, jwt_tenant_matches, roles_from_claims, verify_hs256_jwt
+from app.portrait_console_access import consume_console_ws_ticket
 from app.portrait_jobs import get_video_job
 from app.portrait_security import validate_job_id, validate_stream_id
 from app.portrait_streams import get_stream, refresh_streams_state
@@ -18,7 +19,26 @@ def websocket_tenant(websocket: WebSocket) -> str:
     return websocket.headers.get("x-tenant-id") or websocket.query_params.get("tenant_id") or "default"
 
 
-async def require_websocket_permission(websocket: WebSocket, permission: str, tenant_id: str) -> bool:
+async def require_websocket_permission(
+    websocket: WebSocket,
+    permission: str,
+    tenant_id: str,
+    *,
+    resource_type: str,
+    resource_id: str,
+) -> bool:
+    ticket = websocket.query_params.get("ticket") or ""
+    if ticket:
+        if consume_console_ws_ticket(
+            ticket,
+            tenant_id=tenant_id,
+            resource_type=resource_type,
+            resource_id=resource_id,
+            permission=permission,
+        ):
+            return True
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return False
     authorization = websocket.headers.get("authorization") or ""
     query_bearer = websocket.query_params.get("access_token") or ""
     token = websocket.query_params.get("token") or websocket.headers.get("x-api-key") or ""
@@ -61,12 +81,18 @@ async def send_until_closed(websocket: WebSocket, payload_factory: Any, *, inter
 @router.websocket("/ws/jobs/{job_id}")
 async def ws_job_progress(websocket: WebSocket, job_id: str) -> None:
     tenant_id = websocket_tenant(websocket)
-    if not await require_websocket_permission(websocket, "jobs:read", tenant_id):
-        return
     try:
         job_id = validate_job_id(job_id)
     except HTTPException:
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
+    if not await require_websocket_permission(
+        websocket,
+        "jobs:read",
+        tenant_id,
+        resource_type="job",
+        resource_id=job_id,
+    ):
         return
 
     def payload() -> dict[str, Any]:
@@ -81,12 +107,18 @@ async def ws_job_progress(websocket: WebSocket, job_id: str) -> None:
 @router.websocket("/ws/streams/{stream_id}")
 async def ws_stream_events(websocket: WebSocket, stream_id: str) -> None:
     tenant_id = websocket_tenant(websocket)
-    if not await require_websocket_permission(websocket, "streams:read", tenant_id):
-        return
     try:
         stream_id = validate_stream_id(stream_id)
     except HTTPException:
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
+    if not await require_websocket_permission(
+        websocket,
+        "streams:read",
+        tenant_id,
+        resource_type="stream",
+        resource_id=stream_id,
+    ):
         return
     limit = min(max(1, int(websocket.query_params.get("limit", API_LIST_DEFAULT_LIMIT))), 200)
 

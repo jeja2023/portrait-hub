@@ -1,3 +1,13 @@
+FROM node:22.14.0-bookworm-slim AS console-builder
+
+WORKDIR /build
+
+COPY package.json package-lock.json ./
+COPY frontend/console-next/package.json /build/frontend/console-next/package.json
+RUN npm ci
+
+COPY frontend/console-next /build/frontend/console-next
+RUN npm run console:build
 FROM nvidia/cuda:12.4.1-cudnn-runtime-ubuntu22.04 AS builder
 
 ENV DEBIAN_FRONTEND=noninteractive \
@@ -65,7 +75,8 @@ RUN sed -i \
 
 COPY --from=builder /opt/portrait-hub-venv /opt/portrait-hub-venv
 COPY app /workspace/app
-COPY frontend /workspace/frontend
+COPY frontend/console /workspace/frontend/console
+COPY --from=console-builder /build/frontend/console-next/dist /workspace/frontend/console-next/dist
 COPY main.py /workspace/main.py
 COPY models.yml /workspace/models.yml
 COPY model-capabilities.yml /workspace/model-capabilities.yml

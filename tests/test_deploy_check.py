@@ -40,6 +40,7 @@ def test_deploy_check_enforces_single_stream_api() -> None:
     assert checks["app_required_routes"]["ok"] is True
     assert checks["app_removed_routes"]["ok"] is True
 
+
 def test_deploy_check_tracks_stream_worker_service() -> None:
     report = DeployReport()
 
@@ -47,6 +48,7 @@ def test_deploy_check_tracks_stream_worker_service() -> None:
 
     checks = {item["name"]: item for item in report.checks}
     assert checks["compose_stream_worker_service"]["ok"] is True
+    assert checks["dockerfile_copies_frontend"]["ok"] is True
 
 
 def test_deploy_check_tracks_cpu_only_compose_contract() -> None:

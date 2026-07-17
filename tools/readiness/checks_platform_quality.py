@@ -37,6 +37,10 @@ def check_platform_quality(root: Path) -> list[dict[str, Any]]:
     console_html = src["console_html"]
     console_js = src["console_js"]
     console_module_sources = src["console_module_sources"]
+    console_next_package = src["console_next_package"]
+    console_next_vite = src["console_next_vite"]
+    console_next_session = src["console_next_session"]
+    console_next_manifest = src["console_next_manifest"]
     portrait_console_routes = src["portrait_console_routes"]
     portrait_gallery_orchestration = src["portrait_gallery_orchestration"]
     portrait_gallery_routes = src["portrait_gallery_routes"]
@@ -54,11 +58,7 @@ def check_platform_quality(root: Path) -> list[dict[str, Any]]:
         },
         {
             "name": "quality:core_explicit_imports",
-            "ok": (
-                "__all__" in core
-                and "import *" not in core
-                and "from app.core import *" not in route_modules
-            ),
+            "ok": ("__all__" in core and "import *" not in core and "from app.core import *" not in route_modules),
         },
         {
             "name": "quality:strict_type_check_gate",
@@ -71,8 +71,7 @@ def check_platform_quality(root: Path) -> list[dict[str, Any]]:
                 and "discover_default_targets" in type_check_tool
                 and "DEFAULT_TARGET_ROOTS" in type_check_tool
                 and "--fallback-ok" in type_check_tool
-                and "mypy is not installed; install requirements/dev.txt"
-                in type_check_tool
+                and "mypy is not installed; install requirements/dev.txt" in type_check_tool
                 and '"app"' in type_check_tool
                 and '"tools"' in type_check_tool
                 and '"sdk"' in type_check_tool
@@ -133,8 +132,7 @@ def check_platform_quality(root: Path) -> list[dict[str, Any]]:
                 and "endpointMap" in console_config_js
                 and "alertDefaults" in console_config_js
                 and "window.PortraitConsoleConfig" in console_runtime_js
-                and "const endpointMap = consoleConfig.endpointMap"
-                in console_runtime_js
+                and "const endpointMap = consoleConfig.endpointMap" in console_runtime_js
             ),
         },
         {
@@ -144,8 +142,7 @@ def check_platform_quality(root: Path) -> list[dict[str, Any]]:
                 and "/assets/console/state/store.js" in console_html
                 and "/assets/console/views/gallery.js" in console_html
                 and "/assets/console/views/app.js" in console_html
-                and console_html.index("/assets/console/views/app.js")
-                < console_html.index("/assets/console.js")
+                and console_html.index("/assets/console/views/app.js") < console_html.index("/assets/console.js")
                 and "PortraitConsoleRuntime" in console_js
                 and "runtime.init" in console_js
                 and len(console_js) < 2000
@@ -157,8 +154,28 @@ def check_platform_quality(root: Path) -> list[dict[str, Any]]:
                 and "modules.views" in console_module_sources
                 and "modules.renderers" in console_module_sources
                 and "modules.visuals" in console_module_sources
-                and "def console_asset_path" in portrait_console_routes
+                and "def safe_console_asset" in portrait_console_routes
                 and '"/assets/console/{asset_path:path}"' in portrait_console_routes
+            ),
+        },
+        {
+            "name": "frontend:console_next_production_chain",
+            "ok": (
+                '"vue": "3.5.40"' in console_next_package
+                and '"element-plus": "2.14.3"' in console_next_package
+                and 'base: "/assets/console-next/"' in console_next_vite
+                and "window.sessionStorage" in console_next_session
+                and "window.localStorage" not in console_next_session
+                and "index.html" in console_next_manifest
+                and '"/console/next"' in portrait_console_routes
+                and '"/console/legacy"' in portrait_console_routes
+                and '"/assets/console-next/{asset_path:path}"' in portrait_console_routes
+                and "def next_console_csp" in portrait_console_routes
+                and "script-src 'self'" in portrait_console_routes
+                and "unsafe-eval" not in portrait_console_routes
+                and 'node-version: "22"' in ci_workflow
+                and "npm run console:generate" in ci_workflow
+                and "npm run console:build" in ci_workflow
             ),
         },
         {
@@ -166,8 +183,7 @@ def check_platform_quality(root: Path) -> list[dict[str, Any]]:
             "ok": (
                 "def enroll_gallery_person" in portrait_gallery_orchestration
                 and "def search_gallery_image" in portrait_gallery_orchestration
-                and "def create_async_gallery_search_batch"
-                in portrait_gallery_orchestration
+                and "def create_async_gallery_search_batch" in portrait_gallery_orchestration
                 and "decode_upload_images" in portrait_gallery_orchestration
                 and "rollback_gallery_mutation" in portrait_gallery_orchestration
                 and "enroll_gallery_person" in portrait_gallery_routes
@@ -202,19 +218,13 @@ def check_platform_quality(root: Path) -> list[dict[str, Any]]:
                 and "def production_externalization_failures" in production_gates
                 and "def validate_production_externalization" in production_gates
                 and "validate_production_externalization()" in server
-                and "PORTRAIT_RUNTIME_PROFILE: ${PORTRAIT_RUNTIME_PROFILE:-development}"
-                in compose
-                and "PRODUCTION_EXTERNAL_SERVICES_REQUIRED: ${PRODUCTION_EXTERNAL_SERVICES_REQUIRED:-true}"
-                in compose
-                and "PORTRAIT_STORAGE_BACKEND: ${PORTRAIT_STORAGE_BACKEND:-json}"
-                in compose
-                and "PORTRAIT_VECTOR_BACKEND: ${PORTRAIT_VECTOR_BACKEND:-local}"
-                in compose
-                and "PORTRAIT_OBJECT_STORAGE_BACKEND: ${PORTRAIT_OBJECT_STORAGE_BACKEND:-local}"
-                in compose
+                and "PORTRAIT_RUNTIME_PROFILE: ${PORTRAIT_RUNTIME_PROFILE:-development}" in compose
+                and "PRODUCTION_EXTERNAL_SERVICES_REQUIRED: ${PRODUCTION_EXTERNAL_SERVICES_REQUIRED:-true}" in compose
+                and "PORTRAIT_STORAGE_BACKEND: ${PORTRAIT_STORAGE_BACKEND:-json}" in compose
+                and "PORTRAIT_VECTOR_BACKEND: ${PORTRAIT_VECTOR_BACKEND:-local}" in compose
+                and "PORTRAIT_OBJECT_STORAGE_BACKEND: ${PORTRAIT_OBJECT_STORAGE_BACKEND:-local}" in compose
                 and "TASK_QUEUE_BACKEND: ${TASK_QUEUE_BACKEND:-local}" in compose
-                and "OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}"
-                in compose
+                and "OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}" in compose
                 and "PORTRAIT_RUNTIME_PROFILE=development" in env_example
                 and "PRODUCTION_EXTERNAL_SERVICES_REQUIRED=true" in env_example
                 and "PORTRAIT_RUNTIME_PROFILE=production"

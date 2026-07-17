@@ -46,25 +46,17 @@ def api_request(path: str = "/v1/test") -> Request:
 
 
 def encode_segment(payload: dict | bytes) -> str:
-    data = (
-        payload
-        if isinstance(payload, bytes)
-        else json.dumps(payload, separators=(",", ":")).encode("utf-8")
-    )
+    data = payload if isinstance(payload, bytes) else json.dumps(payload, separators=(",", ":")).encode("utf-8")
     return base64.urlsafe_b64encode(data).decode("ascii").rstrip("=")
 
 
-def hs256_token(
-    payload: dict, secret: str = "test-secret", kid: str | None = None
-) -> str:
+def hs256_token(payload: dict, secret: str = "test-secret", kid: str | None = None) -> str:
     header_payload = {"alg": "HS256", "typ": "JWT"}
     if kid is not None:
         header_payload["kid"] = kid
     header = encode_segment(header_payload)
     body = encode_segment(payload)
-    signature = hmac.new(
-        secret.encode("utf-8"), f"{header}.{body}".encode("ascii"), hashlib.sha256
-    ).digest()
+    signature = hmac.new(secret.encode("utf-8"), f"{header}.{body}".encode("ascii"), hashlib.sha256).digest()
     return f"{header}.{body}.{encode_segment(signature)}"
 
 
@@ -165,9 +157,7 @@ async def test_require_api_token_rejects_unsigned_jwt_shape_when_rbac_is_enabled
     monkeypatch.setattr(portrait_auth, "JWT_SECRET", "test-secret")
 
     with pytest.raises(HTTPException) as exc_info:
-        await security.require_api_token(
-            api_request(), authorization="Bearer header.payload.signature"
-        )
+        await security.require_api_token(api_request(), authorization="Bearer header.payload.signature")
 
     assert exc_info.value.status_code == 401
 
@@ -180,9 +170,7 @@ async def test_require_api_token_fails_closed_when_rbac_has_no_credentials(
     monkeypatch.setattr(security, "API_TOKEN", None)
 
     with pytest.raises(HTTPException) as exc_info:
-        await security.require_api_token(
-            api_request(), authorization=None, x_api_key=None
-        )
+        await security.require_api_token(api_request(), authorization=None, x_api_key=None)
 
     assert exc_info.value.status_code == 401
 
@@ -196,9 +184,7 @@ async def test_require_api_token_fails_closed_when_auth_is_required_without_back
     monkeypatch.setattr(security, "API_TOKEN", None)
 
     with pytest.raises(HTTPException) as exc_info:
-        await security.require_api_token(
-            api_request(), authorization=None, x_api_key=None
-        )
+        await security.require_api_token(api_request(), authorization=None, x_api_key=None)
 
     assert exc_info.value.status_code == 401
     assert "no credential backend" in str(exc_info.value.detail)
@@ -247,9 +233,7 @@ async def test_require_api_token_rejects_jwt_for_wrong_tenant(monkeypatch) -> No
     token = hs256_token(valid_jwt_payload(tenant_id="tenant-a"))
 
     with pytest.raises(HTTPException) as exc_info:
-        await security.require_api_token(
-            api_request(), authorization=f"Bearer {token}", x_tenant_id="tenant-b"
-        )
+        await security.require_api_token(api_request(), authorization=f"Bearer {token}", x_tenant_id="tenant-b")
 
     assert exc_info.value.status_code == 403
     assert "租户" in str(exc_info.value.detail)
@@ -262,9 +246,7 @@ async def test_permission_dependency_accepts_tenant_list_claim(monkeypatch) -> N
     monkeypatch.setattr(portrait_auth, "JWT_ISSUER", "portrait-hub")
     monkeypatch.setattr(portrait_auth, "JWT_AUDIENCE", "portrait-hub-api")
     monkeypatch.setattr(portrait_auth, "JWT_REQUIRE_TENANT", True)
-    token = hs256_token(
-        valid_jwt_payload(roles=["viewer"], tenants=["tenant-a", "tenant-b"])
-    )
+    token = hs256_token(valid_jwt_payload(roles=["viewer"], tenants=["tenant-a", "tenant-b"]))
 
     await portrait_auth.require_permission(
         "gallery:read",
@@ -304,9 +286,7 @@ def test_v1_infers_tenant_from_single_tenant_jwt_when_header_required(
     token = hs256_token(valid_jwt_payload(roles=["operator"], tenant_id="tenant-a"))
     client = TestClient(app)
 
-    response = client.get(
-        "/v1/admin/status", headers={"Authorization": f"Bearer {token}"}
-    )
+    response = client.get("/v1/admin/status", headers={"Authorization": f"Bearer {token}"})
 
     assert response.status_code == 200, response.text
     assert response.json()["data"]["tenant_id"] == "tenant-a"
@@ -323,14 +303,10 @@ def test_v1_multi_tenant_jwt_requires_explicit_tenant_when_header_required(
     monkeypatch.setattr(portrait_auth, "JWT_AUDIENCE", "portrait-hub-api")
     monkeypatch.setattr(portrait_auth, "JWT_REQUIRE_TENANT", True)
     monkeypatch.setattr(portrait_security, "TENANT_HEADER_REQUIRED", True)
-    token = hs256_token(
-        valid_jwt_payload(roles=["operator"], tenants=["tenant-a", "tenant-b"])
-    )
+    token = hs256_token(valid_jwt_payload(roles=["operator"], tenants=["tenant-a", "tenant-b"]))
     client = TestClient(app)
 
-    response = client.get(
-        "/v1/admin/status", headers={"Authorization": f"Bearer {token}"}
-    )
+    response = client.get("/v1/admin/status", headers={"Authorization": f"Bearer {token}"})
 
     assert response.status_code == 400
     assert "缺少 x-tenant-id 请求头" in api_error_message(response)
@@ -361,9 +337,7 @@ def test_legacy_model_management_writes_require_models_write(monkeypatch) -> Non
     token = hs256_token(valid_jwt_payload(roles=["viewer"]))
     client = TestClient(app)
 
-    response = client.post(
-        "/v1/admin/models/reload-config", headers={"Authorization": f"Bearer {token}"}
-    )
+    response = client.post("/v1/admin/models/reload-config", headers={"Authorization": f"Bearer {token}"})
 
     assert response.status_code == 403
     assert "models:write" in api_error_message(response)
@@ -457,9 +431,7 @@ def test_algorithm_role_can_run_inference(monkeypatch) -> None:
     monkeypatch.setattr(portrait_auth, "JWT_AUDIENCE", "portrait-hub-api")
     token = hs256_token(valid_jwt_payload(roles=["algorithm"]))
 
-    assert portrait_auth.has_permission(
-        portrait_auth.roles_from_claims(portrait_auth.verify_hs256_jwt(token)), "infer"
-    )
+    assert portrait_auth.has_permission(portrait_auth.roles_from_claims(portrait_auth.verify_hs256_jwt(token)), "infer")
 
 
 def test_legacy_vision_requires_infer_permission(monkeypatch) -> None:
@@ -532,9 +504,7 @@ def test_ready_deep_redacts_model_readiness_errors(monkeypatch, caplog) -> None:
     monkeypatch.setattr(portrait_auth, "API_TOKEN", "platform-token")
     monkeypatch.setattr(portrait_auth, "RBAC_ENABLED", False)
 
-    monkeypatch.setattr(
-        routes_health.ort, "get_available_providers", lambda: ["CUDAExecutionProvider"]
-    )
+    monkeypatch.setattr(routes_health.ort, "get_available_providers", lambda: ["CUDAExecutionProvider"])
     monkeypatch.setattr(
         routes_health,
         "MODEL_CONFIGS",
@@ -595,26 +565,16 @@ def test_admin_namespace_uses_dedicated_rbac_permissions(monkeypatch) -> None:
     operator = hs256_token(valid_jwt_payload(roles=["operator"]))
     auditor = hs256_token(valid_jwt_payload(roles=["auditor"]))
 
-    viewer_export = client.get(
-        "/v1/admin/export", headers={"Authorization": f"Bearer {viewer}"}
-    )
+    viewer_export = client.get("/v1/admin/export", headers={"Authorization": f"Bearer {viewer}"})
     algorithm_cleanup = client.post(
         "/v1/admin/retention/cleanup",
         headers={"Authorization": f"Bearer {algorithm}"},
         json={"retention_days": 0},
     )
-    operator_status = client.get(
-        "/v1/admin/status", headers={"Authorization": f"Bearer {operator}"}
-    )
-    operator_console = client.get(
-        "/console", headers={"Authorization": f"Bearer {operator}"}
-    )
-    viewer_console = client.get(
-        "/console", headers={"Authorization": f"Bearer {viewer}"}
-    )
-    auditor_export = client.get(
-        "/v1/admin/export", headers={"Authorization": f"Bearer {auditor}"}
-    )
+    operator_status = client.get("/v1/admin/status", headers={"Authorization": f"Bearer {operator}"})
+    operator_console = client.get("/console", headers={"Authorization": f"Bearer {operator}"})
+    viewer_console = client.get("/console", headers={"Authorization": f"Bearer {viewer}"})
+    auditor_export = client.get("/v1/admin/export", headers={"Authorization": f"Bearer {auditor}"})
     auditor_cleanup = client.post(
         "/v1/admin/retention/cleanup",
         headers={"Authorization": f"Bearer {auditor}"},
@@ -627,8 +587,8 @@ def test_admin_namespace_uses_dedicated_rbac_permissions(monkeypatch) -> None:
     assert "admin:retention" in api_error_message(algorithm_cleanup)
     assert operator_status.status_code == 200
     assert operator_console.status_code == 200
-    assert viewer_console.status_code == 403
-    assert "admin:status" in api_error_message(viewer_console)
+    assert viewer_console.status_code == 200
+    assert "Content-Security-Policy" in viewer_console.headers
     assert auditor_export.status_code == 200
     assert auditor_cleanup.status_code == 403
     assert "admin:retention" in api_error_message(auditor_cleanup)
@@ -661,9 +621,7 @@ def test_public_health_and_ready_do_not_expose_runtime_details(monkeypatch) -> N
 def test_public_ready_accepts_cpu_fallback_without_exposing_runtime_details(
     monkeypatch,
 ) -> None:
-    monkeypatch.setattr(
-        routes_health.ort, "get_available_providers", lambda: ["CPUExecutionProvider"]
-    )
+    monkeypatch.setattr(routes_health.ort, "get_available_providers", lambda: ["CPUExecutionProvider"])
     monkeypatch.setattr(runtime_sessions, "CPU_FALLBACK_ENABLED", True)
     client = TestClient(app)
 
@@ -692,12 +650,8 @@ def test_verify_hs256_jwt_accepts_rotated_keyring_secret_with_kid(monkeypatch) -
     monkeypatch.setattr(portrait_auth, "JWT_SECRET_KEYRING", "v1=old-secret")
     monkeypatch.setattr(portrait_auth, "JWT_ISSUER", "portrait-hub")
     monkeypatch.setattr(portrait_auth, "JWT_AUDIENCE", "portrait-hub-api")
-    old_token = hs256_token(
-        valid_jwt_payload(roles=["viewer"]), secret="old-secret", kid="v1"
-    )
-    new_token = hs256_token(
-        valid_jwt_payload(roles=["operator"]), secret="new-secret", kid="v2"
-    )
+    old_token = hs256_token(valid_jwt_payload(roles=["viewer"]), secret="old-secret", kid="v1")
+    new_token = hs256_token(valid_jwt_payload(roles=["operator"]), secret="new-secret", kid="v2")
 
     assert portrait_auth.verify_hs256_jwt(old_token)["roles"] == ["viewer"]
     assert portrait_auth.verify_hs256_jwt(new_token)["roles"] == ["operator"]
@@ -833,16 +787,12 @@ async def test_permission_dependency_still_checks_roles(monkeypatch) -> None:
     token = hs256_token(valid_jwt_payload())
 
     with pytest.raises(HTTPException) as exc_info:
-        await portrait_auth.require_permission(
-            "models:write", authorization=f"Bearer {token}"
-        )
+        await portrait_auth.require_permission("models:write", authorization=f"Bearer {token}")
 
     assert exc_info.value.status_code == 403
 
 
-def test_get_model_path_uses_configured_artifact_path(
-    monkeypatch, workspace_tmp_path: Path
-) -> None:
+def test_get_model_path_uses_configured_artifact_path(monkeypatch, workspace_tmp_path: Path) -> None:
     models_root = workspace_tmp_path / "models"
     models_root.mkdir(parents=True)
     model_path = models_root / "detector.onnx"
@@ -854,15 +804,10 @@ def test_get_model_path_uses_configured_artifact_path(
         lambda key: {"artifact": {"path": "detector.onnx"}},
     )
 
-    assert (
-        model_package.get_model_path("portrait_hub", "detector.onnx")
-        == model_path.resolve()
-    )
+    assert model_package.get_model_path("portrait_hub", "detector.onnx") == model_path.resolve()
 
 
-def test_get_model_path_rejects_escaping_artifact_path(
-    monkeypatch, workspace_tmp_path: Path
-) -> None:
+def test_get_model_path_rejects_escaping_artifact_path(monkeypatch, workspace_tmp_path: Path) -> None:
     models_root = workspace_tmp_path / "models"
     models_root.mkdir(parents=True)
     monkeypatch.setattr(model_package, "MODELS_ROOT", models_root.resolve())
@@ -878,9 +823,7 @@ def test_get_model_path_rejects_escaping_artifact_path(
     assert exc_info.value.status_code == 400
 
 
-def test_get_model_path_missing_model_does_not_echo_model_id(
-    monkeypatch, workspace_tmp_path: Path
-) -> None:
+def test_get_model_path_missing_model_does_not_echo_model_id(monkeypatch, workspace_tmp_path: Path) -> None:
     models_root = workspace_tmp_path / "models"
     models_root.mkdir(parents=True)
     monkeypatch.setattr(model_package, "MODELS_ROOT", models_root.resolve())

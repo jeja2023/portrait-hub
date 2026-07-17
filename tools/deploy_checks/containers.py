@@ -17,20 +17,25 @@ def check_docker_files(root: Path, report: DeployReport) -> None:
     cpu_compose_text = read_text(root / "docker-compose.cpu.yml")
     cpu_compose = yaml.safe_load(cpu_compose_text) or {}
     services = compose.get("services", {}) if isinstance(compose, dict) else {}
-    cpu_services = (
-        cpu_compose.get("services", {}) if isinstance(cpu_compose, dict) else {}
-    )
+    cpu_services = cpu_compose.get("services", {}) if isinstance(cpu_compose, dict) else {}
     service_names = sorted(services) if isinstance(services, dict) else []
     cpu_service_names = sorted(cpu_services) if isinstance(cpu_services, dict) else []
     report.add("dockerfile_copies_app", "COPY app /workspace/app" in dockerfile, None)
     report.add(
         "dockerfile_copies_frontend",
-        "COPY frontend /workspace/frontend" in dockerfile,
+        all(
+            marker in dockerfile and marker in cpu_dockerfile
+            for marker in [
+                "FROM node:22.14.0-bookworm-slim AS console-builder",
+                "RUN npm ci",
+                "RUN npm run console:build",
+                "COPY frontend/console /workspace/frontend/console",
+                "COPY --from=console-builder /build/frontend/console-next/dist /workspace/frontend/console-next/dist",
+            ]
+        ),
         None,
     )
-    report.add(
-        "dockerfile_copies_main", "COPY main.py /workspace/main.py" in dockerfile, None
-    )
+    report.add("dockerfile_copies_main", "COPY main.py /workspace/main.py" in dockerfile, None)
     report.add(
         "dockerfile_copies_capabilities",
         "COPY model-capabilities.yml /workspace/model-capabilities.yml" in dockerfile,
@@ -41,9 +46,7 @@ def check_docker_files(root: Path, report: DeployReport) -> None:
         "COPY requirements/prod-optional.txt" in dockerfile,
         None,
     )
-    report.add(
-        "dockerfile_prod_optional_arg", "INSTALL_PROD_OPTIONAL" in dockerfile, None
-    )
+    report.add("dockerfile_prod_optional_arg", "INSTALL_PROD_OPTIONAL" in dockerfile, None)
     report.add(
         "cpu_dockerfile_uses_cpu_runtime",
         "FROM python:3.12-slim-bookworm" in cpu_dockerfile
@@ -53,9 +56,7 @@ def check_docker_files(root: Path, report: DeployReport) -> None:
         None,
     )
     report.add("compose_services", bool(service_names), {"services": service_names})
-    stream_worker = (
-        services.get("portrait-stream-worker") if isinstance(services, dict) else None
-    )
+    stream_worker = services.get("portrait-stream-worker") if isinstance(services, dict) else None
     report.add(
         "compose_stream_worker_service",
         isinstance(stream_worker, dict)
@@ -63,21 +64,12 @@ def check_docker_files(root: Path, report: DeployReport) -> None:
         and stream_worker.get("healthcheck", {}).get("disable") is True,
         {"service": stream_worker},
     )
-    video_job_worker = (
-        services.get("portrait-video-job-worker")
-        if isinstance(services, dict)
-        else None
-    )
+    video_job_worker = services.get("portrait-video-job-worker") if isinstance(services, dict) else None
     report.add(
         "compose_video_job_worker_service",
         isinstance(video_job_worker, dict)
         and "app.portrait_video_job_worker" in str(video_job_worker.get("command", ""))
-        and str(
-            video_job_worker.get("environment", {}).get(
-                "VIDEO_JOB_WORKER_IN_PROCESS", ""
-            )
-        ).lower()
-        == "false",
+        and str(video_job_worker.get("environment", {}).get("VIDEO_JOB_WORKER_IN_PROCESS", "")).lower() == "false",
         {"service": video_job_worker},
     )
     gpu_like = (
@@ -85,21 +77,14 @@ def check_docker_files(root: Path, report: DeployReport) -> None:
             name
             for name, service in services.items()
             if isinstance(service, dict)
-            and (
-                "NVIDIA_VISIBLE_DEVICES" in str(service.get("environment", ""))
-                or "gpus" in service
-            )
+            and ("NVIDIA_VISIBLE_DEVICES" in str(service.get("environment", "")) or "gpus" in service)
         ]
         if isinstance(services, dict)
         else []
     )
     report.add("compose_gpu_configuration", bool(gpu_like), {"gpu_services": gpu_like})
     cpu_env_text = json.dumps(
-        [
-            service.get("environment", {})
-            for service in cpu_services.values()
-            if isinstance(service, dict)
-        ],
+        [service.get("environment", {}) for service in cpu_services.values() if isinstance(service, dict)],
         ensure_ascii=False,
     )
     cpu_has_gpu_reservation = (
@@ -118,8 +103,7 @@ def check_docker_files(root: Path, report: DeployReport) -> None:
     )
     report.add(
         "cpu_compose_services",
-        cpu_service_names
-        == ["cpu-worker-0", "portrait-stream-worker", "portrait-video-job-worker"],
+        cpu_service_names == ["cpu-worker-0", "portrait-stream-worker", "portrait-video-job-worker"],
         {"services": cpu_service_names},
     )
     report.add(
@@ -139,15 +123,13 @@ def check_docker_files(root: Path, report: DeployReport) -> None:
     )
     report.add(
         "cpu_compose_has_no_gpu_reservation",
-        not cpu_has_gpu_reservation
-        and '"NVIDIA_VISIBLE_DEVICES": "none"' in cpu_env_text,
+        not cpu_has_gpu_reservation and '"NVIDIA_VISIBLE_DEVICES": "none"' in cpu_env_text,
         {"services": cpu_service_names},
     )
     report.add(
         "cpu_compose_uses_cpu_dockerfile",
         all(
-            isinstance(service, dict)
-            and service.get("build", {}).get("dockerfile") == "Dockerfile.cpu"
+            isinstance(service, dict) and service.get("build", {}).get("dockerfile") == "Dockerfile.cpu"
             for service in cpu_services.values()
         )
         if isinstance(cpu_services, dict) and cpu_services
@@ -155,12 +137,7 @@ def check_docker_files(root: Path, report: DeployReport) -> None:
         {"services": cpu_service_names},
     )
     volumes = (
-        [
-            volume
-            for service in services.values()
-            if isinstance(service, dict)
-            for volume in service.get("volumes", [])
-        ]
+        [volume for service in services.values() if isinstance(service, dict) for volume in service.get("volumes", [])]
         if isinstance(services, dict)
         else []
     )
@@ -194,11 +171,7 @@ def check_docker_files(root: Path, report: DeployReport) -> None:
         {"volumes": volumes},
     )
     env_text = json.dumps(
-        [
-            service.get("environment", {})
-            for service in services.values()
-            if isinstance(service, dict)
-        ],
+        [service.get("environment", {}) for service in services.values() if isinstance(service, dict)],
         ensure_ascii=False,
     )
     report.add(
@@ -270,20 +243,17 @@ def check_docker_files(root: Path, report: DeployReport) -> None:
     )
     report.add(
         "compose_auth_required_default",
-        "AUTH_REQUIRED: ${AUTH_REQUIRED:-true}"
-        in read_text(root / "docker-compose.yml"),
+        "AUTH_REQUIRED: ${AUTH_REQUIRED:-true}" in read_text(root / "docker-compose.yml"),
         None,
     )
     report.add(
         "compose_debug_disabled_default",
-        "DEBUG_ENDPOINTS_ENABLED: ${DEBUG_ENDPOINTS_ENABLED:-false}"
-        in read_text(root / "docker-compose.yml"),
+        "DEBUG_ENDPOINTS_ENABLED: ${DEBUG_ENDPOINTS_ENABLED:-false}" in read_text(root / "docker-compose.yml"),
         None,
     )
     report.add(
         "compose_api_docs_disabled_default",
-        "ENABLE_API_DOCS: ${ENABLE_API_DOCS:-false}"
-        in read_text(root / "docker-compose.yml"),
+        "ENABLE_API_DOCS: ${ENABLE_API_DOCS:-false}" in read_text(root / "docker-compose.yml"),
         None,
     )
     report.add(
@@ -294,16 +264,13 @@ def check_docker_files(root: Path, report: DeployReport) -> None:
     )
     report.add(
         "compose_rate_limit_enabled_default",
-        "RATE_LIMIT_PER_MINUTE: ${RATE_LIMIT_PER_MINUTE:-120}"
-        in read_text(root / "docker-compose.yml")
-        and "RATE_LIMIT_BURST: ${RATE_LIMIT_BURST:-240}"
-        in read_text(root / "docker-compose.yml"),
+        "RATE_LIMIT_PER_MINUTE: ${RATE_LIMIT_PER_MINUTE:-120}" in read_text(root / "docker-compose.yml")
+        and "RATE_LIMIT_BURST: ${RATE_LIMIT_BURST:-240}" in read_text(root / "docker-compose.yml"),
         None,
     )
     report.add(
         "compose_request_body_limit_default",
-        "MAX_REQUEST_BODY_BYTES: ${MAX_REQUEST_BODY_BYTES:-117440512}"
-        in read_text(root / "docker-compose.yml"),
+        "MAX_REQUEST_BODY_BYTES: ${MAX_REQUEST_BODY_BYTES:-117440512}" in read_text(root / "docker-compose.yml"),
         None,
     )
     report.add(
@@ -323,8 +290,7 @@ def check_docker_files(root: Path, report: DeployReport) -> None:
     )
     report.add(
         "compose_tenant_header_required_default",
-        "TENANT_HEADER_REQUIRED: ${TENANT_HEADER_REQUIRED:-true}"
-        in read_text(root / "docker-compose.yml"),
+        "TENANT_HEADER_REQUIRED: ${TENANT_HEADER_REQUIRED:-true}" in read_text(root / "docker-compose.yml"),
         None,
     )
     report.add(
@@ -345,20 +311,17 @@ def check_docker_files(root: Path, report: DeployReport) -> None:
     )
     report.add(
         "compose_require_encryption_default",
-        "REQUIRE_ENCRYPTION: ${REQUIRE_ENCRYPTION:-true}"
-        in read_text(root / "docker-compose.yml"),
+        "REQUIRE_ENCRYPTION: ${REQUIRE_ENCRYPTION:-true}" in read_text(root / "docker-compose.yml"),
         None,
     )
     report.add(
         "compose_audit_fail_closed_default",
-        "AUDIT_WRITE_FAIL_CLOSED: ${AUDIT_WRITE_FAIL_CLOSED:-true}"
-        in read_text(root / "docker-compose.yml"),
+        "AUDIT_WRITE_FAIL_CLOSED: ${AUDIT_WRITE_FAIL_CLOSED:-true}" in read_text(root / "docker-compose.yml"),
         None,
     )
     report.add(
         "compose_state_read_fail_closed_default",
-        "STATE_READ_FAIL_CLOSED: ${STATE_READ_FAIL_CLOSED:-true}"
-        in read_text(root / "docker-compose.yml"),
+        "STATE_READ_FAIL_CLOSED: ${STATE_READ_FAIL_CLOSED:-true}" in read_text(root / "docker-compose.yml"),
         None,
     )
     report.add(
@@ -371,8 +334,7 @@ def check_docker_files(root: Path, report: DeployReport) -> None:
         [
             name
             for name, service in services.items()
-            if isinstance(service, dict)
-            and "/ready" in str(service.get("healthcheck", ""))
+            if isinstance(service, dict) and "/ready" in str(service.get("healthcheck", ""))
         ]
         if isinstance(services, dict)
         else []

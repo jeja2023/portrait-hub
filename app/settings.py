@@ -48,8 +48,10 @@ def parse_csv_env(name: str, default: str = "") -> list[str]:
     return [item.strip() for item in os.getenv(name, default).split(",") if item.strip()]
 
 
-APP_VERSION = "0.9.1"
-PORTRAIT_RUNTIME_PROFILE = os.getenv("PORTRAIT_RUNTIME_PROFILE", os.getenv("APP_ENV", "development")).strip().lower() or "development"
+APP_VERSION = "0.10.0"
+PORTRAIT_RUNTIME_PROFILE = (
+    os.getenv("PORTRAIT_RUNTIME_PROFILE", os.getenv("APP_ENV", "development")).strip().lower() or "development"
+)
 PRODUCTION_EXTERNAL_SERVICES_REQUIRED = parse_bool_env("PRODUCTION_EXTERNAL_SERVICES_REQUIRED", True)
 MODELS_ROOT = Path(os.getenv("MODELS_ROOT", "models")).resolve()
 MODEL_CONFIG_PATH = Path(os.getenv("MODEL_CONFIG_PATH", "models.yml"))
@@ -77,7 +79,9 @@ STREAM_READ_TIMEOUT_SECONDS = parse_int_env("STREAM_READ_TIMEOUT_SECONDS", 10)
 STREAM_WORKER_POLL_INTERVAL_SECONDS = parse_float_env("STREAM_WORKER_POLL_INTERVAL_SECONDS", 5.0)
 STREAM_WORKER_MAX_RECONNECTS = parse_int_env("STREAM_WORKER_MAX_RECONNECTS", 3)
 STREAM_WORKER_LEASE_TTL_SECONDS = parse_float_env("STREAM_WORKER_LEASE_TTL_SECONDS", 30.0)
-STREAM_WORKER_PROCESS_LOCK_STALE_SECONDS = parse_float_env("STREAM_WORKER_PROCESS_LOCK_STALE_SECONDS", max(300.0, STREAM_WORKER_LEASE_TTL_SECONDS * 10.0))
+STREAM_WORKER_PROCESS_LOCK_STALE_SECONDS = parse_float_env(
+    "STREAM_WORKER_PROCESS_LOCK_STALE_SECONDS", max(300.0, STREAM_WORKER_LEASE_TTL_SECONDS * 10.0)
+)
 # 视频/流解码后端：auto（装了 PyAV 就用、否则 OpenCV）/ opencv / pyav。
 # PyAV 提供帧精确的单遍顺序解码；任何后端不可用或出错都会优雅回退到 OpenCV。
 VIDEO_DECODE_BACKEND = os.getenv("VIDEO_DECODE_BACKEND", "auto").strip().lower() or "auto"
@@ -107,9 +111,7 @@ MAX_LOADED_MODELS = parse_int_env("MAX_LOADED_MODELS", 0)
 GPU_QUEUE_LIMIT = parse_int_env("GPU_QUEUE_LIMIT", 1)
 GPU_QUEUE_LIMIT_PER_DEVICE = parse_int_env("GPU_QUEUE_LIMIT_PER_DEVICE", GPU_QUEUE_LIMIT)
 GPU_DEVICE_IDS = [
-    int(item)
-    for item in parse_csv_env("GPU_DEVICE_IDS", os.getenv("CUDA_VISIBLE_DEVICES", "0"))
-    if item.isdigit()
+    int(item) for item in parse_csv_env("GPU_DEVICE_IDS", os.getenv("CUDA_VISIBLE_DEVICES", "0")) if item.isdigit()
 ] or [0]
 CPU_FALLBACK_ENABLED = parse_bool_env("CPU_FALLBACK_ENABLED", True)
 # 强制纯 CPU 推理：直接以 CPUExecutionProvider 建会话，跳过 CUDA-first 的探测与回退重建。
@@ -140,25 +142,27 @@ PORTRAIT_ANALYSIS_ARCHIVE_DB_PATH = Path(
     )
 )
 ANALYSIS_ARCHIVE_ENABLED = parse_bool_env("ANALYSIS_ARCHIVE_ENABLED", True)
-ANALYSIS_ARCHIVE_PREVIEW_MAX_SIDE = parse_int_env(
-    "ANALYSIS_ARCHIVE_PREVIEW_MAX_SIDE", 480
-)
+ANALYSIS_ARCHIVE_PREVIEW_MAX_SIDE = parse_int_env("ANALYSIS_ARCHIVE_PREVIEW_MAX_SIDE", 480)
 VIDEO_JOB_INPUT_DIR = Path(os.getenv("VIDEO_JOB_INPUT_DIR", str(RUNTIME_STATE_DIR / "video-job-inputs")))
-PORTRAIT_STREAMS_STATE_PATH = Path(os.getenv("PORTRAIT_STREAMS_STATE_PATH", str(RUNTIME_STATE_DIR / "portrait-streams.json")))
-PORTRAIT_ACCESS_STATE_PATH = Path(os.getenv("PORTRAIT_ACCESS_STATE_PATH", str(RUNTIME_STATE_DIR / "portrait-access.json")))
+PORTRAIT_STREAMS_STATE_PATH = Path(
+    os.getenv("PORTRAIT_STREAMS_STATE_PATH", str(RUNTIME_STATE_DIR / "portrait-streams.json"))
+)
+PORTRAIT_ACCESS_STATE_PATH = Path(
+    os.getenv("PORTRAIT_ACCESS_STATE_PATH", str(RUNTIME_STATE_DIR / "portrait-access.json"))
+)
 ACCESS_STATS_FLUSH_INTERVAL_SECONDS = parse_float_env("ACCESS_STATS_FLUSH_INTERVAL_SECONDS", 5.0)
-PORTRAIT_REVIEW_STATE_PATH = Path(os.getenv("PORTRAIT_REVIEW_STATE_PATH", str(RUNTIME_STATE_DIR / "portrait-review-annotations.json")))
+PORTRAIT_REVIEW_STATE_PATH = Path(
+    os.getenv("PORTRAIT_REVIEW_STATE_PATH", str(RUNTIME_STATE_DIR / "portrait-review-annotations.json"))
+)
 PORTRAIT_ACCESS_KEY_ROTATION_GRACE_SECONDS = parse_float_env("PORTRAIT_ACCESS_KEY_ROTATION_GRACE_SECONDS", 300.0)
-STREAM_WORKER_LOCK_DIR = Path(os.getenv("STREAM_WORKER_LOCK_DIR", str(PORTRAIT_STREAMS_STATE_PATH.parent / "stream-worker-locks")))
+STREAM_WORKER_LOCK_DIR = Path(
+    os.getenv("STREAM_WORKER_LOCK_DIR", str(PORTRAIT_STREAMS_STATE_PATH.parent / "stream-worker-locks"))
+)
 ALLOW_PRIVATE_STREAM_HOSTS = parse_bool_env("ALLOW_PRIVATE_STREAM_HOSTS", False)
 STREAM_ALLOWED_HOSTS = [item.lower() for item in parse_csv_env("STREAM_ALLOWED_HOSTS")]
 ALLOW_PRIVATE_WEBHOOK_HOSTS = parse_bool_env("ALLOW_PRIVATE_WEBHOOK_HOSTS", False)
 WEBHOOK_ALLOWED_HOSTS = [item.lower() for item in parse_csv_env("WEBHOOK_ALLOWED_HOSTS")]
-WARMUP_MODELS = [
-    item.strip()
-    for item in os.getenv("WARMUP_MODELS", "").split(",")
-    if item.strip()
-]
+WARMUP_MODELS = [item.strip() for item in os.getenv("WARMUP_MODELS", "").split(",") if item.strip()]
 # 启动预热失败时是否让整个进程启动失败。默认 false：预热是尽力而为，单个模型加载失败只记录
 # 并继续预热其余模型，避免一个坏模型拖垮整个服务启动（其余可用模型仍能对外提供推理）。
 # 严格部署可设为 true，要求所有预热模型必须成功才允许启动。
@@ -179,6 +183,20 @@ JWT_REQUIRE_AUD = parse_bool_env("JWT_REQUIRE_AUD", True)
 # 本地开发通过 dev_start.py、测试套件通过 tests/conftest.py 重新选用宽松值。
 RBAC_ENABLED = parse_bool_env("RBAC_ENABLED", False)
 AUTH_REQUIRED = parse_bool_env("AUTH_REQUIRED", True)
+CONSOLE_WORKBENCH_V2 = parse_bool_env("CONSOLE_WORKBENCH_V2", True)
+CONSOLE_DEVELOPER_V2 = parse_bool_env("CONSOLE_DEVELOPER_V2", True)
+CONSOLE_ADMIN_V2 = parse_bool_env("CONSOLE_ADMIN_V2", True)
+CONSOLE_DEFAULT_VERSION = os.getenv("CONSOLE_DEFAULT_VERSION", "next").strip().lower()
+if CONSOLE_DEFAULT_VERSION not in {"legacy", "next"}:
+    CONSOLE_DEFAULT_VERSION = "next"
+CONSOLE_WORKBENCH_V2_PERCENT = max(0, min(parse_int_env("CONSOLE_WORKBENCH_V2_PERCENT", 0), 100))
+CONSOLE_DEVELOPER_V2_PERCENT = max(0, min(parse_int_env("CONSOLE_DEVELOPER_V2_PERCENT", 0), 100))
+CONSOLE_ADMIN_V2_PERCENT = max(0, min(parse_int_env("CONSOLE_ADMIN_V2_PERCENT", 0), 100))
+CONSOLE_WORKBENCH_V2_TENANTS = parse_csv_env("CONSOLE_WORKBENCH_V2_TENANTS")
+CONSOLE_DEVELOPER_V2_TENANTS = parse_csv_env("CONSOLE_DEVELOPER_V2_TENANTS")
+CONSOLE_ADMIN_V2_TENANTS = parse_csv_env("CONSOLE_ADMIN_V2_TENANTS")
+CONSOLE_WS_TICKET_TTL_SECONDS = max(5, min(parse_int_env("CONSOLE_WS_TICKET_TTL_SECONDS", 60), 300))
+CONSOLE_WS_TICKET_MAX_ENTRIES = max(128, min(parse_int_env("CONSOLE_WS_TICKET_MAX_ENTRIES", 4096), 65_536))
 DEBUG_ENDPOINTS_ENABLED = parse_bool_env("DEBUG_ENDPOINTS_ENABLED", False)
 ENABLE_API_DOCS = parse_bool_env("ENABLE_API_DOCS", False)
 TRUSTED_HOSTS = parse_csv_env("TRUSTED_HOSTS", DEFAULT_TRUSTED_HOSTS)
@@ -219,7 +237,9 @@ TASK_QUEUE_VISIBILITY_TIMEOUT_SECONDS = parse_float_env("TASK_QUEUE_VISIBILITY_T
 TASK_QUEUE_POLL_INTERVAL_SECONDS = parse_float_env("TASK_QUEUE_POLL_INTERVAL_SECONDS", 0.5)
 VIDEO_JOB_WORKER_IN_PROCESS = parse_bool_env("VIDEO_JOB_WORKER_IN_PROCESS", TASK_QUEUE_BACKEND in {"", "local"})
 REDIS_URL = os.getenv("REDIS_URL", "")
-STREAM_EVENT_STATE_PATH = Path(os.getenv("STREAM_EVENT_STATE_PATH", str(RUNTIME_STATE_DIR / "portrait-stream-events.jsonl")))
+STREAM_EVENT_STATE_PATH = Path(
+    os.getenv("STREAM_EVENT_STATE_PATH", str(RUNTIME_STATE_DIR / "portrait-stream-events.jsonl"))
+)
 MODEL_CAPABILITIES_PATH = Path(os.getenv("MODEL_CAPABILITIES_PATH", "model-capabilities.yml"))
 RATE_LIMIT_PER_MINUTE = parse_int_env("RATE_LIMIT_PER_MINUTE", DEFAULT_RATE_LIMIT_PER_MINUTE)
 RATE_LIMIT_BURST = parse_int_env("RATE_LIMIT_BURST", DEFAULT_RATE_LIMIT_BURST)

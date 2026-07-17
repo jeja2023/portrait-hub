@@ -20,7 +20,7 @@ import (
 )
 
 // SDKVersion 与仓库版本保持一致。
-const SDKVersion = "0.9.1"
+const SDKVersion = "0.10.0"
 
 const userAgent = "portrait-hub-sdk-go/" + SDKVersion
 

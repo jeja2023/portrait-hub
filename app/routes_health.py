@@ -21,15 +21,10 @@ from app.settings import APP_VERSION, OBJECT_STORAGE_DIR, READY_CHECK_DEPENDENCI
 router = APIRouter()
 
 
-@router.get("/")
-async def root() -> dict[str, Any]:
-    return await health()
-
-
 @router.get("/health")
 async def health() -> dict[str, Any]:
     # 公开存活探针：刻意保持最小化，不向未鉴权调用方泄露精确构建版本号
-    #（版本号改在鉴权的 /ready/deep 与管理员状态端点暴露给运维）。
+    # （版本号改在鉴权的 /ready/deep 与管理员状态端点暴露给运维）。
     return {"status": "healthy"}
 
 
