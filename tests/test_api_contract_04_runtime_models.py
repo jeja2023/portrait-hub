@@ -317,10 +317,10 @@ def test_legacy_reload_config_rolls_back_when_audit_fails(monkeypatch) -> None:
         routes_model_query.MODEL_ALIASES.update(alias_snapshot)
 
 
-def test_console_module_assets_are_served() -> None:
+def test_removed_console_module_assets_are_not_served() -> None:
     client = TestClient(app)
 
-    registered_modules = [
+    removed_assets = [
         "/assets/console/api/client.js",
         "/assets/console/state/store.js",
         "/assets/console/renderers/data-viewer.js",
@@ -333,28 +333,18 @@ def test_console_module_assets_are_served() -> None:
         "/assets/console/views/analysis.js",
         "/assets/console/views/gallery.js",
         "/assets/console/views/operations.js",
-    ]
-    for path in registered_modules:
-        response = client.get(path)
-        assert response.status_code == 200
-        assert "PortraitConsoleModules" in response.text
-
-    runtime_assets = [
         "/assets/console/runtime/formatting.js",
         "/assets/console/runtime/network.js",
         "/assets/console/visuals/results.js",
         "/assets/console/views/dashboard.js",
+        "/assets/console/views/app.js",
+        "/assets/console.js",
+        "/assets/console.css",
+        "/assets/console.config.js",
+        "/assets/console",
+        "/assets/console/",
     ]
-    for path in runtime_assets:
-        assert client.get(path).status_code == 200
-
-    runtime = client.get("/assets/console/views/app.js")
-    assert runtime.status_code == 200
-    assert "PortraitConsoleRuntime" in runtime.text
-
-    bootstrap = client.get("/assets/console.js")
-    assert bootstrap.status_code == 200
-    assert "runtime.init" in bootstrap.text
-    assert len(bootstrap.text) < 2000
+    for path in removed_assets:
+        assert client.get(path).status_code == 404
 
     assert client.get("/assets/console/../console.html").status_code == 404

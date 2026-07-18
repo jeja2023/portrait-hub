@@ -23,14 +23,14 @@ import java.util.StringJoiner;
 /**
  * PortraitHub API 的 Java 客户端（零第三方依赖，基于 java.net.http，需要 Java 11+）。
  *
- * <p>能力与 Python/Node SDK 对齐：Bearer / X-API-Key 双认证、租户头、结构化 HTTP 错误、
+ * <u>能力与 Python/Node SDK 对齐：Bearer / X-API-Key 双认证、租户头、结构化 HTTP 错误、
  * multipart 上传、路径段编码与请求超时。响应以原始 JSON 字符串返回，由调用方选择
- * JSON 库解析（保持零依赖）。</p>
+ * JSON 库解析（保持零依赖）。</u>
  */
 public final class PortraitHubClient {
 
     /** 与仓库版本保持一致。 */
-    public static final String SDK_VERSION = "0.10.0";
+    public static final String SDK_VERSION = "0.11.1";
 
     private static final String USER_AGENT = "portrait-hub-sdk-java/" + SDK_VERSION;
 

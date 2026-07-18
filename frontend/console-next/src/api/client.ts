@@ -23,6 +23,12 @@ export class ApiError extends Error {
   }
 }
 
+export interface ApiRawResponse<T> {
+  body: T;
+  httpStatus: number;
+  requestId: string | null;
+}
+
 function requestHeaders(initial?: HeadersInit, body?: BodyInit | null): Headers {
   const headers = new Headers(initial);
   for (const [key, value] of Object.entries(authHeaders())) headers.set(key, value);
@@ -40,18 +46,24 @@ async function decodeError(response: Response): Promise<ApiError> {
   } catch {
     body = {};
   }
-  const message = body.error?.message ?? body.detail ?? `请求失败（HTTP ${response.status}）`;
+  const detailMessage =
+    typeof body.detail === "string"
+      ? body.detail
+      : body.detail && typeof body.detail === "object" && "status" in body.detail
+        ? String((body.detail as { status: unknown }).status)
+        : null;
+  const message = body.error?.message ?? detailMessage ?? "请求失败（HTTP " + response.status + "）";
   const requestId = body.request_id ?? response.headers.get("x-request-id");
   return new ApiError({
     status: response.status,
     message,
     code: body.error?.code,
     requestId,
-    details: body.error?.details,
+    details: body.error?.details ?? body.detail,
   });
 }
 
-export async function apiRequest<T>(path: string, init: RequestInit = {}, timeoutMs = 30_000): Promise<T> {
+export async function apiRaw<T>(path: string, init: RequestInit = {}, timeoutMs = 30_000): Promise<ApiRawResponse<T>> {
   const controller = new AbortController();
   const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
   const upstreamSignal = init.signal;
@@ -70,12 +82,16 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}, timeou
       if (response.status === 401) window.dispatchEvent(new CustomEvent("portrait:unauthorized"));
       throw error;
     }
-    if (response.status === 204) return undefined as T;
-    const body = (await response.json()) as PortraitEnvelope<T> | T;
-    if (body && typeof body === "object" && "status" in body && "data" in body) {
-      return (body as PortraitEnvelope<T>).data;
-    }
-    return body as T;
+    const body = response.status === 204 ? undefined : await response.json();
+    return {
+      body: body as T,
+      httpStatus: response.status,
+      requestId:
+        response.headers.get("x-request-id") ??
+        (body && typeof body === "object" && "request_id" in body
+          ? String((body as { request_id?: unknown }).request_id ?? "")
+          : null),
+    };
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") {
       throw new ApiError({ status: 0, message: "请求超时或已取消" });
@@ -85,6 +101,15 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}, timeou
     window.clearTimeout(timeout);
     upstreamSignal?.removeEventListener("abort", abortFromUpstream);
   }
+}
+
+export async function apiRequest<T>(path: string, init: RequestInit = {}, timeoutMs = 30_000): Promise<T> {
+  const response = await apiRaw<PortraitEnvelope<T> | T>(path, init, timeoutMs);
+  const body = response.body;
+  if (body && typeof body === "object" && "status" in body && "data" in body) {
+    return (body as PortraitEnvelope<T>).data;
+  }
+  return body as T;
 }
 
 export async function apiText(path: string, timeoutMs = 15_000): Promise<string> {

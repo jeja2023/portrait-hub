@@ -39,6 +39,9 @@ def test_deploy_check_enforces_single_stream_api() -> None:
     checks = {item["name"]: item for item in report.checks}
     assert checks["app_required_routes"]["ok"] is True
     assert checks["app_removed_routes"]["ok"] is True
+    assert checks["legacy_console_source_removed"]["ok"] is True
+    assert checks["console_no_duplicate_v1_prefixes"]["ok"] is True
+    assert checks["console_no_duplicate_v1_prefixes"]["detail"]["source_file_count"] > 0
 
 
 def test_deploy_check_tracks_stream_worker_service() -> None:

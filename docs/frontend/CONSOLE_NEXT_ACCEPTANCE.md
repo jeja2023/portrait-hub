@@ -1,65 +1,65 @@
 # Console Next 验收报告
 
 - 验收日期：2026-07-17
-- 发布版本：0.10.0
-- 验收对象：frontend/console-next 与相关 Python 静态服务、业务集合契约、WS ticket、CI/Docker/readiness
-- 结论：代码级批次 0、A、B、C、D 已具备灰度条件；批次 E 的生产观察与 legacy 删除尚未开始
+- 发布版本：0.11.1
+- 验收对象：frontend/console-next、生产静态入口、权限与 WS ticket、SDK 示例、SLO、审计备份、复核池、CI/Docker/readiness
+- 结论：批次 0、A、B、C、D、E 的代码交付均已完成；旧控制台和运行时灰度配置已删除，Console Next 是唯一生产入口。生产上线仍需执行组织审批、镜像回退演练和多副本 WS ticket 前置条件。
+
+
+> 2026-07-18 / 0.11.1 补充验收：deploy_check --import-app 已新增旧源码目录缺失断言，duplicate /v1 检查改为扫描 frontend/console-next/src；平台 strict readiness 同步阻断旧灰度变量、旧静态路径和旧 DOM 标记回归。
+## 功能闭环
+
+| 范围 | 0.11.1 结果 |
+|---|---|
+| 生产入口 | /、/console、/console/next 统一提供 Console Next |
+| legacy | frontend/console 已删除；/console/legacy 与 /assets/console* 返回 404 |
+| 调试台 | 批量检索、批量比对、流注册/列表/事件、HTTP/错误码/request_id 诊断 |
+| SDK 示例 | Python/Node 异步批量与视频任务示例，可逐项复制 |
+| SLO | 30 天调用日志优先、Prometheus 回退、错误预算、推理/排队 p95/p99、设备队列 |
+| 调用日志与错误码 | request_id、应用、状态、错误码、时间窗口筛选；稳定错误码处置建议 |
+| 轨迹复核 | 后端合法标签、证据帧/引用、摘要、数据集与阈值建议 |
+| 审计 | 事件多条件筛选、类别/结果摘要、链错误数与路径指纹 |
+| 备份 | 快照 ID、后端、大小、增量起点、扫描/畸形记录摘要 |
+| readiness | 原 11 个严格失败项全部通过，strict_failure_count=0 |
 
 ## 自动化结果
 
 | 检查 | 结果 |
 |---|---|
-| Ruff（新增/修改 Python） | 通过 |
-| 控制台后端契约 | 9 passed |
+| Python 定向回归 | 48 passed，2 warnings（控制台入口、旧资产 404、deploy_check、readiness、Console Next contracts） |
+| Node SDK | 通过 |
+| npm test | 通过，Node SDK + console:check 标准入口 |
+| Go SDK | 通过 |
+| Java SDK | 主源码 javac 编译通过；本机未安装 Maven，未执行 JUnit |
 | ESLint | 通过，0 warning |
 | Vue TypeScript | 通过 |
-| Vitest | 3 files，8 passed |
-| Vite production build | 通过 |
-| Playwright | 11 passed，4 skipped（全路由巡检仅桌面 Chromium 执行） |
-| 浏览器项目 | Chromium desktop/tablet/mobile、Firefox desktop、WebKit desktop |
-| axe | serious/critical 0 |
-| CSP 运行期事件 | 0 |
-| npm audit | 0 vulnerabilities |
-| deploy_check --skip-node | 通过 |
-| 本地主 Docker 镜像构建 | 未完成：Docker Desktop 代理 127.0.0.1:10808 拒绝连接，基础镜像 manifest 无法拉取 |
-
-## 性能预算
-
-最新生产构建的公共入口资源：
-
-| 资源 | gzip | 预算 |
-|---|---:|---:|
-| 入口、登录、路由与运行时依赖 | 约 130.17 KiB | 合并计入 JS 预算 |
-| 总览路由增量 | 约 2.75 KiB | 合并计入 JS 预算 |
-| 首个总览路由 JS 合计 | 132.92 KiB | 300 KB |
-| 公共与总览 CSS 合计 | 50.22 KiB | 100 KB |
-开发者中心和系统管理均为路由级懒加载，页面 chunk 未计入首个工作台路由。
+| Vitest | 4 files，10 passed |
+| Vite production build | 通过，随 console:check 与 npm test 二次构建 |
+| Playwright | 通过，11 passed / 4 skipped |
+| 平台严格 readiness | 通过，strict_failure_count=0 |
+| deploy_check | 通过，--json --import-app ok=true |
 
 ## 安全边界
 
-- / 登录壳、/console、/console/next 与哈希静态资源可匿名读取；/v1/console/me、任务和人员数据在生产鉴权配置下返回 401。
-- API Key/JWT 仅存 sessionStorage；E2E 验证 localStorage 和 URL 不含密钥。
-- 静态资源路由拒绝目录穿越、点目录、HTML 内部文件与 source map。
-- script-src 仅 self，无 unsafe-inline 与 unsafe-eval；运行期无 securitypolicyviolation。
-- 人员列表和详情不返回 embedding；敏感 metadata 递归脱敏。
-- WS ticket 为短期、单次、租户/资源/权限绑定，日志只记录哈希指纹。
-- 高风险模型发布、特征重建、数据清理均有预演/影响摘要/文本二次确认。
+- / 登录壳、/console、/console/next 与哈希静态资源可匿名读取；租户数据接口继续执行认证、权限和租户隔离。
+- API Key/JWT 仅存 sessionStorage；localStorage 和 URL 不保存凭证。
+- /v1/console/me 对任何有效主体可读，只返回主体、租户、角色、权限、scope 和过期时间；它不要求 admin:status，也不再返回已删除的 feature flag。
+- 静态资源路由拒绝目录穿越、点目录、index.html 和 source map；script-src 仅 self，无 unsafe-inline 与 unsafe-eval。
+- WebSocket ticket 短期、单次、租户/资源/权限绑定，日志只记录指纹。
+- 调试响应、调用日志、审计事件和备份快照均使用公开脱敏字段；服务端路径、对象 key、bucket、摘要和凭证不返回。
+- 图片扩展名与受支持内容不一致时只写脱敏告警；未知签名、实际解码格式冲突、损坏、过大和像素超限仍拒绝。视频容器不匹配继续拒绝。
 
 ## 交付与回退
 
-- Docker 与 CPU Dockerfile 都在 Node 22 builder 中 npm ci 并构建 next，只复制 dist 到运行镜像。
-- CI 检查锁文件、OpenAPI 生成差异、lint、unit、type、build、pytest 和 E2E。
-- / 为统一登录入口，登录后进入 /console；CONSOLE_DEFAULT_VERSION 默认 next，/console/legacy 与 /console/next 继续作为回退和验收入口。
-- 三个角色域使用独立 feature flag、租户 allowlist 和稳定百分比分桶。
-- 回退只需关闭对应 flag 或将 CONSOLE_DEFAULT_VERSION 设为 legacy，不删除业务数据或新构件。
+- Docker 与 CPU Dockerfile 只复制 frontend/console-next/dist，不包含 Node 运行时或旧控制台。
+- CONSOLE_DEFAULT_VERSION 与角色域灰度开关已删除；不存在运行时切换回 legacy 的路径。
+- 回退必须部署上一版镜像或经过签名/校验的受控静态构件；回退不得删除业务数据、解析档案或审计记录。
+- CI/部署前必须执行 `npm test`、`npm run console:e2e`、控制台/门禁定向或全量 `python -m pytest`、`python tools/deploy_check.py --json --import-app` 和 `python tools/portrait_production_readiness.py --scope platform --strict`。
 
-## 未关闭条件
+## 生产待办
 
-- 生产灰度五级观察尚无真实数据。
-- 全量连续 14 天与两个发布周期尚未发生。
-- 多 worker/多副本前，进程内 WS ticket 存储必须迁移到共享原子消费实现。
-- 旧版删除所需的产品、安全、运维共同签字尚未取得。
-- 键盘人工验收和 Chrome/Edge 最近两个实际主版本的企业环境抽检需在灰度环境执行。
-- 在可访问 Docker Hub 的构建环境重跑主 Dockerfile 与 Dockerfile.cpu；本地失败仅由 Docker Desktop 失效代理导致。
-
-因此，本报告不批准删除 legacy；它只确认当前实现可以进入内部租户灰度。
+- 完成产品、安全、运维负责人上线签字和上一版镜像回退演练。
+- 在真实生产流量下记录登录、前端异常、API 4xx/5xx、关键任务成功率和 p95/p99，并按发布规范完成观察。
+- 多 API worker/多副本前，将进程内 WS ticket 存储迁移到共享、带 TTL、原子单次消费的实现。
+- 在可访问镜像仓库的构建环境重跑 Dockerfile 与 Dockerfile.cpu。
+- 完成 Chrome/Edge 最近两个企业主版本的键盘和人工流程抽检。

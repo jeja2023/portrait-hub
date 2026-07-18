@@ -23,98 +23,98 @@ const router = createRouter({
           path: "",
           name: "overview",
           component: () => import("../views/OverviewView.vue"),
-          meta: { title: "总览", permission: "admin:status", feature: "console_workbench_v2" },
+          meta: { title: "总览", permission: "admin:status" },
         },
         { path: "analysis", redirect: "/analysis/image", meta: { title: "智能分析" } },
         {
           path: "analysis/image",
           name: "analysis-image",
           component: () => import("../views/analysis/ImageAnalysisView.vue"),
-          meta: { title: "图片分析", permission: "infer", feature: "console_workbench_v2" },
+          meta: { title: "图片分析", permission: "infer" },
         },
         {
           path: "analysis/video",
           name: "analysis-video",
           component: () => import("../views/analysis/VideoJobsView.vue"),
-          meta: { title: "视频任务", permission: "jobs:read", feature: "console_workbench_v2" },
+          meta: { title: "视频任务", permission: "jobs:read" },
         },
         {
           path: "analysis/video/:jobId",
           name: "analysis-video-detail",
           component: () => import("../views/analysis/VideoJobsView.vue"),
-          meta: { title: "视频任务详情", permission: "jobs:read", feature: "console_workbench_v2" },
+          meta: { title: "视频任务详情", permission: "jobs:read" },
         },
         {
           path: "analysis/stream",
           name: "analysis-stream",
           component: () => import("../views/analysis/StreamsView.vue"),
-          meta: { title: "实时视频流", permission: "streams:read", feature: "console_workbench_v2" },
+          meta: { title: "实时视频流", permission: "streams:read" },
         },
         {
           path: "analysis/results",
           name: "analysis-results",
           component: () => import("../views/analysis/AnalysisResultsView.vue"),
-          meta: { title: "解析结果库", permission: "infer", feature: "console_workbench_v2" },
+          meta: { title: "解析结果库", permission: "infer" },
         },
         {
           path: "compare",
           name: "compare",
           component: () => import("../views/CompareView.vue"),
-          meta: { title: "比对", permission: "compare", feature: "console_workbench_v2" },
+          meta: { title: "比对", permission: "compare" },
         },
         {
           path: "search",
           name: "search",
           component: () => import("../views/SearchView.vue"),
-          meta: { title: "以图搜人", permission: "gallery:read", feature: "console_workbench_v2" },
+          meta: { title: "以图搜人", permission: "gallery:read" },
         },
         {
           path: "gallery",
           name: "gallery",
           component: () => import("../views/GalleryView.vue"),
-          meta: { title: "人员库", permission: "gallery:read", feature: "console_workbench_v2" },
+          meta: { title: "人员库", permission: "gallery:read" },
         },
         {
           path: "gallery/:personId",
           name: "gallery-detail",
           component: () => import("../views/GalleryView.vue"),
-          meta: { title: "人员详情", permission: "gallery:read", feature: "console_workbench_v2" },
+          meta: { title: "人员详情", permission: "gallery:read" },
         },
         {
           path: "dev/access",
           name: "dev-access",
           component: () => import("../views/dev/AccessView.vue"),
-          meta: { title: "接入配置", permission: "access:read", feature: "console_developer_v2" },
+          meta: { title: "接入配置", permission: "access:read" },
         },
         {
           path: "dev/playground",
           name: "dev-playground",
           component: () => import("../views/dev/PlaygroundView.vue"),
-          meta: { title: "调试台", permission: "infer", feature: "console_developer_v2" },
+          meta: { title: "调试台", permission: "infer" },
         },
         {
           path: "dev/logs",
           name: "dev-logs",
           component: () => import("../views/dev/LogsView.vue"),
-          meta: { title: "调用日志", permission: "access:read", feature: "console_developer_v2" },
+          meta: { title: "调用日志", permission: "access:read" },
         },
         {
           path: "admin/models",
           name: "admin-models",
           component: () => import("../views/admin/ModelsView.vue"),
-          meta: { title: "模型中心", permission: "models:read", feature: "console_admin_v2" },
+          meta: { title: "模型中心", permission: "models:read" },
         },
         {
           path: "admin/calibration",
           name: "admin-calibration",
           component: () => import("../views/admin/CalibrationView.vue"),
-          meta: { title: "阈值与标注", permission: "models:read", feature: "console_admin_v2" },
+          meta: { title: "阈值与标注", permission: "models:read" },
         },
         {
           path: "admin/ops",
           name: "admin-ops",
           component: () => import("../views/admin/OpsView.vue"),
-          meta: { title: "运维与合规", permission: "admin:status", feature: "console_admin_v2" },
+          meta: { title: "运维与合规", permission: "admin:status" },
         },
         {
           path: "forbidden",
@@ -162,7 +162,7 @@ router.beforeEach(async (to) => {
     capabilities.clear();
     return openRootLogin(to.fullPath);
   }
-  if (!capabilities.featureEnabled(to.meta.feature) || !capabilities.hasPermission(to.meta.permission)) {
+  if (!capabilities.hasPermission(to.meta.permission)) {
     return to.name === "forbidden" ? true : { name: "forbidden" };
   }
   return true;

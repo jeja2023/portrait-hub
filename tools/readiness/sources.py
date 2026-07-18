@@ -544,52 +544,11 @@ def load_sources(root: Path) -> dict[str, Any]:
         if (root / "requirements" / "base.in").is_file()
         else ""
     )
-    console_html = (
-        (root / "frontend" / "console" / "console.html").read_text(encoding="utf-8")
-        if (root / "frontend" / "console" / "console.html").is_file()
-        else ""
-    )
-    console_js = (
-        (root / "frontend" / "console" / "console.js").read_text(encoding="utf-8")
-        if (root / "frontend" / "console" / "console.js").is_file()
-        else ""
-    )
-    console_config_js = (
-        (root / "frontend" / "console" / "console.config.js").read_text(encoding="utf-8")
-        if (root / "frontend" / "console" / "console.config.js").is_file()
-        else ""
-    )
-    console_runtime_js = "\n".join(
-        (root / "frontend" / "console" / item).read_text(encoding="utf-8")
-        for item in ["views/app.js", "runtime/formatting.js", "runtime/network.js"]
-        if (root / "frontend" / "console" / item).is_file()
-    )
+    console_next_source_root = root / "frontend" / "console-next" / "src"
     console_module_sources = "\n".join(
-        (root / "frontend" / "console" / item).read_text(encoding="utf-8")
-        for item in [
-            "api/client.js",
-            "state/store.js",
-            "views/navigation.js",
-            "templates/core.js",
-            "templates/access.js",
-            "templates/governance.js",
-            "templates/index.js",
-            "runtime/formatting.js",
-            "runtime/network.js",
-            "views/analysis.js",
-            "views/gallery.js",
-            "views/operations.js",
-            "views/access.js",
-            "views/observability.js",
-            "views/governance.js",
-            "views/results.js",
-            "views/dashboard.js",
-            "views/app.js",
-            "renderers/data-viewer.js",
-            "visuals/previews.js",
-            "visuals/results.js",
-        ]
-        if (root / "frontend" / "console" / item).is_file()
+        path.read_text(encoding="utf-8")
+        for path in sorted(console_next_source_root.rglob("*"))
+        if path.is_file() and path.suffix in {".ts", ".vue", ".css"}
     )
     console_next_package = (
         (root / "frontend" / "console-next" / "package.json").read_text(encoding="utf-8")

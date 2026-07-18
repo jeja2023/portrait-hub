@@ -127,7 +127,6 @@ def check_required_files(root: Path, report: DeployReport) -> None:
         "app/production_gates.py",
         "app/portrait_video_job_worker.py",
         "app/rollout_audit.py",
-        "frontend/console/console.html",
         "frontend/console-next/package.json",
         "frontend/console-next/vite.config.ts",
         "frontend/console-next/src/main.ts",
@@ -135,33 +134,6 @@ def check_required_files(root: Path, report: DeployReport) -> None:
         "frontend/console-next/src/api/generated.ts",
         "frontend/console-next/dist/index.html",
         "frontend/console-next/dist/.vite/manifest.json",
-        "frontend/console/console.css",
-        "frontend/console/styles/components.css",
-        "frontend/console/styles/data-viewer.css",
-        "frontend/console/styles/responsive.css",
-        "frontend/console/console.config.js",
-        "frontend/console/console.js",
-        "frontend/console/api/client.js",
-        "frontend/console/state/store.js",
-        "frontend/console/views/navigation.js",
-        "frontend/console/templates/core.js",
-        "frontend/console/templates/access.js",
-        "frontend/console/templates/governance.js",
-        "frontend/console/templates/index.js",
-        "frontend/console/runtime/formatting.js",
-        "frontend/console/runtime/network.js",
-        "frontend/console/views/analysis.js",
-        "frontend/console/views/gallery.js",
-        "frontend/console/views/operations.js",
-        "frontend/console/views/access.js",
-        "frontend/console/views/observability.js",
-        "frontend/console/views/governance.js",
-        "frontend/console/views/results.js",
-        "frontend/console/views/dashboard.js",
-        "frontend/console/views/app.js",
-        "frontend/console/renderers/data-viewer.js",
-        "frontend/console/visuals/previews.js",
-        "frontend/console/visuals/results.js",
         "tools/validate_model_package.py",
         "tools/service_smoke_test.py",
         "tools/regression_check.py",
@@ -254,14 +226,10 @@ def check_code_quality(root: Path, report: DeployReport) -> None:
     postgres_core = read_text(root / "app" / "postgres_core.py")
     config_hot_reload = read_text(root / "app" / "config_hot_reload.py")
     websocket_routes = read_text(root / "app" / "routes_portrait_ws.py")
-    console_js = read_text(root / "frontend" / "console" / "console.js")
-    console_config_js = read_text(root / "frontend" / "console" / "console.config.js")
-    console_runtime_js = "\n".join(
-        [
-            read_text(root / "frontend" / "console" / "views" / "app.js"),
-            read_text(root / "frontend" / "console" / "runtime" / "network.js"),
-        ]
-    )
+    portrait_console_routes = read_text(root / "app" / "routes_portrait_console.py")
+    console_next_ws = read_text(root / "frontend" / "console-next" / "src" / "api" / "ws.ts")
+    console_next_session = read_text(root / "frontend" / "console-next" / "src" / "auth" / "session.ts")
+
     report.add(
         "core_explicit_imports",
         "import *" not in core and "__all__" in core,
@@ -276,6 +244,7 @@ def check_code_quality(root: Path, report: DeployReport) -> None:
         "strict_type_check_gate",
         "[tool.mypy]" in pyproject
         and "strict = true" in pyproject
+        and 'requires-python = "=3.12"' not in pyproject
         and 'requires-python = ">=3.12"' in pyproject
         and "mypy==" in dev_requirements
         and "python tools/type_check.py" in ci
@@ -340,19 +309,17 @@ def check_code_quality(root: Path, report: DeployReport) -> None:
         and "except HTTPException" in websocket_routes
         and '"jobs:read"' in websocket_routes
         and '"streams:read"' in websocket_routes
-        and "new WebSocket" in console_runtime_js
-        and "/ws/jobs/" in console_runtime_js
-        and "/ws/streams/" in console_runtime_js
-        and "window.PortraitConsoleConfig" in console_config_js
-        and "endpointMap" in console_config_js
-        and "const endpointMap = consoleConfig.endpointMap" in console_runtime_js
-        and "PortraitConsoleRuntime" in console_js
-        and "runtime.init" in console_js
-        and len(console_js) < 2000
-        and "window.PortraitConsoleRuntime = { init }" in console_runtime_js,
+        and "new WebSocket" in console_next_ws
+        and '"/v1/console/ws-ticket"' in console_next_ws
+        and "issued.websocket_path" in console_next_ws
+        and "window.sessionStorage" in console_next_session
+        and "window.localStorage" not in console_next_session
+        and '"/assets/console-next/{asset_path:path}"' in portrait_console_routes
+        and '"/console/legacy"' not in portrait_console_routes
+        and "def next_console_csp" in portrait_console_routes
+        and "script-src 'self'" in portrait_console_routes,
         None,
     )
-
 
 def requirement_lines(text: str) -> list[str]:
     return [line.strip() for line in text.splitlines() if line.strip() and not line.strip().startswith("#")]
@@ -568,13 +535,24 @@ def check_import_app(root: Path, report: DeployReport) -> None:
             not removed_routes_present,
             {"present": removed_routes_present},
         )
-        console_views_dir = root / "frontend" / "console" / "views"
-        console_source = "\n".join(path.read_text(encoding="utf-8") for path in sorted(console_views_dir.glob("*.js")))
+        legacy_console_dir = root / "frontend" / "console"
+        report.add(
+            "legacy_console_source_removed",
+            not legacy_console_dir.exists(),
+            {"path": str(legacy_console_dir.relative_to(root))},
+        )
+        console_next_src_dir = root / "frontend" / "console-next" / "src"
+        console_next_files = [
+            path
+            for path in sorted(console_next_src_dir.rglob("*"))
+            if path.is_file() and path.suffix in {".ts", ".vue", ".css"}
+        ]
+        console_source = "\n".join(path.read_text(encoding="utf-8") for path in console_next_files)
         duplicate_v1_prefixes = sorted(set(re.findall(r"/v1(?:/[a-z0-9_-]+)*/v1/", console_source)))
         report.add(
             "console_no_duplicate_v1_prefixes",
-            not duplicate_v1_prefixes,
-            {"present": duplicate_v1_prefixes},
+            bool(console_next_files) and not duplicate_v1_prefixes,
+            {"present": duplicate_v1_prefixes, "source_file_count": len(console_next_files)},
         )
     except Exception as exc:
         report.add("app_import", False, str(exc))

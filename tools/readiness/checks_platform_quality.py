@@ -32,14 +32,14 @@ def check_platform_quality(root: Path) -> list[dict[str, Any]]:
     runtime_execution = src["runtime_execution"]
     portrait_vector_store = src["portrait_vector_store"]
     postgres_core = src["postgres_core"]
-    console_config_js = src["console_config_js"]
-    console_runtime_js = src["console_runtime_js"]
-    console_html = src["console_html"]
-    console_js = src["console_js"]
-    console_module_sources = src["console_module_sources"]
     console_next_package = src["console_next_package"]
     console_next_vite = src["console_next_vite"]
     console_next_session = src["console_next_session"]
+    console_next_ws = (
+        (root / "frontend" / "console-next" / "src" / "api" / "ws.ts").read_text(encoding="utf-8")
+        if (root / "frontend" / "console-next" / "src" / "api" / "ws.ts").is_file()
+        else ""
+    )
     console_next_manifest = src["console_next_manifest"]
     portrait_console_routes = src["portrait_console_routes"]
     portrait_gallery_orchestration = src["portrait_gallery_orchestration"]
@@ -51,6 +51,14 @@ def check_platform_quality(root: Path) -> list[dict[str, Any]]:
     production_gates = src["production_gates"]
     compose = src["compose"]
     env_example = src["env_example"]
+    console_module_sources = src["console_module_sources"]
+    legacy_console_flag_sources = "\n".join([settings, security, env_example, compose, ci_workflow, portrait_console_routes])
+    removed_console_flags = (
+        "CONSOLE_DEFAULT_VERSION",
+        "CONSOLE_WORKBENCH_V2",
+        "CONSOLE_DEVELOPER_V2",
+        "CONSOLE_ADMIN_V2",
+    )
     return [
         {
             "name": "security:auth_required_setting",
@@ -126,36 +134,19 @@ def check_platform_quality(root: Path) -> list[dict[str, Any]]:
             ),
         },
         {
-            "name": "frontend:console_config_externalized",
+            "name": "frontend:legacy_console_removed",
             "ok": (
-                "window.PortraitConsoleConfig" in console_config_js
-                and "endpointMap" in console_config_js
-                and "alertDefaults" in console_config_js
-                and "window.PortraitConsoleConfig" in console_runtime_js
-                and "const endpointMap = consoleConfig.endpointMap" in console_runtime_js
-            ),
-        },
-        {
-            "name": "frontend:console_modules_split",
-            "ok": (
-                "/assets/console/api/client.js" in console_html
-                and "/assets/console/state/store.js" in console_html
-                and "/assets/console/views/gallery.js" in console_html
-                and "/assets/console/views/app.js" in console_html
-                and console_html.index("/assets/console/views/app.js") < console_html.index("/assets/console.js")
-                and "PortraitConsoleRuntime" in console_js
-                and "runtime.init" in console_js
-                and len(console_js) < 2000
-                and "function init()" in console_runtime_js
-                and "window.PortraitConsoleRuntime = { init }" in console_runtime_js
-                and "PortraitConsoleModules" in console_module_sources
-                and "modules.api" in console_module_sources
-                and "modules.state" in console_module_sources
-                and "modules.views" in console_module_sources
-                and "modules.renderers" in console_module_sources
-                and "modules.visuals" in console_module_sources
-                and "def safe_console_asset" in portrait_console_routes
-                and '"/assets/console/{asset_path:path}"' in portrait_console_routes
+                not (root / "frontend" / "console").exists()
+                and "CONSOLE_DEFAULT_VERSION" not in settings
+                and '"/console/legacy"' not in portrait_console_routes
+                and '"/assets/console/{asset_path:path}"' not in portrait_console_routes
+                and '"/assets/console.js"' not in portrait_console_routes
+                and '"/assets/console.css"' not in portrait_console_routes
+                and '"/assets/console.config.js"' not in portrait_console_routes
+                and all(flag not in legacy_console_flag_sources for flag in removed_console_flags)
+                and "/assets/console/" not in console_module_sources
+                and "data-view=" not in console_module_sources
+                and "PortraitConsoleModules" not in console_module_sources
             ),
         },
         {
@@ -167,8 +158,9 @@ def check_platform_quality(root: Path) -> list[dict[str, Any]]:
                 and "window.sessionStorage" in console_next_session
                 and "window.localStorage" not in console_next_session
                 and "index.html" in console_next_manifest
+                and '"/"' in portrait_console_routes
+                and '"/console"' in portrait_console_routes
                 and '"/console/next"' in portrait_console_routes
-                and '"/console/legacy"' in portrait_console_routes
                 and '"/assets/console-next/{asset_path:path}"' in portrait_console_routes
                 and "def next_console_csp" in portrait_console_routes
                 and "script-src 'self'" in portrait_console_routes
@@ -236,11 +228,10 @@ def check_platform_quality(root: Path) -> list[dict[str, Any]]:
         {
             "name": "frontend:websocket_console_subscription",
             "ok": (
-                "new WebSocket" in console_runtime_js
-                and "/ws/jobs/" in console_runtime_js
-                and "/ws/streams/" in console_runtime_js
-                and "access_token" in console_runtime_js
-                and "token" in console_runtime_js
+                "new WebSocket" in console_next_ws
+                and '"/v1/console/ws-ticket"' in console_next_ws
+                and "issued.websocket_path" in console_next_ws
+                and "ticket" in console_next_ws
             ),
         },
     ]

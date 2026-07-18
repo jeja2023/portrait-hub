@@ -1,88 +1,110 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
-import { Activity, CircleGauge, Clock3, Cpu, RefreshCw, Search, Users } from "@lucide/vue";
+import { Activity, CircleGauge, Clock3, Cpu, Flame, RefreshCw, Search, Timer, Users } from "@lucide/vue";
 import { ElAlert, ElButton, ElSkeleton } from "element-plus";
 
 import { ApiError, apiRequest, apiText } from "../api/client";
 import RawDataDrawer from "../components/RawDataDrawer.vue";
 import StatCard from "../components/StatCard.vue";
+import { useCapabilitiesStore } from "../stores/capabilities";
 import { usePrefsStore } from "../stores/prefs";
+import {
+  SLO_WINDOW_SECONDS,
+  deviceQueueDepths,
+  histogramPercentile,
+  metricValue,
+  summarizeSloCallLogs,
+  summarizeSloMetrics,
+  type SloCallLog,
+} from "../utils/slo";
 
 const router = useRouter();
 const prefs = usePrefsStore();
+const capabilities = useCapabilitiesStore();
 const loading = ref(true);
 const errorMessage = ref("");
 const ready = ref<Record<string, unknown> | null>(null);
 const rawMetrics = ref("");
+const callLogs30d = ref<SloCallLog[]>([]);
+const callLogsAvailable = ref(false);
 const showRaw = ref(false);
 
-interface MetricSample {
-  labels: string;
-  value: number;
-}
-
-function metricSamples(name: string): MetricSample[] {
-  const prefix = name + " ";
-  const labeledPrefix = name + "{";
-  return rawMetrics.value.split("\n").flatMap((line) => {
-    if (!line.startsWith(prefix) && !line.startsWith(labeledPrefix)) return [];
-    const separator = line.lastIndexOf(" ");
-    const value = Number(line.slice(separator + 1));
-    if (!Number.isFinite(value)) return [];
-    const labels = line.startsWith(labeledPrefix) ? line.slice(name.length + 1, line.indexOf("}")) : "";
-    return [{ labels, value }];
-  });
-}
-
-function metricValue(name: string): number {
-  return metricSamples(name).find((sample) => sample.labels === "")?.value ?? 0;
-}
-
-function histogramPercentile(name: string, percentile: number): number {
-  const buckets = metricSamples(name + "_bucket")
-    .map((sample) => {
-      const match = /(?:^|,)le="([^"]+)"/.exec(sample.labels);
-      return {
-        boundary: match?.[1] === "+Inf" ? Number.POSITIVE_INFINITY : Number(match?.[1]),
-        count: sample.value,
-      };
-    })
-    .filter((bucket) => Number.isFinite(bucket.boundary) || bucket.boundary === Number.POSITIVE_INFINITY)
-    .sort((left, right) => left.boundary - right.boundary);
-  const total = metricValue(name + "_count");
-  if (total <= 0) return 0;
-  const target = total * percentile;
-  return buckets.find((bucket) => bucket.count >= target)?.boundary ?? 0;
-}
-
-const requestCount = computed(() => metricValue("gpu_worker_requests_total"));
-const errorCount = computed(() =>
-  metricSamples("gpu_worker_requests_total")
-    .filter((sample) => sample.labels.includes('status_class="5xx"'))
-    .reduce((sum, sample) => sum + sample.value, 0),
+const metricAvailability = computed(() => summarizeSloMetrics(rawMetrics.value));
+const availability = computed(() =>
+  callLogsAvailable.value ? summarizeSloCallLogs(callLogs30d.value) : metricAvailability.value,
 );
-const queueDepth = computed(() => metricValue("gpu_worker_gpu_queue_depth"));
-const inferenceP95 = computed(() => histogramPercentile("gpu_worker_inference_seconds", 0.95));
-const inferenceP99 = computed(() => histogramPercentile("gpu_worker_inference_seconds", 0.99));
-const errorRate = computed(() => (requestCount.value > 0 ? errorCount.value / requestCount.value : 0));
+const successRateSource = computed(() => (callLogsAvailable.value ? "call_logs_30d" : "prometheus_counters"));
+const requestCount = computed(() => availability.value.request_count);
+const errorCount = computed(() => availability.value.error_count);
+const queueDepth = computed(() => metricValue(rawMetrics.value, "gpu_worker_gpu_queue_depth"));
+const queueP95 = computed(() => histogramPercentile(rawMetrics.value, "gpu_worker_queue_seconds", 0.95));
+const queueP99 = computed(() => histogramPercentile(rawMetrics.value, "gpu_worker_queue_seconds", 0.99));
+const inferenceP95 = computed(() => histogramPercentile(rawMetrics.value, "gpu_worker_inference_seconds", 0.95));
+const inferenceP99 = computed(() => histogramPercentile(rawMetrics.value, "gpu_worker_inference_seconds", 0.99));
+const gpuDeviceQueueDepths = computed(() => deviceQueueDepths(rawMetrics.value));
+const sloPanel = computed(() => ({
+  success_rate_source: successRateSource.value,
+  call_logs_30d: callLogs30d.value.length,
+  call_log_window_seconds: SLO_WINDOW_SECONDS,
+  ...availability.value,
+  inference_p95_seconds: inferenceP95.value,
+  inference_p99_seconds: inferenceP99.value,
+  queue_p95_seconds: queueP95.value,
+  queue_p99_seconds: queueP99.value,
+  gpu_queue_depth: queueDepth.value,
+  gpu_device_queue_depths: gpuDeviceQueueDepths.value,
+}));
 const isReady = computed(() => ready.value?.status === "ready" || ready.value?.ready === true);
+
+function duration(value: number): string {
+  if (value === Number.POSITIVE_INFINITY) return ">10 s";
+  return value.toFixed(3) + " s";
+}
+
+function readinessFromError(error: unknown): Record<string, unknown> | null {
+  if (!(error instanceof ApiError) || error.status !== 503) return null;
+  if (error.details && typeof error.details === "object") return error.details as Record<string, unknown>;
+  return { status: "not_ready" };
+}
 
 async function refresh(): Promise<void> {
   loading.value = true;
   errorMessage.value = "";
-  try {
-    const [readyPayload, metricsPayload] = await Promise.all([
-      apiRequest<Record<string, unknown>>("/ready/deep"),
-      apiText("/metrics"),
-    ]);
-    ready.value = readyPayload;
-    rawMetrics.value = metricsPayload;
-  } catch (error) {
-    errorMessage.value = error instanceof ApiError ? error.message : "平台状态加载失败";
-  } finally {
-    loading.value = false;
+  const callLogPath =
+    "/v1/access/call-logs?limit=500&created_since=" +
+    (Math.floor(Date.now() / 1000) - SLO_WINDOW_SECONDS);
+  const [readyResult, metricsResult, callLogsResult] = await Promise.allSettled([
+    apiRequest<Record<string, unknown>>("/ready/deep"),
+    apiText("/metrics"),
+    capabilities.hasPermission("access:read")
+      ? apiRequest<{ logs: SloCallLog[] }>(callLogPath)
+      : Promise.reject(new Error("access:read unavailable")),
+  ]);
+
+  if (readyResult.status === "fulfilled") {
+    ready.value = readyResult.value;
+  } else {
+    const degradedReady = readinessFromError(readyResult.reason);
+    if (degradedReady) ready.value = degradedReady;
+    else errorMessage.value = readyResult.reason instanceof ApiError ? readyResult.reason.message : "平台状态加载失败";
   }
+
+  if (metricsResult.status === "fulfilled") {
+    rawMetrics.value = metricsResult.value;
+  } else if (!errorMessage.value) {
+    errorMessage.value = metricsResult.reason instanceof ApiError ? metricsResult.reason.message : "平台指标加载失败";
+  }
+
+  if (callLogsResult.status === "fulfilled" && callLogsResult.value.logs.length > 0) {
+    callLogs30d.value = callLogsResult.value.logs;
+    callLogsAvailable.value = true;
+  } else {
+    callLogs30d.value = [];
+    callLogsAvailable.value = false;
+  }
+
+  loading.value = false;
 }
 
 onMounted(() => void refresh());
@@ -93,7 +115,7 @@ onMounted(() => void refresh());
     <header class="page-header">
       <div>
         <h1>总览</h1>
-        <p>当前租户的服务状态、调用情况与待处理资源。</p>
+        <p>当前租户的服务状态、SLO、调用情况与待处理资源。</p>
       </div>
       <div class="page-actions">
         <ElButton :icon="RefreshCw" :loading="loading" @click="refresh">刷新</ElButton>
@@ -116,28 +138,37 @@ onMounted(() => void refresh());
           :tone="isReady ? 'success' : 'warning'"
           :icon="Activity"
         />
-        <StatCard label="累计请求" :value="requestCount.toLocaleString('zh-CN')" :icon="CircleGauge" />
+        <StatCard label="统计请求" :value="requestCount.toLocaleString('zh-CN')" :icon="CircleGauge" />
         <StatCard
-          label="错误率"
-          :value="errorRate.toLocaleString('zh-CN', { style: 'percent', maximumFractionDigits: 2 })"
-          :tone="errorRate > 0.02 ? 'danger' : 'success'"
+          label="30 天成功率"
+          :value="availability.success_rate.toLocaleString('zh-CN', { style: 'percent', maximumFractionDigits: 3 })"
+          :tone="availability.success_rate < 0.995 ? 'danger' : 'success'"
           :icon="Clock3"
+          :detail="successRateSource === 'call_logs_30d' ? '调用日志窗口' : 'Prometheus 累计回退'"
         />
         <StatCard
-          label="推理 P95"
-          :value="inferenceP95 === Infinity ? '>10 s' : inferenceP95.toFixed(3) + ' s'"
-          :icon="Clock3"
+          label="错误预算剩余"
+          :value="availability.error_budget_remaining.toLocaleString('zh-CN', { style: 'percent', maximumFractionDigits: 1 })"
+          :tone="availability.error_budget_remaining < 0.2 ? 'danger' : 'success'"
+          :icon="Timer"
+          :detail="errorCount + ' 个失败请求'"
         />
         <StatCard
-          label="推理 P99"
-          :value="inferenceP99 === Infinity ? '>10 s' : inferenceP99.toFixed(3) + ' s'"
-          :icon="Clock3"
+          label="预算燃尽率"
+          :value="availability.error_budget_burn_rate.toFixed(2) + 'x'"
+          :tone="availability.error_budget_burn_rate > 1 ? 'danger' : 'success'"
+          :icon="Flame"
         />
+        <StatCard label="推理 P95" :value="duration(inferenceP95)" :icon="Clock3" />
+        <StatCard label="推理 P99" :value="duration(inferenceP99)" :icon="Clock3" />
+        <StatCard label="排队 P95" :value="duration(queueP95)" :icon="Timer" />
+        <StatCard label="排队 P99" :value="duration(queueP99)" :icon="Timer" />
         <StatCard
           label="GPU 队列"
           :value="queueDepth.toLocaleString('zh-CN')"
           :tone="queueDepth > 10 ? 'warning' : 'neutral'"
           :icon="Cpu"
+          :detail="Object.keys(gpuDeviceQueueDepths).length + ' 个设备'"
         />
       </div>
       <section class="quick-actions" aria-labelledby="quick-title">
@@ -157,8 +188,8 @@ onMounted(() => void refresh());
     </ElSkeleton>
     <RawDataDrawer
       v-model="showRaw"
-      title="平台状态原始数据（已脱敏）"
-      :data="{ ready, metrics: rawMetrics }"
+      title="平台状态与 SLO 原始数据（已脱敏）"
+      :data="{ ready, slo: sloPanel, metrics: rawMetrics }"
     />
   </div>
 </template>

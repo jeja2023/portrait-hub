@@ -48,7 +48,7 @@ def parse_csv_env(name: str, default: str = "") -> list[str]:
     return [item.strip() for item in os.getenv(name, default).split(",") if item.strip()]
 
 
-APP_VERSION = "0.10.0"
+APP_VERSION = "0.11.1"
 PORTRAIT_RUNTIME_PROFILE = (
     os.getenv("PORTRAIT_RUNTIME_PROFILE", os.getenv("APP_ENV", "development")).strip().lower() or "development"
 )
@@ -183,18 +183,6 @@ JWT_REQUIRE_AUD = parse_bool_env("JWT_REQUIRE_AUD", True)
 # 本地开发通过 dev_start.py、测试套件通过 tests/conftest.py 重新选用宽松值。
 RBAC_ENABLED = parse_bool_env("RBAC_ENABLED", False)
 AUTH_REQUIRED = parse_bool_env("AUTH_REQUIRED", True)
-CONSOLE_WORKBENCH_V2 = parse_bool_env("CONSOLE_WORKBENCH_V2", True)
-CONSOLE_DEVELOPER_V2 = parse_bool_env("CONSOLE_DEVELOPER_V2", True)
-CONSOLE_ADMIN_V2 = parse_bool_env("CONSOLE_ADMIN_V2", True)
-CONSOLE_DEFAULT_VERSION = os.getenv("CONSOLE_DEFAULT_VERSION", "next").strip().lower()
-if CONSOLE_DEFAULT_VERSION not in {"legacy", "next"}:
-    CONSOLE_DEFAULT_VERSION = "next"
-CONSOLE_WORKBENCH_V2_PERCENT = max(0, min(parse_int_env("CONSOLE_WORKBENCH_V2_PERCENT", 0), 100))
-CONSOLE_DEVELOPER_V2_PERCENT = max(0, min(parse_int_env("CONSOLE_DEVELOPER_V2_PERCENT", 0), 100))
-CONSOLE_ADMIN_V2_PERCENT = max(0, min(parse_int_env("CONSOLE_ADMIN_V2_PERCENT", 0), 100))
-CONSOLE_WORKBENCH_V2_TENANTS = parse_csv_env("CONSOLE_WORKBENCH_V2_TENANTS")
-CONSOLE_DEVELOPER_V2_TENANTS = parse_csv_env("CONSOLE_DEVELOPER_V2_TENANTS")
-CONSOLE_ADMIN_V2_TENANTS = parse_csv_env("CONSOLE_ADMIN_V2_TENANTS")
 CONSOLE_WS_TICKET_TTL_SECONDS = max(5, min(parse_int_env("CONSOLE_WS_TICKET_TTL_SECONDS", 60), 300))
 CONSOLE_WS_TICKET_MAX_ENTRIES = max(128, min(parse_int_env("CONSOLE_WS_TICKET_MAX_ENTRIES", 4096), 65_536))
 DEBUG_ENDPOINTS_ENABLED = parse_bool_env("DEBUG_ENDPOINTS_ENABLED", False)
@@ -212,7 +200,7 @@ POSTGRES_CONNECT_TIMEOUT_SECONDS = parse_int_env("POSTGRES_CONNECT_TIMEOUT_SECON
 POSTGRES_POOL_MIN_SIZE = parse_int_env("POSTGRES_POOL_MIN_SIZE", 1)
 POSTGRES_POOL_MAX_SIZE = parse_int_env("POSTGRES_POOL_MAX_SIZE", 10)
 # pgvector HNSW 候选列表大小。ANN 索引只按 embedding_dim 分区，因此 tenant_id/modality
-# 的等值过滤是在 ANN 候选之上施加的；当许多 tenant 或 modality 共享同一维度时，更大的
+# 的等值过滤是在 PNN 候选之上施加的；当许多 tenant 或 modality 共享同一维度时，更大的
 # ef_search 可保持较高召回。实际生效值为 max(本值, top_k)。
 PGVECTOR_HNSW_EF_SEARCH = parse_int_env("PGVECTOR_HNSW_EF_SEARCH", 100)
 QDRANT_URL = os.getenv("QDRANT_URL", "")

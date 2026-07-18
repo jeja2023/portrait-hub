@@ -135,13 +135,7 @@ def test_gallery_collection_returns_redacted_summaries_and_supports_search() -> 
         GALLERY.update(snapshot)
 
 
-def test_console_me_returns_server_driven_capabilities(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(portrait_console_access, "CONSOLE_WORKBENCH_V2", True)
-    monkeypatch.setattr(portrait_console_access, "CONSOLE_DEVELOPER_V2", False)
-    monkeypatch.setattr(portrait_console_access, "CONSOLE_DEVELOPER_V2_PERCENT", 0)
-    monkeypatch.setattr(portrait_console_access, "CONSOLE_ADMIN_V2", False)
-    monkeypatch.setattr(portrait_console_access, "CONSOLE_ADMIN_V2_PERCENT", 0)
-
+def test_console_me_returns_principal_capabilities() -> None:
     response = TestClient(app).get("/v1/console/me", headers={"x-tenant-id": "tenant-a"})
 
     assert response.status_code == 200
@@ -150,12 +144,7 @@ def test_console_me_returns_server_driven_capabilities(monkeypatch: pytest.Monke
     assert payload["tenant_id"] == "tenant-a"
     assert payload["auth_kind"] == "development_anonymous"
     assert payload["permissions"] == ["*"]
-    assert payload["features"] == {
-        "console_workbench_v2": True,
-        "console_developer_v2": False,
-        "console_admin_v2": False,
-    }
-
+    assert "features" not in payload
 
 def test_console_ws_ticket_is_resource_bound_and_single_use() -> None:
     snapshot = deepcopy(VIDEO_JOBS)
@@ -197,12 +186,10 @@ def test_console_next_shell_and_hashed_assets_are_public() -> None:
     home = client.get("/")
     canonical = client.get("/console")
     shell = client.get("/console/next")
-    legacy = client.get("/console/legacy")
 
     assert home.status_code == 200
     assert canonical.status_code == 200
     assert shell.status_code == 200
-    assert legacy.status_code == 200
     assert home.text == shell.text
     assert canonical.text == shell.text
     assert shell.headers["Cache-Control"] == "no-cache, no-store, must-revalidate"
@@ -217,7 +204,6 @@ def test_console_next_shell_and_hashed_assets_are_public() -> None:
     assert asset.status_code == 200
     assert asset.headers["Cache-Control"] == "public, max-age=31536000, immutable"
     assert asset.headers["X-Content-Type-Options"] == "nosniff"
-
 
 def test_console_next_asset_route_hides_internal_files_and_traversal() -> None:
     client = TestClient(app)

@@ -57,15 +57,19 @@ curl "https://portrait.internal.example/v1/analysis/artifacts/${ARCHIVE_ID}/${AR
 
 解析档案按租户隔离且不设数量上限。接入方应使用游标分页，不应一次拉取全部记录；生产运维必须同时备份数据库索引和对象存储，缺少任一部分都不能完整恢复档案。
 
-### 0.10.0 控制台入口与智能分析
+### 0.11.1 控制台唯一入口与运维能力
 
-- 正式登录地址调整为 `/`，认证成功后进入 `/console#/`；`/console/next` 只用于新版直达验收，`/console/legacy` 只用于灰度期回退，`/health` 不再兼作登录或主页入口。
+- 正式登录地址调整为 `/`，认证成功后进入 `/console#/`；`/console/next` 只用于新版直达验收，`/console/legacy` 已删除，`/health` 不再兼作登录或主页入口。
 - 控制台登录继续接受 API Key 或 JWT。单租户凭证由服务端自动解析租户，调用方无需再传 `X-Tenant-ID`；只有多租户凭证才需要显式选择本次请求租户。
 - 控制台不提供用户名/密码模式，因为当前平台身份契约不包含用户目录、密码散列、重置、多因素认证和账号锁定。业务系统不得把 API Key 包装成用户名/密码后长期存储。
 - 智能分析提供图片分析、视频解析、视频流解析和解析结果库四个入口。视频任务与流操作仍使用原有 v1 API；历史查询统一使用 `/v1/analysis/results`，不应恢复已删除的旧结果列表接口。
 - 未认证的 `/console` 站内深链会跳转到 `/?redirect=...`，认证后恢复目标。接入网关应放行根路径与控制台静态资源，并保留 URL 中的 path、query 和 fragment。
-- 全站紧急回退时设置 `CONSOLE_DEFAULT_VERSION=legacy` 并重启服务；不要删除新版构建产物或解析档案数据。回退窗口结束前，自动化脚本仍应同时探测 `/`、`/console/next` 和 `/console/legacy`。
+- 旧版删除后，全站紧急回退应部署上一版镜像或受控静态构件；不要删除新版构建产物或解析档案数据。自动化脚本应探测 `/` 与 `/console/next`，并确认 `/console/legacy` 返回 404。
 
+- 开发调试台支持批量检索、批量比对、视频流注册/列表/事件；业务系统仍应使用 SDK 或 OpenAPI 生成客户端，不应把控制台当作自动化调用接口。
+- 总览 SLO 优先读取当前租户 30 天调用日志，缺少 access:read 或窗口为空时回退 Prometheus；对接方排障时应同时保留 request_id、HTTP 状态和稳定错误码。
+- 运维审计使用 /v1/admin/audit/events 的 records、summary 和 filters；备份快照只返回公开摘要，不包含对象 key、bucket、摘要值或服务端路径。
+- 轨迹复核标签限定为 confirmed、mismatch、false_positive、low_quality、uncertain；阈值建议 auto_apply 始终为 false，调用方不得自动写回生产阈值。
 ### 0.9.1 媒体上传兼容性与控制台展示
 
 - 图片格式以文件签名和解码器识别结果为准。JPEG、PNG、WebP、BMP 的扩展名缺失或与内容不匹配时不再拒绝请求，只记录不包含原文件名的告警；签名与实际解码格式不一致、文件损坏、尺寸或像素数超限仍会拒绝。

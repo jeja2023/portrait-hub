@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { Code2, Eye, Plus, RefreshCw, Save, Search, Settings2, Trash2, UserRound } from "@lucide/vue";
@@ -15,6 +15,8 @@ import {
   ElOption,
   ElSelect,
   ElSkeleton,
+  ElStep,
+  ElSteps,
 } from "element-plus";
 
 import { ApiError, apiRequest, jsonBody } from "../api/client";
@@ -46,6 +48,8 @@ const enrollFiles = ref<File[]>([]);
 const enrollId = ref("");
 const enrollName = ref("");
 const enrollModality = ref("body");
+const enrollStep = ref(0);
+const enrollResult = ref<Record<string, unknown> | null>(null);
 const deleteOpen = ref(false);
 const deleteLoading = ref(false);
 const reindexOpen = ref(false);
@@ -58,6 +62,22 @@ const detailPersonId = computed(() =>
 const detailFeatures = computed(() =>
   Array.isArray(detail.value?.features) ? (detail.value.features as Record<string, unknown>[]) : [],
 );
+const enrollResultPerson = computed(() =>
+  enrollResult.value?.person && typeof enrollResult.value.person === "object"
+    ? (enrollResult.value.person as Record<string, unknown>)
+    : null,
+);
+const enrollResultPersonId = computed(() =>
+  typeof enrollResultPerson.value?.person_id === "string" ? enrollResultPerson.value.person_id : "",
+);
+const enrollSkippedCount = computed(() => {
+  for (const key of ["skipped", "skipped_count", "duplicate_count", "duplicates"]) {
+    const value = enrollResult.value?.[key];
+    if (typeof value === "number") return value;
+    if (Array.isArray(value)) return value.length;
+  }
+  return 0;
+});
 
 async function loadPeople(append = false): Promise<void> {
   loading.value = !append;
@@ -100,9 +120,36 @@ function closeDetail(): void {
   detail.value = null;
   void router.replace("/gallery");
 }
+function openEnroll(): void {
+  enrollStep.value = 0;
+  enrollResult.value = null;
+  enrollOpen.value = true;
+}
+
 function selectedEnrollFiles(event: Event): void {
   enrollFiles.value = Array.from((event.target as HTMLInputElement).files ?? []);
 }
+
+function resetEnroll(): void {
+  enrollFiles.value = [];
+  enrollId.value = "";
+  enrollName.value = "";
+  enrollModality.value = "body";
+  enrollResult.value = null;
+  enrollStep.value = 0;
+}
+
+function closeEnroll(): void {
+  enrollOpen.value = false;
+  resetEnroll();
+}
+
+async function finishEnroll(openPerson: boolean): Promise<void> {
+  const personId = enrollResultPersonId.value;
+  closeEnroll();
+  if (openPerson && personId) await openDetail(personId);
+}
+
 async function enroll(): Promise<void> {
   if (!enrollFiles.value.length) return;
   enrollLoading.value = true;
@@ -112,15 +159,13 @@ async function enroll(): Promise<void> {
     if (enrollId.value.trim()) body.append("person_id", enrollId.value.trim());
     if (enrollName.value.trim()) body.append("display_name", enrollName.value.trim());
     body.append("modality", enrollModality.value);
-    const payload = await apiRequest<{ person: Record<string, unknown> }>(
+    enrollResult.value = await apiRequest<Record<string, unknown>>(
       "/v1/gallery/enroll",
       { method: "POST", body },
       120_000,
     );
-    enrollOpen.value = false;
-    enrollFiles.value = [];
     await loadPeople();
-    if (typeof payload.person.person_id === "string") await openDetail(payload.person.person_id);
+    enrollStep.value = 2;
   } catch (error) {
     errorMessage.value = error instanceof ApiError ? error.message : "人员注册失败";
   } finally {
@@ -231,7 +276,7 @@ watch(
           v-if="capabilities.hasPermission('gallery:write')"
           type="primary"
           :icon="Plus"
-          @click="enrollOpen = true"
+          @click="openEnroll"
           >注册人员</ElButton
         >
         <ElDropdown
@@ -269,7 +314,7 @@ watch(
           v-if="people.length === 0"
           title="还没有人员"
           action-label="注册第一个人员"
-          @action="enrollOpen = true"
+          @action="openEnroll"
         />
         <div v-else class="table-wrap">
           <table class="data-table">
@@ -376,34 +421,63 @@ watch(
         </div></template
       ></ElDrawer
     >
-    <ElDialog v-model="enrollOpen" title="注册人员" width="min(560px, 92vw)" :close-on-click-modal="false"
-      ><div class="enroll-form">
-        <label><span>人员名称</span><ElInput v-model="enrollName" maxlength="256" /></label
-        ><label><span>人员 ID（可选）</span><ElInput v-model="enrollId" maxlength="128" /></label
-        ><label
-          ><span>模态</span
-          ><ElSelect v-model="enrollModality"
-            ><ElOption label="人体" value="body" /><ElOption label="人脸" value="face" /><ElOption
-              label="衣着"
-              value="appearance" /></ElSelect></label
-        ><label
-          ><span>特征图片</span
-          ><input type="file" accept="image/*" multiple @change="selectedEnrollFiles" /><small
-            >已选择 {{ enrollFiles.length }} 张</small
-          ></label
-        >
+    <ElDialog
+      v-model="enrollOpen"
+      title="注册人员"
+      width="min(620px, 94vw)"
+      :close-on-click-modal="false"
+      @closed="resetEnroll"
+    >
+      <ElSteps :active="enrollStep" finish-status="success" class="enroll-steps">
+        <ElStep title="基本信息" />
+        <ElStep title="上传图片" />
+        <ElStep title="完成" />
+      </ElSteps>
+      <div v-if="enrollStep === 0" class="enroll-form">
+        <label><span>人员名称</span><ElInput v-model="enrollName" maxlength="256" /></label>
+        <label><span>人员 ID（可选）</span><ElInput v-model="enrollId" maxlength="128" /></label>
+        <label>
+          <span>模态</span>
+          <ElSelect v-model="enrollModality">
+            <ElOption label="人体" value="body" />
+            <ElOption label="人脸" value="face" />
+            <ElOption label="衣着" value="appearance" />
+          </ElSelect>
+        </label>
       </div>
-      <template #footer
-        ><ElButton @click="enrollOpen = false">取消</ElButton
-        ><ElButton
+      <div v-else-if="enrollStep === 1" class="enroll-form">
+        <label>
+          <span>特征图片</span>
+          <input type="file" accept="image/*" multiple @change="selectedEnrollFiles" />
+          <small>已选择 {{ enrollFiles.length }} 张；服务端会跳过重复或不可用图片。</small>
+        </label>
+      </div>
+      <div v-else class="enroll-complete">
+        <UserRound :size="32" />
+        <h3>注册完成</h3>
+        <p>
+          {{ enrollResultPerson?.display_name || enrollName || "未命名人员" }}
+          <code v-if="enrollResultPersonId">{{ enrollResultPersonId }}</code>
+        </p>
+        <p v-if="enrollSkippedCount">已跳过 {{ enrollSkippedCount }} 张重复或不可用图片。</p>
+        <p v-else>未发现重复跳过图片。</p>
+      </div>
+      <template #footer>
+        <ElButton v-if="enrollStep < 2" @click="closeEnroll">取消</ElButton>
+        <ElButton v-if="enrollStep === 1" @click="enrollStep = 0">上一步</ElButton>
+        <ElButton v-if="enrollStep === 0" type="primary" @click="enrollStep = 1">下一步</ElButton>
+        <ElButton
+          v-else-if="enrollStep === 1"
           type="primary"
           :disabled="enrollFiles.length === 0"
           :loading="enrollLoading"
           @click="enroll"
-          >注册</ElButton
-        ></template
-      ></ElDialog
-    >
+          >提交注册</ElButton
+        >
+        <ElButton v-if="enrollStep === 2" @click="finishEnroll(false)">完成</ElButton>
+        <ElButton v-if="enrollStep === 2" type="primary" @click="finishEnroll(true)">查看人员详情</ElButton>
+      </template>
+    </ElDialog>
     <ElDialog
       v-model="reindexOpen"
       title="特征重建预演"
@@ -621,6 +695,9 @@ watch(
   justify-content: flex-end;
   gap: 8px;
 }
+.enroll-steps {
+  margin-bottom: 22px;
+}
 .enroll-form {
   display: grid;
   gap: 15px;
@@ -631,7 +708,27 @@ watch(
   color: #62706d;
   font-size: 13px;
 }
+.enroll-complete {
+  display: grid;
+  place-items: center;
+  gap: 8px;
+  min-height: 190px;
+  color: #62706d;
+  text-align: center;
+}
+.enroll-complete h3 {
+  margin: 4px 0 0;
+  color: #1f2d2a;
+}
+.enroll-complete p {
+  margin: 0;
+}
+.enroll-complete code {
+  margin-left: 6px;
+}
 .enroll-form small {
   color: #71807c;
 }
 </style>
+
+

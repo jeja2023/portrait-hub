@@ -25,7 +25,6 @@ export interface Pagination {
   has_more: boolean;
 }
 
-export type ConsoleFeature = "console_workbench_v2" | "console_developer_v2" | "console_admin_v2";
 
 export interface ConsoleCapabilities {
   tenant_id: string;
@@ -35,7 +34,6 @@ export interface ConsoleCapabilities {
   permissions: string[];
   scopes: string[];
   expires_at: number | null;
-  features: Record<ConsoleFeature, boolean>;
 }
 
 export interface JobSummary {

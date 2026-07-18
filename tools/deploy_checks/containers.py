@@ -29,7 +29,6 @@ def check_docker_files(root: Path, report: DeployReport) -> None:
                 "FROM node:22.14.0-bookworm-slim AS console-builder",
                 "RUN npm ci",
                 "RUN npm run console:build",
-                "COPY frontend/console /workspace/frontend/console",
                 "COPY --from=console-builder /build/frontend/console-next/dist /workspace/frontend/console-next/dist",
             ]
         ),

@@ -247,10 +247,11 @@ def check_model_governance_audit(root: Path) -> list[dict[str, Any]]:
                 and 'permission_dependency("admin:status")' in portrait_admin_routes
                 and '"audit_chain": audit_chain' in portrait_admin_routes
                 and "/v1/admin/audit/verify" in console_module_sources
-                and "auditVerificationPayload" in console_module_sources
-                and "auditChainErrorCount" in console_module_sources
-                and "audit_chain" in console_module_sources
-                and "path_hash" in console_module_sources
+                and "const auditChain = ref" in console_module_sources
+                and "auditChain.ok" in console_module_sources
+                and "auditChain.error_count" in console_module_sources
+                and "auditChain.path_hash" in console_module_sources
+                and "auditChain.record_count" in console_module_sources
             ),
         },
         {
@@ -268,9 +269,7 @@ def check_model_governance_audit(root: Path) -> list[dict[str, Any]]:
                 and "created_until" in portrait_audit
                 and 'payload.get("tenant_id") != tenant_id' in portrait_audit
                 and '"api_key"'
-                not in portrait_audit.split("PUBLIC_AUDIT_EVENT_FIELDS", 1)[1].split(
-                    "def", 1
-                )[0]
+                not in portrait_audit.split("PUBLIC_AUDIT_EVENT_FIELDS", 1)[1].split("def", 1)[0]
                 and '"/v1/admin/audit/events"' in portrait_admin_routes
                 and "read_public_audit_events" in portrait_admin_routes
                 and "created_until 必须大于等于 created_since" in portrait_admin_routes
@@ -280,16 +279,15 @@ def check_model_governance_audit(root: Path) -> list[dict[str, Any]]:
                 and "不支持的审计事件类别" in portrait_admin_routes
                 and 'permission_dependency("admin:status")' in portrait_admin_routes
                 and "MAX_PUBLIC_AUDIT_EVENT_LIMIT" in portrait_admin_routes
-                and "/v1/admin/audit/events?${auditEventQueryParams().toString()}"
-                in console_module_sources
-                and "function auditEventQueryParams" in console_module_sources
-                and "audit-event-filter-button" in console_module_sources
-                and "audit-category-filter-input" in console_module_sources
-                and 'params.set("category", categoryFilter)' in console_module_sources
-                and "audit-event-table" in console_module_sources
-                and "function renderAuditEventRows" in console_module_sources
-                and "auditEventsPayload" in console_module_sources
-                and "audit_events" in console_module_sources
+                and '"/v1/admin/audit/events?" + params.toString()' in console_module_sources
+                and "async function loadAudit" in console_module_sources
+                and "const auditCategoryFilter = ref" in console_module_sources
+                and 'params.set("category", auditCategoryFilter.value)' in console_module_sources
+                and "const auditCreatedRange = ref" in console_module_sources
+                and "const auditPayload = ref" in console_module_sources
+                and "auditPayload.value.records" in console_module_sources
+                and "auditPayload.matched_count" in console_module_sources
+                and "auditPayload.malformed_count" in console_module_sources
             ),
         },
         {
@@ -303,28 +301,28 @@ def check_model_governance_audit(root: Path) -> list[dict[str, Any]]:
                 and 'payload.get("tenant_id") != tenant_id or payload.get("event") != "admin_backup"'
                 in portrait_audit
                 and '"object_key"'
-                not in portrait_audit.split("PUBLIC_BACKUP_SNAPSHOT_FIELDS", 1)[
-                    1
-                ].split("PUBLIC_AUDIT_EVENT_FIELDS", 1)[0]
+                not in portrait_audit.split("PUBLIC_BACKUP_SNAPSHOT_FIELDS", 1)[1].split(
+                    "PUBLIC_AUDIT_EVENT_FIELDS", 1
+                )[0]
                 and '"bucket"'
-                not in portrait_audit.split("PUBLIC_BACKUP_SNAPSHOT_FIELDS", 1)[
-                    1
-                ].split("PUBLIC_AUDIT_EVENT_FIELDS", 1)[0]
+                not in portrait_audit.split("PUBLIC_BACKUP_SNAPSHOT_FIELDS", 1)[1].split(
+                    "PUBLIC_AUDIT_EVENT_FIELDS", 1
+                )[0]
                 and '"sha256"'
-                not in portrait_audit.split("PUBLIC_BACKUP_SNAPSHOT_FIELDS", 1)[
-                    1
-                ].split("PUBLIC_AUDIT_EVENT_FIELDS", 1)[0]
+                not in portrait_audit.split("PUBLIC_BACKUP_SNAPSHOT_FIELDS", 1)[1].split(
+                    "PUBLIC_AUDIT_EVENT_FIELDS", 1
+                )[0]
                 and '"/v1/admin/backups"' in portrait_admin_routes
                 and "read_public_backup_snapshots" in portrait_admin_routes
                 and 'permission_dependency("admin:export")' in portrait_admin_routes
                 and "MAX_PUBLIC_BACKUP_SNAPSHOT_LIMIT" in portrait_admin_routes
                 and "/v1/admin/backups?limit=20" in console_module_sources
-                and "backup-snapshot-summary" in console_module_sources
-                and "backup-snapshot-table" in console_module_sources
-                and "backup-snapshot-refresh-button" in console_module_sources
-                and "function renderBackupSnapshots" in console_module_sources
-                and "async function refreshAdminData" in console_module_sources
-                and "backup_snapshots" in console_module_sources
+                and "const backupPayload = ref" in console_module_sources
+                and "async function loadBackups" in console_module_sources
+                and "backupPayload.value = await apiRequest" in console_module_sources
+                and "backupPayload.value.snapshots" in console_module_sources
+                and "item.object_backend" in console_module_sources
+                and "item.bytes" in console_module_sources
             ),
         },
     ]

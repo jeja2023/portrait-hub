@@ -1,10 +1,12 @@
-<script setup lang="ts">
-import { computed, onBeforeUnmount, ref } from "vue";
+﻿<script setup lang="ts">
+import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { Code2, ImageUp, Play, RotateCcw } from "@lucide/vue";
 import { ElAlert, ElButton, ElCheckbox, ElOption, ElSelect } from "element-plus";
 
 import { ApiError, apiRequest } from "../../api/client";
 import AnalysisNavigation from "../../components/AnalysisNavigation.vue";
+import EmptyState from "../../components/EmptyState.vue";
+import FrameGrid from "../../components/FrameGrid.vue";
 import RawDataDrawer from "../../components/RawDataDrawer.vue";
 import { usePrefsStore } from "../../stores/prefs";
 
@@ -17,6 +19,32 @@ const loading = ref(false);
 const errorMessage = ref("");
 const result = ref<Record<string, unknown> | null>(null);
 const showRaw = ref(false);
+const imageArchives = ref<AnalysisArchive[]>([]);
+const archiveNextCursor = ref<string | null>(null);
+const archiveLoading = ref(false);
+
+interface AnalysisPreview {
+  artifact_id: string;
+  label: string;
+  src: string;
+  content_url?: string;
+}
+
+interface AnalysisArchive {
+  archive_id: string;
+  request_id: string;
+  source_type: string;
+  mode: string;
+  payload: Record<string, unknown>;
+  previews: AnalysisPreview[];
+  created_at: number;
+  next_cursor?: string | null;
+}
+
+interface AnalysisArchiveResponse {
+  results: AnalysisArchive[];
+  next_cursor: string | null;
+}
 
 const endpointOptions = [
   { value: "/v1/infer/persons", label: "人体解析" },
@@ -62,6 +90,7 @@ async function analyze(): Promise<void> {
       { method: "POST", body },
       60_000,
     );
+    void loadImageArchives();
   } catch (error) {
     errorMessage.value = error instanceof ApiError ? error.message : "图片分析失败";
   } finally {
@@ -77,6 +106,23 @@ function reset(): void {
   previewUrl.value = "";
 }
 
+async function loadImageArchives(append = false): Promise<void> {
+  archiveLoading.value = true;
+  try {
+    const params = new URLSearchParams({ source_type: "image", limit: "6" });
+    if (append && archiveNextCursor.value) params.set("cursor", archiveNextCursor.value);
+    const payload = await apiRequest<AnalysisArchiveResponse>(`/v1/analysis/results?${params}`);
+    imageArchives.value = append ? [...imageArchives.value, ...payload.results] : payload.results;
+    archiveNextCursor.value = payload.next_cursor;
+  } catch {
+    imageArchives.value = append ? imageArchives.value : [];
+    archiveNextCursor.value = null;
+  } finally {
+    archiveLoading.value = false;
+  }
+}
+
+onMounted(() => void loadImageArchives());
 onBeforeUnmount(() => {
   if (previewUrl.value) URL.revokeObjectURL(previewUrl.value);
 });
@@ -141,9 +187,34 @@ onBeforeUnmount(() => {
           </div>
           <p v-if="summary.length === 0">分析已完成，可在开发者模式查看脱敏详情。</p>
         </div>
+        <FrameGrid v-if="result" :data="result" title="标注图与证据" />
         <div v-else class="result-empty"><ImageUp :size="34" /><span>结果将在这里显示</span></div>
       </section>
     </div>
+    <section class="archive-panel" aria-labelledby="image-archives-title">
+      <div class="archive-panel__header">
+        <h2 id="image-archives-title" class="section-title">图片归档结果</h2>
+        <ElButton :loading="archiveLoading" @click="loadImageArchives()">刷新归档</ElButton>
+      </div>
+      <EmptyState
+        v-if="imageArchives.length === 0"
+        title="暂无图片归档"
+        description="完成并归档的图片分析结果会显示在这里。"
+      />
+      <div v-else class="archive-list">
+        <article v-for="archive in imageArchives" :key="archive.archive_id" class="archive-row">
+          <img v-if="archive.previews[0]?.src" :src="archive.previews[0].src" alt="图片归档预览" />
+          <div>
+            <strong>{{ archive.mode || "图片分析" }}</strong>
+            <code>{{ archive.request_id }}</code>
+          </div>
+          <span>{{ archive.previews.length }} 张预览</span>
+        </article>
+      </div>
+      <div v-if="archiveNextCursor" class="load-more">
+        <ElButton :loading="archiveLoading" @click="loadImageArchives(true)">加载更多</ElButton>
+      </div>
+    </section>
     <RawDataDrawer v-model="showRaw" :data="result" />
   </div>
 </template>
@@ -239,9 +310,68 @@ onBeforeUnmount(() => {
   border: 1px dashed #c6d0ce;
   border-radius: 5px;
 }
+.archive-panel {
+  margin-top: 22px;
+  padding: 18px;
+  background: #fff;
+  border: 1px solid #d8e0de;
+  border-radius: 5px;
+}
+.archive-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.archive-panel :deep(.el-empty__description p) {
+  color: #52605d;
+}
+.archive-list {
+  display: grid;
+  gap: 8px;
+}
+.archive-row {
+  display: grid;
+  grid-template-columns: 88px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 10px;
+  border: 1px solid #e0e7e5;
+  border-radius: 4px;
+}
+.archive-row img {
+  width: 88px;
+  height: 64px;
+  object-fit: cover;
+  background: #eef3f2;
+  border-radius: 3px;
+}
+.archive-row div {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+.archive-row code,
+.archive-row span {
+  color: #62706d;
+  font-size: 12px;
+}
+.archive-row code {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.load-more {
+  display: flex;
+  justify-content: center;
+  margin-top: 12px;
+}
 @media (max-width: 900px) {
   .analysis-grid {
     grid-template-columns: 1fr;
   }
 }
 </style>
+
+

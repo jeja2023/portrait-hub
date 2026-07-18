@@ -334,7 +334,8 @@ def refresh_streams_state() -> None:
         STREAMS.update(current_streams)
         for key, persisted_stream in persisted_streams.items():
             current_stream = current_streams.get(key)
-            if current_stream is None or persisted_stream.updated_at > current_stream.updated_at:
+            persisted_has_new_events = current_stream is not None and len(persisted_stream.events) > len(current_stream.events)
+            if current_stream is None or persisted_stream.updated_at > current_stream.updated_at or persisted_has_new_events:
                 STREAMS[key] = persisted_stream
 
 

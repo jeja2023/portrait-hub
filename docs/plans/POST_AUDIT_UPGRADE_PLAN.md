@@ -6,6 +6,8 @@
 
 本文记录本轮全面检查后的已落地优化，以及仍需要真实生产依赖或业务数据配合的扩展验收项。它补充 `影鉴优化方案.md` 和 `PLATFORM_ACCEPTANCE.md`，作为后续升级的执行清单。
 
+
+> 2026-07-18 / 0.11.1 说明：本文是 0.8.x 后审计升级历史记录，其中关于 frontend/console、console.config.js 和旧模块化控制台的条目已被 Console Next 取代；后续控制台改动请以 frontend/console-next、docs/frontend 和 readiness 门禁为准。
 ## 2026-07-14 / v0.8.0 平台可靠性与可访问性升级
 
 - 已完成持久化视频队列、独立 worker、分块上传、租约续期、超时恢复和跨进程取消。
@@ -13,12 +15,16 @@
 - 已完成调用统计批量落盘、严格类型/部署检查恢复和灯箱焦点管理；移动端导航按范围暂缓。
 - 完整发布内容、配置项、部署模板和验证结果见根目录 `更新日志.md` 的 `0.8.0` 条目。
 
+
+> 2026-07-18 / 0.11.1 说明：本文是 0.8.x 后审计升级历史记录，其中关于 frontend/console、console.config.js 和旧模块化控制台的条目已被 Console Next 取代；后续控制台改动请以 frontend/console-next、docs/frontend 和 readiness 门禁为准。
 ## 2026-07-14 / v0.7.1 租户目录与管理员开通体验收口
 
 - 在 `0.7.0` 单凭证优先底座上，新增租户目录接口和控制台“租户开通”面板，管理员只需维护租户名称、用户/角色和接入应用。
 - 后台负责生成稳定 `tenant_id`、默认接入应用、一次性 API Key、scope、限流、配额和审计归属，业务系统默认只携带单租户 API Key。
 - 租户目录读写独立为 `tenants:read` / `tenants:write` 管理权限，默认业务应用不授予该能力，保持后台管理面和业务调用面的安全边界。
 - 文档、SDK 示例、OpenAPI 契约测试和控制台契约测试已同步，版本启用为 `0.7.1`。
+
+> 2026-07-18 / 0.11.1 说明：本文是 0.8.x 后审计升级历史记录，其中关于 frontend/console、console.config.js 和旧模块化控制台的条目已被 Console Next 取代；后续控制台改动请以 frontend/console-next、docs/frontend 和 readiness 门禁为准。
 ## 2026-07-14 / v0.7.0 租户凭证体验升级
 
 - 保留租户作为数据隔离、审计和配额边界，但将系统对接升级为“单凭证优先”：单租户 API Key/JWT 自动解析租户，旧版 `X-Tenant-ID + 凭证` 继续兼容。

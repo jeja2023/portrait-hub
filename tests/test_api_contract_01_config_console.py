@@ -299,239 +299,53 @@ def test_video_job_openapi_uses_time_sampling_batch_contract() -> None:
     assert "max_frames" not in properties
 
 
-def test_legacy_console_is_product_admin_shell_with_strict_inline_policy() -> None:
+def test_removed_legacy_console_routes_are_not_served() -> None:
     client = TestClient(app)
 
-    response = client.get("/console/legacy")
+    for path in [
+        "/console/legacy",
+        "/assets/console.js",
+        "/assets/console.css",
+        "/assets/console.config.js",
+        "/assets/console",
+        "/assets/console/",
+        "/assets/console/console.html",
+        "/assets/console/views/app.js",
+        "/assets/console/templates/core.js",
+    ]:
+        assert client.get(path).status_code == 404
 
+
+def test_console_next_is_the_public_product_shell_with_strict_policy() -> None:
+    client = TestClient(app)
+
+    home = client.get("/")
+    response = client.get("/console")
+    direct = client.get("/console/next")
+
+    assert home.status_code == 200
     assert response.status_code == 200
-    body = response.text
-    assert "影鉴 业务控制台" in body
-    assert "启用 JavaScript" in body
+    assert direct.status_code == 200
+    assert home.text == response.text
+    assert response.text == direct.text
+    assert response.headers["Cache-Control"] == "no-cache, no-store, must-revalidate"
     csp = response.headers["Content-Security-Policy"]
     assert "img-src 'self' data: blob:" in csp
-    assert "script-src 'self' 'nonce-" in csp
-    assert "style-src 'self' 'nonce-" in csp
+    assert "script-src 'self'" in csp
+    assert "style-src 'self'" in csp
     assert "'unsafe-inline'" not in csp
-    assert 'style="' not in body
-    assert "onclick" not in body
-    assert "/assets/console/views/navigation.js" in body
-    assert "/assets/console/styles/components.css?v=unified-media-cards" in body
-    assert "/assets/console/visuals/results.js?v=unified-media-cards" in body
-    assert "/assets/console/views/results.js?v=unified-media-cards" in body
+    assert "'unsafe-eval'" not in csp
+    assert "/assets/console-next/assets/" in response.text
 
+    asset_url = response.text.split('src="', 1)[1].split('"', 1)[0]
+    asset = client.get(asset_url)
+    assert asset.status_code == 200
+    assert asset.headers["Cache-Control"] == "public, max-age=31536000, immutable"
+    assert asset.headers["X-Content-Type-Options"] == "nosniff"
 
-def test_console_assets_use_light_structured_response_panels() -> None:
-    client = TestClient(app)
-
-    config_js = client.get("/assets/console.config.js")
-    js = client.get("/assets/console.js")
-    runtime_js = client.get("/assets/console/views/app.js")
-    template_core_js = client.get("/assets/console/templates/core.js")
-    template_access_js = client.get("/assets/console/templates/access.js")
-    template_governance_js = client.get("/assets/console/templates/governance.js")
-    template_index_js = client.get("/assets/console/templates/index.js")
-    formatting_js = client.get("/assets/console/runtime/formatting.js")
-    network_js = client.get("/assets/console/runtime/network.js")
-    result_visuals_js = client.get("/assets/console/visuals/results.js")
-    dashboard_js = client.get("/assets/console/views/dashboard.js")
-    data_viewer_js = client.get("/assets/console/renderers/data-viewer.js")
-    navigation_js = client.get("/assets/console/views/navigation.js")
-    access_js = client.get("/assets/console/views/access.js")
-    observability_js = client.get("/assets/console/views/observability.js")
-    governance_js = client.get("/assets/console/views/governance.js")
-    results_js = client.get("/assets/console/views/results.js")
-    css = client.get("/assets/console.css")
-    components_css = client.get("/assets/console/styles/components.css")
-    data_viewer_css = client.get("/assets/console/styles/data-viewer.css")
-    responsive_css = client.get("/assets/console/styles/responsive.css")
-
-    assert config_js.status_code == 200
-    assert config_js.headers["Cache-Control"] == "no-cache"
-    assert template_core_js.headers["Cache-Control"] == "no-cache"
-    assert css.headers["Cache-Control"] == "no-cache"
-    assert js.status_code == 200
-    assert runtime_js.status_code == 200
-    assert template_core_js.status_code == 200
-    assert template_access_js.status_code == 200
-    assert template_governance_js.status_code == 200
-    assert template_index_js.status_code == 200
-    assert formatting_js.status_code == 200
-    assert network_js.status_code == 200
-    assert result_visuals_js.status_code == 200
-    assert dashboard_js.status_code == 200
-    assert data_viewer_js.status_code == 200
-    assert navigation_js.status_code == 200
-    assert access_js.status_code == 200
-    assert observability_js.status_code == 200
-    assert governance_js.status_code == 200
-    assert results_js.status_code == 200
-    assert css.status_code == 200
-    assert components_css.status_code == 200
-    assert data_viewer_css.status_code == 200
-    assert responsive_css.status_code == 200
-    config_body = config_js.text
-    js_body = js.text
-    runtime_body = runtime_js.text
-    template_core_body = template_core_js.text
-    template_access_body = template_access_js.text
-    template_governance_body = template_governance_js.text
-    template_index_body = template_index_js.text
-    formatting_body = formatting_js.text
-    network_body = network_js.text
-    result_visuals_body = result_visuals_js.text
-    dashboard_body = dashboard_js.text
-    data_viewer_body = data_viewer_js.text
-    navigation_body = navigation_js.text
-    access_body = access_js.text
-    observability_body = observability_js.text
-    governance_body = governance_js.text
-    results_body = results_js.text
-    css_body = "\n".join([css.text, components_css.text, data_viewer_css.text, responsive_css.text])
-    # The union preserves content contracts while implementation and templates live in focused assets.
-    views_union = "\n".join(
-        [
-            runtime_body,
-            template_core_body,
-            template_access_body,
-            template_governance_body,
-            template_index_body,
-            formatting_body,
-            network_body,
-            result_visuals_body,
-            dashboard_body,
-            access_body,
-            observability_body,
-            governance_body,
-            results_body,
-        ]
-    )
-    assert "PortraitConsoleConfig" in config_body
-    assert "/v1/infer/faces" in config_body
-    assert "PortraitConsoleRuntime" in js_body
-    assert ".result-visual-card--video .result-visual-stage text" in css_body
-    assert "function archivedMediaFrameVisuals" in results_body
-    assert 'const unit = sourceType === "image" ? "张" : "帧"' in results_body
-    assert '["image", "video", "stream"].includes(sourceType)' in results_body
-    assert 'accept="video/*,.mp4,.mov,.m4v,.avi,.mkv,.webm"' in template_core_body
-    assert "const endpointMap = consoleConfig.endpointMap" in views_union
-    assert "fallbackNavigation" in views_union
-    assert "data-viewer" in views_union
-    assert "查看完整数据（JSON）" in views_union
-    assert "复制数据" in views_union
-    assert "call-log-application-input" in views_union
-    assert 'value="/v1/gallery/search/batch" data-method="POST"' in views_union
-    assert 'value="/v1/compare/batch" data-method="POST"' in views_union
-    assert 'value="/v1/streams" data-method="POST"' in views_union
-    assert 'value="/v1/streams" data-method="GET"' in views_union
-    assert 'value="/v1/streams/{stream_id}/events" data-method="GET"' in views_union
-    assert "playground-stream-id-input" in views_union
-    assert "playground-stream-url-input" in views_union
-    assert "playground-async-mode-input" in views_union
-    assert "function apiRaw" in network_body
-    assert "function playgroundSelection" in access_body
-    assert 'appendFiles(form, "files"' in access_body
-    assert "endpoint_template" in access_body
-    assert "http_status" in views_union
-    assert "controlled_use" in access_body
-    assert "function summarizeSloCallLogs" in observability_body
-    assert "call_logs_30d" in observability_body
-    assert "/v1/access/call-logs?limit=500&created_since=" in observability_body
-    assert "queue_p95_seconds" in observability_body
-    assert "queue_p99_seconds" in observability_body
-    assert "gpu_queue_depth" in observability_body
-    assert "gpu_device_queue_depths" in observability_body
-    assert "error_budget_burn_rate" in observability_body
-    assert "success_rate_source" in observability_body
-    assert "call_log_window_seconds" in observability_body
-    assert "call-log-error-code-input" in views_union
-    assert "call-log-created-since-input" in views_union
-    assert "call-log-created-until-input" in views_union
-    assert "created_since" in views_union
-    assert "created_until" in views_union
-    assert "accessAppCallSummary" in access_body
-    assert "visionLightboxReturnFocus" in views_union
-    assert "trapVisionLightboxFocus" in views_union
-    assert 'node.querySelector(".vision-lightbox-close")?.focus()' in views_union
-    assert "/v1/access/tenants" in access_body
-    assert "access-tenant-form" in views_union
-    assert "租户开通" in views_union
-    assert "/v1/access/error-codes" in views_union
-    assert 'view: "error-codes"' in views_union
-    assert "error-codes-table" in views_union
-    assert "error-codes-json" in views_union
-    assert "renderErrorCodes" in observability_body
-    assert "最高错误率" in access_body
-    assert "release-audit-table" in views_union
-    assert "/v1/admin/models/rollout/audit?limit=20" in governance_body
-    assert "/v1/admin/audit/verify" in views_union
-    assert "auditVerificationPayload" in governance_body
-    assert "audit_chain" in views_union
-    assert "path_hash" in views_union
-    assert "auditChainErrorCount" in governance_body
-    assert "/v1/admin/audit/events?limit=20" not in views_union
-    assert "/v1/admin/audit/events?${auditEventQueryParams().toString()}" in governance_body
-    assert "auditEventQueryParams" in governance_body
-    assert "audit-event-filter-button" in views_union
-    assert "audit-category-filter-input" in views_union
-    assert 'params.set("category", categoryFilter)' in governance_body
-    assert "audit-event-table" in views_union
-    assert "renderAuditEventRows" in governance_body
-    assert "audit_events" in views_union
-    assert "/v1/admin/backups?limit=20" in governance_body
-    assert "backup-snapshot-summary" in views_union
-    assert "backup-snapshot-table" in views_union
-    assert "backup-snapshot-refresh-button" in views_union
-    assert "renderBackupSnapshots" in governance_body
-    assert "refreshAdminData" in governance_body
-    assert "backup_snapshots" in views_union
-    assert "track-review-annotation-form" in views_union
-    assert "/v1/evaluation/datasets" in views_union
-    assert "/v1/evaluation/threshold-recommendations" in views_union
-    assert "evaluation-dataset-table" in views_union
-    assert "evaluation-threshold-table" in views_union
-    assert "renderEvaluationThresholdRecommendations" in governance_body
-    assert "/v1/evaluation/track-reviews" in views_union
-    assert "/v1/evaluation/track-reviews/summary" in views_union
-    assert "evaluation-review-summary" in views_union
-    assert "import os" in access_body
-    assert 'os.getenv("PORTRAIT_HUB_API_TOKEN")' in access_body
-    assert "sdk-batch-code" in views_union
-    assert "sdk-video-code" in views_union
-    assert "sdk-batch-copy-button" in views_union
-    assert "sdk-video-copy-button" in views_union
-    assert "client.search_batch" in views_union
-    assert "async_mode=True" in views_union
-    assert "createVideoJob" in views_union
-    assert "client.jobResult" in views_union
-    assert "X-API-Key: ${state.apiKey}" not in views_union
-    assert 'class="json-view data-viewer"' in views_union
-    assert "PortraitConsoleModules" in data_viewer_body
-    assert "modules.navigation" in navigation_body
-    assert "gallery-rebuild" in navigation_body
-    assert '<pre id="dashboard-json"' not in views_union
-    assert '<pre id="models-json"' not in views_union
-    assert "--code" not in css_body
-    assert "#111827" not in css_body
-    assert "background: #fbfdff" in css_body
-    assert "智能分析" in navigation_body
-    assert "比对检索" in navigation_body
-    assert "特征重建" in navigation_body
-    assert "视频解析结果" in views_union
-    assert "视频流解析" in views_union
-    assert "stream-results-visuals" in views_union
-    assert "/v1/analysis/results?${params.toString()}" in results_body
-    assert "loadMoreAnalysisResults" in results_body
-    assert 'data-results-load-more="image"' in template_core_body
-    assert 'data-results-load-more="video"' in template_core_body
-    assert 'data-results-load-more="stream"' in template_core_body
-    assert "fetch(contentUrl, { headers: headers() })" in result_visuals_body
-    assert "/v1/vision/results" not in results_body
-    assert "/events?limit=200" not in results_body
-    assert "stream-live-summary" in template_access_body
-    assert "stream-live-visuals" in template_access_body
-    assert "renderLiveStreamResults(payload)" in network_body
-    assert 'watchJsonSocket("stream", `/ws/streams/${id}`' in runtime_body
-    assert "人员库查询" not in navigation_body
-    assert "智能解析" not in navigation_body
-    assert "视频分析" not in navigation_body
+    for blocked_asset in [
+        "/assets/console-next/index.html",
+        "/assets/console-next/.vite/manifest.json",
+        f"{asset_url}.map",
+    ]:
+        assert client.get(blocked_asset).status_code == 404

@@ -2,20 +2,37 @@
 
 面向 Ubuntu + Docker + NVIDIA GPU 的 ONNX 推理服务。服务通过 FastAPI 暴露接口，按 GPU 拆成多个 worker，适合给人像识别、人像检索、ReID 等业务项目提供共享推理能力。
 
-当前版本：`0.10.0`。本版本启用重建后的 Vue 3 控制台，以根路径作为统一登录入口，并补齐图片分析、视频解析、视频流解析和解析结果库的完整工作流。
+当前版本：0.11.1。本版本在 Console Next 唯一生产入口基础上补强迁移门禁、readiness 断言与历史文档收口；0.11.0 已完成旧控制台删除、生产入口切换、调试台、SLO、审计备份和人工复核工作流。
 
 > `0.9.0` 是破坏性升级。旧的 `/v1/vision/results`、`/v1/jobs/video/results` 及有限图片历史实现已删除，不提供兼容回退或旧记录自动迁移；接入方必须切换到统一档案接口。
 
 拆分后的模块映射、维护边界和验证命令见 [大型文件拆分维护指南](docs/maintenance/LARGE_FILE_SPLIT.md)，完整发布记录见 [更新日志](更新日志.md)。
 
+## 0.11.1 迁移门禁与文档收口
+
+- `tools/deploy_check.py --import-app` 不再对已删除的 `frontend/console/views` 做空目录扫描；新增 `legacy_console_source_removed` 断言，并让 `console_no_duplicate_v1_prefixes` 扫描 `frontend/console-next/src` 的 Vue/TypeScript/CSS 源码。
+- 平台 strict readiness 继续确认旧控制台源码目录缺失，并同步检查旧灰度变量、旧 `/assets/console/` 引用、`data-view=` 属性和 `PortraitConsoleModules` 不再进入运行时代码或配置。
+- 历史维护/计划文档已标注为 Console Next 迁移前记录，后续控制台开发以 `frontend/console-next`、`docs/frontend`、CI 与 readiness 门禁为准。
+- 根 `npm test` 已作为 `npm run check` 的标准别名，覆盖 Node SDK 契约与 Console Next lint、unit、typecheck 和 production build。
+
+## 0.11.0 生产入口收口与运维就绪
+
+- frontend/console、/console/legacy 和旧版 /assets/console* 资源已删除；/、/console 与 /console/next 统一提供 Console Next，旧路径稳定返回 404。
+- CONSOLE_DEFAULT_VERSION、三组角色域 feature flag 及其租户/百分比分桶配置已移除；紧急回退只允许部署上一版镜像或受控静态构件。
+- 调试台支持批量以图搜人、批量比对、视频流注册/列表/事件请求，响应同时显示端点模板、HTTP 状态、错误码、request_id 和操作属性；SDK 页补齐 Python/Node 异步批量和视频任务示例及复制操作。
+- 总览新增 30 天 SLO 面板：优先使用租户调用日志计算成功率和错误预算，无 access:read 或窗口无数据时回退 Prometheus；同时展示推理与排队 p95/p99、GPU 总队列和设备队列。
+- 运维页按真实 records 契约读取审计事件，支持事件、请求、结果、类别和时间筛选；审计链展示路径指纹、记录数与错误数，备份页展示快照后端、大小、增量起点和异常记录摘要。
+- 阈值与标注页使用后端支持的 confirmed/mismatch/false_positive/low_quality/uncertain 结论，补齐证据帧/引用、复核摘要、评估数据集和阈值建议。
+- 生产 readiness 已切换为扫描 frontend/console-next/src，原 11 个严格失败项全部通过；python tools/portrait_production_readiness.py --scope platform --strict 的失败数为 0。
+
 ## 0.10.0 新版控制台与统一入口
 
 - 控制台以 Vue 3、TypeScript、Vite、Element Plus、Pinia 和 Vue Router 重建，覆盖工作台、智能分析、开发者中心和系统管理，并保留明确的加载、空数据、错误和无权限状态。
-- `http://127.0.0.1:8765/` 是正式登录地址；认证成功后进入 `/console#/`。`/console/next` 用于新版直达验收，`/console/legacy` 用于灰度期回退，`/health` 仅承担健康探针职责。
+- `http://127.0.0.1:8765/` 是正式登录地址；认证成功后进入 `/console#/`。`/console/next` 保留为新版直达验收别名，旧版 `/console/legacy` 已删除，`/health` 仅承担健康探针职责。
 - 登录继续使用已有的 API Key 或 JWT 身份体系，不虚构后端尚未提供的用户名/密码账号。单租户凭证由服务端自动解析租户，登录页不再要求手工填写租户；多租户凭证仍需显式选择目标租户。
 - 智能分析补齐图片分析、离线视频解析、实时视频流解析和统一解析结果库。结果库支持按图片、视频、视频流及解析模式筛选、游标分页、预览和详情查看。
 - 凭证只保存在 `sessionStorage`，退出登录或会话失效返回根路径；未经认证的 `/console` 深链会携带安全的站内重定向参数返回登录页，认证后恢复原目标。
-- 新版默认启用，`CONSOLE_DEFAULT_VERSION=next`；灰度期继续保留旧版，只有完成生产观察窗口和两个发布周期门槛后才删除 legacy 资源。
+- 新版控制台已成为唯一生产入口；`CONSOLE_DEFAULT_VERSION` 与三组 legacy 灰度开关已删除，不再支持切回旧控制台资源。
 
 ## 0.9.1 媒体上传与结果展示
 
@@ -895,6 +912,6 @@ curl -X POST http://127.0.0.1:9001/predict \
 4. 考虑导出 FP16 或 TensorRT 版本。
 ## Console Next 构建与灰度
 
-新版控制台源码位于 frontend/console-next，使用 Node 22、Vue 3 和 TypeScript。npm ci 后执行 npm run console:build 生成 dist。根路径 / 提供登录页，认证成功后进入 /console；/console/next 与 /console/legacy 仅作为新版直达和回退入口。CONSOLE_DEFAULT_VERSION 默认 next，显式设为 legacy 可回退旧版。
+新版控制台源码位于 frontend/console-next，使用 Node 22、Vue 3 和 TypeScript。npm ci 后执行 npm run console:build 生成 dist。根路径 / 提供登录页，认证成功后进入 /console；/console/next 仅作为新版直达验收别名。旧版 /console/legacy 与 /assets/console* 静态资源已删除。
 
-CONSOLE_WORKBENCH_V2、CONSOLE_DEVELOPER_V2、CONSOLE_ADMIN_V2 三组开关支持全局、租户 allowlist 和稳定百分比灰度，关闭对应开关即可回退，不删除新旧构件或业务数据。新版 API Key/JWT 只保存在标签页级 sessionStorage，WebSocket 使用短期单次 ticket；多 worker/多副本部署前须将 ticket 存储迁移到共享原子消费实现。完整决策和验收证据见 docs/frontend。
+新版 API Key/JWT 只保存在标签页级 sessionStorage，WebSocket 使用短期单次 ticket；多 worker/多副本部署前须将 ticket 存储迁移到共享原子消费实现。旧控制台删除后，界面回退应通过上一版镜像或受控静态构件完成，不能再依赖 legacy feature flag。完整决策和验收证据见 docs/frontend。

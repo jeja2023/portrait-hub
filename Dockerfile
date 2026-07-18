@@ -75,7 +75,6 @@ RUN sed -i \
 
 COPY --from=builder /opt/portrait-hub-venv /opt/portrait-hub-venv
 COPY app /workspace/app
-COPY frontend/console /workspace/frontend/console
 COPY --from=console-builder /build/frontend/console-next/dist /workspace/frontend/console-next/dist
 COPY main.py /workspace/main.py
 COPY models.yml /workspace/models.yml

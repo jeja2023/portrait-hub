@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { Ban, Code2, Eye, Plus, RefreshCw } from "@lucide/vue";
@@ -10,6 +10,7 @@ import { openTicketWebSocket, type LiveConnectionState } from "../../api/ws";
 import AnalysisNavigation from "../../components/AnalysisNavigation.vue";
 import DangerConfirm from "../../components/DangerConfirm.vue";
 import EmptyState from "../../components/EmptyState.vue";
+import FrameGrid from "../../components/FrameGrid.vue";
 import RawDataDrawer from "../../components/RawDataDrawer.vue";
 import { useCapabilitiesStore } from "../../stores/capabilities";
 import { usePrefsStore } from "../../stores/prefs";
@@ -314,6 +315,10 @@ onBeforeUnmount(() => {
           </div>
         </dl>
         <ElAlert v-if="detail.job.error" :title="detail.job.error" type="error" :closable="false" show-icon />
+        <FrameGrid v-if="detail.result" :data="detail.result" title="帧结果" />
+        <div v-else-if="detail.job.status === 'completed'" class="result-empty-note">
+          任务已完成，但当前结果没有可展示的帧预览。
+        </div>
         <div v-if="prefs.developerMode" class="drawer-actions">
           <ElButton :icon="Code2" @click="rawOpen = true">原始数据</ElButton>
         </div></template
@@ -408,9 +413,18 @@ onBeforeUnmount(() => {
 .detail-grid dd {
   margin: 5px 0 0;
 }
+.result-empty-note {
+  margin-top: 18px;
+  padding: 16px;
+  color: #62706d;
+  background: #f8faf9;
+  border: 1px dashed #c6d0ce;
+  border-radius: 5px;
+}
 .drawer-actions {
   display: flex;
   justify-content: flex-end;
   margin-top: 18px;
 }
 </style>
+

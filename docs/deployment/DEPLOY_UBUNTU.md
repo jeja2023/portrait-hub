@@ -892,21 +892,20 @@ Compose 默认绑定：
 - 已完成至少一次真实模型压测。
 ## 新版控制台灰度与回退
 
-本节适用于 `0.10.0`。该版本默认启用 Console Next，并将根路径 `/` 作为正式登录入口。
+本节适用于 0.11.1。Console Next 是唯一生产控制台，根路径 / 是正式登录入口。0.11.1 在 0.11.0 入口切换基础上补强了迁移门禁和 readiness 断言。
 
-构建镜像时，Node 22 builder 会在根 npm workspace 中执行 npm ci 与 npm run console:build；运行镜像只复制 frontend/console 和 frontend/console-next/dist，不安装 Node。非镜像部署必须先在仓库根目录执行相同构建命令，并确认 dist/index.html 与 dist/.vite/manifest.json 存在。
+构建镜像时，Node 22 builder 会在根 npm workspace 中执行 npm ci 与 npm run console:build；运行镜像只复制 frontend/console-next/dist，不安装 Node，也不再包含旧版 frontend/console。非镜像部署必须先在仓库根目录执行相同构建命令，并确认 dist/index.html 与 dist/.vite/manifest.json 存在。
 
 入口与回退：
 
 - /：新版登录入口；已有有效会话时自动进入 /console。
-- /console：登录后的新版业务控制台，CONSOLE_DEFAULT_VERSION 默认 next。
-- /console/next：新版直接验收入口；/console/legacy：观察期回退入口。
-- CONSOLE_WORKBENCH_V2、CONSOLE_DEVELOPER_V2、CONSOLE_ADMIN_V2：分别控制工作台、开发者中心和系统管理。
-- 每组开关均有 PERCENT 与 TENANTS 配置。先用 TENANTS 开内部租户，再按 5%、25%、50%、100% 扩大；停止灰度时设为 false、0 和空列表。
-- 回退不需要删除 dist，也不得删除业务数据。关闭对应能力开关；全站回退时将 CONSOLE_DEFAULT_VERSION 设为 legacy 并重启服务。
+- /console：登录后的新版业务控制台，已是唯一生产入口。
+- /console/next：新版直接验收别名；/console/legacy 已删除。
+- CONSOLE_WORKBENCH_V2、CONSOLE_DEVELOPER_V2、CONSOLE_ADMIN_V2 与 CONSOLE_DEFAULT_VERSION 已删除，不再作为生产回退手段。
+- 旧版删除后，控制台回退必须使用上一版镜像或受控静态构件；不得删除业务数据，也不得通过已移除的 legacy 环境变量回退。
 
-上线前执行 npm run console:check、npm run console:e2e、pytest -q tests/test_console_next_contracts.py 和 python tools/deploy_check.py --skip-node。真实 CSP 必须保持 script-src self，禁止 unsafe-inline 与 unsafe-eval。
+上线前执行 `npm test`、`npm run console:e2e`、控制台/门禁定向或全量 `python -m pytest`、`python tools/deploy_check.py --json --import-app` 和 `python tools/portrait_production_readiness.py --scope platform --strict`。严格 readiness 必须为 strict_failure_count=0；真实 CSP 必须保持 script-src self，禁止 unsafe-inline 与 unsafe-eval。
 
 CONSOLE_WS_TICKET_TTL_SECONDS 默认 60 秒，ticket 单次消费并绑定租户、资源和权限。当前实现使用单进程有界内存，只适用于单 API worker；多 worker 或多副本拓扑必须先接入共享、原子消费、带 TTL 的存储，再扩大新版视频任务和视频流灰度。
 
-生产观察、自动回退阈值和 legacy 删除门槛以根目录《控制台前端重建方案.md》及 docs/frontend/CONSOLE_NEXT_ACCEPTANCE.md 为准。
+生产观察、上一版镜像回退演练和多副本 WS ticket 前置条件以根目录《控制台前端重建方案.md》及 docs/frontend/CONSOLE_NEXT_ACCEPTANCE.md 为准。

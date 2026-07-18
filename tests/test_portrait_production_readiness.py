@@ -66,7 +66,7 @@ def test_readiness_templates_include_cutover_and_worker_artifacts() -> None:
     checks = {item["name"]: item for item in check_templates(Path("."))}
 
     for item in [
-        "frontend/console/console.config.js",
+        "frontend/console-next/package.json",
         "package.json",
         "tools/portrait_cutover_check.py",
         "tools/portrait_model_regression.py",
@@ -80,11 +80,30 @@ def test_readiness_templates_include_cutover_and_worker_artifacts() -> None:
         assert checks[f"template:{item}"]["ok"] is True
 
 
-def test_readiness_tracks_console_config_externalization() -> None:
+def test_readiness_tracks_console_next_cutover() -> None:
     checks = {item["name"]: item for item in check_security_controls(Path("."))}
 
-    assert checks["frontend:console_config_externalized"]["ok"] is True
+    assert checks["frontend:legacy_console_removed"]["ok"] is True
+    assert checks["frontend:console_next_production_chain"]["ok"] is True
 
+
+def test_readiness_strict_console_and_governance_contracts_hold() -> None:
+    checks = {item["name"]: item for item in check_security_controls(Path("."))}
+    expected = [
+        "sdk:batch_async_and_video_examples",
+        "frontend:api_playground_stage_two_coverage",
+        "frontend:slo_panel_operational_contract",
+        "security:least_privilege_rbac_roles",
+        "security:access_center_state_safety",
+        "security:access_error_code_catalog",
+        "security:track_review_annotation_pool",
+        "security:upload_validation_error_minimal_disclosure",
+        "security:audit_chain_console_verification",
+        "security:audit_event_readback",
+        "security:backup_snapshot_readback",
+    ]
+
+    assert {name: checks[name]["ok"] for name in expected} == dict.fromkeys(expected, True)
 
 def test_runtime_error_redaction_contract_holds_in_repo() -> None:
     # 锁定运行期错误脱敏契约：响应只回 request-id、日志只记脱敏摘要。这两项由共享的

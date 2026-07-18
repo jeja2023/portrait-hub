@@ -1,4 +1,4 @@
-"""SDK 与控制台契约门禁：HTTP 错误契约、路径编码、multipart 转义、API playground 与 SLO 面板。"""
+"""SDK 与 Console Next 契约门禁：HTTP 错误、路径编码、multipart、调试台和 SLO 面板。"""
 
 from __future__ import annotations
 
@@ -26,8 +26,7 @@ def check_sdk_and_console(root: Path) -> list[dict[str, Any]]:
                 and "JSON.parse(text)" in node_sdk
                 and "return text;" in node_sdk
                 and "if (!response.ok)" in node_sdk
-                and "module.exports = { PortraitHubClient, PortraitHubHTTPError, SDK_VERSION }"
-                in node_sdk
+                and "module.exports = { PortraitHubClient, PortraitHubHTTPError, SDK_VERSION }" in node_sdk
             ),
         },
         {
@@ -47,10 +46,8 @@ def check_sdk_and_console(root: Path) -> list[dict[str, Any]]:
             "ok": (
                 "def _multipart_header_value" in python_sdk
                 and "self._multipart_header_value(key)" in python_sdk
-                and "safe_field_name = self._multipart_header_value(field_name)"
-                in python_sdk
-                and "safe_filename = self._multipart_header_value(path_obj.name)"
-                in python_sdk
+                and "safe_field_name = self._multipart_header_value(field_name)" in python_sdk
+                and "safe_filename = self._multipart_header_value(path_obj.name)" in python_sdk
                 and 'name="{safe_field_name}"; ' in python_sdk
                 and 'filename="{safe_filename}"' in python_sdk
                 and 'name="{field_name}"; ' not in python_sdk
@@ -79,32 +76,29 @@ def check_sdk_and_console(root: Path) -> list[dict[str, Any]]:
                 and '"/v1/gallery/search/batch"' in node_sdk
                 and '"/v1/compare/batch"' in node_sdk
                 and "asyncMode" in node_sdk
-                and "sdk-batch-code" in console_module_sources
-                and "sdk-video-code" in console_module_sources
-                and "sdk-batch-copy-button" in console_module_sources
-                and "sdk-video-copy-button" in console_module_sources
-                and "client.search_batch" in console_module_sources
-                and "async_mode=True" in console_module_sources
+                and 'id: "batch-python"' in console_module_sources
+                and 'id: "batch-node"' in console_module_sources
+                and 'id: "video-python"' in console_module_sources
+                and 'id: "video-node"' in console_module_sources
+                and "client.search_batch(images, async_mode=True)" in console_module_sources
+                and "client.create_video_job" in console_module_sources
                 and "createVideoJob" in console_module_sources
                 and "client.jobResult" in console_module_sources
+                and "navigator.clipboard.writeText(example.code)" in console_module_sources
             ),
         },
         {
             "name": "frontend:api_playground_stage_two_coverage",
             "ok": (
-                'value="/v1/gallery/search/batch" data-method="POST"'
-                in console_module_sources
-                and 'value="/v1/compare/batch" data-method="POST"'
-                in console_module_sources
-                and 'value="/v1/streams" data-method="POST"' in console_module_sources
-                and 'value="/v1/streams" data-method="GET"' in console_module_sources
-                and 'value="/v1/streams/{stream_id}/events" data-method="GET"'
-                in console_module_sources
-                and "playground-stream-id-input" in console_module_sources
-                and "playground-stream-url-input" in console_module_sources
-                and "playground-async-mode-input" in console_module_sources
-                and "function apiRaw" in console_module_sources
-                and "function playgroundSelection" in console_module_sources
+                'value: "/v1/gallery/search/batch"' in console_module_sources
+                and 'value: "/v1/compare/batch"' in console_module_sources
+                and 'value: "/v1/streams"' in console_module_sources
+                and 'value: "/v1/streams/{stream_id}/events"' in console_module_sources
+                and "const streamId = ref" in console_module_sources
+                and "const streamUrl = ref" in console_module_sources
+                and "const asyncMode = ref" in console_module_sources
+                and "export async function apiRaw" in console_module_sources
+                and "const selectedEndpoint" in console_module_sources
                 and 'appendFiles(form, "files"' in console_module_sources
                 and "endpoint_template" in console_module_sources
                 and "http_status" in console_module_sources
@@ -115,19 +109,19 @@ def check_sdk_and_console(root: Path) -> list[dict[str, Any]]:
         {
             "name": "frontend:slo_panel_operational_contract",
             "ok": (
-                "function summarizeSloCallLogs" in console_module_sources
+                "export function summarizeSloCallLogs" in console_module_sources
                 and "call_logs_30d" in console_module_sources
-                and "/v1/access/call-logs?limit=500&created_since="
-                in console_module_sources
+                and '"/v1/access/call-logs?limit=500&created_since="' in console_module_sources
                 and "queue_p95_seconds" in console_module_sources
                 and "queue_p99_seconds" in console_module_sources
                 and "gpu_queue_depth" in console_module_sources
                 and "gpu_device_queue_depths" in console_module_sources
                 and "error_budget_burn_rate" in console_module_sources
+                and "error_budget_remaining" in console_module_sources
                 and "success_rate_source" in console_module_sources
                 and "call_log_window_seconds" in console_module_sources
-                and "gpu_worker_queue_seconds" in console_module_sources
-                and "gpu_worker_gpu_device_queue_depth" in console_module_sources
+                and '"gpu_worker_queue_seconds"' in console_module_sources
+                and '"gpu_worker_gpu_device_queue_depth"' in console_module_sources
             ),
         },
     ]

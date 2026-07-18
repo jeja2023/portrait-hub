@@ -1,9 +1,11 @@
 # 大型文件拆分维护指南
 
-适用版本：`0.8.3+`
+适用版本：`0.8.3` 至 `0.10.x` 的历史拆分记录；`0.11.0+` 控制台已迁移到 `frontend/console-next`，旧 `frontend/console` 不再是开发入口。
 
-本文档记录大型文件拆分后的模块所有权、兼容边界和发布检查要求。目标不是追求最小文件，而是让单个文件保持清晰职责，并避免后续功能重新集中到门面文件。
+本文档记录大型文件拆分后的模块所有权、兼容边界和发布检查要求。目标不是追求最小文件，而是让单个文件保持清晰职责，并避免后续功能重新集中到门面文件。0.11.1 之后，旧控制台相关规则仅用于阅读历史记录，不适用于新增 Console Next 功能。
 
+
+> 2026-07-18 / 0.11.1 说明：本文保留旧控制台大文件拆分的历史映射，不能作为新增控制台功能的目标结构。Console Next 的当前结构、验收和迁移状态以 docs/frontend 与 frontend/console-next 为准。
 ## 模块映射
 
 | 原大型文件 | 当前门面或保留文件 | 拆分模块 |
@@ -18,10 +20,10 @@
 
 ## 兼容边界
 
-- 控制台使用经典脚本共享运行时符号；`console.html` 中模板、运行时、领域视图、`app.js`、`console.js` 的加载顺序不得随意调整。
-- CSS 文件按 `console.css`、`components.css`、`data-viewer.css`、`responsive.css` 的顺序加载，确保拆分前后的级联优先级一致。
+- 旧控制台历史分支曾使用经典脚本共享运行时符号；`console.html` 中模板、运行时、领域视图、`app.js`、`console.js` 的加载顺序规则仅适用于 0.8.3 至 0.10.x 历史记录。
+- 旧控制台历史分支的 CSS 顺序为 `console.css`、`components.css`、`data-viewer.css`、`responsive.css`；0.11.1+ 新增控制台样式必须进入 `frontend/console-next/src` 并接受 Vite、ESLint、typecheck 和 Playwright 门禁。
 - `tools/portrait_production_readiness.py` 和 `tools/deploy_check.py` 是稳定 CLI/导入门面。调用方应从门面导入，内部模块可继续按职责演进。
-- 新增控制台资产时，必须同步 `console.html`、`package.json`、`tools/deploy_check.py`、`tools/readiness/structure.py` 和控制台契约测试。
+- 新增 Console Next 资产时，必须同步 `frontend/console-next` 源码、根 npm workspace、CI、`tools/deploy_check.py`、readiness 和控制台契约测试；不得恢复 `console.html` 或 `/assets/console*`。
 - 测试文件的数字前缀用于保持历史收集顺序。新增用例应进入对应领域文件，不应恢复已移除的单体文件。
 
 ## 规模约束

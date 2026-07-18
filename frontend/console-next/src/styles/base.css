@@ -135,18 +135,6 @@ a {
 .console-shell[data-collapsed="true"] .console-sidebar .el-menu-item svg {
   margin-right: 0;
 }
-.legacy-link {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 0 8px;
-  padding: 9px 10px;
-  color: #c9d5d2;
-  font-size: 13px;
-  text-decoration: none;
-  border: 1px dashed #465552;
-  border-radius: 4px;
-}
 .sidebar-footer {
   padding: 8px 12px 14px;
   border-top: 1px solid #32403d;
@@ -424,8 +412,7 @@ a {
     grid-template-columns: 72px minmax(0, 1fr);
   }
   .brand-copy,
-  .nav-section__title,
-  .legacy-link {
+  .nav-section__title {
     display: none;
   }
   .console-sidebar .el-menu {

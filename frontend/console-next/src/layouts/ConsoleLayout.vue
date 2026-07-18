@@ -7,7 +7,6 @@ import {
   Braces,
   ChevronLeft,
   Code2,
-  ExternalLink,
   FileClock,
   Gauge,
   Images,
@@ -33,7 +32,6 @@ const activeMenuPath = computed(() => (route.path.startsWith("/analysis/") ? "/a
 const sections = [
   {
     label: "工作台",
-    feature: "console_workbench_v2" as const,
     items: [
       { label: "总览", path: "/", permission: "admin:status", icon: Gauge },
       { label: "智能分析", path: "/analysis/image", permission: "infer", icon: Activity },
@@ -44,7 +42,6 @@ const sections = [
   },
   {
     label: "开发者中心",
-    feature: "console_developer_v2" as const,
     items: [
       { label: "接入配置", path: "/dev/access", permission: "access:read", icon: Settings2 },
       { label: "调试台", path: "/dev/playground", permission: "infer", icon: Braces },
@@ -53,7 +50,6 @@ const sections = [
   },
   {
     label: "系统管理",
-    feature: "console_admin_v2" as const,
     items: [
       { label: "模型中心", path: "/admin/models", permission: "models:read", icon: Boxes },
       { label: "阈值与标注", path: "/admin/calibration", permission: "models:read", icon: SlidersHorizontal },
@@ -63,11 +59,12 @@ const sections = [
 ];
 
 const visibleSections = computed(() =>
-  sections.map((section) => ({
-    ...section,
-    enabled: capabilities.featureEnabled(section.feature),
-    items: section.items.filter((item) => capabilities.hasPermission(item.permission)),
-  })),
+  sections
+    .map((section) => ({
+      ...section,
+      items: section.items.filter((item) => capabilities.hasPermission(item.permission)),
+    }))
+    .filter((section) => section.items.length > 0),
 );
 
 function logout(): void {
@@ -90,7 +87,6 @@ function logout(): void {
         <section v-for="section in visibleSections" :key="section.label" class="nav-section">
           <div v-if="!prefs.sidebarCollapsed" class="nav-section__title">{{ section.label }}</div>
           <ElMenu
-            v-if="section.enabled"
             :default-active="activeMenuPath"
             router
             :collapse="prefs.sidebarCollapsed"
@@ -100,9 +96,6 @@ function logout(): void {
               <template #title>{{ item.label }}</template>
             </ElMenuItem>
           </ElMenu>
-          <a v-else-if="!prefs.sidebarCollapsed" class="legacy-link" href="/console/legacy">
-            <ExternalLink :size="15" />旧版{{ section.label }}
-          </a>
         </section>
       </nav>
       <div class="sidebar-footer">

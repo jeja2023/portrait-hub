@@ -13,15 +13,6 @@ from app.security import global_api_token_matches
 from app.settings import (
     API_TOKEN,
     AUTH_REQUIRED,
-    CONSOLE_ADMIN_V2,
-    CONSOLE_ADMIN_V2_PERCENT,
-    CONSOLE_ADMIN_V2_TENANTS,
-    CONSOLE_DEVELOPER_V2,
-    CONSOLE_DEVELOPER_V2_PERCENT,
-    CONSOLE_DEVELOPER_V2_TENANTS,
-    CONSOLE_WORKBENCH_V2,
-    CONSOLE_WORKBENCH_V2_PERCENT,
-    CONSOLE_WORKBENCH_V2_TENANTS,
     CONSOLE_WS_TICKET_MAX_ENTRIES,
     CONSOLE_WS_TICKET_TTL_SECONDS,
     RBAC_ENABLED,
@@ -113,50 +104,6 @@ def clear_console_ws_tickets() -> None:
         _TICKETS.clear()
 
 
-def _stable_feature_bucket(feature: str, tenant_id: str) -> int:
-    digest = hashlib.sha256(f"{feature}:{tenant_id}".encode()).digest()
-    return int.from_bytes(digest[:4], "big") % 100
-
-
-def _feature_enabled(
-    feature: str,
-    tenant_id: str,
-    *,
-    globally_enabled: bool,
-    percentage: int,
-    tenant_allowlist: list[str],
-) -> bool:
-    if globally_enabled or tenant_id in set(tenant_allowlist):
-        return True
-    return percentage > 0 and _stable_feature_bucket(feature, tenant_id) < percentage
-
-
-def console_features(tenant_id: str) -> dict[str, bool]:
-    return {
-        "console_workbench_v2": _feature_enabled(
-            "console_workbench_v2",
-            tenant_id,
-            globally_enabled=CONSOLE_WORKBENCH_V2,
-            percentage=CONSOLE_WORKBENCH_V2_PERCENT,
-            tenant_allowlist=CONSOLE_WORKBENCH_V2_TENANTS,
-        ),
-        "console_developer_v2": _feature_enabled(
-            "console_developer_v2",
-            tenant_id,
-            globally_enabled=CONSOLE_DEVELOPER_V2,
-            percentage=CONSOLE_DEVELOPER_V2_PERCENT,
-            tenant_allowlist=CONSOLE_DEVELOPER_V2_TENANTS,
-        ),
-        "console_admin_v2": _feature_enabled(
-            "console_admin_v2",
-            tenant_id,
-            globally_enabled=CONSOLE_ADMIN_V2,
-            percentage=CONSOLE_ADMIN_V2_PERCENT,
-            tenant_allowlist=CONSOLE_ADMIN_V2_TENANTS,
-        ),
-    }
-
-
 def _permissions_for_roles(roles: set[str]) -> list[str]:
     permissions: set[str] = set()
     for role in roles:
@@ -223,7 +170,6 @@ def console_principal(
 __all__ = [
     "ConsoleWebSocketTicket",
     "clear_console_ws_tickets",
-    "console_features",
     "console_principal",
     "consume_console_ws_ticket",
     "issue_console_ws_ticket",

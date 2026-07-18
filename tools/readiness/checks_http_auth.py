@@ -163,7 +163,9 @@ def check_http_auth_hardening(root: Path) -> list[dict[str, Any]]:
                 and 'permission_dependency("admin:retention")' in portrait_admin_routes
                 and 'permission_dependency("models:read")' not in portrait_admin_routes
                 and 'permission_dependency("models:write")' not in portrait_admin_routes
-                and 'permission_dependency("admin:status")' in portrait_console_routes
+                and '@router.get("/v1/console/me", dependencies=[Depends(require_api_token)])'
+                in portrait_console_routes
+                and 'permission_dependency("admin:status")' not in portrait_console_routes
                 and 'permission_dependency("access:read")' in portrait_access_routes
                 and 'permission_dependency("access:write")' in portrait_access_routes
                 and "application_scopes_allow_permission" in portrait_auth
@@ -188,11 +190,11 @@ def check_http_auth_hardening(root: Path) -> list[dict[str, Any]]:
                 and "error_code: str | None = Query" in portrait_access_routes
                 and "created_since: float | None = Query" in portrait_access_routes
                 and "created_until: float | None = Query" in portrait_access_routes
-                and "call-log-error-code-input" in console_module_sources
-                and "call-log-created-since-input" in console_module_sources
-                and "call-log-created-until-input" in console_module_sources
-                and "created_since" in console_module_sources
-                and "created_until" in console_module_sources
+                and 'const errorCode = ref("")' in console_module_sources
+                and "const createdRange = ref" in console_module_sources
+                and 'params.set("error_code", errorCode.value)' in console_module_sources
+                and 'params.set("created_since"' in console_module_sources
+                and 'params.set("created_until"' in console_module_sources
                 and "error_code=logged_error_code" in server
                 and "portrait_error_code" in server
                 and "portrait_application_id" in rate_limit
@@ -211,16 +213,16 @@ def check_http_auth_hardening(root: Path) -> list[dict[str, Any]]:
                 and "storage_error" in portrait_errors
                 and "batch_job_error" in portrait_errors
                 and "migration_error" in portrait_errors
-                and "from app.portrait_errors import error_code_catalog"
-                in portrait_access_routes
+                and "from app.portrait_errors import error_code_catalog" in portrait_access_routes
                 and '@router.get("/v1/access/error-codes", dependencies=[Depends(permission_dependency("access:read"))])'
                 in portrait_access_routes
                 and '"error_codes": error_codes' in portrait_access_routes
                 and "/v1/access/error-codes" in console_module_sources
-                and 'view: "error-codes"' in console_module_sources
-                and "error-codes-table" in console_module_sources
-                and "error-codes-json" in console_module_sources
-                and "renderErrorCodes" in console_module_sources
+                and "const errorCatalog = ref" in console_module_sources
+                and "const selectedErrorCode = ref" in console_module_sources
+                and "selectedError.operator_action" in console_module_sources
+                and "item.http_status" in console_module_sources
+                and "item.retryable" in console_module_sources
             ),
         },
         {
@@ -242,16 +244,17 @@ def check_http_auth_hardening(root: Path) -> list[dict[str, Any]]:
                 and 'permission_dependency("jobs")' in portrait_review_routes
                 and '"track_review_annotation_created"' in portrait_review_routes
                 and "load_review_state()" in portrait_bootstrap
-                and "track-review-annotation-form" in console_module_sources
                 and "/v1/evaluation/datasets" in console_module_sources
-                and "/v1/evaluation/threshold-recommendations" in portrait_review_routes
                 and "/v1/evaluation/threshold-recommendations" in console_module_sources
-                and "evaluation-dataset-table" in console_module_sources
-                and "evaluation-threshold-table" in console_module_sources
-                and "renderEvaluationThresholdRecommendations" in console_module_sources
                 and "/v1/evaluation/track-reviews" in console_module_sources
                 and "/v1/evaluation/track-reviews/summary" in console_module_sources
-                and "evaluation-review-summary" in console_module_sources
+                and "const reviewSummary = ref" in console_module_sources
+                and "const datasets = ref" in console_module_sources
+                and "const recommendationPayload = ref" in console_module_sources
+                and 'value="confirmed"' in console_module_sources
+                and 'value="mismatch"' in console_module_sources
+                and "frame_index" in console_module_sources
+                and "evidence_ref" in console_module_sources
             ),
         },
         {
@@ -440,32 +443,27 @@ def check_http_auth_hardening(root: Path) -> list[dict[str, Any]]:
                 and 'detail=f"上传文件过大：最大 {MAX_IMAGE_BYTES} 字节"' in image_io
                 and 'detail="不支持的图片扩展名"' in media_image_decode
                 and 'detail="上传文件包含不支持的图片内容"' in media_image_decode
-                and 'detail="图片扩展名与检测到的内容不匹配"' in media_image_decode
                 and 'detail="不支持的图片格式"' in media_image_decode
                 and 'detail="图片内容与解码出的图片格式不匹配"' in media_image_decode
                 and 'detail="上传文件不是有效图片"' in media_image_decode
-                and 'detail=f"上传文件过大：最大 {max_bytes} 字节"'
-                in media_image_decode
-                and 'detail=f"图片像素过多：最大 {MAX_IMAGE_PIXELS}"'
-                in media_image_decode
+                and 'detail=f"上传文件过大：最大 {max_bytes} 字节"' in media_image_decode
+                and 'detail=f"图片像素过多：最大 {MAX_IMAGE_PIXELS}"' in media_image_decode
+                and "image filename format mismatch ignored" in media_image_decode
+                and 'detail="图片扩展名与检测到的内容不匹配"' not in media_image_decode
                 and 'detail="不支持的视频扩展名"' in video_io
                 and 'detail="上传视频包含不支持的容器内容"' in video_io
                 and 'detail="视频扩展名与检测到的内容不匹配"' in video_io
                 and 'detail="上传视频为空"' in video_io
                 and 'detail=f"上传视频过大：最大 {MAX_VIDEO_BYTES} 字节"' in video_io
                 and "不支持的图片扩展名 '{suffix}'" not in media_image_decode
-                and "image extension does not match detected {detected.lower()} content"
-                not in media_image_decode
+                and "image extension does not match detected {detected.lower()} content" not in media_image_decode
                 and "不支持的图片格式 '{image_format}'" not in media_image_decode
-                and "image content sniffed as {detected_format.lower()}"
-                not in media_image_decode
+                and "image content sniffed as {detected_format.lower()}" not in media_image_decode
                 and "uploaded file is too large: {len(data)} bytes" not in image_io
-                and "uploaded file is too large: {len(data)} bytes"
-                not in media_image_decode
+                and "uploaded file is too large: {len(data)} bytes" not in media_image_decode
                 and "图片像素过多: {width * height}" not in media_image_decode
                 and "不支持的视频扩展名 '{suffix}'" not in video_io
-                and "video extension does not match detected {container} content"
-                not in video_io
+                and "video extension does not match detected {container} content" not in video_io
                 and "uploaded video is too large: {len(data)} bytes" not in video_io
                 and "uploaded file '{file.filename}'" not in image_io
                 and "uploaded file '{file.filename}'" not in media_image_decode
