@@ -887,12 +887,12 @@ Compose 默认绑定：
 - `/v1/models/{model_id}` 能返回正确输入 shape 和 dtype。
 - `/v1/admin/models/warmup` 成功。
 - 业务请求 tensor shape 与模型输入一致。
-- 已设置 `API_TOKEN`。
+- 已设置 `API_TOKEN`，并配置 `API_TOKEN_TENANT_ID`；只有受控平台运维场景才可显式设置 `API_TOKEN_ALLOW_TENANT_OVERRIDE=true`。
 - 已设置调用方超时、重试和日志 request id。
 - 已完成至少一次真实模型压测。
 ## 新版控制台灰度与回退
 
-本节适用于 0.11.1。Console Next 是唯一生产控制台，根路径 / 是正式登录入口。0.11.1 在 0.11.0 入口切换基础上补强了迁移门禁和 readiness 断言。
+本节适用于 0.11.2。Console Next 是唯一生产控制台，根路径 / 是正式登录入口。0.11.2 在 0.11.1 迁移门禁基础上补齐二次复核修复：WS 主凭证禁止 query 回退、`/v1/*` 统一 no-store、默认 CSP 去除 `unsafe-inline` 与 jsdelivr，并补齐流详情深链、错误 request_id 与值级脱敏。
 
 构建镜像时，Node 22 builder 会在根 npm workspace 中执行 npm ci 与 npm run console:build；运行镜像只复制 frontend/console-next/dist，不安装 Node，也不再包含旧版 frontend/console。非镜像部署必须先在仓库根目录执行相同构建命令，并确认 dist/index.html 与 dist/.vite/manifest.json 存在。
 

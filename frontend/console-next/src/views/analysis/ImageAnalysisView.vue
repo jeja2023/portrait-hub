@@ -3,12 +3,13 @@ import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { Code2, ImageUp, Play, RotateCcw } from "@lucide/vue";
 import { ElAlert, ElButton, ElCheckbox, ElOption, ElSelect } from "element-plus";
 
-import { ApiError, apiRequest } from "../../api/client";
+import { apiRequest } from "../../api/client";
 import AnalysisNavigation from "../../components/AnalysisNavigation.vue";
 import EmptyState from "../../components/EmptyState.vue";
 import FrameGrid from "../../components/FrameGrid.vue";
 import RawDataDrawer from "../../components/RawDataDrawer.vue";
 import { usePrefsStore } from "../../stores/prefs";
+import { errorBannerMessage } from "../../utils/errors";
 
 const prefs = usePrefsStore();
 const endpoint = ref("/v1/infer/persons");
@@ -92,7 +93,7 @@ async function analyze(): Promise<void> {
     );
     void loadImageArchives();
   } catch (error) {
-    errorMessage.value = error instanceof ApiError ? error.message : "图片分析失败";
+    errorMessage.value = errorBannerMessage(error, "图片分析失败");
   } finally {
     loading.value = false;
   }
@@ -146,6 +147,7 @@ onBeforeUnmount(() => {
     <ElAlert
       v-if="errorMessage"
       class="error-banner"
+      role="alert"
       :title="errorMessage"
       type="error"
       show-icon

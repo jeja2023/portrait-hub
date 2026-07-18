@@ -12,10 +12,11 @@ import {
   ElTabs,
 } from "element-plus";
 
-import { ApiError, apiRequest, jsonBody } from "../../api/client";
+import { apiRequest, jsonBody } from "../../api/client";
 import DangerConfirm from "../../components/DangerConfirm.vue";
 import EmptyState from "../../components/EmptyState.vue";
 import { useCapabilitiesStore } from "../../stores/capabilities";
+import { errorBannerMessage } from "../../utils/errors";
 
 interface ModelRow {
   id?: string;
@@ -85,7 +86,7 @@ async function load(): Promise<void> {
     releaseTarget.value ||=
       aliases.value.find((item) => item.alias === releaseAlias.value)?.target ?? idOf(models.value[0] ?? {});
   } catch (error) {
-    errorMessage.value = error instanceof ApiError ? error.message : "模型中心数据加载失败";
+    errorMessage.value = errorBannerMessage(error, "模型中心数据加载失败");
   } finally {
     loading.value = false;
   }
@@ -99,7 +100,7 @@ async function change(model: ModelRow, action: "load" | "unload"): Promise<void>
     ElMessage.success(action === "load" ? "模型已加载" : "模型已卸载");
     await load();
   } catch (error) {
-    errorMessage.value = error instanceof ApiError ? error.message : "模型操作失败";
+    errorMessage.value = errorBannerMessage(error, "模型操作失败");
   } finally {
     actionId.value = "";
   }
@@ -127,7 +128,7 @@ async function submitRelease(dryRun: boolean): Promise<void> {
     ElMessage.success(dryRun ? "发布预演已完成" : "模型别名已正式切换");
     if (!dryRun) await load();
   } catch (error) {
-    errorMessage.value = error instanceof ApiError ? error.message : "模型发布操作失败";
+    errorMessage.value = errorBannerMessage(error, "模型发布操作失败");
   } finally {
     releaseLoading.value = false;
   }
@@ -148,6 +149,7 @@ onMounted(() => void load());
     <ElAlert
       v-if="errorMessage"
       class="error-banner"
+      role="alert"
       :title="errorMessage"
       type="error"
       show-icon

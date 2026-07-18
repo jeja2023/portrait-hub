@@ -84,14 +84,14 @@ async def portrait_console_ws_ticket(
     await require_permission(permission, authorization, ctx.tenant_id, x_api_key)
     if payload.resource_type == "job":
         resource_id = validate_job_id(payload.resource_id)
-        resource = get_video_job(resource_id, tenant_id=ctx.tenant_id)
+        if get_video_job(resource_id, tenant_id=ctx.tenant_id) is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="实时资源不存在")
         websocket_path = f"/ws/jobs/{resource_id}"
     else:
         resource_id = validate_stream_id(payload.resource_id)
-        resource = get_stream(resource_id, tenant_id=ctx.tenant_id)
+        if get_stream(resource_id, tenant_id=ctx.tenant_id) is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="实时资源不存在")
         websocket_path = f"/ws/streams/{resource_id}"
-    if resource is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="实时资源不存在")
 
     raw_ticket, ticket = issue_console_ws_ticket(
         tenant_id=ctx.tenant_id,

@@ -9,10 +9,20 @@ DEFAULT_RATE_LIMIT_MAX_BUCKETS = 10_000
 DEFAULT_RATE_LIMIT_BUCKET_TTL_SECONDS = 3600
 # 与最大视频上传（100MB）+ multipart 余量对齐；过大的全局请求体上限会放大内存 DoS 面。
 DEFAULT_MAX_REQUEST_BODY_BYTES = 112 * 1024 * 1024
+# 全局默认 CSP 与 compose/.env.example 对齐：script-src 仅 'self'，不含 unsafe-inline 或
+# 外链 CDN（旧控制台残留已随 0.11.1 删除）。/docs、/redoc 由 server 中间件单独下发
+# DOCS_CONTENT_SECURITY_POLICY（Swagger/ReDoc 需要 jsdelivr 与内联引导脚本）。
 DEFAULT_CONTENT_SECURITY_POLICY = (
     "default-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; "
-    "form-action 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
-    "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net"
+    "form-action 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; "
+    "script-src 'self'"
+)
+DOCS_CONTENT_SECURITY_POLICY = (
+    "default-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; "
+    "form-action 'self'; img-src 'self' data: https://cdn.jsdelivr.net https://fastapi.tiangolo.com; "
+    "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+    "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+    "worker-src 'self' blob:"
 )
 DEFAULT_HSTS_ENABLED = False
 DEFAULT_HSTS_MAX_AGE_SECONDS = 31_536_000

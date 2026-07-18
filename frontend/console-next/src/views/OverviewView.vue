@@ -8,6 +8,7 @@ import { ApiError, apiRequest, apiText } from "../api/client";
 import RawDataDrawer from "../components/RawDataDrawer.vue";
 import StatCard from "../components/StatCard.vue";
 import { useCapabilitiesStore } from "../stores/capabilities";
+import { errorBannerMessage } from "../utils/errors";
 import { usePrefsStore } from "../stores/prefs";
 import {
   SLO_WINDOW_SECONDS,
@@ -87,13 +88,13 @@ async function refresh(): Promise<void> {
   } else {
     const degradedReady = readinessFromError(readyResult.reason);
     if (degradedReady) ready.value = degradedReady;
-    else errorMessage.value = readyResult.reason instanceof ApiError ? readyResult.reason.message : "平台状态加载失败";
+    else errorMessage.value = errorBannerMessage(readyResult.reason, "平台状态加载失败");
   }
 
   if (metricsResult.status === "fulfilled") {
     rawMetrics.value = metricsResult.value;
   } else if (!errorMessage.value) {
-    errorMessage.value = metricsResult.reason instanceof ApiError ? metricsResult.reason.message : "平台指标加载失败";
+    errorMessage.value = errorBannerMessage(metricsResult.reason, "平台指标加载失败");
   }
 
   if (callLogsResult.status === "fulfilled" && callLogsResult.value.logs.length > 0) {
@@ -125,6 +126,7 @@ onMounted(() => void refresh());
     <ElAlert
       v-if="errorMessage"
       class="error-banner"
+      role="alert"
       :title="errorMessage"
       type="error"
       show-icon

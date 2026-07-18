@@ -19,7 +19,7 @@ import {
   ElSteps,
 } from "element-plus";
 
-import { ApiError, apiRequest, jsonBody } from "../api/client";
+import { apiRequest, jsonBody } from "../api/client";
 import type { GalleryListResponse, PersonSummary } from "../api/contracts";
 import DangerConfirm from "../components/DangerConfirm.vue";
 import EmptyState from "../components/EmptyState.vue";
@@ -27,6 +27,7 @@ import RawDataDrawer from "../components/RawDataDrawer.vue";
 import { useCapabilitiesStore } from "../stores/capabilities";
 import { usePrefsStore } from "../stores/prefs";
 import { formatTimestamp } from "../utils/format";
+import { errorBannerMessage } from "../utils/errors";
 
 const route = useRoute();
 const router = useRouter();
@@ -90,7 +91,7 @@ async function loadPeople(append = false): Promise<void> {
     people.value = append ? [...people.value, ...payload.items] : payload.items;
     nextCursor.value = payload.next_cursor;
   } catch (error) {
-    errorMessage.value = error instanceof ApiError ? error.message : "人员列表加载失败";
+    errorMessage.value = errorBannerMessage(error, "人员列表加载失败");
   } finally {
     loading.value = false;
   }
@@ -113,7 +114,7 @@ async function openDetail(personId: string): Promise<void> {
     }));
     await router.replace(`/gallery/${encodeURIComponent(personId)}`);
   } catch (error) {
-    errorMessage.value = error instanceof ApiError ? error.message : "人员详情加载失败";
+    errorMessage.value = errorBannerMessage(error, "人员详情加载失败");
   }
 }
 function closeDetail(): void {
@@ -167,7 +168,7 @@ async function enroll(): Promise<void> {
     await loadPeople();
     enrollStep.value = 2;
   } catch (error) {
-    errorMessage.value = error instanceof ApiError ? error.message : "人员注册失败";
+    errorMessage.value = errorBannerMessage(error, "人员注册失败");
   } finally {
     enrollLoading.value = false;
   }
@@ -201,7 +202,7 @@ async function saveDetail(): Promise<void> {
     ElMessage.success("人员信息已保存");
     await loadPeople();
   } catch (error) {
-    errorMessage.value = error instanceof ApiError ? error.message : "人员信息保存失败";
+    errorMessage.value = errorBannerMessage(error, "人员信息保存失败");
   } finally {
     detailSaving.value = false;
   }
@@ -216,7 +217,7 @@ async function previewReindex(): Promise<void> {
     });
     reindexOpen.value = true;
   } catch (error) {
-    errorMessage.value = error instanceof ApiError ? error.message : "特征重建预演失败";
+    errorMessage.value = errorBannerMessage(error, "特征重建预演失败");
   } finally {
     reindexLoading.value = false;
   }
@@ -231,7 +232,7 @@ async function executeReindex(): Promise<void> {
     ElMessage.success("特征索引重建已完成");
     await loadPeople();
   } catch (error) {
-    errorMessage.value = error instanceof ApiError ? error.message : "特征索引重建失败";
+    errorMessage.value = errorBannerMessage(error, "特征索引重建失败");
   } finally {
     reindexLoading.value = false;
   }
@@ -245,7 +246,7 @@ async function deletePerson(): Promise<void> {
     closeDetail();
     await loadPeople();
   } catch (error) {
-    errorMessage.value = error instanceof ApiError ? error.message : "删除人员失败";
+    errorMessage.value = errorBannerMessage(error, "删除人员失败");
   } finally {
     deleteLoading.value = false;
   }
@@ -294,6 +295,7 @@ watch(
     <ElAlert
       v-if="errorMessage"
       class="error-banner"
+      role="alert"
       :title="errorMessage"
       type="error"
       show-icon

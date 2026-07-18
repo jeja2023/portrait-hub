@@ -14,9 +14,10 @@ import {
   ElTabs,
 } from "element-plus";
 
-import { ApiError, apiRequest, jsonBody } from "../../api/client";
+import { apiRequest, jsonBody } from "../../api/client";
 import DangerConfirm from "../../components/DangerConfirm.vue";
 import { useCapabilitiesStore } from "../../stores/capabilities";
+import { errorBannerMessage } from "../../utils/errors";
 import { formatTimestamp } from "../../utils/format";
 
 interface ReviewSummary {
@@ -123,7 +124,7 @@ async function load(): Promise<void> {
       recommendationResult.status === "fulfilled" ? recommendationResult.value.threshold_recommendations : {};
     syncDraft();
   } catch (error) {
-    errorMessage.value = error instanceof ApiError ? error.message : "阈值与标注数据加载失败";
+    errorMessage.value = errorBannerMessage(error, "阈值与标注数据加载失败");
   } finally {
     loading.value = false;
   }
@@ -141,7 +142,7 @@ async function saveThresholds(): Promise<void> {
     ElMessage.success("阈值方案已保存");
     await load();
   } catch (error) {
-    errorMessage.value = error instanceof ApiError ? error.message : "阈值保存失败";
+    errorMessage.value = errorBannerMessage(error, "阈值保存失败");
   } finally {
     saving.value = false;
   }
@@ -171,7 +172,7 @@ async function createReview(): Promise<void> {
     reviewForm.evidence_ref = "";
     await load();
   } catch (error) {
-    errorMessage.value = error instanceof ApiError ? error.message : "轨迹标注提交失败";
+    errorMessage.value = errorBannerMessage(error, "轨迹标注提交失败");
   } finally {
     saving.value = false;
   }
@@ -192,6 +193,7 @@ onMounted(() => void load());
     <ElAlert
       v-if="errorMessage"
       class="error-banner"
+      role="alert"
       :title="errorMessage"
       type="error"
       show-icon

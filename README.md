@@ -2,11 +2,18 @@
 
 面向 Ubuntu + Docker + NVIDIA GPU 的 ONNX 推理服务。服务通过 FastAPI 暴露接口，按 GPU 拆成多个 worker，适合给人像识别、人像检索、ReID 等业务项目提供共享推理能力。
 
-当前版本：0.11.1。本版本在 Console Next 唯一生产入口基础上补强迁移门禁、readiness 断言与历史文档收口；0.11.0 已完成旧控制台删除、生产入口切换、调试台、SLO、审计备份和人工复核工作流。
+当前版本：0.11.2。本版本在 Console Next 唯一生产入口基础上完成二次复核修复：移除 WS query 主凭证回退、统一 `/v1/*` no-store、收紧默认 CSP，并补齐流详情深链、路由 meta 导航、可访问状态通告、错误展示、脱敏兜底、搜索质量分和对应契约测试；0.11.1 已完成迁移门禁与历史文档收口。
 
 > `0.9.0` 是破坏性升级。旧的 `/v1/vision/results`、`/v1/jobs/video/results` 及有限图片历史实现已删除，不提供兼容回退或旧记录自动迁移；接入方必须切换到统一档案接口。
 
 拆分后的模块映射、维护边界和验证命令见 [大型文件拆分维护指南](docs/maintenance/LARGE_FILE_SPLIT.md)，完整发布记录见 [更新日志](更新日志.md)。
+
+## 0.11.2 Console Next 二次复核修复
+
+- 后端移除 WebSocket 握手 query 主凭证回退，浏览器长效凭证不再进入 URL；`/v1/*` 统一下发 `Cache-Control: no-store`，默认 CSP 去掉 `unsafe-inline` 与 jsdelivr，仅文档页使用独立文档 CSP。
+- 前端补齐 `/analysis/stream/:streamId` 深链、流详情抽屉和 KVEditor metadata；侧栏导航改为路由 `meta.nav` 驱动，动态状态通过 `aria-live` 通告。
+- 错误横幅显示中文 `error_code` 与 `request_id`；`redact.ts` 增加向量、内部地址、带凭证流地址和 data URL 的值级兜底脱敏；搜索候选卡展示质量分。
+- 契约测试新增 `me auth_kind` 三类凭证、缺权限 403、ws-ticket 401/stream 票据/TTL 上限和 gallery 空库稳定响应；typecheck、ruff、pytest、npm check、Playwright E2E 与 diff check 已全量通过。
 
 ## 0.11.1 迁移门禁与文档收口
 

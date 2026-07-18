@@ -3,10 +3,11 @@ import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { Code2, ImagePlus, Play } from "@lucide/vue";
 import { ElAlert, ElButton, ElOption, ElSelect } from "element-plus";
 
-import { ApiError, apiRequest } from "../api/client";
+import { apiRequest } from "../api/client";
 import RawDataDrawer from "../components/RawDataDrawer.vue";
 import { usePrefsStore } from "../stores/prefs";
 import { formatPercent } from "../utils/format";
+import { errorBannerMessage } from "../utils/errors";
 
 type CompareMode = "face" | "body" | "gait" | "fusion" | "batch";
 
@@ -136,7 +137,7 @@ async function compare(): Promise<void> {
       mode.value === "gait" || mode.value === "batch" ? 180_000 : 90_000,
     );
   } catch (error) {
-    errorMessage.value = error instanceof ApiError ? error.message : "比对失败";
+    errorMessage.value = errorBannerMessage(error, "比对失败");
   } finally {
     loading.value = false;
   }
@@ -179,6 +180,7 @@ onBeforeUnmount(() => {
     <ElAlert
       v-if="errorMessage"
       class="error-banner"
+      role="alert"
       :title="errorMessage"
       type="error"
       show-icon

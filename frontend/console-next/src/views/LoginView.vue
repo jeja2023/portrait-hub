@@ -14,8 +14,8 @@ import {
   ElRadioGroup,
 } from "element-plus";
 
-import { ApiError } from "../api/client";
 import { beginSession, clearSession, markSessionAuthenticated, type AuthMode } from "../auth/session";
+import { errorBannerMessage } from "../utils/errors";
 import { useCapabilitiesStore } from "../stores/capabilities";
 
 const route = useRoute();
@@ -57,7 +57,7 @@ async function login(): Promise<void> {
   } catch (error) {
     clearSession();
     capabilities.clear();
-    errorMessage.value = error instanceof ApiError ? error.message : "无法验证当前凭证";
+    errorMessage.value = errorBannerMessage(error, "无法验证当前凭证");
   } finally {
     loading.value = false;
   }
@@ -78,6 +78,7 @@ async function login(): Promise<void> {
       <ElAlert
         v-if="errorMessage"
         class="error-banner"
+        role="alert"
         :title="errorMessage"
         type="error"
         show-icon

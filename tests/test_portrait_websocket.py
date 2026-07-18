@@ -67,7 +67,23 @@ def test_job_websocket_requires_api_token_when_configured(monkeypatch: pytest.Mo
 
     assert exc_info.value.code == 1008
 
-    with client.websocket_connect("/ws/jobs/job_missing?tenant_id=default&token=secret-token") as websocket:
+    # 主凭证禁止经 query 参数传递（方案 §8.4），只接受请求头
+    with pytest.raises(WebSocketDisconnect) as exc_info:
+        with client.websocket_connect("/ws/jobs/job_missing?tenant_id=default&token=secret-token"):
+            pass
+
+    assert exc_info.value.code == 1008
+
+    with pytest.raises(WebSocketDisconnect) as exc_info:
+        with client.websocket_connect("/ws/jobs/job_missing?tenant_id=default&access_token=secret-token"):
+            pass
+
+    assert exc_info.value.code == 1008
+
+    with client.websocket_connect(
+        "/ws/jobs/job_missing?tenant_id=default",
+        headers={"x-api-key": "secret-token"},
+    ) as websocket:
         payload = websocket.receive_json()
 
     assert payload["status"] == "not_found"

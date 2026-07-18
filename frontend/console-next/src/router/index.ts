@@ -1,5 +1,18 @@
 import { nextTick } from "vue";
 import { createMemoryHistory, createRouter, createWebHashHistory } from "vue-router";
+import {
+  Activity,
+  Boxes,
+  Braces,
+  FileClock,
+  Gauge,
+  Images,
+  ScanSearch,
+  Settings2,
+  ShieldCheck,
+  SlidersHorizontal,
+  Waypoints,
+} from "@lucide/vue";
 
 import { clearSession, hasSession } from "../auth/session";
 import ConsoleLayout from "../layouts/ConsoleLayout.vue";
@@ -23,14 +36,22 @@ const router = createRouter({
           path: "",
           name: "overview",
           component: () => import("../views/OverviewView.vue"),
-          meta: { title: "总览", permission: "admin:status" },
+          meta: {
+            title: "总览",
+            permission: "admin:status",
+            nav: { section: "工作台", order: 1, icon: Gauge },
+          },
         },
         { path: "analysis", redirect: "/analysis/image", meta: { title: "智能分析" } },
         {
           path: "analysis/image",
           name: "analysis-image",
           component: () => import("../views/analysis/ImageAnalysisView.vue"),
-          meta: { title: "图片分析", permission: "infer" },
+          meta: {
+            title: "图片分析",
+            permission: "infer",
+            nav: { section: "工作台", order: 2, icon: Activity, label: "智能分析" },
+          },
         },
         {
           path: "analysis/video",
@@ -51,6 +72,12 @@ const router = createRouter({
           meta: { title: "实时视频流", permission: "streams:read" },
         },
         {
+          path: "analysis/stream/:streamId",
+          name: "analysis-stream-detail",
+          component: () => import("../views/analysis/StreamsView.vue"),
+          meta: { title: "视频流详情", permission: "streams:read" },
+        },
+        {
           path: "analysis/results",
           name: "analysis-results",
           component: () => import("../views/analysis/AnalysisResultsView.vue"),
@@ -60,19 +87,31 @@ const router = createRouter({
           path: "compare",
           name: "compare",
           component: () => import("../views/CompareView.vue"),
-          meta: { title: "比对", permission: "compare" },
+          meta: {
+            title: "比对",
+            permission: "compare",
+            nav: { section: "工作台", order: 3, icon: Waypoints },
+          },
         },
         {
           path: "search",
           name: "search",
           component: () => import("../views/SearchView.vue"),
-          meta: { title: "以图搜人", permission: "gallery:read" },
+          meta: {
+            title: "以图搜人",
+            permission: "gallery:read",
+            nav: { section: "工作台", order: 4, icon: ScanSearch },
+          },
         },
         {
           path: "gallery",
           name: "gallery",
           component: () => import("../views/GalleryView.vue"),
-          meta: { title: "人员库", permission: "gallery:read" },
+          meta: {
+            title: "人员库",
+            permission: "gallery:read",
+            nav: { section: "工作台", order: 5, icon: Images },
+          },
         },
         {
           path: "gallery/:personId",
@@ -84,37 +123,61 @@ const router = createRouter({
           path: "dev/access",
           name: "dev-access",
           component: () => import("../views/dev/AccessView.vue"),
-          meta: { title: "接入配置", permission: "access:read" },
+          meta: {
+            title: "接入配置",
+            permission: "access:read",
+            nav: { section: "开发者中心", order: 1, icon: Settings2 },
+          },
         },
         {
           path: "dev/playground",
           name: "dev-playground",
           component: () => import("../views/dev/PlaygroundView.vue"),
-          meta: { title: "调试台", permission: "infer" },
+          meta: {
+            title: "调试台",
+            permission: "infer",
+            nav: { section: "开发者中心", order: 2, icon: Braces },
+          },
         },
         {
           path: "dev/logs",
           name: "dev-logs",
           component: () => import("../views/dev/LogsView.vue"),
-          meta: { title: "调用日志", permission: "access:read" },
+          meta: {
+            title: "调用日志",
+            permission: "access:read",
+            nav: { section: "开发者中心", order: 3, icon: FileClock },
+          },
         },
         {
           path: "admin/models",
           name: "admin-models",
           component: () => import("../views/admin/ModelsView.vue"),
-          meta: { title: "模型中心", permission: "models:read" },
+          meta: {
+            title: "模型中心",
+            permission: "models:read",
+            nav: { section: "系统管理", order: 1, icon: Boxes },
+          },
         },
         {
           path: "admin/calibration",
           name: "admin-calibration",
           component: () => import("../views/admin/CalibrationView.vue"),
-          meta: { title: "阈值与标注", permission: "models:read" },
+          meta: {
+            title: "阈值与标注",
+            permission: "models:read",
+            nav: { section: "系统管理", order: 2, icon: SlidersHorizontal },
+          },
         },
         {
           path: "admin/ops",
           name: "admin-ops",
           component: () => import("../views/admin/OpsView.vue"),
-          meta: { title: "运维与合规", permission: "admin:status" },
+          meta: {
+            title: "运维与合规",
+            permission: "admin:status",
+            nav: { section: "系统管理", order: 3, icon: ShieldCheck },
+          },
         },
         {
           path: "forbidden",

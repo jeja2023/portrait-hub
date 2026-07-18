@@ -3,11 +3,12 @@ import { computed, onMounted, ref } from "vue";
 import { Archive, Code2, Eye, Image as ImageIcon, RefreshCw } from "@lucide/vue";
 import { ElAlert, ElButton, ElDrawer, ElInput, ElRadioButton, ElRadioGroup, ElSkeleton } from "element-plus";
 
-import { ApiError, apiRequest } from "../../api/client";
+import { apiRequest } from "../../api/client";
 import AnalysisNavigation from "../../components/AnalysisNavigation.vue";
 import EmptyState from "../../components/EmptyState.vue";
 import RawDataDrawer from "../../components/RawDataDrawer.vue";
 import { usePrefsStore } from "../../stores/prefs";
+import { errorBannerMessage } from "../../utils/errors";
 import { formatTimestamp } from "../../utils/format";
 
 interface AnalysisPreview {
@@ -100,7 +101,7 @@ async function loadResults(append = false): Promise<void> {
     nextCursor.value = payload.next_cursor;
     total.value = payload.total;
   } catch (error) {
-    errorMessage.value = error instanceof ApiError ? error.message : "解析结果加载失败";
+    errorMessage.value = errorBannerMessage(error, "解析结果加载失败");
   } finally {
     loading.value = false;
   }
@@ -130,6 +131,7 @@ onMounted(() => void loadResults());
     <ElAlert
       v-if="errorMessage"
       class="error-banner"
+      role="alert"
       :title="errorMessage"
       type="error"
       show-icon

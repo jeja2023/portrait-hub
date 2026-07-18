@@ -38,6 +38,7 @@ from app.portrait_video_job_worker import start_in_process_worker
 from app.production_gates import validate_production_externalization
 from app.rate_limit import check_rate_limit
 from app.routes import router
+from app.runtime_defaults import DOCS_CONTENT_SECURITY_POLICY
 from app.security_headers import apply_security_headers
 from app.settings import (
     ACCESS_STATS_FLUSH_INTERVAL_SECONDS,
@@ -453,6 +454,14 @@ def create_app() -> FastAPI:
             response.headers["X-Request-ID"] = request_id
             if traceparent:
                 response.headers["traceparent"] = traceparent
+            # 契约（方案 §8.2.5）：敏感 API 与鉴权对象响应统一 no-store；
+            # 端点如需更严格头可自行显式设置（setdefault 不覆盖）。
+            if request.url.path.startswith("/v1/"):
+                response.headers.setdefault("Cache-Control", "no-store")
+            # Swagger/ReDoc 静态页依赖 jsdelivr 与内联引导脚本，单独下发文档 CSP；
+            # 其余响应走全局严格默认（script-src 'self'，无 unsafe-inline）。
+            if ENABLE_API_DOCS and request.url.path in {"/docs", "/redoc"}:
+                response.headers.setdefault("Content-Security-Policy", DOCS_CONTENT_SECURITY_POLICY)
             apply_security_headers(response)
             log_json(
                 logging.INFO,

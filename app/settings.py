@@ -48,7 +48,7 @@ def parse_csv_env(name: str, default: str = "") -> list[str]:
     return [item.strip() for item in os.getenv(name, default).split(",") if item.strip()]
 
 
-APP_VERSION = "0.11.1"
+APP_VERSION = "0.11.2"
 PORTRAIT_RUNTIME_PROFILE = (
     os.getenv("PORTRAIT_RUNTIME_PROFILE", os.getenv("APP_ENV", "development")).strip().lower() or "development"
 )
@@ -183,7 +183,8 @@ JWT_REQUIRE_AUD = parse_bool_env("JWT_REQUIRE_AUD", True)
 # 本地开发通过 dev_start.py、测试套件通过 tests/conftest.py 重新选用宽松值。
 RBAC_ENABLED = parse_bool_env("RBAC_ENABLED", False)
 AUTH_REQUIRED = parse_bool_env("AUTH_REQUIRED", True)
-CONSOLE_WS_TICKET_TTL_SECONDS = max(5, min(parse_int_env("CONSOLE_WS_TICKET_TTL_SECONDS", 60), 300))
+# 契约要求 WS 票据 TTL 不超过 60 秒（控制台前端重建方案 §8.1），clamp 上限不得放宽。
+CONSOLE_WS_TICKET_TTL_SECONDS = max(5, min(parse_int_env("CONSOLE_WS_TICKET_TTL_SECONDS", 60), 60))
 CONSOLE_WS_TICKET_MAX_ENTRIES = max(128, min(parse_int_env("CONSOLE_WS_TICKET_MAX_ENTRIES", 4096), 65_536))
 DEBUG_ENDPOINTS_ENABLED = parse_bool_env("DEBUG_ENDPOINTS_ENABLED", False)
 ENABLE_API_DOCS = parse_bool_env("ENABLE_API_DOCS", False)

@@ -1,15 +1,17 @@
 # Console Next 验收报告
 
 - 验收日期：2026-07-17
-- 发布版本：0.11.1
+- 发布版本：0.11.2
 - 验收对象：frontend/console-next、生产静态入口、权限与 WS ticket、SDK 示例、SLO、审计备份、复核池、CI/Docker/readiness
 - 结论：批次 0、A、B、C、D、E 的代码交付均已完成；旧控制台和运行时灰度配置已删除，Console Next 是唯一生产入口。生产上线仍需执行组织审批、镜像回退演练和多副本 WS ticket 前置条件。
 
 
+> 2026-07-18 / 0.11.2 补充验收：二次复核修复 WS query 主凭证回退、`/v1/*` no-store、默认 CSP、流详情深链、meta.nav 导航、aria-live、错误横幅 request_id、值级脱敏与搜索质量分；新增 me auth_kind×3、403、ws-ticket 401/stream/TTL、空库契约测试，并完成 typecheck、ruff、pytest、npm check、Playwright E2E 与 diff check。
+
 > 2026-07-18 / 0.11.1 补充验收：deploy_check --import-app 已新增旧源码目录缺失断言，duplicate /v1 检查改为扫描 frontend/console-next/src；平台 strict readiness 同步阻断旧灰度变量、旧静态路径和旧 DOM 标记回归。
 ## 功能闭环
 
-| 范围 | 0.11.1 结果 |
+| 范围 | 0.11.2 结果 |
 |---|---|
 | 生产入口 | /、/console、/console/next 统一提供 Console Next |
 | legacy | frontend/console 已删除；/console/legacy 与 /assets/console* 返回 404 |
@@ -21,11 +23,16 @@
 | 审计 | 事件多条件筛选、类别/结果摘要、链错误数与路径指纹 |
 | 备份 | 快照 ID、后端、大小、增量起点、扫描/畸形记录摘要 |
 | readiness | 原 11 个严格失败项全部通过，strict_failure_count=0 |
+| 安全响应头 | WS 主凭证不进 query；`/v1/*` no-store；默认 CSP 无 unsafe-inline/jsdelivr |
+| 流详情与导航 | `/analysis/stream/:streamId` 深链、流详情抽屉、KVEditor metadata；侧栏消费路由 meta.nav |
+| 可访问性与错误 | aria-live 动态通告；错误横幅显示中文 error_code 与 request_id |
+| 脱敏与搜索 | 值级兜底覆盖向量/内部地址/data URL/带凭证 URL；搜索候选展示质量分 |
 
 ## 自动化结果
 
 | 检查 | 结果 |
 |---|---|
+| 0.11.2 全量验证 | typecheck 177 sources、ruff、pytest 546 passed / 4 skipped、npm check、Playwright 11 passed / 4 skipped、diff check 均通过 |
 | Python 定向回归 | 48 passed，2 warnings（控制台入口、旧资产 404、deploy_check、readiness、Console Next contracts） |
 | Node SDK | 通过 |
 | npm test | 通过，Node SDK + console:check 标准入口 |

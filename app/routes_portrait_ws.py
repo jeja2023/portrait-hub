@@ -39,10 +39,11 @@ async def require_websocket_permission(
             return True
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         return False
+    # 契约（方案 §8.4）：WebSocket URL 只允许携带一次性 ticket，主凭证（API Key/JWT）
+    # 禁止经 query 参数传递，仅接受请求头，避免凭证落入访问日志与浏览器历史。
     authorization = websocket.headers.get("authorization") or ""
-    query_bearer = websocket.query_params.get("access_token") or ""
-    token = websocket.query_params.get("token") or websocket.headers.get("x-api-key") or ""
-    bearer = authorization.removeprefix("Bearer ").strip() if authorization.startswith("Bearer ") else query_bearer
+    token = websocket.headers.get("x-api-key") or ""
+    bearer = authorization.removeprefix("Bearer ").strip() if authorization.startswith("Bearer ") else ""
     if RBAC_ENABLED:
         if not bearer:
             await websocket.close(code=status.WS_1008_POLICY_VIOLATION)

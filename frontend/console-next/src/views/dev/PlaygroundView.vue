@@ -17,6 +17,7 @@ import {
 } from "element-plus";
 
 import { ApiError, apiRaw, apiRequest, jsonBody } from "../../api/client";
+import { errorBannerMessage } from "../../utils/errors";
 import { redactForDisplay } from "../../utils/redact";
 
 type EndpointKind = "read" | "batch-search" | "batch-compare" | "stream-create" | "stream-events";
@@ -193,7 +194,7 @@ async function loadReference(value: string): Promise<void> {
       const payload = await apiRequest<{ error_codes: Record<string, unknown>[] }>("/v1/access/error-codes");
       errorCodes.value = payload.error_codes;
     } catch (error) {
-      errorMessage.value = error instanceof ApiError ? error.message : "错误码目录加载失败";
+      errorMessage.value = errorBannerMessage(error, "错误码目录加载失败");
     } finally {
       referenceLoading.value = false;
     }
@@ -215,7 +216,7 @@ async function loadReference(value: string): Promise<void> {
           })),
       );
     } catch (error) {
-      errorMessage.value = error instanceof ApiError ? error.message : "OpenAPI 定义加载失败";
+      errorMessage.value = errorBannerMessage(error, "OpenAPI 定义加载失败");
     } finally {
       referenceLoading.value = false;
     }
@@ -303,6 +304,7 @@ async function execute(): Promise<void> {
     <ElAlert
       v-if="errorMessage"
       class="error-banner"
+      role="alert"
       :title="errorMessage"
       type="error"
       show-icon

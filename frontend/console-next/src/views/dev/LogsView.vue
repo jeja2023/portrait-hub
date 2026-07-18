@@ -11,8 +11,9 @@ import {
   ElSelect,
   ElSkeleton,
 } from "element-plus";
-import { ApiError, apiRequest } from "../../api/client";
+import { apiRequest } from "../../api/client";
 import EmptyState from "../../components/EmptyState.vue";
+import { errorBannerMessage } from "../../utils/errors";
 import { formatTimestamp } from "../../utils/format";
 interface LogRow {
   request_id: string;
@@ -57,7 +58,7 @@ async function load(): Promise<void> {
     }
     logs.value = (await apiRequest<{ logs: LogRow[] }>(`/v1/access/call-logs?${params}`)).logs;
   } catch (error) {
-    errorMessage.value = error instanceof ApiError ? error.message : "调用日志加载失败";
+    errorMessage.value = errorBannerMessage(error, "调用日志加载失败");
   } finally {
     loading.value = false;
   }
@@ -84,6 +85,7 @@ onMounted(async () => {
     <ElAlert
       v-if="errorMessage"
       class="error-banner"
+      role="alert"
       :title="errorMessage"
       type="error"
       show-icon

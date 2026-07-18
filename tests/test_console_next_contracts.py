@@ -1,16 +1,23 @@
 from __future__ import annotations
 
+import base64
+import hashlib
+import hmac
+import json
+import time
 from copy import deepcopy
 
 import pytest
 from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
-from app import portrait_auth, portrait_console_access, security
+from app import portrait_access, portrait_auth, portrait_console_access, routes_portrait_access, security
 from app.portrait_console_access import clear_console_ws_tickets
 from app.portrait_gallery import GALLERY, gallery_key
 from app.portrait_gallery_records import FeatureRecord, PersonRecord
 from app.portrait_jobs import VIDEO_JOBS, JobStatus, VideoJob, job_key
+from app.portrait_streams import STREAMS, StreamRecord, stream_key
+from app.settings import CONSOLE_WS_TICKET_TTL_SECONDS
 from main import app
 
 
@@ -295,3 +302,252 @@ def test_console_ws_tickets_reject_wrong_binding_and_expiration() -> None:
         )
     finally:
         clear_console_ws_tickets()
+
+
+def test_console_ws_ticket_ttl_is_capped_at_sixty_seconds() -> None:
+    # 契约（方案 §8.1）：票据 TTL 不得超过 60 秒；settings clamp 上限锁定 60。
+    assert CONSOLE_WS_TICKET_TTL_SECONDS <= 60
+    clear_console_ws_tickets()
+    try:
+        _, record = portrait_console_access.issue_console_ws_ticket(
+            tenant_id="tenant-a",
+            resource_type="job",
+            resource_id="job-a",
+            permission="jobs:read",
+            now=100.0,
+        )
+        assert record.expires_at - 100.0 <= 60.0
+    finally:
+        clear_console_ws_tickets()
+
+
+def _encode_jwt_segment(payload: dict | bytes) -> str:
+    data = payload if isinstance(payload, bytes) else json.dumps(payload, separators=(",", ":")).encode("utf-8")
+    return base64.urlsafe_b64encode(data).decode("ascii").rstrip("=")
+
+
+def _hs256_token(payload: dict, secret: str = "test-secret") -> str:
+    header = _encode_jwt_segment({"alg": "HS256", "typ": "JWT"})
+    body = _encode_jwt_segment(payload)
+    signature = hmac.new(secret.encode("utf-8"), f"{header}.{body}".encode("ascii"), hashlib.sha256).digest()
+    return f"{header}.{body}.{_encode_jwt_segment(signature)}"
+
+
+def test_console_me_contract_for_global_api_token(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(security, "RBAC_ENABLED", False)
+    monkeypatch.setattr(security, "AUTH_REQUIRED", True)
+    monkeypatch.setattr(security, "API_TOKEN", "global-secret")
+    monkeypatch.setattr(security, "API_TOKEN_TENANT_ID", "tenant-a")
+    monkeypatch.setattr(security, "API_TOKEN_ALLOW_TENANT_OVERRIDE", False)
+    monkeypatch.setattr(portrait_console_access, "API_TOKEN", "global-secret")
+    client = TestClient(app)
+
+    response = client.get(
+        "/v1/console/me",
+        headers={"x-tenant-id": "tenant-a", "Authorization": "Bearer global-secret"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()["data"]
+    assert payload["tenant_id"] == "tenant-a"
+    assert payload["auth_kind"] == "global_api_token"
+    assert payload["permissions"] == ["*"]
+    assert payload["expires_at"] is None
+    assert "features" not in payload
+
+
+def test_console_me_contract_for_application_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    portrait_access.clear_access_state()
+    monkeypatch.setattr(portrait_access, "save_access_state", lambda: None)
+    monkeypatch.setattr(routes_portrait_access, "audit_event", lambda *args, **kwargs: None)
+    client = TestClient(app)
+    created = client.post(
+        "/v1/access/applications",
+        headers={"X-Tenant-ID": "tenant-a"},
+        json={
+            "app_id": "console-me-app",
+            "name": "Console Me App",
+            "owner": "qa",
+            "status": "active",
+            "scopes": ["infer", "jobs:read"],
+        },
+    )
+    assert created.status_code == 200, created.text
+    secret = created.json()["data"]["one_time_secret"]
+    try:
+        monkeypatch.setattr(security, "RBAC_ENABLED", True)
+        monkeypatch.setattr(security, "AUTH_REQUIRED", True)
+        monkeypatch.setattr(security, "API_TOKEN", None)
+        monkeypatch.setattr(portrait_console_access, "API_TOKEN", None)
+
+        response = client.get(
+            "/v1/console/me",
+            headers={"X-Tenant-ID": "tenant-a", "X-API-Key": secret},
+        )
+
+        assert response.status_code == 200
+        payload = response.json()["data"]
+        assert payload["auth_kind"] == "application_api_key"
+        assert payload["subject"] == "console-me-app"
+        assert payload["permissions"] == ["infer", "jobs:read"]
+        assert payload["scopes"] == ["infer", "jobs:read"]
+        assert "features" not in payload
+    finally:
+        portrait_access.clear_access_state()
+
+
+def test_console_me_contract_for_jwt(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(security, "RBAC_ENABLED", True)
+    monkeypatch.setattr(security, "AUTH_REQUIRED", True)
+    monkeypatch.setattr(security, "API_TOKEN", None)
+    monkeypatch.setattr(portrait_console_access, "RBAC_ENABLED", True)
+    monkeypatch.setattr(portrait_console_access, "API_TOKEN", None)
+    monkeypatch.setattr(portrait_auth, "RBAC_ENABLED", True)
+    monkeypatch.setattr(portrait_auth, "JWT_SECRET", "test-secret")
+    monkeypatch.setattr(portrait_auth, "JWT_ISSUER", "portrait-hub")
+    monkeypatch.setattr(portrait_auth, "JWT_AUDIENCE", "portrait-hub-api")
+    expires = int(time.time()) + 300
+    token = _hs256_token(
+        {
+            "iss": "portrait-hub",
+            "aud": "portrait-hub-api",
+            "sub": "auditor-01",
+            "roles": ["viewer"],
+            "tenant_id": "tenant-a",
+            "exp": expires,
+        }
+    )
+    client = TestClient(app)
+
+    response = client.get(
+        "/v1/console/me",
+        headers={"X-Tenant-ID": "tenant-a", "Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()["data"]
+    assert payload["auth_kind"] == "jwt"
+    assert payload["subject"] == "auditor-01"
+    assert payload["roles"] == ["viewer"]
+    assert "jobs:read" in payload["permissions"]
+    assert payload["expires_at"] == float(expires)
+    assert "features" not in payload
+
+
+def test_console_collections_reject_authenticated_principal_without_permission(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # 已认证但缺少 jobs:read/gallery:read/streams:read -> 403（方案 §12.3）。
+    monkeypatch.setattr(security, "RBAC_ENABLED", True)
+    monkeypatch.setattr(security, "AUTH_REQUIRED", True)
+    monkeypatch.setattr(security, "API_TOKEN", None)
+    monkeypatch.setattr(portrait_auth, "RBAC_ENABLED", True)
+    monkeypatch.setattr(portrait_auth, "JWT_SECRET", "test-secret")
+    monkeypatch.setattr(portrait_auth, "JWT_ISSUER", "portrait-hub")
+    monkeypatch.setattr(portrait_auth, "JWT_AUDIENCE", "portrait-hub-api")
+    token = _hs256_token(
+        {
+            "iss": "portrait-hub",
+            "aud": "portrait-hub-api",
+            "roles": ["algorithm"],  # 无 jobs:read / gallery:read / streams:read
+            "tenant_id": "tenant-a",
+            "exp": int(time.time()) + 300,
+        }
+    )
+    headers = {"X-Tenant-ID": "tenant-a", "Authorization": f"Bearer {token}"}
+    client = TestClient(app)
+
+    assert client.get("/v1/jobs", headers=headers).status_code == 403
+    assert client.get("/v1/gallery", headers=headers).status_code == 403
+    denied_ticket = client.post(
+        "/v1/console/ws-ticket",
+        headers=headers,
+        json={"resource_type": "job", "resource_id": "job-any"},
+    )
+    assert denied_ticket.status_code == 403
+
+
+def test_console_ws_ticket_requires_authentication(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(security, "RBAC_ENABLED", False)
+    monkeypatch.setattr(security, "AUTH_REQUIRED", True)
+    monkeypatch.setattr(security, "API_TOKEN", None)
+    client = TestClient(app)
+
+    anonymous = client.post(
+        "/v1/console/ws-ticket",
+        headers={"x-tenant-id": "tenant-a"},
+        json={"resource_type": "job", "resource_id": "job-any"},
+    )
+
+    assert anonymous.status_code == 401
+
+
+def test_console_ws_ticket_supports_stream_resources() -> None:
+    snapshot = dict(STREAMS)
+    STREAMS.clear()
+    clear_console_ws_tickets()
+    try:
+        stream = StreamRecord(
+            stream_id="stream_ticket",
+            tenant_id="tenant-a",
+            stream_url="rtsp://example.com/live",
+            name="ticket-stream",
+            settings={},
+            metadata={},
+        )
+        STREAMS[stream_key(stream.tenant_id, stream.stream_id)] = stream
+        client = TestClient(app)
+
+        issued = client.post(
+            "/v1/console/ws-ticket",
+            headers={"x-tenant-id": "tenant-a"},
+            json={"resource_type": "stream", "resource_id": stream.stream_id},
+        )
+        assert issued.status_code == 200
+        ticket_payload = issued.json()["data"]
+        assert ticket_payload["websocket_path"] == f"/ws/streams/{stream.stream_id}"
+
+        ws_url = f"/ws/streams/{stream.stream_id}?tenant_id=tenant-a&ticket={ticket_payload['ticket']}"
+        with client.websocket_connect(ws_url) as websocket:
+            payload = websocket.receive_json()
+        assert payload["status"] == "success"
+        assert payload["stream"]["stream_id"] == stream.stream_id
+
+        # 单次消费：复用同一 ticket 必须被拒绝
+        with pytest.raises(WebSocketDisconnect) as exc_info:
+            with client.websocket_connect(ws_url):
+                pass
+        assert exc_info.value.code == 1008
+    finally:
+        clear_console_ws_tickets()
+        STREAMS.clear()
+        STREAMS.update(snapshot)
+
+
+def test_gallery_empty_collection_returns_stable_response() -> None:
+    snapshot = deepcopy(GALLERY)
+    GALLERY.clear()
+    try:
+        response = TestClient(app).get("/v1/gallery", headers={"x-tenant-id": "tenant-empty"})
+
+        assert response.status_code == 200
+        payload = response.json()["data"]
+        assert payload["items"] == []
+        assert payload["count"] == 0
+        assert payload["total"] == 0
+        assert payload["has_more"] is False
+        assert payload["next_cursor"] is None
+    finally:
+        GALLERY.clear()
+        GALLERY.update(snapshot)
+
+
+def test_v1_authenticated_responses_default_to_no_store() -> None:
+    # 方案 §8.2.5：敏感 API 与鉴权对象响应统一 no-store。
+    client = TestClient(app)
+
+    jobs = client.get("/v1/jobs", headers={"x-tenant-id": "tenant-a"})
+    gallery = client.get("/v1/gallery", headers={"x-tenant-id": "tenant-a"})
+
+    assert jobs.headers["Cache-Control"] == "no-store"
+    assert gallery.headers["Cache-Control"] == "no-store"

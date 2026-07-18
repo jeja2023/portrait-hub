@@ -1,23 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { useRoute } from "vue-router";
-import {
-  Activity,
-  Boxes,
-  Braces,
-  ChevronLeft,
-  Code2,
-  FileClock,
-  Gauge,
-  Images,
-  LogOut,
-  Menu,
-  ScanSearch,
-  Settings2,
-  ShieldCheck,
-  SlidersHorizontal,
-  Waypoints,
-} from "@lucide/vue";
+import { useRoute, useRouter } from "vue-router";
+import { ChevronLeft, Code2, LogOut, Menu, ScanSearch } from "@lucide/vue";
 import { ElButton, ElMenu, ElMenuItem, ElSwitch, ElTooltip } from "element-plus";
 
 import { clearSession, sessionState } from "../auth/session";
@@ -25,47 +9,33 @@ import { useCapabilitiesStore } from "../stores/capabilities";
 import { usePrefsStore } from "../stores/prefs";
 
 const route = useRoute();
+const router = useRouter();
 const capabilities = useCapabilitiesStore();
 const prefs = usePrefsStore();
 const activeMenuPath = computed(() => (route.path.startsWith("/analysis/") ? "/analysis/image" : route.path));
 
-const sections = [
-  {
-    label: "工作台",
-    items: [
-      { label: "总览", path: "/", permission: "admin:status", icon: Gauge },
-      { label: "智能分析", path: "/analysis/image", permission: "infer", icon: Activity },
-      { label: "比对", path: "/compare", permission: "compare", icon: Waypoints },
-      { label: "以图搜人", path: "/search", permission: "gallery:read", icon: ScanSearch },
-      { label: "人员库", path: "/gallery", permission: "gallery:read", icon: Images },
-    ],
-  },
-  {
-    label: "开发者中心",
-    items: [
-      { label: "接入配置", path: "/dev/access", permission: "access:read", icon: Settings2 },
-      { label: "调试台", path: "/dev/playground", permission: "infer", icon: Braces },
-      { label: "调用日志", path: "/dev/logs", permission: "access:read", icon: FileClock },
-    ],
-  },
-  {
-    label: "系统管理",
-    items: [
-      { label: "模型中心", path: "/admin/models", permission: "models:read", icon: Boxes },
-      { label: "阈值与标注", path: "/admin/calibration", permission: "models:read", icon: SlidersHorizontal },
-      { label: "运维与合规", path: "/admin/ops", permission: "admin:status", icon: ShieldCheck },
-    ],
-  },
-];
+// 单一导航数据源（方案 §6）：由路由表 meta.nav 派生侧栏，标题/权限/图标只在路由声明一次。
+const SECTION_ORDER = ["工作台", "开发者中心", "系统管理"];
 
-const visibleSections = computed(() =>
-  sections
-    .map((section) => ({
-      ...section,
-      items: section.items.filter((item) => capabilities.hasPermission(item.permission)),
+const visibleSections = computed(() => {
+  const items = router
+    .getRoutes()
+    .filter((record) => record.meta.nav)
+    .map((record) => ({
+      label: record.meta.nav!.label ?? record.meta.title ?? record.path,
+      path: record.path,
+      icon: record.meta.nav!.icon,
+      section: record.meta.nav!.section,
+      order: record.meta.nav!.order,
+      permission: record.meta.permission,
     }))
-    .filter((section) => section.items.length > 0),
-);
+    .filter((item) => capabilities.hasPermission(item.permission))
+    .sort((a, b) => a.order - b.order);
+  return SECTION_ORDER.map((label) => ({
+    label,
+    items: items.filter((item) => item.section === label),
+  })).filter((section) => section.items.length > 0);
+});
 
 function logout(): void {
   clearSession();
@@ -130,6 +100,8 @@ function logout(): void {
       <main id="main-content" class="console-main" tabindex="-1">
         <RouterView />
       </main>
+      <!-- 路由切换与页面级动态状态的读屏通告（方案 §11.8） -->
+      <div class="visually-hidden" role="status" aria-live="polite">当前页面：{{ route.meta.title }}</div>
     </div>
   </div>
 </template>

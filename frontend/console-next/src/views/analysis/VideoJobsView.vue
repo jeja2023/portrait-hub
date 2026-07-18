@@ -4,7 +4,7 @@ import { useRoute, useRouter } from "vue-router";
 import { Ban, Code2, Eye, Plus, RefreshCw } from "@lucide/vue";
 import { ElAlert, ElButton, ElDialog, ElDrawer, ElInputNumber, ElSkeleton } from "element-plus";
 
-import { ApiError, apiRequest } from "../../api/client";
+import { apiRequest } from "../../api/client";
 import type { JobListResponse, JobSummary } from "../../api/contracts";
 import { openTicketWebSocket, type LiveConnectionState } from "../../api/ws";
 import AnalysisNavigation from "../../components/AnalysisNavigation.vue";
@@ -14,6 +14,7 @@ import FrameGrid from "../../components/FrameGrid.vue";
 import RawDataDrawer from "../../components/RawDataDrawer.vue";
 import { useCapabilitiesStore } from "../../stores/capabilities";
 import { usePrefsStore } from "../../stores/prefs";
+import { errorBannerMessage } from "../../utils/errors";
 import { formatPercent, formatTimestamp, statusLabels } from "../../utils/format";
 
 const route = useRoute();
@@ -54,7 +55,7 @@ async function loadJobs(append = false): Promise<void> {
     jobs.value = append ? [...jobs.value, ...payload.items] : payload.items;
     nextCursor.value = payload.next_cursor;
   } catch (error) {
-    errorMessage.value = error instanceof ApiError ? error.message : "任务列表加载失败";
+    errorMessage.value = errorBannerMessage(error, "任务列表加载失败");
   } finally {
     loading.value = false;
   }
@@ -82,7 +83,7 @@ async function createJob(): Promise<void> {
     await loadJobs();
     await openDetail(payload.job.job_id);
   } catch (error) {
-    errorMessage.value = error instanceof ApiError ? error.message : "任务创建失败";
+    errorMessage.value = errorBannerMessage(error, "任务创建失败");
   } finally {
     createLoading.value = false;
   }
@@ -128,7 +129,7 @@ async function openDetail(jobId: string): Promise<void> {
     if (payload.job.status === "completed") await loadDetailResult(jobId);
     else await startLive(payload.job);
   } catch (error) {
-    errorMessage.value = error instanceof ApiError ? error.message : "任务详情加载失败";
+    errorMessage.value = errorBannerMessage(error, "任务详情加载失败");
   }
 }
 
@@ -148,7 +149,7 @@ async function cancelJob(): Promise<void> {
     cancelTarget.value = null;
     await loadJobs();
   } catch (error) {
-    errorMessage.value = error instanceof ApiError ? error.message : "取消任务失败";
+    errorMessage.value = errorBannerMessage(error, "取消任务失败");
   } finally {
     cancelLoading.value = false;
   }
@@ -195,6 +196,7 @@ onBeforeUnmount(() => {
     <ElAlert
       v-if="errorMessage"
       class="error-banner"
+      role="alert"
       :title="errorMessage"
       type="error"
       show-icon
@@ -311,7 +313,9 @@ onBeforeUnmount(() => {
           </div>
           <div>
             <dt>实时连接</dt>
-            <dd>{{ liveState === "open" ? "已连接" : liveState === "degraded" ? "已降级" : "连接中" }}</dd>
+            <dd role="status" aria-live="polite">
+              {{ liveState === "open" ? "已连接" : liveState === "degraded" ? "已降级" : "连接中" }}
+            </dd>
           </div>
         </dl>
         <ElAlert v-if="detail.job.error" :title="detail.job.error" type="error" :closable="false" show-icon />

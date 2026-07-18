@@ -3,10 +3,11 @@ import { computed, onBeforeUnmount, ref } from "vue";
 import { Code2, ImagePlus, Search, UserRound } from "@lucide/vue";
 import { ElAlert, ElButton, ElInputNumber, ElOption, ElSelect } from "element-plus";
 
-import { ApiError, apiRequest } from "../api/client";
+import { apiRequest } from "../api/client";
 import RawDataDrawer from "../components/RawDataDrawer.vue";
 import { usePrefsStore } from "../stores/prefs";
 import { formatPercent } from "../utils/format";
+import { errorBannerMessage } from "../utils/errors";
 
 const prefs = usePrefsStore();
 const file = ref<File | null>(null);
@@ -43,6 +44,13 @@ function candidateRisk(candidate: Record<string, unknown>): string {
 function candidateThumbnail(candidate: Record<string, unknown>): string {
   return String(asRecord(candidate.feature).thumbnail ?? "");
 }
+function candidateQuality(candidate: Record<string, unknown>): number | null {
+  const quality = Number(asRecord(candidate.feature).quality_score);
+  return Number.isFinite(quality) ? quality : null;
+}
+function candidateModality(candidate: Record<string, unknown>): string {
+  return String(asRecord(candidate.feature).modality ?? candidate.modality ?? "");
+}
 function selectFile(event: Event): void {
   if (previewUrl.value) URL.revokeObjectURL(previewUrl.value);
   file.value = (event.target as HTMLInputElement).files?.[0] ?? null;
@@ -65,7 +73,7 @@ async function search(): Promise<void> {
       90_000,
     );
   } catch (error) {
-    errorMessage.value = error instanceof ApiError ? error.message : "检索失败";
+    errorMessage.value = errorBannerMessage(error, "检索失败");
   } finally {
     loading.value = false;
   }
@@ -91,6 +99,7 @@ onBeforeUnmount(() => {
     <ElAlert
       v-if="errorMessage"
       class="error-banner"
+      role="alert"
       :title="errorMessage"
       type="error"
       show-icon
@@ -152,7 +161,11 @@ onBeforeUnmount(() => {
             </div>
             <div class="candidate-meta">
               置信度 {{ formatPercent(Number(candidateDecision(candidate).confidence ?? 0)) }} · 风险
-              {{ candidateRisk(candidate) }}
+              {{ candidateRisk(candidate) }}<template v-if="candidateQuality(candidate) !== null">
+                · 质量 {{ formatPercent(candidateQuality(candidate)!) }}</template
+              ><template v-if="candidateModality(candidate)">
+                · 模态 {{ candidateModality(candidate) }}</template
+              >
             </div>
           </div>
           <RouterLink :to="`/gallery/${encodeURIComponent(String(candidate.person_id))}`"

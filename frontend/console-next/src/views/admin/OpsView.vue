@@ -15,9 +15,10 @@ import {
   ElTabs,
 } from "element-plus";
 
-import { ApiError, apiRequest, jsonBody } from "../../api/client";
+import { apiRequest, jsonBody } from "../../api/client";
 import DangerConfirm from "../../components/DangerConfirm.vue";
 import { useCapabilitiesStore } from "../../stores/capabilities";
+import { errorBannerMessage } from "../../utils/errors";
 import { formatTimestamp } from "../../utils/format";
 
 interface AuditEvent {
@@ -102,7 +103,7 @@ const categorySummary = computed(() =>
 );
 
 function errorText(error: unknown, fallback: string): string {
-  return error instanceof ApiError ? error.message : fallback;
+  return errorBannerMessage(error, fallback);
 }
 
 function shortHash(value: unknown): string {
@@ -242,6 +243,7 @@ onMounted(() => void load());
     <ElAlert
       v-if="errorMessage"
       class="error-banner"
+      role="alert"
       :title="errorMessage"
       type="error"
       show-icon

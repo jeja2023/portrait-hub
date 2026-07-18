@@ -14,10 +14,11 @@ import {
   ElTabs,
 } from "element-plus";
 
-import { ApiError, apiRequest, jsonBody } from "../../api/client";
+import { apiRequest, jsonBody } from "../../api/client";
 import DangerConfirm from "../../components/DangerConfirm.vue";
 import EmptyState from "../../components/EmptyState.vue";
 import { useCapabilitiesStore } from "../../stores/capabilities";
+import { errorBannerMessage } from "../../utils/errors";
 import { formatTimestamp, statusLabels } from "../../utils/format";
 
 interface ApplicationRow {
@@ -75,7 +76,7 @@ async function load(): Promise<void> {
     webhooks.value = hooks.webhooks;
     webhookForm.application_id ||= applications.value[0]?.app_id ?? "";
   } catch (error) {
-    errorMessage.value = error instanceof ApiError ? error.message : "接入配置加载失败";
+    errorMessage.value = errorBannerMessage(error, "接入配置加载失败");
   } finally {
     loading.value = false;
   }
@@ -107,7 +108,7 @@ async function createApplication(): Promise<void> {
     revealSecret(payload.one_time_secret);
     await load();
   } catch (error) {
-    errorMessage.value = error instanceof ApiError ? error.message : "应用创建失败";
+    errorMessage.value = errorBannerMessage(error, "应用创建失败");
   } finally {
     actionLoading.value = false;
   }
@@ -123,7 +124,7 @@ async function toggleApplication(app: ApplicationRow): Promise<void> {
     ElMessage.success(app.status === "active" ? "应用已停用" : "应用已启用");
     await load();
   } catch (error) {
-    errorMessage.value = error instanceof ApiError ? error.message : "应用状态更新失败";
+    errorMessage.value = errorBannerMessage(error, "应用状态更新失败");
   } finally {
     actionLoading.value = false;
   }
@@ -150,7 +151,7 @@ async function createWebhook(): Promise<void> {
     revealSecret(payload.one_time_secret);
     await load();
   } catch (error) {
-    errorMessage.value = error instanceof ApiError ? error.message : "事件回调创建失败";
+    errorMessage.value = errorBannerMessage(error, "事件回调创建失败");
   } finally {
     actionLoading.value = false;
   }
@@ -174,7 +175,7 @@ async function rotateSecret(): Promise<void> {
     revealSecret(payload.one_time_secret);
     await load();
   } catch (error) {
-    errorMessage.value = error instanceof ApiError ? error.message : "密钥轮换失败";
+    errorMessage.value = errorBannerMessage(error, "密钥轮换失败");
   } finally {
     actionLoading.value = false;
   }
@@ -188,7 +189,7 @@ async function sendSample(webhookId: string): Promise<void> {
     });
     ElMessage.success("示例事件已生成");
   } catch (error) {
-    errorMessage.value = error instanceof ApiError ? error.message : "示例事件生成失败";
+    errorMessage.value = errorBannerMessage(error, "示例事件生成失败");
   } finally {
     actionLoading.value = false;
   }
@@ -230,6 +231,7 @@ onMounted(() => void load());
     <ElAlert
       v-if="errorMessage"
       class="error-banner"
+      role="alert"
       :title="errorMessage"
       type="error"
       show-icon

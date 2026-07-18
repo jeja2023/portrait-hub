@@ -75,7 +75,8 @@ async def v1_get_analysis_artifact(
     return Response(
         content=content,
         media_type=artifact.media_type,
-        headers={"Cache-Control": "private, max-age=300"},
+        # 鉴权对象响应统一 no-store（方案 §8.2.5）；人员/解析图像不进入浏览器磁盘缓存
+        headers={"Cache-Control": "no-store"},
     )
 
 
