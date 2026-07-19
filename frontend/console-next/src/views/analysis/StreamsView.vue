@@ -13,7 +13,7 @@ import RawDataDrawer from "../../components/RawDataDrawer.vue";
 import { useCapabilitiesStore } from "../../stores/capabilities";
 import { usePrefsStore } from "../../stores/prefs";
 import { errorBannerMessage } from "../../utils/errors";
-import { formatTimestamp, statusLabels } from "../../utils/format";
+import { formatTimestamp, statusLabel, eventLabel } from "../../utils/format";
 
 interface StreamSummary {
   stream_id: string;
@@ -251,7 +251,7 @@ onBeforeUnmount(() => {
                 <td>{{ stream.stream_url }}</td>
                 <td>
                   <span class="status-pill" :data-status="stream.status">{{
-                    statusLabels[stream.status] ?? stream.status
+                    statusLabel(stream.status)
                   }}</span>
                 </td>
                 <td>{{ stream.event_count }}</td>
@@ -318,7 +318,7 @@ onBeforeUnmount(() => {
             <span>视频流</span><strong>{{ detail.name || detail.stream_id }}</strong>
           </div>
           <span class="status-pill" :data-status="detail.status">{{
-            statusLabels[detail.status] ?? detail.status
+            statusLabel(detail.status)
           }}</span>
         </div>
         <dl class="detail-grid">
@@ -359,8 +359,8 @@ onBeforeUnmount(() => {
           <ol v-if="detailEvents.length" aria-live="polite">
             <li v-for="event in [...detailEvents].reverse().slice(0, 50)" :key="event.event_id">
               <time>{{ formatTimestamp(event.created_at) }}</time>
-              <strong>{{ event.message }}</strong>
-              <code>{{ event.type }}</code>
+              <strong>{{ eventLabel(event.type) }}</strong>
+              <code v-if="prefs.developerMode">{{ event.type }}</code>
             </li>
           </ol>
           <p v-else class="event-empty">暂无事件，流启动后会自动追加。</p>

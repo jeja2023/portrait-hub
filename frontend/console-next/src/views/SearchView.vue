@@ -6,7 +6,7 @@ import { ElAlert, ElButton, ElInputNumber, ElOption, ElSelect } from "element-pl
 import { apiRequest } from "../api/client";
 import RawDataDrawer from "../components/RawDataDrawer.vue";
 import { usePrefsStore } from "../stores/prefs";
-import { formatPercent } from "../utils/format";
+import { formatPercent, modalityLabel, riskLabel } from "../utils/format";
 import { errorBannerMessage } from "../utils/errors";
 
 const prefs = usePrefsStore();
@@ -161,10 +161,10 @@ onBeforeUnmount(() => {
             </div>
             <div class="candidate-meta">
               置信度 {{ formatPercent(Number(candidateDecision(candidate).confidence ?? 0)) }} · 风险
-              {{ candidateRisk(candidate) }}<template v-if="candidateQuality(candidate) !== null">
+              {{ riskLabel(candidateRisk(candidate)) }}<template v-if="candidateQuality(candidate) !== null">
                 · 质量 {{ formatPercent(candidateQuality(candidate)!) }}</template
               ><template v-if="candidateModality(candidate)">
-                · 模态 {{ candidateModality(candidate) }}</template
+                · 模态 {{ modalityLabel(candidateModality(candidate)) }}</template
               >
             </div>
           </div>

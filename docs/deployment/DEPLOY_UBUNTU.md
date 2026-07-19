@@ -893,7 +893,7 @@ Compose 默认绑定：
 
 ## 新版控制台灰度与回退
 
-本节适用于 0.12.0。Console Next 是唯一生产控制台，根路径 / 是正式登录入口。0.12.0 在既有安全基线之上补齐 SLO 聚合完整性、WebSocket 降级轮询、会话到期、URL 状态恢复、解析档案详情、图片推理高级参数、接入应用编辑与 Redis ws-ticket 多副本支持。
+本节适用于 0.12.1。Console Next 是唯一生产控制台，根路径 / 是正式登录入口。0.12.1 在 0.12.0 基础上补齐环境模板同步、构建后 HTML 热读取、路由滚动恢复和标题栏展示修复。
 
 构建镜像时，Node 22 builder 会在根 npm workspace 中执行 npm ci 与 npm run console:build；运行镜像只复制 frontend/console-next/dist，不安装 Node，也不再包含旧版 frontend/console。非镜像部署必须先在仓库根目录执行相同构建命令，并确认 dist/index.html 与 dist/.vite/manifest.json 存在。
 

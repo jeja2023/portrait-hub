@@ -19,7 +19,7 @@ import { apiRequest, jsonBody } from "../../api/client";
 import DangerConfirm from "../../components/DangerConfirm.vue";
 import { useCapabilitiesStore } from "../../stores/capabilities";
 import { errorBannerMessage } from "../../utils/errors";
-import { formatTimestamp } from "../../utils/format";
+import { formatTimestamp, auditCategoryLabel, backendAreaLabel, backendLabel, eventLabel, outcomeLabel } from "../../utils/format";
 import { useRouteTab } from "../../utils/routeState";
 
 interface AuditEvent {
@@ -257,7 +257,7 @@ onMounted(() => void load());
           <ElSkeleton :loading="loading" :rows="5" animated>
             <div class="backend-grid">
               <div v-for="item in backends" :key="item[0]">
-                <span>{{ item[0] }}</span><strong>{{ item[1] }}</strong>
+                <span>{{ backendAreaLabel(item[0]) }}</span><strong>{{ backendLabel(item[1]) }}</strong>
               </div>
             </div>
           </ElSkeleton>
@@ -304,10 +304,10 @@ onMounted(() => void load());
                 <tr v-for="(item, index) in backups" :key="String(item.snapshot_id ?? index)">
                   <td><code :title="item.snapshot_id">{{ shortHash(item.snapshot_id) }}</code></td>
                   <td>{{ formatTimestamp(Number(item.created_at)) }}</td>
-                  <td>{{ item.object_backend || "--" }}</td>
+                  <td>{{ backendLabel(item.object_backend) }}</td>
                   <td>{{ formatBytes(item.bytes) }}</td>
                   <td>{{ item.updated_since == null ? "完整" : formatTimestamp(Number(item.updated_since)) }}</td>
-                  <td>{{ item.outcome || "success" }}</td>
+                  <td>{{ outcomeLabel(item.outcome || "success") }}</td>
                 </tr>
               </tbody>
             </table>
@@ -358,7 +358,7 @@ onMounted(() => void load());
             <span>匹配 {{ auditPayload.matched_count }}</span>
             <span>扫描 {{ auditPayload.scanned_count }}</span>
             <span :data-warning="auditPayload.malformed_count > 0">异常记录 {{ auditPayload.malformed_count }}</span>
-            <span v-for="item in categorySummary" :key="item[0]">{{ item[0] }} {{ item[1] }}</span>
+            <span v-for="item in categorySummary" :key="item[0]">{{ auditCategoryLabel(item[0]) }} {{ item[1] }}</span>
           </div>
 
           <div v-if="audit.length === 0" class="tab-note">没有符合条件的审计事件</div>
@@ -377,9 +377,9 @@ onMounted(() => void load());
               <tbody>
                 <tr v-for="(item, index) in audit" :key="String(item.audit_hash ?? index)">
                   <td>{{ formatTimestamp(Number(item.created_at)) }}</td>
-                  <td>{{ item.event }}</td>
-                  <td>{{ item.category }}</td>
-                  <td>{{ item.outcome || "--" }}</td>
+                  <td>{{ eventLabel(item.event) }}</td>
+                  <td>{{ auditCategoryLabel(item.category) }}</td>
+                  <td>{{ outcomeLabel(item.outcome) }}</td>
                   <td><code>{{ item.request_id }}</code></td>
                   <td><code :title="item.audit_hash">{{ shortHash(item.audit_hash) }}</code></td>
                 </tr>

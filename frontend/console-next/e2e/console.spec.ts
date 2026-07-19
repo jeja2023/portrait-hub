@@ -39,8 +39,8 @@ test("[E2E-SHELL-01] loads the public shell, logs in, and keeps credentials out 
   const apiKey = "e2e-tab-only-secret";
   await page.getByRole("textbox", { name: "接口密钥", exact: true }).fill(apiKey);
   await page.getByRole("button", { name: "进入控制台" }).click();
-  await expect(page.getByRole("heading", { name: "总览" })).toBeVisible();
   await expect(page).toHaveURL(/\/console#\/$/);
+  await expect(page.getByRole("heading", { name: "总览", exact: true })).toBeVisible();
 
   const browserState = await page.evaluate((secret) => {
     const localValues = Object.values(window.localStorage);
@@ -129,7 +129,7 @@ test("[E2E-ROUTES-02] loads every product route and opens guarded dialogs withou
   await page.goto("/console#/dev/playground");
   await page.getByRole("tab", { name: "错误码" }).click();
   await expect(page.getByRole("cell", { name: "unauthorized", exact: true })).toBeVisible();
-  await page.getByRole("tab", { name: "OpenAPI" }).click();
+  await page.getByRole("tab", { name: "接口定义" }).click();
   await expect(page.getByText(/共 \d+ 个接口操作/)).toBeVisible();
 
   await page.goto("/console#/dev/access");

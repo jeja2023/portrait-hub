@@ -6,7 +6,13 @@ import { ElAlert, ElButton, ElOption, ElSelect } from "element-plus";
 import { apiRequest } from "../api/client";
 import RawDataDrawer from "../components/RawDataDrawer.vue";
 import { usePrefsStore } from "../stores/prefs";
-import { formatPercent } from "../utils/format";
+import {
+  comparisonReasonLabel,
+  formatPercent,
+  modalityLabel,
+  riskLabel,
+  thresholdProfileLabel,
+} from "../utils/format";
 import { errorBannerMessage } from "../utils/errors";
 
 type CompareMode = "face" | "body" | "gait" | "fusion" | "batch";
@@ -201,7 +207,7 @@ onBeforeUnmount(() => {
         <label
           ><span>阈值方案</span
           ><ElSelect v-model="thresholdProfile">
-            <ElOption v-for="profile in thresholdProfiles" :key="profile" :label="profile" :value="profile" />
+            <ElOption v-for="profile in thresholdProfiles" :key="profile" :label="thresholdProfileLabel(profile)" :value="profile" />
           </ElSelect>
         </label>
         <label v-if="mode === 'batch'"
@@ -220,7 +226,7 @@ onBeforeUnmount(() => {
           <span v-else><ImagePlus :size="28" />选择左侧{{ requiresMultiple ? "文件组" : "图像" }}</span>
           <small v-if="filesA.length">{{ filesA.length }} 个文件</small>
         </label>
-        <div class="pair-divider">VS</div>
+        <div class="pair-divider">对比</div>
         <label class="compare-file">
           <input type="file" accept="image/*" :multiple="requiresMultiple" @change="select('b', $event)" />
           <img v-if="previewB" :src="previewB" alt="右侧证据预览" />
@@ -251,7 +257,7 @@ onBeforeUnmount(() => {
           >相似度 {{ similarity === null ? "--" : formatPercent(similarity) }} · 阈值
           {{ threshold === null ? "--" : formatPercent(threshold) }}</span
         >
-        <small>风险：{{ risk }}</small>
+        <small>风险：{{ riskLabel(risk) }}</small>
       </div>
       <div class="similarity-scale">
         <progress :value="similarity ?? 0" max="1">{{ similarity }}</progress>
@@ -274,12 +280,12 @@ onBeforeUnmount(() => {
           </thead>
           <tbody>
             <tr v-for="[name, item] in fusionRows" :key="name">
-              <td>{{ name }}</td>
+              <td>{{ modalityLabel(name) }}</td>
               <td>{{ item.used ? "是" : "否" }}</td>
               <td>{{ typeof item.score === "number" ? formatPercent(Number(item.score)) : "--" }}</td>
               <td>{{ typeof item.quality === "number" ? formatPercent(Number(item.quality)) : "--" }}</td>
               <td>{{ item.weight ?? "--" }}</td>
-              <td>{{ item.reason ?? "--" }}</td>
+              <td>{{ item.reason ? comparisonReasonLabel(item.reason) : "--" }}</td>
             </tr>
           </tbody>
         </table>
@@ -302,10 +308,10 @@ onBeforeUnmount(() => {
           <tbody>
             <tr v-for="row in batchRows" :key="String(row.index)">
               <td>{{ Number(row.index) + 1 }}</td>
-              <td>{{ row.modality }}</td>
+              <td>{{ modalityLabel(row.modality) }}</td>
               <td>{{ batchComparison(row).passed ? "通过" : "未通过" }}</td>
               <td>{{ formatPercent(batchScore(row)) }}</td>
-              <td>{{ batchRisk(row) }}</td>
+              <td>{{ riskLabel(batchRisk(row)) }}</td>
             </tr>
           </tbody>
         </table>

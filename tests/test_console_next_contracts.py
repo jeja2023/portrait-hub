@@ -213,6 +213,20 @@ def test_console_next_shell_and_hashed_assets_are_public() -> None:
     assert asset.headers["Cache-Control"] == "public, max-age=31536000, immutable"
     assert asset.headers["X-Content-Type-Options"] == "nosniff"
 
+
+def test_console_next_shell_reloads_after_bundle_rebuild(workspace_tmp_path, monkeypatch) -> None:
+    from app import routes_portrait_console
+
+    index_path = workspace_tmp_path / "index.html"
+    index_path.write_text('<script src="/assets/old.js"></script>', encoding="utf-8")
+    monkeypatch.setattr(routes_portrait_console, "CONSOLE_NEXT_HTML_PATH", index_path)
+
+    assert routes_portrait_console.render_next_console_html() == '<script src="/assets/old.js"></script>'
+    index_path.write_text('<script src="/assets/new.js"></script>', encoding="utf-8")
+
+    assert routes_portrait_console.render_next_console_html() == '<script src="/assets/new.js"></script>'
+
+
 def test_console_next_asset_route_hides_internal_files_and_traversal() -> None:
     client = TestClient(app)
 

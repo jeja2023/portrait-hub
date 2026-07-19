@@ -65,8 +65,8 @@ const sloPanel = computed(() => ({
 const isReady = computed(() => ready.value?.status === "ready" || ready.value?.ready === true);
 
 function duration(value: number): string {
-  if (value === Number.POSITIVE_INFINITY) return ">10 s";
-  return value.toFixed(3) + " s";
+  if (value === Number.POSITIVE_INFINITY) return ">10 秒";
+  return value.toFixed(3) + " 秒";
 }
 
 function readinessFromError(error: unknown): Record<string, unknown> | null {
@@ -165,7 +165,7 @@ onMounted(() => void refresh());
         />
         <StatCard
           label="预算燃尽率"
-          :value="availability.error_budget_burn_rate.toFixed(2) + 'x'"
+          :value="availability.error_budget_burn_rate.toFixed(2) + ' 倍'"
           :tone="availability.error_budget_burn_rate > 1 ? 'danger' : 'success'"
           :icon="Flame"
         />

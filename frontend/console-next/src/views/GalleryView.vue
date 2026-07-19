@@ -26,7 +26,7 @@ import EmptyState from "../components/EmptyState.vue";
 import RawDataDrawer from "../components/RawDataDrawer.vue";
 import { useCapabilitiesStore } from "../stores/capabilities";
 import { usePrefsStore } from "../stores/prefs";
-import { formatTimestamp } from "../utils/format";
+import { formatTimestamp, modalityLabel } from "../utils/format";
 import { errorBannerMessage } from "../utils/errors";
 
 const route = useRoute();
@@ -347,7 +347,7 @@ watch(
                 <td>
                   <code>{{ person.person_id }}</code>
                 </td>
-                <td>{{ person.modalities.join("、") || "--" }}</td>
+                <td>{{ person.modalities.map((item) => modalityLabel(item)).join("、") || "--" }}</td>
                 <td>{{ person.feature_count }}</td>
                 <td>{{ formatTimestamp(person.updated_at) }}</td>
                 <td><ElButton text :icon="Eye" @click="openDetail(person.person_id)">详情</ElButton></td>
@@ -408,7 +408,7 @@ watch(
                 <img v-if="feature.thumbnail" :src="String(feature.thumbnail)" alt="人员特征图" />
                 <UserRound v-else :size="24" />
               </div>
-              <strong>{{ feature.modality || "unknown" }}</strong>
+              <strong>{{ modalityLabel(feature.modality) }}</strong>
               <span>质量 {{ Math.round(Number(feature.quality_score || 0) * 100) }}%</span>
             </article>
           </div>

@@ -1,6 +1,8 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { computed } from "vue";
 import { ImageOff } from "@lucide/vue";
+
+import { artifactLabel } from "../utils/format";
 
 interface FrameGridItem {
   id: string;
@@ -47,7 +49,7 @@ function buildFrameItems(frames: Record<string, unknown>[]): FrameGridItem[] {
   return frames.flatMap((frame, index) => {
     const src = firstString(frame, ["thumbnail", "preview", "image", "src", "content_url"]);
     const frameIndex = frame.source_frame_index ?? frame.frame_index ?? index + 1;
-    const sourceSeconds = typeof frame.source_seconds === "number" ? `${frame.source_seconds.toFixed(2)}s` : null;
+    const sourceSeconds = typeof frame.source_seconds === "number" ? `${frame.source_seconds.toFixed(2)} 秒` : null;
     const meta = [
       sourceSeconds,
       countMeta("人员", frame.person_count),
@@ -69,7 +71,7 @@ function buildFrameItems(frames: Record<string, unknown>[]): FrameGridItem[] {
 function buildPreviewItems(previews: Record<string, unknown>[]): FrameGridItem[] {
   return previews.map((preview, index) => ({
     id: String(preview.artifact_id ?? preview.id ?? index),
-    label: String(preview.label ?? `预览 ${index + 1}`),
+    label: artifactLabel(preview.label, index),
     src: firstString(preview, ["src", "content_url", "preview", "thumbnail", "image"]),
     meta: [
       typeof preview.width === "number" && typeof preview.height === "number"

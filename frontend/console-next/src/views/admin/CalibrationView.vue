@@ -18,7 +18,17 @@ import { apiRequest, jsonBody } from "../../api/client";
 import DangerConfirm from "../../components/DangerConfirm.vue";
 import { useCapabilitiesStore } from "../../stores/capabilities";
 import { errorBannerMessage } from "../../utils/errors";
-import { formatTimestamp } from "../../utils/format";
+import {
+  actionLabel,
+  confidenceLabel,
+  datasetNameLabel,
+  datasetPurposeLabel,
+  formatTimestamp,
+  modalityLabel,
+  recommendationReasonLabel,
+  reviewLabel,
+  thresholdProfileLabel,
+} from "../../utils/format";
 import { useRouteTab } from "../../utils/routeState";
 
 interface ReviewSummary {
@@ -208,7 +218,7 @@ onMounted(() => void load());
             <label>
               <span>阈值方案</span>
               <ElSelect v-model="profile" @change="syncDraft">
-                <ElOption v-for="item in profileOptions" :key="item" :label="item" :value="item" />
+                <ElOption v-for="item in profileOptions" :key="item" :label="thresholdProfileLabel(item)" :value="item" />
               </ElSelect>
             </label>
             <ElButton
@@ -227,7 +237,7 @@ onMounted(() => void load());
                 <thead><tr><th>模态</th><th>当前阈值</th><th>允许范围</th></tr></thead>
                 <tbody>
                   <tr v-for="modality in modalities" :key="modality">
-                    <td>{{ modality }}</td>
+                    <td>{{ modalityLabel(modality) }}</td>
                     <td>
                       <ElInputNumber
                         v-model="draft[modality]"
@@ -302,7 +312,7 @@ onMounted(() => void load());
                   <tbody>
                     <tr v-for="(review, index) in reviews" :key="String(review.annotation_id ?? index)">
                       <td>{{ review.track_id }}<br /><code>{{ review.job_id }}</code></td>
-                      <td>{{ review.label }}</td>
+                      <td>{{ reviewLabel(review.label) }}</td>
                       <td>{{ review.reviewer || "--" }}</td>
                       <td>{{ review.frame_index == null ? "--" : "帧 " + review.frame_index }}</td>
                       <td>{{ formatTimestamp(Number(review.created_at)) }}</td>
@@ -324,8 +334,8 @@ onMounted(() => void load());
                   <thead><tr><th>数据集</th><th>用途</th><th>样本</th><th>任务/轨迹</th><th>最新证据</th></tr></thead>
                   <tbody>
                     <tr v-for="(dataset, index) in datasets" :key="String(dataset.dataset_id ?? index)">
-                      <td>{{ dataset.name || dataset.dataset_id }}</td>
-                      <td>{{ dataset.purpose || "--" }}</td>
+                      <td>{{ datasetNameLabel(dataset.name || dataset.dataset_id) }}</td>
+                      <td>{{ datasetPurposeLabel(dataset.purpose) }}</td>
                       <td>{{ dataset.sample_count ?? 0 }}</td>
                       <td>{{ dataset.job_count ?? 0 }} / {{ dataset.track_count ?? 0 }}</td>
                       <td>{{ formatTimestamp(Number(dataset.latest_created_at)) }}</td>
@@ -345,12 +355,12 @@ onMounted(() => void load());
                   <thead><tr><th>模态/方案</th><th>当前</th><th>建议</th><th>变化</th><th>动作</th><th>置信度</th></tr></thead>
                   <tbody>
                     <tr v-for="(item, index) in recommendations" :key="String(item.modality ?? index)">
-                      <td>{{ item.modality }} / {{ item.profile }}</td>
+                      <td>{{ modalityLabel(item.modality) }} / {{ thresholdProfileLabel(item.profile) }}</td>
                       <td>{{ item.current_threshold }}</td>
                       <td>{{ item.recommended_threshold }}</td>
                       <td>{{ item.delta }}</td>
-                      <td :title="item.reason">{{ item.action }}</td>
-                      <td>{{ item.confidence }}</td>
+                      <td :title="recommendationReasonLabel(item.reason)">{{ actionLabel(item.action) }}</td>
+                      <td>{{ confidenceLabel(item.confidence) }}</td>
                     </tr>
                   </tbody>
                 </table>
@@ -364,7 +374,7 @@ onMounted(() => void load());
     <DangerConfirm
       v-model="saveConfirmOpen"
       title="保存阈值方案"
-      :description="'将更新 ' + profile + ' 方案的 ' + modalities.length + ' 个模态阈值，后续比对将使用新值。'"
+      :description="'将更新“' + thresholdProfileLabel(profile) + '”方案的 ' + modalities.length + ' 个模态阈值，后续比对将使用新值。'"
       :loading="saving"
       @confirm="saveThresholds"
     />

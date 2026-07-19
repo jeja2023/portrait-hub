@@ -179,6 +179,11 @@ function resetRequestState(): void {
 
 watch(endpointIndex, resetRequestState);
 
+function operationSummary(summary: string): string {
+  if (/[\u3400-\u9fff]/u.test(summary)) return summary;
+  return "接口操作";
+}
+
 async function copyExample(example: SdkExample): Promise<void> {
   try {
     await navigator.clipboard.writeText(example.code);
@@ -217,7 +222,7 @@ async function loadReference(value: string): Promise<void> {
           })),
       );
     } catch (error) {
-      errorMessage.value = errorBannerMessage(error, "OpenAPI 定义加载失败");
+      errorMessage.value = errorBannerMessage(error, "接口定义加载失败");
     } finally {
       referenceLoading.value = false;
     }
@@ -416,7 +421,7 @@ async function execute(): Promise<void> {
                 <thead>
                   <tr>
                     <th>错误码</th>
-                    <th>HTTP</th>
+                    <th>协议状态</th>
                     <th>可重试</th>
                     <th>说明</th>
                     <th>处理建议</th>
@@ -436,7 +441,7 @@ async function execute(): Promise<void> {
           </ElSkeleton>
         </ElTabPane>
 
-        <ElTabPane label="OpenAPI" name="openapi">
+        <ElTabPane label="接口定义" name="openapi">
           <ElSkeleton :loading="referenceLoading" :rows="6" animated>
             <div class="reference-toolbar">
               <span>共 {{ openapiPaths.length }} 个接口操作</span>
@@ -449,7 +454,7 @@ async function execute(): Promise<void> {
                   <tr v-for="item in openapiPaths" :key="item.method + item.path">
                     <td><code>{{ item.method }}</code></td>
                     <td><code>{{ item.path }}</code></td>
-                    <td>{{ item.summary || "--" }}</td>
+                    <td>{{ operationSummary(item.summary) }}</td>
                   </tr>
                 </tbody>
               </table>

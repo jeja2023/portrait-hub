@@ -58,6 +58,11 @@ curl "https://portrait.internal.example/v1/analysis/artifacts/${ARCHIVE_ID}/${AR
 
 解析档案按租户隔离且不设数量上限。接入方应使用游标分页，不应一次拉取全部记录；生产运维必须同时备份数据库索引和对象存储，缺少任一部分都不能完整恢复档案。
 
+### 0.12.1 配置与前端资源升级注意事项
+
+- 升级前对照新的 `.env.example` 检查新增配置项；本地开发可使用 `runtime-state/portrait-access.json` 和 `runtime-state/portrait-review-annotations.json`，生产环境应改为共享且受保护的状态存储。
+- 重新构建 Console Next 后必须同步发布 `dist/index.html` 与哈希资产。服务端现在每次读取最新 HTML，旧 HTML 不会继续缓存，但 CDN 或反向代理仍应按部署策略清理 HTML 缓存。
+- 控制台路由切换会将页面滚动恢复到顶部；标题栏说明文字属于统一布局，业务页面不应重新添加重复的页面级标题。
 ### 0.12.0 统计、深链与连接可靠性
 
 - 调用日志列表仍用于分页排障；SLO 和聚合统计应改用 `GET /v1/access/call-logs/summary`。响应中的 `complete` 表示当前查询窗口是否被保留上限截断，`retained_count`/`retained_limit` 用于说明覆盖范围。`complete=false` 时不得宣称数据覆盖完整 30 天。

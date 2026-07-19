@@ -15,7 +15,7 @@ import { useRoute, useRouter } from "vue-router";
 import { apiRequest } from "../../api/client";
 import EmptyState from "../../components/EmptyState.vue";
 import { errorBannerMessage } from "../../utils/errors";
-import { formatTimestamp } from "../../utils/format";
+import { formatTimestamp, statusLabel } from "../../utils/format";
 interface LogRow {
   request_id: string;
   endpoint?: string;
@@ -103,7 +103,7 @@ onMounted(async () => {
     <header class="page-header">
       <div>
         <h1>调用日志</h1>
-        <p>按请求、状态与应用排查 API 调用。</p>
+        <p>按请求、状态与应用排查接口调用。</p>
       </div>
       <ElButton :icon="RefreshCw" :loading="loading" @click="load">刷新</ElButton>
     </header>
@@ -176,7 +176,7 @@ onMounted(async () => {
                 </td>
                 <td>{{ log.method }} {{ log.endpoint || log.path }}</td>
                 <td>
-                  {{ log.status_code || log.status
+                  {{ log.status_code ?? statusLabel(log.status)
                   }}<ElButton
                     v-if="log.error_code"
                     text
@@ -186,7 +186,7 @@ onMounted(async () => {
                   >
                 </td>
                 <td>{{ log.application_id || "--" }}</td>
-                <td>{{ log.duration_ms == null ? "--" : `${log.duration_ms} ms` }}</td>
+                <td>{{ log.duration_ms == null ? "--" : `${log.duration_ms} 毫秒` }}</td>
               </tr>
             </tbody>
           </table>

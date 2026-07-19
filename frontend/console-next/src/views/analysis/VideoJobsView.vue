@@ -15,7 +15,7 @@ import RawDataDrawer from "../../components/RawDataDrawer.vue";
 import { useCapabilitiesStore } from "../../stores/capabilities";
 import { usePrefsStore } from "../../stores/prefs";
 import { errorBannerMessage } from "../../utils/errors";
-import { formatPercent, formatTimestamp, statusLabels } from "../../utils/format";
+import { formatPercent, formatTimestamp, statusLabel } from "../../utils/format";
 
 const route = useRoute();
 const router = useRouter();
@@ -232,10 +232,10 @@ onBeforeUnmount(() => {
             <tbody>
               <tr v-for="job in jobs" :key="job.job_id">
                 <td>{{ job.job_id }}</td>
-                <td>{{ job.kind === "batch" ? "批量" : "视频" }}</td>
+                <td>{{ job.kind === "batch" ? "批量任务" : "视频任务" }}</td>
                 <td>
                   <span class="status-pill" :data-status="job.status">{{
-                    statusLabels[job.status] ?? job.status
+                    statusLabel(job.status)
                   }}</span>
                 </td>
                 <td>
@@ -302,7 +302,7 @@ onBeforeUnmount(() => {
             <span>任务 ID</span><strong>{{ detail.job.job_id }}</strong>
           </div>
           <span class="status-pill" :data-status="detail.job.status">{{
-            statusLabels[detail.job.status]
+            statusLabel(detail.job.status)
           }}</span>
         </div>
         <dl class="detail-grid">

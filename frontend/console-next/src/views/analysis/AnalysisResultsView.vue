@@ -10,7 +10,7 @@ import EmptyState from "../../components/EmptyState.vue";
 import RawDataDrawer from "../../components/RawDataDrawer.vue";
 import { usePrefsStore } from "../../stores/prefs";
 import { errorBannerMessage } from "../../utils/errors";
-import { formatTimestamp } from "../../utils/format";
+import { artifactLabel, formatTimestamp, modalityLabel } from "../../utils/format";
 
 interface AnalysisPreview {
   artifact_id: string;
@@ -70,15 +70,16 @@ const modeLabels: Record<string, string> = {
   tracks: "人员轨迹",
   video: "视频解析",
   stream: "视频流解析",
+  person_tracks: "人员轨迹解析",
 };
 const resultCountLabel = computed(() => `共 ${total.value} 条`);
 
 function sourceLabel(value: string): string {
-  return sourceLabels[value] ?? value;
+  return sourceLabels[value] ?? modalityLabel(value);
 }
 
 function modeLabel(value: string): string {
-  return modeLabels[value] ?? value;
+  return modeLabels[value] ?? modalityLabel(value);
 }
 
 function resultSummary(item: AnalysisArchive): string {
@@ -255,9 +256,9 @@ onMounted(async () => {
           </div>
         </dl>
         <div v-if="detail.previews.length" class="detail-previews">
-          <figure v-for="preview in detail.previews" :key="preview.artifact_id">
-            <img :src="preview.src" :alt="preview.label" />
-            <figcaption>{{ preview.label }}</figcaption>
+          <figure v-for="(preview, index) in detail.previews" :key="preview.artifact_id">
+            <img :src="preview.src" :alt="artifactLabel(preview.label, index)" />
+            <figcaption>{{ artifactLabel(preview.label, index) }}</figcaption>
           </figure>
         </div>
         <EmptyState v-else title="该档案没有可见预览" />

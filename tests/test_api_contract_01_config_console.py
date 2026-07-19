@@ -1,4 +1,6 @@
 import os
+import re
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -61,6 +63,37 @@ def test_dev_start_local_env_clears_api_token_for_browser_console(
     assert values["RBAC_ENABLED"] == "false"
     assert values["VIDEO_JOB_WORKER_IN_PROCESS"] == "true"
     assert values["ALLOW_PRIVATE_STREAM_HOSTS"] == "true"
+    assert values["PORTRAIT_ACCESS_STATE_PATH"] == str(
+        workspace_tmp_path / "runtime-state" / "portrait-access.json"
+    )
+    assert values["PORTRAIT_REVIEW_STATE_PATH"] == str(
+        workspace_tmp_path / "runtime-state" / "portrait-review-annotations.json"
+    )
+
+
+def test_env_example_documents_supported_runtime_and_compose_configuration() -> None:
+    from app.runtime_defaults import parse_env_file
+
+    root = Path(__file__).resolve().parents[1]
+    template_keys = set(parse_env_file(root / ".env.example"))
+    settings_source = (root / "app" / "settings.py").read_text(encoding="utf-8")
+    runtime_keys = set(
+        re.findall(
+            r'(?:os\.getenv|parse_(?:int|bool|float|csv)_env)\(\s*["\']([A-Z][A-Z0-9_]*)["\']',
+            settings_source,
+        )
+    )
+    compose_source = "\n".join(
+        (root / filename).read_text(encoding="utf-8")
+        for filename in ("docker-compose.yml", "docker-compose.cpu.yml")
+    )
+    compose_keys = set(re.findall(r"\$\{([A-Z][A-Z0-9_]*)", compose_source))
+
+    # Canonical settings replace APP_ENV; Docker controls the other two values per runtime.
+    intentionally_implicit = {"APP_ENV", "CUDA_VISIBLE_DEVICES", "MODELS_ROOT"}
+    missing = (runtime_keys | compose_keys) - intentionally_implicit - template_keys
+
+    assert missing == set()
 
 
 def test_dev_start_runs_stream_worker_with_api(

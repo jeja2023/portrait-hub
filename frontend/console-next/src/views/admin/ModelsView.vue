@@ -18,6 +18,17 @@ import EmptyState from "../../components/EmptyState.vue";
 import { useCapabilitiesStore } from "../../stores/capabilities";
 import { errorBannerMessage } from "../../utils/errors";
 import { useRouteTab } from "../../utils/routeState";
+import {
+  actionLabel,
+  capabilityLabel,
+  confidenceLabel,
+  datasetNameLabel,
+  formatPercent,
+  formatTimestamp,
+  modalityLabel,
+  statusLabel,
+  thresholdProfileLabel,
+} from "../../utils/format";
 
 interface ModelRow {
   id?: string;
@@ -50,12 +61,22 @@ const releaseLoading = ref(false);
 const releaseConfirmOpen = ref(false);
 const releasePreview = ref<Record<string, unknown> | null>(null);
 
-const recommendationRows = computed(() =>
-  Object.entries(recommendations.value).map(([modality, value]) => ({
-    modality,
-    value: value && typeof value === "object" ? JSON.stringify(value) : String(value ?? "--"),
-  })),
-);
+const recommendationRows = computed(() => {
+  const rows = recommendations.value.recommendations;
+  if (!Array.isArray(rows)) return [];
+  return rows.map((raw, index) => {
+    const item = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+    const threshold = Number(item.recommended_threshold);
+    const parts = [actionLabel(item.action)];
+    if (item.profile) parts.push("方案：" + thresholdProfileLabel(item.profile));
+    if (Number.isFinite(threshold)) parts.push("建议阈值：" + formatPercent(threshold));
+    if (item.confidence) parts.push("置信度：" + confidenceLabel(item.confidence));
+    return {
+      modality: String(item.modality ?? index),
+      value: parts.join(" · "),
+    };
+  });
+});
 
 function idOf(model: ModelRow): string {
   return String(model.model_id ?? model.id ?? "");
@@ -179,10 +200,10 @@ onMounted(() => void load());
                       <code>{{ idOf(model) }}</code>
                     </td>
                     <td>{{ model.alias || "--" }}</td>
-                    <td>{{ model.capability || model.task || model.adapter || "--" }}</td>
+                    <td>{{ capabilityLabel(model.capability || model.task || model.adapter) }}</td>
                     <td>
                       <span class="status-pill" :data-status="model.loaded ? 'completed' : ''">
-                        {{ model.loaded ? "已加载" : model.status || "未加载" }}
+                        {{ model.loaded ? "已加载" : model.status ? statusLabel(model.status) : "未加载" }}
                       </span>
                     </td>
                     <td>
@@ -276,9 +297,9 @@ onMounted(() => void load());
                   </thead>
                   <tbody>
                     <tr v-for="(dataset, index) in datasets" :key="String(dataset.dataset_id ?? index)">
-                      <td>{{ dataset.name || dataset.dataset_id || "未命名数据集" }}</td>
+                      <td>{{ datasetNameLabel(dataset.name || dataset.dataset_id) }}</td>
                       <td>{{ dataset.sample_count ?? "--" }}</td>
-                      <td>{{ dataset.updated_at ?? "--" }}</td>
+                      <td>{{ formatTimestamp(dataset.updated_at as string | number | undefined) }}</td>
                     </tr>
                   </tbody>
                 </table>
@@ -288,7 +309,7 @@ onMounted(() => void load());
               <h2>阈值建议</h2>
               <div class="recommendation-list">
                 <div v-for="item in recommendationRows" :key="item.modality">
-                  <strong>{{ item.modality }}</strong
+                  <strong>{{ modalityLabel(item.modality) }}</strong
                   ><span>{{ item.value }}</span>
                 </div>
               </div>

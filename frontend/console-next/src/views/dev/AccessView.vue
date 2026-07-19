@@ -20,7 +20,7 @@ import DangerConfirm from "../../components/DangerConfirm.vue";
 import EmptyState from "../../components/EmptyState.vue";
 import { useCapabilitiesStore } from "../../stores/capabilities";
 import { errorBannerMessage } from "../../utils/errors";
-import { formatTimestamp, statusLabels } from "../../utils/format";
+import { eventLabel, formatTimestamp, statusLabel } from "../../utils/format";
 import { useRouteTab } from "../../utils/routeState";
 
 interface ApplicationRow {
@@ -325,7 +325,7 @@ onMounted(() => void load());
                     </td>
                     <td>
                       <span class="status-pill" :data-status="app.status">{{
-                        statusLabels[app.status] ?? app.status
+                        statusLabel(app.status)
                       }}</span>
                     </td>
                     <td>{{ formatTimestamp(app.last_called_at) }}</td>
@@ -374,10 +374,10 @@ onMounted(() => void load());
                   </td>
                   <td>{{ hook.application_id || "--" }}</td>
                   <td class="url-cell">{{ hook.url || "未配置" }}</td>
-                  <td>{{ hook.events?.join("、") }}</td>
+                  <td>{{ hook.events?.map((event) => eventLabel(event)).join("、") }}</td>
                   <td>
                     <span class="status-pill" :data-status="hook.status">{{
-                      statusLabels[hook.status] ?? hook.status
+                      statusLabel(hook.status)
                     }}</span>
                   </td>
                   <td>

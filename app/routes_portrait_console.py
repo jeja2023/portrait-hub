@@ -1,4 +1,3 @@
-from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
@@ -33,7 +32,6 @@ def next_console_csp() -> str:
     )
 
 
-@lru_cache(maxsize=1)
 def render_next_console_html() -> str:
     if not CONSOLE_NEXT_HTML_PATH.is_file():
         raise HTTPException(

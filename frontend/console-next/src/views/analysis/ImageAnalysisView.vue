@@ -10,6 +10,7 @@ import FrameGrid from "../../components/FrameGrid.vue";
 import RawDataDrawer from "../../components/RawDataDrawer.vue";
 import { usePrefsStore } from "../../stores/prefs";
 import { errorBannerMessage } from "../../utils/errors";
+import { modalityLabel } from "../../utils/format";
 
 const prefs = usePrefsStore();
 const endpoint = ref("/v1/infer/persons");
@@ -218,7 +219,7 @@ onBeforeUnmount(() => {
         <article v-for="archive in imageArchives" :key="archive.archive_id" class="archive-row">
           <img v-if="archive.previews[0]?.src" :src="archive.previews[0].src" alt="图片归档预览" />
           <div>
-            <strong>{{ archive.mode || "图片分析" }}</strong>
+            <strong>{{ archive.mode ? modalityLabel(archive.mode) : "图片分析" }}</strong>
             <code>{{ archive.request_id }}</code>
           </div>
           <span>{{ archive.previews.length }} 张预览</span>
