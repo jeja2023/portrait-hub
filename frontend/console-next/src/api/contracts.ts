@@ -26,14 +26,41 @@ export interface Pagination {
 }
 
 
+export interface ConsoleIdentityMetadata {
+  enabled: boolean;
+  provider_name: string;
+  issuer: string;
+  identity_admin_url: string;
+}
+
+export interface ConsoleRole {
+  role: string;
+  permissions: string[];
+}
+
 export interface ConsoleCapabilities {
   tenant_id: string;
   auth_kind: string;
   subject: string;
+  display_name?: string;
+  email?: string;
   roles: string[];
   permissions: string[];
   scopes: string[];
   expires_at: number | null;
+  identity: ConsoleIdentityMetadata;
+}
+
+export interface IdentityAdminPayload {
+  identity: ConsoleIdentityMetadata;
+  roles: ConsoleRole[];
+}
+
+export interface AuthPublicConfig {
+  local_enabled: boolean;
+  oidc_enabled: boolean;
+  provider_name: string;
+  credential_login_available: boolean;
 }
 
 export interface JobSummary {

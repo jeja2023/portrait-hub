@@ -18,6 +18,15 @@
 - 流量跃升前运行压测。
 - 跟踪 p95 延迟、队列深度和 GPU 显存。
 
+## 控制台登录与身份排障
+
+1. 登录页未显示用户名/密码时，请求 GET /v1/auth/config，确认 local_enabled；默认 admin / 123456 只对 loopback 可见，生产模式或远程开放但仍使用默认密码/默认会话密钥时会自动禁用。
+2. 生产本地账号必须设置 LOCAL_AUTH_PASSWORD、LOCAL_AUTH_SESSION_SECRET、LOCAL_AUTH_COOKIE_SECURE=true；若通过反向代理访问，还需明确评估 LOCAL_AUTH_ALLOW_REMOTE，不能直接暴露默认弱凭据。
+3. OIDC 登录失败时检查 discovery、issuer、client_id、回调地址、JWKS、系统时间和 OIDC_ROLE_MAPPING。未映射角色/用户组以及非法租户声明会按设计拒绝登录。
+4. 登录成功但写操作返回 403 CSRF validation failed 时，检查 portrait_csrf Cookie 与 X-CSRF-Token 是否同时经过代理，并确认请求同源。
+5. 登录后角色或租户异常时访问系统管理的“身份与权限”，核对认证来源、tenant_id、roles 和权限矩阵；API Key/JWT 显式错误不会回退到浏览器会话。
+6. 应急禁用人员登录可设置 LOCAL_AUTH_ENABLED=false 和 OIDC_ENABLED=false；系统到系统 API Key/JWT 接入仍按原鉴权配置运行。
+
 ## 视频流无解析图片
 
 当控制台显示“分析中”但没有实时图片时，按以下顺序检查：

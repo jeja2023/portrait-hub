@@ -893,18 +893,22 @@ Compose 默认绑定：
 
 ## 新版控制台灰度与回退
 
-本节适用于 0.12.1。Console Next 是唯一生产控制台，根路径 / 是正式登录入口。0.12.1 在 0.12.0 基础上补齐环境模板同步、构建后 HTML 热读取、路由滚动恢复和标题栏展示修复。
+本节适用于 0.13.0。Console Next 是唯一生产控制台，根路径 / 是正式登录入口。0.13.0 完成工作台导航扁平化、本地管理员登录、OIDC 企业 SSO 和身份权限可视化；公开业务 API 保持兼容。
 
 构建镜像时，Node 22 builder 会在根 npm workspace 中执行 npm ci 与 npm run console:build；运行镜像只复制 frontend/console-next/dist，不安装 Node，也不再包含旧版 frontend/console。非镜像部署必须先在仓库根目录执行相同构建命令，并确认 dist/index.html 与 dist/.vite/manifest.json 存在。
 
 入口与回退：
 
-- /：新版登录入口；已有有效会话时自动进入 /console。
+- /：新版登录入口；默认显示本地管理员用户名/密码表单，已有有效浏览器会话时自动进入 /console。
+- 默认本地账号为 admin / 123456，仅允许 loopback 登录；生产或远程使用必须更换 LOCAL_AUTH_PASSWORD 和至少 32 字节的 LOCAL_AUTH_SESSION_SECRET，否则本地登录自动禁用。
+- 不需要本地账号时设置 LOCAL_AUTH_ENABLED=false；允许远程本地账号前必须设置 LOCAL_AUTH_ALLOW_REMOTE=true 并替换默认密码和会话密钥。
+- 企业登录设置 OIDC_ENABLED=true，并配置 OIDC_ISSUER、OIDC_CLIENT_ID、OIDC_CLIENT_SECRET、OIDC_SESSION_SECRET、OIDC_ROLE_MAPPING 和回调地址；生产保持 Secure Cookie 与 HTTPS。
 - /console：登录后的新版业务控制台，已是唯一生产入口。
 - /console/next：新版直接验收别名；/console/legacy 已删除。
 - CONSOLE_WORKBENCH_V2、CONSOLE_DEVELOPER_V2、CONSOLE_ADMIN_V2 与 CONSOLE_DEFAULT_VERSION 已删除，不再作为生产回退手段。
 - 旧版删除后，控制台回退必须使用上一版镜像或受控静态构件；不得删除业务数据，也不得通过已移除的 legacy 环境变量回退。
 
+浏览器账号会话使用 HttpOnly、SameSite Cookie；所有写请求必须携带与 CSRF Cookie 一致的 X-CSRF-Token。反向代理必须保留 Cookie、X-CSRF-Token、Host 和外部协议，并确保本地登录来源判断不被伪造的转发头绕过。OIDC 回调地址必须与身份平台登记值完全一致，外部角色/用户组必须显式映射为 admin、operator、algorithm、auditor、viewer。
 上线前执行 `npm test`、`npm run console:e2e`、控制台/门禁定向或全量 `python -m pytest`、`python tools/deploy_check.py --json --import-app` 和 `python tools/portrait_production_readiness.py --scope platform --strict`。严格 readiness 必须为 strict_failure_count=0；真实 CSP 必须保持 script-src self，禁止 unsafe-inline 与 unsafe-eval。
 
 CONSOLE_WS_TICKET_TTL_SECONDS 默认 60 秒，ticket 单次消费并绑定租户、资源和权限。设置 `REDIS_URL` 后，ticket 使用 Redis TTL 与 Lua `GET + DEL` 原子消费，可供多 worker/多副本共享；未设置 Redis 时回退到进程内有界内存，仅适用于本地开发或单进程测试。生产多副本上线前必须验证 Redis 连通性、TTL、原子消费和故障告警。

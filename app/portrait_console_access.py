@@ -201,9 +201,26 @@ def console_principal(
     tenant_id: str,
     authorization: str | None,
     x_api_key: str | None,
+    request: Any | None = None,
 ) -> dict[str, Any]:
     bearer = optional_header_value(authorization)
     api_key = optional_header_value(x_api_key)
+    if not bearer and not api_key and request is not None:
+        from app.oidc_auth import browser_session_claims
+
+        session_claims = browser_session_claims(request)
+        if session_claims is not None:
+            roles = {str(role) for role in session_claims.get("roles", [])}
+            return {
+                "auth_kind": str(session_claims.get("auth_kind") or "oidc"),
+                "subject": str(session_claims.get("sub") or "oidc-user"),
+                "display_name": str(session_claims.get("name") or session_claims.get("sub") or "企业用户"),
+                "email": str(session_claims.get("email") or ""),
+                "roles": sorted(roles),
+                "permissions": _permissions_for_roles(roles),
+                "scopes": [],
+                "expires_at": float(session_claims["exp"]),
+            }
     if global_api_token_matches(bearer, api_key):
         return {
             "auth_kind": "global_api_token",

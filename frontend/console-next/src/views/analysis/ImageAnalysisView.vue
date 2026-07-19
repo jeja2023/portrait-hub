@@ -4,7 +4,6 @@ import { Code2, ImageUp, Play, RotateCcw } from "@lucide/vue";
 import { ElAlert, ElButton, ElCheckbox, ElInputNumber, ElOption, ElSelect } from "element-plus";
 
 import { apiRequest } from "../../api/client";
-import AnalysisNavigation from "../../components/AnalysisNavigation.vue";
 import EmptyState from "../../components/EmptyState.vue";
 import FrameGrid from "../../components/FrameGrid.vue";
 import RawDataDrawer from "../../components/RawDataDrawer.vue";
@@ -138,7 +137,6 @@ onBeforeUnmount(() => {
 
 <template>
   <div>
-    <AnalysisNavigation />
     <header class="page-header">
       <div>
         <h1>图片分析</h1>
@@ -199,7 +197,7 @@ onBeforeUnmount(() => {
             <span>{{ item[0] }}</span
             ><strong>{{ item[1] }}</strong>
           </div>
-          <p v-if="summary.length === 0">分析已完成，可在开发者模式查看脱敏详情。</p>
+          <p v-if="summary.length === 0">分析已完成，开启调试信息后可查看脱敏详情。</p>
         </div>
         <FrameGrid v-if="result" :data="result" title="标注图与证据" />
         <div v-else class="result-empty"><ImageUp :size="34" /><span>结果将在这里显示</span></div>

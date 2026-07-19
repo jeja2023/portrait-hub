@@ -1,5 +1,6 @@
 from fastapi import APIRouter
 
+from app.oidc_auth import router as oidc_router
 from app.routes_portrait_access import router as access_router
 from app.routes_portrait_admin import router as admin_router
 from app.routes_portrait_analysis import router as analysis_router
@@ -14,6 +15,7 @@ from app.routes_portrait_streams import router as streams_router
 from app.routes_portrait_ws import router as ws_router
 
 router = APIRouter()
+router.include_router(oidc_router)
 router.include_router(access_router)
 router.include_router(analysis_router)
 router.include_router(infer_router)

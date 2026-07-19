@@ -8,7 +8,7 @@ import time
 from collections.abc import Callable
 from typing import Any
 
-from fastapi import Header, HTTPException, status
+from fastapi import Header, HTTPException, Request, status
 
 from app.settings import (
     API_TOKEN,
@@ -352,9 +352,23 @@ async def require_permission(
     authorization: str | None = Header(default=None),
     x_tenant_id: str | None = Header(default=None),
     x_api_key: str | None = Header(default=None),
+    request: Request | None = None,
 ) -> None:
     tenant_id = optional_header_value(x_tenant_id)
+    authorization = optional_header_value(authorization)
     api_key = optional_header_value(x_api_key)
+    if request is not None and not authorization and not api_key:
+        from app.oidc_auth import browser_session_claims, require_browser_session_csrf
+
+        session_claims = browser_session_claims(request)
+        if session_claims is not None:
+            session_tenant = str(session_claims.get("tenant_id") or "")
+            if tenant_id and not hmac.compare_digest(tenant_id, session_tenant):
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="浏览器会话与租户不匹配")
+            if not has_permission(roles_from_claims(session_claims), permission):
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=f"缺少权限：{permission}")
+            require_browser_session_csrf(request, session_claims)
+            return
     if api_key:
         from app.portrait_access import (
             application_key_matches,
@@ -372,6 +386,10 @@ async def require_permission(
 
     if API_TOKEN and authorization and hmac.compare_digest(authorization, f"Bearer {API_TOKEN}"):
         return
+
+    if authorization or api_key:
+        if not (RBAC_ENABLED and authorization and authorization.startswith("Bearer ")):
+            raise unauthorized("invalid bearer JWT or API key")
     if not RBAC_ENABLED:
         # RBAC 关闭且未命中任何凭证：仅当认证为必填（生产默认）时 fail-closed，
         # 避免仅挂 permission_dependency 而漏挂 require_api_token 的路由被匿名访问。
@@ -389,10 +407,11 @@ async def require_permission(
 
 def permission_dependency(permission: str) -> Callable[..., Any]:
     async def dependency(
+        request: Request,
         authorization: str | None = Header(default=None),
         x_tenant_id: str | None = Header(default=None),
         x_api_key: str | None = Header(default=None),
     ) -> None:
-        await require_permission(permission, authorization, x_tenant_id, x_api_key)
+        await require_permission(permission, authorization, x_tenant_id, x_api_key, request)
 
     return dependency

@@ -4,6 +4,7 @@ import { useRoute, useRouter } from "vue-router";
 import { ChevronLeft, Code2, LogOut, Menu, ScanSearch } from "@lucide/vue";
 import { ElButton, ElMenu, ElMenuItem, ElSwitch, ElTooltip } from "element-plus";
 
+import { apiRequest } from "../api/client";
 import { clearSession, sessionState } from "../auth/session";
 import { useCapabilitiesStore } from "../stores/capabilities";
 import { usePrefsStore } from "../stores/prefs";
@@ -13,7 +14,11 @@ const route = useRoute();
 const router = useRouter();
 const capabilities = useCapabilitiesStore();
 const prefs = usePrefsStore();
-const activeMenuPath = computed(() => (route.path.startsWith("/analysis/") ? "/analysis/image" : route.path));
+const activeMenuPath = computed(() => {
+  if (route.path.startsWith("/analysis/video/")) return "/analysis/video";
+  if (route.path.startsWith("/analysis/stream/")) return "/analysis/stream";
+  return route.path;
+});
 const sessionExpiryLabel = computed(() => formatTimestamp(sessionState.expiresAt));
 const PAGE_DESCRIPTIONS: Record<string, string> = {
   overview: "\u5f53\u524d\u79df\u6237\u7684\u670d\u52a1\u72b6\u6001\u3001SLO\u3001\u8c03\u7528\u60c5\u51b5\u4e0e\u5f85\u5904\u7406\u8d44\u6e90\u3002",
@@ -30,6 +35,7 @@ const PAGE_DESCRIPTIONS: Record<string, string> = {
   "dev-access": "\u7ba1\u7406\u5e94\u7528\u8bbf\u95ee\u8303\u56f4\u3001\u8c03\u7528\u72b6\u6001\u4e0e\u4e8b\u4ef6\u56de\u8c03\u3002",
   "dev-playground": "\u6309\u771f\u5b9e\u63a5\u53e3\u5951\u7ea6\u6784\u9020\u53ea\u8bfb\u3001\u6279\u91cf\u4e0e\u89c6\u9891\u6d41\u8bf7\u6c42\uff0c\u5e76\u67e5\u770b\u8131\u654f\u54cd\u5e94\u3002",
   "dev-logs": "\u6309\u8bf7\u6c42\u3001\u72b6\u6001\u4e0e\u5e94\u7528\u6392\u67e5 \u63a5\u53e3\u8c03\u7528\u3002",
+  "admin-identity": "管理企业身份来源、当前用户、租户角色与权限映射。",
   "admin-models": "\u7ba1\u7406\u6a21\u578b\u8fd0\u884c\u72b6\u6001\u3001\u522b\u540d\u53d1\u5e03\u4e0e\u8bc4\u4f30\u57fa\u7ebf\u3002",
   "admin-calibration": "\u7ef4\u62a4\u5404\u6a21\u6001\u9608\u503c\uff0c\u8bb0\u5f55\u4eba\u5de5\u590d\u6838\uff0c\u5e76\u5c06\u590d\u6838\u6c60\u8f6c\u5316\u4e3a\u8bc4\u4f30\u6570\u636e\u548c\u9608\u503c\u5efa\u8bae\u3002",
   "admin-ops": "\u67e5\u770b\u8fd0\u884c\u540e\u7aef\u3001\u5ba1\u8ba1\u94fe\u548c\u5907\u4efd\uff0c\u5e76\u6267\u884c\u53d7\u63a7\u4fdd\u7559\u7b56\u7565\u3002",
@@ -60,7 +66,14 @@ const visibleSections = computed(() => {
   })).filter((section) => section.items.length > 0);
 });
 
-function logout(): void {
+async function logout(): Promise<void> {
+  if (sessionState.authMode === "oidc" || sessionState.authMode === "local") {
+    try {
+      await apiRequest("/v1/auth/logout", { method: "POST" });
+    } catch {
+      // The local UI session is still cleared if the server session already expired.
+    }
+  }
   clearSession();
   capabilities.clear();
   window.location.assign("/");
@@ -118,8 +131,8 @@ function logout(): void {
         <div class="topbar-actions">
           <label class="developer-switch">
             <Code2 :size="17" />
-            <span>开发者模式</span>
-            <ElSwitch v-model="prefs.developerMode" aria-label="开发者模式" />
+            <span>调试信息</span>
+            <ElSwitch v-model="prefs.developerMode" aria-label="调试信息" />
           </label>
           <ElTooltip content="退出当前会话" placement="bottom">
             <ElButton :icon="LogOut" circle aria-label="退出" @click="logout" />

@@ -1,5 +1,5 @@
 import AxeBuilder from "@axe-core/playwright";
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 
 declare global {
   interface Window {
@@ -22,6 +22,11 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
+async function loginAsDefaultAdmin(page: Page): Promise<void> {
+  await page.getByLabel("密码", { exact: true }).fill("123456");
+  await page.getByRole("button", { name: "登录", exact: true }).click();
+}
+
 test("[E2E-SHELL-01] loads the public shell, logs in, and keeps credentials out of durable storage", async ({
   page,
 }, testInfo) => {
@@ -33,36 +38,52 @@ test("[E2E-SHELL-01] loads the public shell, logs in, and keeps credentials out 
   expect(csp).not.toContain("'unsafe-inline'");
   expect(csp).not.toContain("'unsafe-eval'");
   await expect(page.getByRole("heading", { name: "登录控制台" })).toBeVisible();
+  await expect(page.getByLabel("用户名", { exact: true })).toHaveValue("admin");
+  await expect(page.getByLabel("密码", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("接口密钥")).toHaveCount(0);
   expect(new URL(page.url()).pathname).toBe("/");
   expect(new URL(page.url()).hash).toBe("");
 
-  const apiKey = "e2e-tab-only-secret";
-  await page.getByRole("textbox", { name: "接口密钥", exact: true }).fill(apiKey);
-  await page.getByRole("button", { name: "进入控制台" }).click();
+  await loginAsDefaultAdmin(page);
+
   await expect(page).toHaveURL(/\/console#\/$/);
   await expect(page.getByRole("heading", { name: "总览", exact: true })).toBeVisible();
 
-  const browserState = await page.evaluate((secret) => {
-    const localValues = Object.values(window.localStorage);
-    const sessionValues = Object.values(window.sessionStorage);
-    return {
-      localContainsSecret: localValues.some((value) => value.includes(secret)),
-      sessionContainsSecret: sessionValues.some((value) => value.includes(secret)),
-      urlContainsSecret: window.location.href.includes(secret),
-    };
-  }, apiKey);
-  expect(browserState).toEqual({
-    localContainsSecret: false,
-    sessionContainsSecret: true,
-    urlContainsSecret: false,
-  });
+  const browserState = await page.evaluate(() => ({
+    localValues: Object.values(window.localStorage),
+    sessionValues: Object.values(window.sessionStorage),
+    url: window.location.href,
+  }));
+  expect(browserState.localValues).toEqual([]);
+  const storedSession = JSON.parse(browserState.sessionValues[0] ?? "{}") as { apiKey?: string; bearer?: string };
+  expect(storedSession.apiKey).toBe("");
+  expect(storedSession.bearer).toBe("");
+  expect(browserState.localValues.join(" ")).not.toContain("123456");
+  expect(browserState.sessionValues.join(" ")).not.toContain("123456");
+  expect(browserState.url).not.toContain("token");
 
-  await page.getByRole("menuitem", { name: "智能分析" }).click();
-  await expect(page.getByRole("heading", { name: "图片分析" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "图片分析" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "视频解析" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "视频流解析" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "解析结果库" })).toBeVisible();
+  await page.getByRole("menuitem", { name: "图片分析" }).click();
+  await expect(page.getByRole("heading", { name: "图片分析" }).first()).toBeVisible();
+  for (const menuName of [
+    "总览",
+    "图片分析",
+    "视频任务",
+    "实时视频流",
+    "分析结果",
+    "人员比对",
+    "以图搜人",
+    "人员库",
+  ]) {
+    await expect(page.getByRole("menuitem", { name: menuName })).toBeVisible();
+  }
+  await expect(page.getByRole("menuitem", { name: "智能分析" })).toHaveCount(0);
+  const developerSwitch = page.locator(".developer-switch");
+  if (testInfo.project.name.includes("mobile")) {
+    await expect(developerSwitch).toHaveCount(1);
+  } else {
+    await expect(developerSwitch).toBeVisible();
+  }
+  await expect(page.getByRole("switch", { name: "调试信息" })).toHaveCount(1);
   await expect(page.locator("body")).not.toHaveCSS("overflow-x", "scroll");
 
   const accessibility = await new AxeBuilder({ page }).analyze();
@@ -80,7 +101,7 @@ test("[E2E-SHELL-01] loads the public shell, logs in, and keeps credentials out 
 test("[E2E-ROUTE-01] supports direct deep links after authentication", async ({ page }) => {
   await page.goto("/console/next#/analysis/video");
   await expect(page.getByRole("heading", { name: "登录控制台" })).toBeVisible();
-  await page.getByRole("button", { name: "进入控制台" }).click();
+  await loginAsDefaultAdmin(page);
 
   await expect(page).toHaveURL(/#\/analysis\/video$/);
   await expect(page.getByRole("heading", { name: "视频任务" })).toBeVisible();
@@ -89,7 +110,7 @@ test("[E2E-ROUTE-01] supports direct deep links after authentication", async ({ 
 
 test("[E2E-ROUTES-02] loads every product route and opens guarded dialogs without CSP violations", async ({ page }) => {
   await page.goto("/console/next");
-  await page.getByRole("button", { name: "进入控制台" }).click();
+  await loginAsDefaultAdmin(page);
   await expect(page).toHaveURL(/\/console#\/$/);
   await expect(page.getByRole("heading", { name: "总览", exact: true })).toBeVisible();
 
@@ -98,13 +119,14 @@ test("[E2E-ROUTES-02] loads every product route and opens guarded dialogs withou
     ["/analysis/image", "图片分析"],
     ["/analysis/video", "视频任务"],
     ["/analysis/stream", "实时视频流"],
-    ["/analysis/results", "解析结果库"],
-    ["/compare", "比对"],
+    ["/analysis/results", "分析结果"],
+    ["/compare", "人员比对"],
     ["/search", "以图搜人"],
     ["/gallery", "人员库"],
     ["/dev/access", "接入配置"],
     ["/dev/playground", "调试台"],
     ["/dev/logs", "调用日志"],
+    ["/admin/identity", "身份与权限"],
     ["/admin/models", "模型中心"],
     ["/admin/calibration", "阈值与标注"],
     ["/admin/ops", "运维与合规"],
@@ -116,6 +138,9 @@ test("[E2E-ROUTES-02] loads every product route and opens guarded dialogs withou
     await page.waitForLoadState("networkidle");
     await expect(page.locator(".error-banner")).toHaveCount(0);
   }
+
+  await page.goto("/console#/analysis");
+  await expect(page.getByRole("heading", { name: "页面不存在", exact: true }).first()).toBeVisible();
 
   await page.goto("/console#/gallery");
   await page.getByRole("button", { name: "高级操作" }).click();

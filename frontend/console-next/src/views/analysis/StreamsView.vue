@@ -6,7 +6,6 @@ import { ElAlert, ElButton, ElDialog, ElDrawer, ElInput, ElSkeleton } from "elem
 
 import { apiRequest, jsonBody } from "../../api/client";
 import { openTicketWebSocket, type LiveConnectionState } from "../../api/ws";
-import AnalysisNavigation from "../../components/AnalysisNavigation.vue";
 import EmptyState from "../../components/EmptyState.vue";
 import FrameGrid from "../../components/FrameGrid.vue";
 import RawDataDrawer from "../../components/RawDataDrawer.vue";
@@ -197,7 +196,6 @@ onBeforeUnmount(() => {
 
 <template>
   <div>
-    <AnalysisNavigation />
     <header class="page-header">
       <div>
         <h1>实时视频流</h1>

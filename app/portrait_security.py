@@ -121,7 +121,19 @@ def _tenant_id_from_bearer(authorization: str | None) -> str | None:
 
 
 def inferred_tenant_id_from_request(request: Request) -> str | None:
-    return _tenant_id_from_api_key(request.headers.get("x-api-key")) or _tenant_id_from_bearer(request.headers.get("authorization"))
+    from app.oidc_auth import browser_session_claims
+
+    session_claims = (
+        browser_session_claims(request)
+        if not request.headers.get("authorization") and not request.headers.get("x-api-key")
+        else None
+    )
+    session_tenant = str(session_claims.get("tenant_id") or "").strip() if session_claims else ""
+    return (
+        session_tenant
+        or _tenant_id_from_api_key(request.headers.get("x-api-key"))
+        or _tenant_id_from_bearer(request.headers.get("authorization"))
+    )
 
 
 def tenant_id_from_request(request: Request) -> str:

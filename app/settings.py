@@ -48,7 +48,7 @@ def parse_csv_env(name: str, default: str = "") -> list[str]:
     return [item.strip() for item in os.getenv(name, default).split(",") if item.strip()]
 
 
-APP_VERSION = "0.12.1"
+APP_VERSION = "0.13.0"
 PORTRAIT_RUNTIME_PROFILE = (
     os.getenv("PORTRAIT_RUNTIME_PROFILE", os.getenv("APP_ENV", "development")).strip().lower() or "development"
 )
@@ -170,6 +170,43 @@ WARMUP_FAIL_FAST = parse_bool_env("WARMUP_FAIL_FAST", False)
 API_TOKEN = os.getenv("API_TOKEN")
 API_TOKEN_TENANT_ID = os.getenv("API_TOKEN_TENANT_ID", "").strip()
 API_TOKEN_ALLOW_TENANT_OVERRIDE = parse_bool_env("API_TOKEN_ALLOW_TENANT_OVERRIDE", False)
+LOCAL_AUTH_ENABLED = parse_bool_env("LOCAL_AUTH_ENABLED", True)
+LOCAL_AUTH_ALLOW_REMOTE = parse_bool_env("LOCAL_AUTH_ALLOW_REMOTE", False)
+LOCAL_AUTH_USERNAME = os.getenv("LOCAL_AUTH_USERNAME", "admin").strip() or "admin"
+LOCAL_AUTH_PASSWORD = os.getenv("LOCAL_AUTH_PASSWORD", "123456")
+LOCAL_AUTH_TENANT_ID = os.getenv("LOCAL_AUTH_TENANT_ID", "default").strip() or "default"
+LOCAL_AUTH_SESSION_SECRET = os.getenv(
+    "LOCAL_AUTH_SESSION_SECRET",
+    "portrait-hub-development-local-session-secret",
+)
+LOCAL_AUTH_SESSION_MAX_AGE_SECONDS = max(
+    300,
+    min(parse_int_env("LOCAL_AUTH_SESSION_MAX_AGE_SECONDS", 28_800), 86_400),
+)
+LOCAL_AUTH_COOKIE_SECURE = parse_bool_env(
+    "LOCAL_AUTH_COOKIE_SECURE",
+    PORTRAIT_RUNTIME_PROFILE in {"prod", "production"},
+)
+OIDC_ENABLED = parse_bool_env("OIDC_ENABLED", False)
+OIDC_ISSUER = os.getenv("OIDC_ISSUER", "").strip().rstrip("/")
+OIDC_CLIENT_ID = os.getenv("OIDC_CLIENT_ID", "").strip()
+OIDC_CLIENT_SECRET = os.getenv("OIDC_CLIENT_SECRET", "")
+OIDC_REDIRECT_URI = os.getenv("OIDC_REDIRECT_URI", "").strip()
+OIDC_PROVIDER_NAME = os.getenv("OIDC_PROVIDER_NAME", "企业账号").strip() or "企业账号"
+OIDC_SCOPES = os.getenv("OIDC_SCOPES", "openid profile email groups").strip() or "openid profile email"
+OIDC_ROLE_CLAIM = os.getenv("OIDC_ROLE_CLAIM", "roles").strip() or "roles"
+OIDC_GROUPS_CLAIM = os.getenv("OIDC_GROUPS_CLAIM", "groups").strip() or "groups"
+OIDC_TENANT_CLAIM = os.getenv("OIDC_TENANT_CLAIM", "tenant_id").strip() or "tenant_id"
+OIDC_ROLE_MAPPING = os.getenv("OIDC_ROLE_MAPPING", "{}")
+OIDC_DEFAULT_ROLE = os.getenv("OIDC_DEFAULT_ROLE", "").strip()
+OIDC_DEFAULT_TENANT_ID = os.getenv("OIDC_DEFAULT_TENANT_ID", "").strip()
+OIDC_SESSION_SECRET = os.getenv("OIDC_SESSION_SECRET", "")
+OIDC_SESSION_COOKIE_NAME = os.getenv("OIDC_SESSION_COOKIE_NAME", "portrait_oidc_session").strip() or "portrait_oidc_session"
+OIDC_SESSION_MAX_AGE_SECONDS = max(300, min(parse_int_env("OIDC_SESSION_MAX_AGE_SECONDS", 28_800), 86_400))
+OIDC_HTTP_TIMEOUT_SECONDS = max(1.0, min(parse_float_env("OIDC_HTTP_TIMEOUT_SECONDS", 10.0), 60.0))
+OIDC_COOKIE_SECURE = parse_bool_env("OIDC_COOKIE_SECURE", True)
+OIDC_ALLOW_INSECURE_HTTP = parse_bool_env("OIDC_ALLOW_INSECURE_HTTP", False)
+OIDC_IDENTITY_ADMIN_URL = os.getenv("OIDC_IDENTITY_ADMIN_URL", "").strip()
 JWT_SECRET = os.getenv("JWT_SECRET")
 JWT_SECRET_ID = os.getenv("JWT_SECRET_ID", "primary").strip()
 JWT_SECRET_KEYRING = os.getenv("JWT_SECRET_KEYRING", "")

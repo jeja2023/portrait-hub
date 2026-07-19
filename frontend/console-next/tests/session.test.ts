@@ -33,6 +33,18 @@ describe("console session", () => {
     });
   });
 
+  it("uses only the CSRF cookie for an OIDC browser session", () => {
+    document.cookie = "portrait_csrf=csrf-value; path=/";
+    beginSession({ tenantId: "tenant-a", authMode: "oidc" });
+
+    expect(authHeaders()).toEqual({
+      "X-Tenant-ID": "tenant-a",
+      "X-CSRF-Token": "csrf-value",
+    });
+    expect(sessionState.apiKey).toBe("");
+    expect(sessionState.bearer).toBe("");
+  });
+
   it("lets a single-tenant credential determine the tenant", () => {
     beginSession({
       tenantId: "",

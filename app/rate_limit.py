@@ -98,6 +98,7 @@ def client_identity(request: Request) -> str:
         request.headers.get("authorization"),
         request.headers.get("x-api-key"),
         request.headers.get("x-tenant-id"),
+        request,
     )
     if identity:
         return identity

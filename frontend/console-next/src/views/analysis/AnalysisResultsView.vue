@@ -5,7 +5,6 @@ import { ElAlert, ElButton, ElDrawer, ElInput, ElRadioButton, ElRadioGroup, ElSk
 import { useRoute, useRouter } from "vue-router";
 
 import { apiRequest } from "../../api/client";
-import AnalysisNavigation from "../../components/AnalysisNavigation.vue";
 import EmptyState from "../../components/EmptyState.vue";
 import RawDataDrawer from "../../components/RawDataDrawer.vue";
 import { usePrefsStore } from "../../stores/prefs";
@@ -156,10 +155,9 @@ onMounted(async () => {
 
 <template>
   <div>
-    <AnalysisNavigation />
     <header class="page-header">
       <div>
-        <h1>解析结果库</h1>
+        <h1>分析结果</h1>
         <p>统一查看当前租户的图片、视频和视频流解析档案。</p>
       </div>
       <div class="page-actions">

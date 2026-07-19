@@ -1,6 +1,6 @@
 import { computed, reactive } from "vue";
 
-export type AuthMode = "api-key" | "jwt" | "anonymous";
+export type AuthMode = "api-key" | "jwt" | "oidc" | "local" | "anonymous";
 
 interface StoredSession {
   tenantId: string;
@@ -34,7 +34,7 @@ function readStoredSession(): StoredSession {
     if (!parsed || typeof parsed !== "object") return emptySession();
     return {
       tenantId: typeof parsed.tenantId === "string" ? parsed.tenantId.trim() : "",
-      authMode: parsed.authMode === "jwt" || parsed.authMode === "anonymous" ? parsed.authMode : "api-key",
+      authMode: parsed.authMode === "jwt" || parsed.authMode === "oidc" || parsed.authMode === "local" || parsed.authMode === "anonymous" ? parsed.authMode : "api-key",
       apiKey: typeof parsed.apiKey === "string" ? parsed.apiKey : "",
       bearer: typeof parsed.bearer === "string" ? parsed.bearer : "",
       authenticated: parsed.authenticated === true,
@@ -82,6 +82,11 @@ export function beginSession(input: {
   persistSession();
 }
 
+export function setSessionTenant(tenantId: string): void {
+  sessionState.tenantId = tenantId.trim();
+  persistSession();
+}
+
 export function setSessionExpiry(expiresAt: number | null | undefined): void {
   sessionState.expiresAt = typeof expiresAt === "number" && Number.isFinite(expiresAt) ? expiresAt : null;
   armExpiryTimer();
@@ -94,6 +99,13 @@ export function markSessionAuthenticated(): void {
   persistSession();
 }
 
+function cookieValue(name: string): string {
+  if (typeof document === "undefined") return "";
+  const prefix = encodeURIComponent(name) + "=";
+  const item = document.cookie.split("; ").find((value) => value.startsWith(prefix));
+  return item ? decodeURIComponent(item.slice(prefix.length)) : "";
+}
+
 export function authHeaders(): HeadersInit {
   const headers: Record<string, string> = {};
   if (sessionState.tenantId) headers["X-Tenant-ID"] = sessionState.tenantId;
@@ -102,6 +114,10 @@ export function authHeaders(): HeadersInit {
   }
   if (sessionState.authMode === "jwt" && sessionState.bearer) {
     headers.Authorization = `Bearer ${sessionState.bearer}`;
+  }
+  if (sessionState.authMode === "oidc" || sessionState.authMode === "local") {
+    const csrf = cookieValue("portrait_csrf");
+    if (csrf) headers["X-CSRF-Token"] = csrf;
   }
   return headers;
 }

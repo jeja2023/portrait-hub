@@ -1,16 +1,20 @@
 import { nextTick } from "vue";
 import { createMemoryHistory, createRouter, createWebHashHistory } from "vue-router";
 import {
-  Activity,
+  Archive,
   Boxes,
   Braces,
   FileClock,
   Gauge,
+  Image as ImageIcon,
   Images,
+  IdCard,
+  Radio,
   ScanSearch,
   Settings2,
   ShieldCheck,
   SlidersHorizontal,
+  Video,
   Waypoints,
 } from "@lucide/vue";
 
@@ -46,7 +50,6 @@ const router = createRouter({
             nav: { section: "工作台", order: 1, icon: Gauge },
           },
         },
-        { path: "analysis", redirect: "/analysis/image", meta: { title: "智能分析" } },
         {
           path: "analysis/image",
           name: "analysis-image",
@@ -54,14 +57,18 @@ const router = createRouter({
           meta: {
             title: "图片分析",
             permission: "infer",
-            nav: { section: "工作台", order: 2, icon: Activity, label: "智能分析" },
+            nav: { section: "工作台", order: 2, icon: ImageIcon },
           },
         },
         {
           path: "analysis/video",
           name: "analysis-video",
           component: () => import("../views/analysis/VideoJobsView.vue"),
-          meta: { title: "视频任务", permission: "jobs:read" },
+          meta: {
+            title: "视频任务",
+            permission: "jobs:read",
+            nav: { section: "工作台", order: 3, icon: Video },
+          },
         },
         {
           path: "analysis/video/:jobId",
@@ -73,7 +80,11 @@ const router = createRouter({
           path: "analysis/stream",
           name: "analysis-stream",
           component: () => import("../views/analysis/StreamsView.vue"),
-          meta: { title: "实时视频流", permission: "streams:read" },
+          meta: {
+            title: "实时视频流",
+            permission: "streams:read",
+            nav: { section: "工作台", order: 4, icon: Radio },
+          },
         },
         {
           path: "analysis/stream/:streamId",
@@ -85,16 +96,20 @@ const router = createRouter({
           path: "analysis/results",
           name: "analysis-results",
           component: () => import("../views/analysis/AnalysisResultsView.vue"),
-          meta: { title: "解析结果库", permission: "infer" },
+          meta: {
+            title: "分析结果",
+            permission: "infer",
+            nav: { section: "工作台", order: 5, icon: Archive },
+          },
         },
         {
           path: "compare",
           name: "compare",
           component: () => import("../views/CompareView.vue"),
           meta: {
-            title: "比对",
+            title: "人员比对",
             permission: "compare",
-            nav: { section: "工作台", order: 3, icon: Waypoints },
+            nav: { section: "工作台", order: 6, icon: Waypoints },
           },
         },
         {
@@ -104,7 +119,7 @@ const router = createRouter({
           meta: {
             title: "以图搜人",
             permission: "gallery:read",
-            nav: { section: "工作台", order: 4, icon: ScanSearch },
+            nav: { section: "工作台", order: 7, icon: ScanSearch },
           },
         },
         {
@@ -114,7 +129,7 @@ const router = createRouter({
           meta: {
             title: "人员库",
             permission: "gallery:read",
-            nav: { section: "工作台", order: 5, icon: Images },
+            nav: { section: "工作台", order: 8, icon: Images },
           },
         },
         {
@@ -154,13 +169,23 @@ const router = createRouter({
           },
         },
         {
+          path: "admin/identity",
+          name: "admin-identity",
+          component: () => import("../views/admin/IdentityView.vue"),
+          meta: {
+            title: "身份与权限",
+            permission: "admin:identity",
+            nav: { section: "系统管理", order: 1, icon: IdCard },
+          },
+        },
+        {
           path: "admin/models",
           name: "admin-models",
           component: () => import("../views/admin/ModelsView.vue"),
           meta: {
             title: "模型中心",
             permission: "models:read",
-            nav: { section: "系统管理", order: 1, icon: Boxes },
+            nav: { section: "系统管理", order: 2, icon: Boxes },
           },
         },
         {
@@ -170,7 +195,7 @@ const router = createRouter({
           meta: {
             title: "阈值与标注",
             permission: "models:read",
-            nav: { section: "系统管理", order: 2, icon: SlidersHorizontal },
+            nav: { section: "系统管理", order: 3, icon: SlidersHorizontal },
           },
         },
         {
@@ -180,7 +205,7 @@ const router = createRouter({
           meta: {
             title: "运维与合规",
             permission: "admin:status",
-            nav: { section: "系统管理", order: 3, icon: ShieldCheck },
+            nav: { section: "系统管理", order: 4, icon: ShieldCheck },
           },
         },
         {

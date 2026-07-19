@@ -1,12 +1,13 @@
 from pathlib import Path
 from typing import Literal
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Response, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response, status
 from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.observability import logger
-from app.portrait_auth import require_permission
+from app.oidc_auth import oidc_identity_metadata
+from app.portrait_auth import ROLE_PERMISSIONS, permission_dependency, require_permission
 from app.portrait_console_access import console_principal, issue_console_ws_ticket
 from app.portrait_jobs import get_video_job
 from app.portrait_request_context import PortraitRequestContext, portrait_request_context
@@ -41,6 +42,16 @@ def render_next_console_html() -> str:
     return CONSOLE_NEXT_HTML_PATH.read_text(encoding="utf-8")
 
 
+def role_catalog() -> list[dict[str, object]]:
+    return [
+        {
+            "role": role,
+            "permissions": sorted(permissions),
+        }
+        for role, permissions in ROLE_PERMISSIONS.items()
+    ]
+
+
 class ConsoleWebSocketTicketRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -50,6 +61,7 @@ class ConsoleWebSocketTicketRequest(BaseModel):
 
 @router.get("/v1/console/me", dependencies=[Depends(require_api_token)])
 async def portrait_console_me(
+    request: Request,
     response: Response,
     ctx: PortraitRequestContext = Depends(portrait_request_context),
     authorization: str | None = Header(default=None),
@@ -59,13 +71,33 @@ async def portrait_console_me(
         tenant_id=ctx.tenant_id,
         authorization=authorization,
         x_api_key=x_api_key,
+        request=request,
     )
     response.headers["Cache-Control"] = "no-store"
     return portrait_success(
         ctx.request_id,
         {
             "tenant_id": ctx.tenant_id,
+            "identity": oidc_identity_metadata(),
             **principal,
+        },
+    )
+
+
+@router.get(
+    "/v1/admin/identity",
+    dependencies=[Depends(require_api_token), Depends(permission_dependency("admin:identity"))],
+)
+async def portrait_identity_admin(
+    response: Response,
+    ctx: PortraitRequestContext = Depends(portrait_request_context),
+) -> dict[str, object]:
+    response.headers["Cache-Control"] = "no-store"
+    return portrait_success(
+        ctx.request_id,
+        {
+            "identity": oidc_identity_metadata(include_admin_url=True),
+            "roles": role_catalog(),
         },
     )
 
@@ -73,13 +105,14 @@ async def portrait_console_me(
 @router.post("/v1/console/ws-ticket", dependencies=[Depends(require_api_token)])
 async def portrait_console_ws_ticket(
     payload: ConsoleWebSocketTicketRequest,
+    request: Request,
     response: Response,
     ctx: PortraitRequestContext = Depends(portrait_request_context),
     authorization: str | None = Header(default=None),
     x_api_key: str | None = Header(default=None),
 ) -> dict[str, object]:
     permission = "jobs:read" if payload.resource_type == "job" else "streams:read"
-    await require_permission(permission, authorization, ctx.tenant_id, x_api_key)
+    await require_permission(permission, authorization, ctx.tenant_id, x_api_key, request)
     if payload.resource_type == "job":
         resource_id = validate_job_id(payload.resource_id)
         if get_video_job(resource_id, tenant_id=ctx.tenant_id) is None:

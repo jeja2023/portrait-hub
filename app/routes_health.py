@@ -3,7 +3,7 @@ from typing import Any
 
 import numpy as np
 import onnxruntime as ort
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response, status
 
 from app.metrics import prometheus_metrics
 from app.model_config import MODEL_CONFIGS
@@ -30,13 +30,14 @@ async def health() -> dict[str, Any]:
 
 @router.get("/ready")
 async def ready(
+    request: Request,
     authorization: str | None = Header(default=None),
     x_api_key: str | None = Header(default=None),
     x_tenant_id: str | None = Header(default=None),
 ) -> dict[str, Any]:
     # /ready 接口保持公开可达，以便编排器（Orchestrator）探测存活状态，但
     # 依赖项/磁盘的详细细分信息仅披露给已通过身份验证的调用者。
-    disclose_detail = request_is_authenticated(authorization, x_api_key, x_tenant_id)
+    disclose_detail = request_is_authenticated(authorization, x_api_key, x_tenant_id, request)
     available = await run_blocking_io(ort.get_available_providers)
     provider_status = runtime_provider_status(available)
     if not provider_status["ready"]:

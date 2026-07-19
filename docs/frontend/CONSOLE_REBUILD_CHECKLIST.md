@@ -1,13 +1,14 @@
 # 控制台重建行为对照清单
 
 - 冻结日期：2026-07-17
-- 交付版本：0.12.1
+- 交付版本：0.13.0
 - 范围：legacy 模板中全部 27 个 data-view 和其写操作
 - 正式入口：/ 登录，认证成功后进入 /console；/console/next 仅保留直达验收
 - 状态定义：实现完成表示代码与自动化链路已落库；观察中表示必须在生产灰度后收集指标，不能以本地测试代替。
 - 通用状态：所有新路由均有加载骨架、空状态、错误横幅、权限路由和直接深链；列表使用服务端数据，不静默回退本地假数据。
 
 
+> 2026-07-19 / 0.13.0：工作台导航扁平化、/analysis 删除、人员比对命名、调试信息改名、本地管理员登录、OIDC 企业 SSO、浏览器会话安全边界和身份权限页面已完成。
 > 2026-07-19 / 0.12.1：配置模板漂移检查、资源热读取、路由滚动顶部、标题/说明单行布局、中文说明和空租户标签修复已完成。
 > 2026-07-19 / 0.12.0：补齐 SLO 聚合完整性、WS 降级轮询、expires_at 会话失效、URL 状态恢复、解析档案详情、图片高级参数、接入应用编辑/配额/用量和 Redis ws-ticket 多副本原子消费。
 
@@ -51,6 +52,10 @@
 
 | 契约 | 验收结果 | 自动化 |
 |---|---|---|
+| 工作台八个入口直接展示，/analysis 不保留 | 完成 | E2E-SHELL-01；E2E-ROUTES-02 |
+| 本地账号/OIDC 浏览器会话接入 RBAC、租户与 CSRF | 完成 | test_oidc_auth.py |
+| 默认 admin / 123456 仅允许本机且不进入浏览器存储 | 完成 | test_oidc_auth.py；E2E-SHELL-01 |
+| 身份与权限展示认证来源、租户和五级角色矩阵 | 完成 | test_oidc_session_drives_console_identity_and_role_permissions；E2E-ROUTES-02 |
 | 静态壳匿名可取，租户数据必须鉴权 | 完成 | test_public_console_shell_does_not_expose_tenant_data；E2E-SHELL-01 |
 | /v1/console/me 服务端驱动主体与权限，不要求 admin:status、不返回 legacy features | 完成 | test_console_me_returns_principal_capabilities |
 | 任务与人员集合租户隔离、脱敏和游标分页 | 完成 | test_jobs_collection_is_tenant_scoped_filterable_and_cursor_paginated；test_gallery_collection_returns_redacted_summaries_and_supports_search |
@@ -80,22 +85,23 @@
 
 ## 本轮自动化验证
 
-- `python tools/type_check.py`：通过，177 source files。
-- `python -m ruff check app tools tests`：通过。
-- `npm run console:typecheck`：通过。
-- `npm run console:check`：通过，覆盖 ESLint、Vitest 5 files / 13 tests、Vue TypeScript 和 Vite production build。
-- `npm run console:e2e`：通过，Playwright 15 passed / 0 skipped。
-- `npm test`：通过，Node SDK 契约 + Console Next 静态链路。
-- `python -m pytest -q`：通过，549 passed / 4 skipped，11 warnings（既有 HTTP 状态常量弃用提醒）。
-- `go test ./...`：通过；Java SDK 主源码 `javac` 编译通过（本机未安装 Maven，未执行 JUnit）。
-- `python tools/deploy_check.py --json --import-app`：ok=true，确认旧源码目录缺失和 Console Next 源码无重复 `/v1` 前缀。
-- `python tools/portrait_production_readiness.py --scope platform --strict`：ok=true，strict_failure_count=0。
+- python -m pytest -q：通过，563 passed / 4 skipped。
+- 本地账号与 OIDC 专项及限流回归：23 passed。
+- python tools/type_check.py --fallback-ok：fallback 注解门禁通过；当前环境未安装 mypy，未宣称严格 mypy 通过。
+- python -m ruff check app tools tests：通过。
+- npm run check：通过，覆盖 Node SDK、ESLint、Vitest 6 files / 19 tests、Vue TypeScript 和 Vite production build。
+- deploy_check --json --import-app：ok=true，确认应用导入、依赖锁、Compose、旧控制台删除和 Console Next 源码契约。
+- platform strict readiness：ok=true，strict_failure_count=0。
+- Docker Compose GPU/CPU 配置解析、统一 0.13.0 版本断言和 git diff --check：通过。
+- Java SDK 主源码使用 javac -encoding UTF-8 编译通过；本机未安装 Maven，未执行 JUnit。
+- 当前环境未安装 Go 工具链，未复跑 go test ./...；Node SDK 契约已随 npm run check 通过。
+- 本机浏览器完成 admin / 123456 登录、工作台导航、身份与权限页面及退出流程验收。
 
 ## 生产上线待办
 
 以下事项依赖真实发布环境，不以代码门禁结果代替：
 
-- [ ] 产品、安全、运维负责人完成 0.12.1 上线签字。
+- [ ] 产品、安全、运维负责人完成 0.13.0 上线签字。
 - [ ] 使用上一版镜像或受控静态构件完成回退演练，验证业务数据和解析档案不变。
 - [ ] 记录真实登录、前端异常、API 4xx/5xx、关键流程成功率和 p95/p99 观察结果。
 - [x] WS ticket 在配置 REDIS_URL 时使用共享 Redis TTL 与 Lua 原子单次消费；无 Redis 的本地开发保留进程内实现。

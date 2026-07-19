@@ -9,7 +9,7 @@ from urllib.error import HTTPError
 from urllib.parse import quote, urlencode
 from urllib import request as urllib_request
 
-SDK_VERSION = "0.12.1"
+SDK_VERSION = "0.13.0"
 USER_AGENT = f"portrait-hub-sdk-python/{SDK_VERSION}"
 
 

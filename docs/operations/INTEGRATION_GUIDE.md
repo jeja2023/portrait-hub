@@ -58,6 +58,17 @@ curl "https://portrait.internal.example/v1/analysis/artifacts/${ARCHIVE_ID}/${AR
 
 解析档案按租户隔离且不设数量上限。接入方应使用游标分页，不应一次拉取全部记录；生产运维必须同时备份数据库索引和对象存储，缺少任一部分都不能完整恢复档案。
 
+### 0.13.0 控制台登录、导航与身份接入
+
+- 工作台导航改为总览、图片分析、视频任务、实时视频流、分析结果、人员比对、以图搜人和人员库八个直接入口，不再提供“智能分析”中间菜单；/analysis 也不再作为兼容路由。
+- 控制台默认提供本地管理员登录，初始账号 admin、初始密码 123456。默认弱凭据只允许本机访问；生产模式，或开放远程登录但仍保留默认密码/默认会话密钥时，本地登录自动禁用。
+- 生产必须设置 LOCAL_AUTH_PASSWORD 与至少 32 字节的 LOCAL_AUTH_SESSION_SECRET，并在 HTTPS 部署中启用 LOCAL_AUTH_COOKIE_SECURE。若不需要本地账号，可设置 LOCAL_AUTH_ENABLED=false。
+- OIDC 企业账号采用 Authorization Code + PKCE。上线前登记 /auth/oidc/callback，配置 OIDC_ISSUER、OIDC_CLIENT_ID、客户端密钥、至少 32 字节的 OIDC_SESSION_SECRET，并保持 OIDC_COOKIE_SECURE=true、OIDC_ALLOW_INSECURE_HTTP=false。
+- OIDC_ROLE_MAPPING 必须把外部角色或用户组显式映射为 admin、operator、algorithm、auditor、viewer；未映射身份默认拒绝登录。账号密码、重置、MFA、锁定和离职禁用继续由企业身份平台负责。
+- 浏览器账号会话使用 HttpOnly、SameSite Cookie，写请求要求 CSRF Cookie 与 X-CSRF-Token 一致；反向代理必须保留 Cookie、X-CSRF-Token、外部协议和站内重定向参数。
+- API Key/JWT 继续支持，并收进“高级凭证登录”。显式携带的非法 API Key/JWT 不会回退到已有浏览器会话。
+- 系统管理新增“身份与权限”，管理员可查看当前认证来源、租户、角色和权限矩阵；影鉴本身暂不提供企业用户目录的增删改、密码重置或 MFA 管理。
+
 ### 0.12.1 配置与前端资源升级注意事项
 
 - 升级前对照新的 `.env.example` 检查新增配置项；本地开发可使用 `runtime-state/portrait-access.json` 和 `runtime-state/portrait-review-annotations.json`，生产环境应改为共享且受保护的状态存储。
@@ -76,9 +87,6 @@ curl "https://portrait.internal.example/v1/analysis/artifacts/${ARCHIVE_ID}/${AR
 
 - 0.11.2 起，浏览器 WebSocket 主凭证不再接受 query 参数回退；接入方必须通过标准请求头完成主鉴权，并让控制台使用短期 ws-ticket 连接任务/视频流。所有 `/v1/*` 响应统一 `Cache-Control: no-store`，默认 CSP 不再依赖 `unsafe-inline` 或 jsdelivr。
 - 正式登录地址调整为 `/`，认证成功后进入 `/console#/`；`/console/next` 只用于新版直达验收，`/console/legacy` 已删除，`/health` 不再兼作登录或主页入口。
-- 控制台登录继续接受 API Key 或 JWT。单租户凭证由服务端自动解析租户，调用方无需再传 `X-Tenant-ID`；只有多租户凭证才需要显式选择本次请求租户。
-- 控制台不提供用户名/密码模式，因为当前平台身份契约不包含用户目录、密码散列、重置、多因素认证和账号锁定。业务系统不得把 API Key 包装成用户名/密码后长期存储。
-- 智能分析提供图片分析、视频解析、视频流解析和解析结果库四个入口。视频任务与流操作仍使用原有 v1 API；历史查询统一使用 `/v1/analysis/results`，不应恢复已删除的旧结果列表接口。
 - 未认证的 `/console` 站内深链会跳转到 `/?redirect=...`，认证后恢复目标。接入网关应放行根路径与控制台静态资源，并保留 URL 中的 path、query 和 fragment。
 - 旧版删除后，全站紧急回退应部署上一版镜像或受控静态构件；不要删除新版构建产物或解析档案数据。自动化脚本应探测 `/` 与 `/console/next`，并确认 `/console/legacy` 返回 404。
 

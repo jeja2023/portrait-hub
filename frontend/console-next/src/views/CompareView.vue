@@ -174,7 +174,7 @@ onBeforeUnmount(() => {
   <div>
     <header class="page-header">
       <div>
-        <h1>比对</h1>
+        <h1>人员比对</h1>
         <p>并排核验证据，以相似度、阈值、质量和风险给出结论。</p>
       </div>
       <div class="page-actions">

@@ -53,8 +53,18 @@ def authenticated_request_identity(
     authorization: str | None,
     x_api_key: str | None = None,
     x_tenant_id: str | None = None,
+    request: Request | None = None,
 ) -> str | None:
     try:
+        from app.oidc_auth import browser_session_claims
+
+        session_claims = browser_session_claims(request) if not authorization and not x_api_key else None
+        if session_claims is not None:
+            requested_tenant = optional_header_value(x_tenant_id)
+            session_tenant = str(session_claims.get("tenant_id") or "")
+            if requested_tenant and not hmac.compare_digest(requested_tenant, session_tenant):
+                return None
+            return f"{session_claims.get('auth_kind') or 'browser'}:{session_claims.get('sub')}"
         if global_api_token_matches(authorization, x_api_key):
             if not global_api_token_tenant_allowed(x_tenant_id, require_binding=False):
                 return None
@@ -94,9 +104,10 @@ def request_is_authenticated(
     authorization: str | None,
     x_api_key: str | None = None,
     x_tenant_id: str | None = None,
+    request: Request | None = None,
 ) -> bool:
     """对探针等公开端点执行不会抛出异常的凭证有效性检查。"""
-    return authenticated_request_identity(authorization, x_api_key, x_tenant_id) is not None
+    return authenticated_request_identity(authorization, x_api_key, x_tenant_id, request) is not None
 
 
 async def require_api_token(
@@ -105,6 +116,17 @@ async def require_api_token(
     x_api_key: str | None = Header(default=None),
     x_tenant_id: str | None = Header(default=None),
 ) -> None:
+    from app.oidc_auth import browser_session_claims, require_browser_session_csrf
+
+    session_claims = browser_session_claims(request) if not authorization and not x_api_key else None
+    if session_claims is not None:
+        requested_tenant = optional_header_value(x_tenant_id)
+        session_tenant = str(session_claims.get("tenant_id") or "")
+        if requested_tenant and not hmac.compare_digest(requested_tenant, session_tenant):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="浏览器会话与租户不匹配")
+        require_browser_session_csrf(request, session_claims)
+        return
+
     if global_api_token_matches(authorization, x_api_key):
         if request.url.path.startswith("/v1/") and not global_api_token_tenant_allowed(
             x_tenant_id,
@@ -125,6 +147,9 @@ async def require_api_token(
 
     if access_application_identity(x_api_key, x_tenant_id):
         return
+
+    if authorization or x_api_key:
+        raise unauthorized("invalid bearer JWT or API key")
 
     if RBAC_ENABLED and not API_TOKEN:
         raise unauthorized("missing bearer JWT or API key")

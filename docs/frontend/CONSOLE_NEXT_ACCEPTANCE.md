@@ -1,11 +1,13 @@
 # Console Next 验收报告
 
 - 验收日期：2026-07-19
-- 发布版本：0.12.1
+- 发布版本：0.13.0
 - 验收对象：frontend/console-next、生产静态入口、权限与 WS ticket、SDK 示例、SLO、审计备份、复核池、CI/Docker/readiness
-- 结论：批次 0、A、B、C、D、E、0.12.0 全面优化及 0.12.1 补丁均已完成；旧控制台和运行时灰度配置已删除，Console Next 是唯一生产入口。生产上线仍需执行组织审批、镜像回退演练，并验证共享 Redis、外部服务和真实浏览器环境。
+- 结论：批次 0、A、B、C、D、E、0.12.0 全面优化及 0.12.1 补丁及 0.13.0 导航与身份升级均已完成；旧控制台和运行时灰度配置已删除，Console Next 是唯一生产入口。生产上线仍需执行组织审批、镜像回退演练，并验证共享 Redis、外部服务和真实浏览器环境。
 
 
+> 2026-07-19 / 0.13.0 验收：工作台八个入口和 /analysis 删除通过；登录页默认 admin 用户名/密码并将 API Key/JWT 收进高级入口；本地账号与 OIDC 会话的 RBAC、租户隔离、CSRF、退出清理和显式凭证优先级通过；身份页显示认证来源和五级角色权限矩阵；本机 admin / 123456 登录与退出浏览器流程通过。
+>
 > 2026-07-19 / 0.12.1 补丁验收：环境模板与运行时配置漂移测试通过；Console HTML 热读取避免哈希资源 404；路由进入时滚动到顶部；标题栏说明文字、问号修复、重复标题隐藏和空租户标签处理通过；登录页与 14 个产品路由完成中文文案复核，普通业务枚举统一中文，必要技术专名保持原名。
 > 2026-07-19 / 0.12.0 补充验收：SLO 使用日志聚合并标记保留完整性；WebSocket 降级启用详情轮询；会话按 expires_at 到期；页签、筛选和详情可深链恢复；解析档案支持按 ID 查询；图片推理开放高级参数；接入应用支持编辑、配额与用量；REDIS_URL 启用跨副本 ws-ticket 原子消费。
 
@@ -15,9 +17,13 @@
 
 ## 功能闭环
 
-| 范围 | 0.12.1 结果 |
+| 范围 | 0.13.0 结果 |
 |---|---|
 | 生产入口 | /、/console、/console/next 统一提供 Console Next |
+| 工作台导航 | 八个业务入口直接展示；无“智能分析”中间菜单；/analysis 返回页面不存在 |
+| 人员登录 | 本地管理员、OIDC 企业 SSO 与高级 API Key/JWT 三类入口 |
+| 身份与权限 | 当前认证来源、租户、五级角色和服务端权限矩阵可见 |
+| 调试信息 | 仅完成名称优化，原可见性和脱敏行为保持不变 |
 | legacy | frontend/console 已删除；/console/legacy 与 /assets/console* 返回 404 |
 | 调试台 | 批量检索、批量比对、流注册/列表/事件、HTTP/错误码/request_id 诊断 |
 | SDK 示例 | Python/Node 异步批量与视频任务示例，可逐项复制 |
@@ -41,15 +47,17 @@
 
 | 检查 | 结果 |
 |---|---|
+| 0.13.0 发布验证 | Pytest 563 passed / 4 skipped；OIDC/本地登录专项 23 passed；Vitest 6 files / 19 tests；Vue TypeScript、ESLint、Vite production build、Compose config、diff check、本机浏览器登录验收和 /ready/deep version=0.13.0 通过 |
 | 0.12.1 发布验证 | Python strict typecheck 177 sources、Ruff、Pytest 549 passed / 4 skipped、npm check、Vitest 6 files / 18 tests、Playwright 15 passed / 0 skipped、deploy_check、平台 strict readiness 与 diff check 均通过 |
-| Python 全量回归 | 549 passed / 4 skipped，11 warnings（既有 HTTP 状态常量弃用提醒） |
+| Python 全量回归 | 563 passed / 4 skipped |
 | Node SDK | 通过 |
 | npm test | 通过，Node SDK + console:check 标准入口 |
-| Go SDK | 通过 |
-| Java SDK | 主源码 javac 编译通过；本机未安装 Maven，未执行 JUnit |
+| Go SDK | 当前环境未安装 Go 工具链，本轮未复跑 |
+| Java SDK | 主源码使用 javac -encoding UTF-8 编译通过；本机未安装 Maven，未执行 JUnit |
 | ESLint | 通过，0 warning |
+| Python 类型门禁 | 当前环境未安装 mypy；--fallback-ok 注解门禁通过 |
 | Vue TypeScript | 通过 |
-| Vitest | 6 files，18 passed |
+| Vitest | 6 files，19 passed |
 | Vite production build | 通过，随 npm run check 完成 |
 | Playwright | 通过，15 passed / 0 skipped |
 | 平台严格 readiness | 通过，strict_failure_count=0 |
@@ -58,7 +66,9 @@
 ## 安全边界
 
 - / 登录壳、/console、/console/next 与哈希静态资源可匿名读取；租户数据接口继续执行认证、权限和租户隔离。
-- API Key/JWT 仅存 sessionStorage；localStorage 和 URL 不保存凭证。
+- 本地账号/OIDC 使用 HttpOnly、SameSite Cookie 和 CSRF 双重校验；用户名、密码、会话签名不进入 localStorage、sessionStorage 或 URL。
+- API Key/JWT 仅存 sessionStorage；localStorage 和 URL 不保存凭证，显式非法凭证不会回退到浏览器 Cookie。
+- 默认 admin / 123456 只允许 loopback；生产或远程登录必须替换默认密码和会话密钥。
 - /v1/console/me 对任何有效主体可读，只返回主体、租户、角色、权限、scope 和过期时间；它不要求 admin:status，也不再返回已删除的 feature flag。
 - 静态资源路由拒绝目录穿越、点目录、index.html 和 source map；script-src 仅 self，无 unsafe-inline 与 unsafe-eval。
 - WebSocket ticket 短期、单次、租户/资源/权限绑定，日志只记录指纹；多副本通过 REDIS_URL 使用 Redis TTL 与 Lua 原子消费。

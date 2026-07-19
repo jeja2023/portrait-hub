@@ -7,7 +7,6 @@ import { ElAlert, ElButton, ElDialog, ElDrawer, ElInputNumber, ElSkeleton } from
 import { apiRequest } from "../../api/client";
 import type { JobListResponse, JobSummary } from "../../api/contracts";
 import { openTicketWebSocket, type LiveConnectionState } from "../../api/ws";
-import AnalysisNavigation from "../../components/AnalysisNavigation.vue";
 import DangerConfirm from "../../components/DangerConfirm.vue";
 import EmptyState from "../../components/EmptyState.vue";
 import FrameGrid from "../../components/FrameGrid.vue";
@@ -183,7 +182,6 @@ onBeforeUnmount(() => {
 
 <template>
   <div>
-    <AnalysisNavigation />
     <header class="page-header">
       <div>
         <h1>视频任务</h1>
