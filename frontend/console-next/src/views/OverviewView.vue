@@ -15,9 +15,9 @@ import {
   deviceQueueDepths,
   histogramPercentile,
   metricValue,
-  summarizeSloCallLogs,
+  summarizeSloCounts,
   summarizeSloMetrics,
-  type SloCallLog,
+  type SloCallLogSummary,
 } from "../utils/slo";
 
 const router = useRouter();
@@ -27,15 +27,20 @@ const loading = ref(true);
 const errorMessage = ref("");
 const ready = ref<Record<string, unknown> | null>(null);
 const rawMetrics = ref("");
-const callLogs30d = ref<SloCallLog[]>([]);
+const callLogs30d = ref<SloCallLogSummary | null>(null);
 const callLogsAvailable = ref(false);
+const callLogsComplete = ref(false);
 const showRaw = ref(false);
 
 const metricAvailability = computed(() => summarizeSloMetrics(rawMetrics.value));
 const availability = computed(() =>
-  callLogsAvailable.value ? summarizeSloCallLogs(callLogs30d.value) : metricAvailability.value,
+  callLogsAvailable.value && callLogs30d.value
+    ? summarizeSloCounts(callLogs30d.value.request_count, callLogs30d.value.error_count)
+    : metricAvailability.value,
 );
-const successRateSource = computed(() => (callLogsAvailable.value ? "call_logs_30d" : "prometheus_counters"));
+const successRateSource = computed(() =>
+  callLogsAvailable.value ? (callLogsComplete.value ? "call_logs_30d" : "call_logs_retained") : "prometheus_counters",
+);
 const requestCount = computed(() => availability.value.request_count);
 const errorCount = computed(() => availability.value.error_count);
 const queueDepth = computed(() => metricValue(rawMetrics.value, "gpu_worker_gpu_queue_depth"));
@@ -46,7 +51,8 @@ const inferenceP99 = computed(() => histogramPercentile(rawMetrics.value, "gpu_w
 const gpuDeviceQueueDepths = computed(() => deviceQueueDepths(rawMetrics.value));
 const sloPanel = computed(() => ({
   success_rate_source: successRateSource.value,
-  call_logs_30d: callLogs30d.value.length,
+  call_logs_30d: callLogs30d.value?.request_count ?? 0,
+  call_logs_complete: callLogsComplete.value,
   call_log_window_seconds: SLO_WINDOW_SECONDS,
   ...availability.value,
   inference_p95_seconds: inferenceP95.value,
@@ -73,13 +79,13 @@ async function refresh(): Promise<void> {
   loading.value = true;
   errorMessage.value = "";
   const callLogPath =
-    "/v1/access/call-logs?limit=500&created_since=" +
+    "/v1/access/call-logs/summary?created_since=" +
     (Math.floor(Date.now() / 1000) - SLO_WINDOW_SECONDS);
   const [readyResult, metricsResult, callLogsResult] = await Promise.allSettled([
     apiRequest<Record<string, unknown>>("/ready/deep"),
     apiText("/metrics"),
     capabilities.hasPermission("access:read")
-      ? apiRequest<{ logs: SloCallLog[] }>(callLogPath)
+      ? apiRequest<SloCallLogSummary>(callLogPath)
       : Promise.reject(new Error("access:read unavailable")),
   ]);
 
@@ -97,12 +103,14 @@ async function refresh(): Promise<void> {
     errorMessage.value = errorBannerMessage(metricsResult.reason, "平台指标加载失败");
   }
 
-  if (callLogsResult.status === "fulfilled" && callLogsResult.value.logs.length > 0) {
-    callLogs30d.value = callLogsResult.value.logs;
+  if (callLogsResult.status === "fulfilled") {
+    callLogs30d.value = callLogsResult.value;
     callLogsAvailable.value = true;
+    callLogsComplete.value = callLogsResult.value.complete;
   } else {
-    callLogs30d.value = [];
+    callLogs30d.value = null;
     callLogsAvailable.value = false;
+    callLogsComplete.value = false;
   }
 
   loading.value = false;
@@ -146,7 +154,7 @@ onMounted(() => void refresh());
           :value="availability.success_rate.toLocaleString('zh-CN', { style: 'percent', maximumFractionDigits: 3 })"
           :tone="availability.success_rate < 0.995 ? 'danger' : 'success'"
           :icon="Clock3"
-          :detail="successRateSource === 'call_logs_30d' ? '调用日志窗口' : 'Prometheus 累计回退'"
+          :detail="successRateSource === 'call_logs_30d' ? '30 天调用日志窗口' : successRateSource === 'call_logs_retained' ? '调用日志保留窗口（已截断）' : 'Prometheus 累计回退'"
         />
         <StatCard
           label="错误预算剩余"

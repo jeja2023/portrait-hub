@@ -58,7 +58,13 @@ def best_person_detection(image: Image.Image, persons: list[dict[str, Any]]) -> 
     }
 
 
-async def detect_body_embedding_crop(image: Image.Image) -> tuple[Image.Image, dict[str, Any]]:
+async def detect_body_embedding_crop(
+    image: Image.Image,
+    *,
+    confidence_override: float | None = None,
+    iou_override: float | None = None,
+    max_detections_override: int | None = None,
+) -> tuple[Image.Image, dict[str, Any]]:
     global _PERSON_DETECTION_RUNTIME_UNAVAILABLE
     if _runtime_cooldown_active(_PERSON_DETECTION_RUNTIME_UNAVAILABLE):
         return image, {"selection_strategy": "whole_image_reid"}
@@ -72,9 +78,21 @@ async def detect_body_embedding_crop(image: Image.Image) -> tuple[Image.Image, d
         return image, {"selection_strategy": "whole_image_reid"}
 
     try:
-        confidence = float(runtime_output_value(runtime, "confidence", runtime.capability.get("confidence", 0.25)))
-        iou = float(runtime_output_value(runtime, "iou", runtime.capability.get("iou", 0.45)))
-        max_detections = int(runtime_output_value(runtime, "max_detections", runtime.capability.get("max_detections", 8)))
+        confidence = float(
+            confidence_override
+            if confidence_override is not None
+            else runtime_output_value(runtime, "confidence", runtime.capability.get("confidence", 0.25))
+        )
+        iou = float(
+            iou_override
+            if iou_override is not None
+            else runtime_output_value(runtime, "iou", runtime.capability.get("iou", 0.45))
+        )
+        max_detections = int(
+            max_detections_override
+            if max_detections_override is not None
+            else runtime_output_value(runtime, "max_detections", runtime.capability.get("max_detections", 8))
+        )
         frames, meta = await infer_person_frames(
             runtime.bundle,
             runtime.cache_key,
@@ -114,7 +132,13 @@ async def detect_body_embedding_crop(image: Image.Image) -> tuple[Image.Image, d
     }
 
 
-async def run_reid_body_embedding(image: Image.Image) -> tuple[list[float], dict[str, Any]] | None:
+async def run_reid_body_embedding(
+    image: Image.Image,
+    *,
+    confidence: float | None = None,
+    iou: float | None = None,
+    max_detections: int | None = None,
+) -> tuple[list[float], dict[str, Any]] | None:
     global _BODY_EMBEDDING_RUNTIME_UNAVAILABLE
     if _runtime_cooldown_active(_BODY_EMBEDDING_RUNTIME_UNAVAILABLE):
         return None
@@ -128,7 +152,12 @@ async def run_reid_body_embedding(image: Image.Image) -> tuple[list[float], dict
         return None
 
     try:
-        crop, selection_meta = await detect_body_embedding_crop(image)
+        crop, selection_meta = await detect_body_embedding_crop(
+            image,
+            confidence_override=confidence,
+            iou_override=iou,
+            max_detections_override=max_detections,
+        )
         embeddings, meta = await infer_reid_images(runtime.bundle, runtime.cache_key, [crop])
     except Exception as exc:
         _BODY_EMBEDDING_RUNTIME_UNAVAILABLE = _runtime_cooldown_deadline()
@@ -161,11 +190,23 @@ def fallback_body_embedding_record(image: Image.Image, *, include_embedding: boo
     return record
 
 
-async def infer_body_record_for_image(image: Image.Image, *, include_embedding: bool = True) -> dict[str, Any]:
+async def infer_body_record_for_image(
+    image: Image.Image,
+    *,
+    include_embedding: bool = True,
+    confidence: float | None = None,
+    iou: float | None = None,
+    max_detections: int | None = None,
+) -> dict[str, Any]:
     if not include_embedding:
         return fallback_body_embedding_record(image, include_embedding=False)
 
-    result = await run_reid_body_embedding(image)
+    result = await run_reid_body_embedding(
+        image,
+        confidence=confidence,
+        iou=iou,
+        max_detections=max_detections,
+    )
     if result is None:
         return fallback_body_embedding_record(image, include_embedding=True)
 

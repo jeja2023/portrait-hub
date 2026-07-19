@@ -226,6 +226,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/v1/access/call-logs/summary": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** V1 Access Call Logs Summary */
+    get: operations["v1_access_call_logs_summary_v1_access_call_logs_summary_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/v1/access/error-codes": {
     parameters: {
       query?: never;
@@ -628,6 +645,23 @@ export interface paths {
     };
     /** V1 List Analysis Results */
     get: operations["v1_list_analysis_results_v1_analysis_results_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/analysis/results/{archive_id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** V1 Get Analysis Result */
+    get: operations["v1_get_analysis_result_v1_analysis_results__archive_id__get"];
     put?: never;
     post?: never;
     delete?: never;
@@ -1764,6 +1798,8 @@ export interface components {
     };
     /** Body_v1_infer_faces_v1_infer_faces_post */
     Body_v1_infer_faces_v1_infer_faces_post: {
+      /** Confidence */
+      confidence?: number | null;
       /**
        * Fallback To Image
        * @default false
@@ -1776,6 +1812,10 @@ export interface components {
        * @default false
        */
       include_embeddings: boolean;
+      /** Iou */
+      iou?: number | null;
+      /** Max Detections */
+      max_detections?: number | null;
     };
     /** Body_v1_infer_gait_v1_infer_gait_post */
     Body_v1_infer_gait_v1_infer_gait_post: {
@@ -1789,6 +1829,8 @@ export interface components {
     };
     /** Body_v1_infer_persons_v1_infer_persons_post */
     Body_v1_infer_persons_v1_infer_persons_post: {
+      /** Confidence */
+      confidence?: number | null;
       /** Files */
       files: string[];
       /**
@@ -1796,6 +1838,10 @@ export interface components {
        * @default false
        */
       include_embeddings: boolean;
+      /** Iou */
+      iou?: number | null;
+      /** Max Detections */
+      max_detections?: number | null;
     };
     /** Body_v1_infer_pose_v1_infer_pose_post */
     Body_v1_infer_pose_v1_infer_pose_post: {
@@ -2436,6 +2482,49 @@ export interface operations {
         created_since?: number | null;
         created_until?: number | null;
         limit?: number;
+      };
+      header?: {
+        authorization?: string | null;
+        "x-api-key"?: string | null;
+        "x-tenant-id"?: string | null;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            [key: string]: unknown;
+          };
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  v1_access_call_logs_summary_v1_access_call_logs_summary_get: {
+    parameters: {
+      query?: {
+        request_id?: string | null;
+        endpoint?: string | null;
+        status?: string | null;
+        application_id?: string | null;
+        error_code?: string | null;
+        created_since?: number | null;
+        created_until?: number | null;
       };
       header?: {
         authorization?: string | null;
@@ -3435,6 +3524,43 @@ export interface operations {
         "x-tenant-id"?: string | null;
       };
       path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            [key: string]: unknown;
+          };
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  v1_get_analysis_result_v1_analysis_results__archive_id__get: {
+    parameters: {
+      query?: never;
+      header?: {
+        authorization?: string | null;
+        "x-api-key"?: string | null;
+        "x-tenant-id"?: string | null;
+      };
+      path: {
+        archive_id: string;
+      };
       cookie?: never;
     };
     requestBody?: never;

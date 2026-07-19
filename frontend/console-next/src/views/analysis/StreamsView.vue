@@ -143,6 +143,13 @@ function applyLivePayload(payload: unknown): void {
   if (Array.isArray(live.events)) detailEvents.value = live.events;
 }
 
+async function refreshDetail(streamId: string): Promise<void> {
+  const payload = await apiRequest<{ stream: StreamDetail }>(
+    `/v1/streams/${encodeURIComponent(streamId)}`,
+  );
+  applyLivePayload({ stream: payload.stream });
+}
+
 async function startLive(stream: StreamSummary): Promise<void> {
   stopLive?.();
   stopLive = null;
@@ -151,6 +158,7 @@ async function startLive(stream: StreamSummary): Promise<void> {
     resourceId: stream.stream_id,
     onMessage: applyLivePayload,
     onState: (state) => (liveState.value = state),
+    poll: () => refreshDetail(stream.stream_id),
   });
 }
 

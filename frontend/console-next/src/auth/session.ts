@@ -8,9 +8,11 @@ interface StoredSession {
   apiKey: string;
   bearer: string;
   authenticated: boolean;
+  expiresAt: number | null;
 }
 
 const SESSION_KEY = "portraitHubConsoleSessionV2";
+let expiryTimer: number | null = null;
 
 function emptySession(): StoredSession {
   return {
@@ -19,6 +21,7 @@ function emptySession(): StoredSession {
     apiKey: "",
     bearer: "",
     authenticated: false,
+    expiresAt: null,
   };
 }
 
@@ -35,6 +38,7 @@ function readStoredSession(): StoredSession {
       apiKey: typeof parsed.apiKey === "string" ? parsed.apiKey : "",
       bearer: typeof parsed.bearer === "string" ? parsed.bearer : "",
       authenticated: parsed.authenticated === true,
+      expiresAt: typeof parsed.expiresAt === "number" && Number.isFinite(parsed.expiresAt) ? parsed.expiresAt : null,
     };
   } catch {
     return emptySession();
@@ -49,6 +53,19 @@ function persistSession(): void {
   window.sessionStorage.setItem(SESSION_KEY, JSON.stringify(sessionState));
 }
 
+function armExpiryTimer(): void {
+  if (typeof window === "undefined") return;
+  if (expiryTimer !== null) window.clearTimeout(expiryTimer);
+  expiryTimer = null;
+  if (!sessionState.authenticated || sessionState.expiresAt === null) return;
+  const delay = Math.max(0, sessionState.expiresAt * 1000 - Date.now());
+  expiryTimer = window.setTimeout(() => {
+    if (!sessionState.authenticated) return;
+    clearSession();
+    window.dispatchEvent(new CustomEvent("portrait:session-expired"));
+  }, delay);
+}
+
 export function beginSession(input: {
   tenantId: string;
   authMode: AuthMode;
@@ -60,11 +77,20 @@ export function beginSession(input: {
   sessionState.apiKey = input.authMode === "api-key" ? (input.apiKey ?? "").trim() : "";
   sessionState.bearer = input.authMode === "jwt" ? (input.bearer ?? "").trim() : "";
   sessionState.authenticated = false;
+  sessionState.expiresAt = null;
+  armExpiryTimer();
+  persistSession();
+}
+
+export function setSessionExpiry(expiresAt: number | null | undefined): void {
+  sessionState.expiresAt = typeof expiresAt === "number" && Number.isFinite(expiresAt) ? expiresAt : null;
+  armExpiryTimer();
   persistSession();
 }
 
 export function markSessionAuthenticated(): void {
   sessionState.authenticated = true;
+  armExpiryTimer();
   persistSession();
 }
 
@@ -81,8 +107,12 @@ export function authHeaders(): HeadersInit {
 }
 
 export function clearSession(): void {
+  if (typeof window !== "undefined" && expiryTimer !== null) window.clearTimeout(expiryTimer);
+  expiryTimer = null;
   Object.assign(sessionState, emptySession());
   if (typeof window !== "undefined") {
     window.sessionStorage.removeItem(SESSION_KEY);
   }
 }
+
+armExpiryTimer();

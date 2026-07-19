@@ -19,6 +19,7 @@ import {
 import { ApiError, apiRaw, apiRequest, jsonBody } from "../../api/client";
 import { errorBannerMessage } from "../../utils/errors";
 import { redactForDisplay } from "../../utils/redact";
+import { useRouteTab } from "../../utils/routeState";
 
 type EndpointKind = "read" | "batch-search" | "batch-compare" | "stream-create" | "stream-events";
 interface EndpointDefinition {
@@ -91,7 +92,7 @@ const diagnostics = ref<Diagnostics | null>(null);
 const referenceLoading = ref(false);
 const errorCodes = ref<Record<string, unknown>[]>([]);
 const openapiPaths = ref<Array<{ method: string; path: string; summary: string }>>([]);
-const tab = ref("debug");
+const tab = useRouteTab("debug");
 const filesA = ref<File[]>([]);
 const filesB = ref<File[]>([]);
 const modality = ref("body");

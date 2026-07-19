@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import threading
 import time
 from dataclasses import dataclass
@@ -16,7 +17,13 @@ from app.settings import (
     CONSOLE_WS_TICKET_MAX_ENTRIES,
     CONSOLE_WS_TICKET_TTL_SECONDS,
     RBAC_ENABLED,
+    REDIS_URL,
 )
+
+try:
+    import redis
+except ImportError:  # pragma: no cover - optional production dependency
+    redis = None
 
 
 @dataclass(frozen=True)
@@ -31,6 +38,46 @@ class ConsoleWebSocketTicket:
 
 _TICKETS: dict[str, ConsoleWebSocketTicket] = {}
 _TICKETS_LOCK = threading.RLock()
+_REDIS_TICKET_PREFIX = "portrait:console:ws-ticket:"
+_REDIS_GETDEL_SCRIPT = """
+local value = redis.call("GET", KEYS[1])
+if value then redis.call("DEL", KEYS[1]) end
+return value
+"""
+
+
+def _redis_ticket_client() -> Any | None:
+    if not REDIS_URL:
+        return None
+    if redis is None:
+        raise RuntimeError("redis is required when REDIS_URL is configured")
+    return redis.Redis.from_url(REDIS_URL, decode_responses=True)
+
+
+def _ticket_payload(record: ConsoleWebSocketTicket) -> str:
+    return json.dumps(
+        {
+            "tenant_id": record.tenant_id,
+            "resource_type": record.resource_type,
+            "resource_id": record.resource_id,
+            "permission": record.permission,
+            "expires_at": record.expires_at,
+            "fingerprint": record.fingerprint,
+        },
+        separators=(",", ":"),
+    )
+
+
+def _ticket_from_payload(payload: str) -> ConsoleWebSocketTicket:
+    data = json.loads(payload)
+    return ConsoleWebSocketTicket(
+        tenant_id=str(data["tenant_id"]),
+        resource_type=str(data["resource_type"]),
+        resource_id=str(data["resource_id"]),
+        permission=str(data["permission"]),
+        expires_at=float(data["expires_at"]),
+        fingerprint=str(data["fingerprint"]),
+    )
 
 
 def _ticket_digest(ticket: str) -> str:
@@ -52,6 +99,25 @@ def issue_console_ws_ticket(
     now: float | None = None,
 ) -> tuple[str, ConsoleWebSocketTicket]:
     issued_at = time.time() if now is None else float(now)
+    redis_client = _redis_ticket_client()
+    if redis_client is not None:
+        raw_ticket = f"cwt_{token_urlsafe(32)}"
+        digest = _ticket_digest(raw_ticket)
+        record = ConsoleWebSocketTicket(
+            tenant_id=tenant_id,
+            resource_type=resource_type,
+            resource_id=resource_id,
+            permission=permission,
+            expires_at=issued_at + CONSOLE_WS_TICKET_TTL_SECONDS,
+            fingerprint=digest[:16],
+        )
+        redis_client.setex(
+            _REDIS_TICKET_PREFIX + digest,
+            CONSOLE_WS_TICKET_TTL_SECONDS,
+            _ticket_payload(record),
+        )
+        return raw_ticket, record
+
     with _TICKETS_LOCK:
         _purge_expired_tickets(issued_at)
         while len(_TICKETS) >= CONSOLE_WS_TICKET_MAX_ENTRIES:
@@ -85,9 +151,18 @@ def consume_console_ws_ticket(
 ) -> bool:
     current_time = time.time() if now is None else float(now)
     digest = _ticket_digest(raw_ticket)
-    with _TICKETS_LOCK:
-        _purge_expired_tickets(current_time)
-        record = _TICKETS.pop(digest, None)
+    redis_client = _redis_ticket_client()
+    if redis_client is not None:
+        payload = redis_client.eval(
+            _REDIS_GETDEL_SCRIPT,
+            1,
+            _REDIS_TICKET_PREFIX + digest,
+        )
+        record = _ticket_from_payload(payload) if isinstance(payload, str) else None
+    else:
+        with _TICKETS_LOCK:
+            _purge_expired_tickets(current_time)
+            record = _TICKETS.pop(digest, None)
     if record is None:
         return False
     return (
@@ -100,6 +175,16 @@ def consume_console_ws_ticket(
 
 
 def clear_console_ws_tickets() -> None:
+    redis_client = _redis_ticket_client()
+    if redis_client is not None:
+        cursor = 0
+        pattern = _REDIS_TICKET_PREFIX + "*"
+        while True:
+            cursor, keys = redis_client.scan(cursor=cursor, match=pattern, count=100)
+            if keys:
+                redis_client.delete(*keys)
+            if cursor == 0:
+                break
     with _TICKETS_LOCK:
         _TICKETS.clear()
 

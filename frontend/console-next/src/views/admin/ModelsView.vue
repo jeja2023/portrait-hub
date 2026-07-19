@@ -17,6 +17,7 @@ import DangerConfirm from "../../components/DangerConfirm.vue";
 import EmptyState from "../../components/EmptyState.vue";
 import { useCapabilitiesStore } from "../../stores/capabilities";
 import { errorBannerMessage } from "../../utils/errors";
+import { useRouteTab } from "../../utils/routeState";
 
 interface ModelRow {
   id?: string;
@@ -42,7 +43,7 @@ const recommendations = ref<Record<string, unknown>>({});
 const loading = ref(true);
 const actionId = ref("");
 const errorMessage = ref("");
-const tab = ref("models");
+const tab = useRouteTab("models");
 const releaseAlias = ref("");
 const releaseTarget = ref("");
 const releaseLoading = ref(false);

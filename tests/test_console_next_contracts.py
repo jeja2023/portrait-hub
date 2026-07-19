@@ -12,6 +12,7 @@ from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
 from app import portrait_access, portrait_auth, portrait_console_access, routes_portrait_access, security
+from app.portrait_call_logs import clear_call_logs, record_call_log, summarize_call_logs
 from app.portrait_console_access import clear_console_ws_tickets
 from app.portrait_gallery import GALLERY, gallery_key
 from app.portrait_gallery_records import FeatureRecord, PersonRecord
@@ -551,3 +552,76 @@ def test_v1_authenticated_responses_default_to_no_store() -> None:
 
     assert jobs.headers["Cache-Control"] == "no-store"
     assert gallery.headers["Cache-Control"] == "no-store"
+
+def test_console_ws_ticket_uses_atomic_shared_store_when_configured(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class SharedStore:
+        def __init__(self) -> None:
+            self.values: dict[str, str] = {}
+
+        def setex(self, key: str, _ttl: int, value: str) -> None:
+            self.values[key] = value
+
+        def eval(self, _script: str, _key_count: int, key: str) -> str | None:
+            return self.values.pop(key, None)
+
+        def scan(self, *, cursor: int, match: str, count: int) -> tuple[int, list[str]]:
+            del cursor, count
+            prefix = match.removesuffix("*")
+            return 0, [key for key in self.values if key.startswith(prefix)]
+
+        def delete(self, *keys: str) -> None:
+            for key in keys:
+                self.values.pop(key, None)
+
+    shared = SharedStore()
+    monkeypatch.setattr(portrait_console_access, "_redis_ticket_client", lambda: shared)
+    raw_ticket, _ = portrait_console_access.issue_console_ws_ticket(
+        tenant_id="tenant-shared",
+        resource_type="job",
+        resource_id="job-shared",
+        permission="jobs:read",
+    )
+
+    assert portrait_console_access.consume_console_ws_ticket(
+        raw_ticket,
+        tenant_id="tenant-shared",
+        resource_type="job",
+        resource_id="job-shared",
+        permission="jobs:read",
+    )
+    assert not portrait_console_access.consume_console_ws_ticket(
+        raw_ticket,
+        tenant_id="tenant-shared",
+        resource_type="job",
+        resource_id="job-shared",
+        permission="jobs:read",
+    )
+def test_call_log_summary_counts_all_retained_rows_without_page_limit() -> None:
+    clear_call_logs()
+    try:
+        for index in range(750):
+            record_call_log(
+                request_id=f"req-{index}",
+                tenant_id="tenant-slo",
+                method="GET",
+                path="/v1/test",
+                status_code=500 if index % 10 == 0 else 200,
+                latency_ms=4,
+                created_at=float(index),
+            )
+        summary = summarize_call_logs("tenant-slo", created_since=0)
+        assert summary["request_count"] == 750
+        assert summary["error_count"] == 75
+        assert summary["success_count"] == 675
+        assert summary["complete"] is True
+    finally:
+        clear_call_logs()
+
+def test_analysis_result_detail_is_tenant_scoped_and_returns_not_found() -> None:
+    response = TestClient(app).get(
+        "/v1/analysis/results/archive-missing",
+        headers={"x-tenant-id": "tenant-a"},
+    )
+    assert response.status_code == 404

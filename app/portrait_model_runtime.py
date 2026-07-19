@@ -126,9 +126,19 @@ async def infer_face_records_for_image(
     *,
     include_embeddings: bool = False,
     fallback: bool = False,
+    confidence: float | None = None,
+    iou: float | None = None,
+    max_detections: int | None = None,
 ) -> list[dict[str, Any]]:
     await _prepare_runtime_dependencies()
-    return await runtime_face.infer_face_records_for_image(image, include_embeddings=include_embeddings, fallback=fallback)
+    return await runtime_face.infer_face_records_for_image(
+        image,
+        include_embeddings=include_embeddings,
+        fallback=fallback,
+        confidence=confidence,
+        iou=iou,
+        max_detections=max_detections,
+    )
 
 
 async def infer_best_face_embedding_for_image(image: Image.Image) -> tuple[list[float], dict[str, Any]]:
@@ -168,10 +178,23 @@ def fallback_body_embedding_record(image: Image.Image, *, include_embedding: boo
     return runtime_body.fallback_body_embedding_record(image, include_embedding=include_embedding)
 
 
-async def infer_body_record_for_image(image: Image.Image, *, include_embedding: bool = True) -> dict[str, Any]:
+async def infer_body_record_for_image(
+    image: Image.Image,
+    *,
+    include_embedding: bool = True,
+    confidence: float | None = None,
+    iou: float | None = None,
+    max_detections: int | None = None,
+) -> dict[str, Any]:
     await _prepare_runtime_dependencies()
     try:
-        return await runtime_body.infer_body_record_for_image(image, include_embedding=include_embedding)
+        return await runtime_body.infer_body_record_for_image(
+            image,
+            include_embedding=include_embedding,
+            confidence=confidence,
+            iou=iou,
+            max_detections=max_detections,
+        )
     finally:
         await _commit_body_runtime_flags()
 

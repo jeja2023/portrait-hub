@@ -1,4 +1,4 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { Code2, Eye, Plus, RefreshCw, Save, Search, Settings2, Trash2, UserRound } from "@lucide/vue";
@@ -36,7 +36,7 @@ const prefs = usePrefsStore();
 const people = ref<PersonSummary[]>([]);
 const loading = ref(true);
 const errorMessage = ref("");
-const query = ref("");
+const query = ref(typeof route.query.q === "string" ? route.query.q : "");
 const nextCursor = ref<string | null>(null);
 const detail = ref<Record<string, unknown> | null>(null);
 const detailName = ref("");
@@ -84,6 +84,9 @@ async function loadPeople(append = false): Promise<void> {
   loading.value = !append;
   errorMessage.value = "";
   try {
+    if (!append) {
+      void router.replace({ query: { ...route.query, q: query.value.trim() || undefined } });
+    }
     const params = new URLSearchParams({ limit: "30" });
     if (query.value.trim()) params.set("query", query.value.trim());
     if (append && nextCursor.value) params.set("cursor", nextCursor.value);
@@ -112,14 +115,14 @@ async function openDetail(personId: string): Promise<void> {
       key,
       value: typeof value === "string" ? value : String(value ?? ""),
     }));
-    await router.replace(`/gallery/${encodeURIComponent(personId)}`);
+    await router.replace({ path: "/gallery/" + encodeURIComponent(personId), query: route.query });
   } catch (error) {
     errorMessage.value = errorBannerMessage(error, "人员详情加载失败");
   }
 }
 function closeDetail(): void {
   detail.value = null;
-  void router.replace("/gallery");
+  void router.replace({ path: "/gallery", query: route.query });
 }
 function openEnroll(): void {
   enrollStep.value = 0;

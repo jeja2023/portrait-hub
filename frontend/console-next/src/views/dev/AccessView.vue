@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from "vue";
-import { Copy, Plus, RefreshCw, RotateCw, Send } from "@lucide/vue";
+import { Copy, Pencil, Plus, RefreshCw, RotateCw, Send } from "@lucide/vue";
 import {
   ElAlert,
   ElButton,
   ElDialog,
   ElInput,
+  ElInputNumber,
   ElMessage,
   ElOption,
   ElSelect,
@@ -20,6 +21,7 @@ import EmptyState from "../../components/EmptyState.vue";
 import { useCapabilitiesStore } from "../../stores/capabilities";
 import { errorBannerMessage } from "../../utils/errors";
 import { formatTimestamp, statusLabels } from "../../utils/format";
+import { useRouteTab } from "../../utils/routeState";
 
 interface ApplicationRow {
   app_id: string;
@@ -28,6 +30,13 @@ interface ApplicationRow {
   scopes: string[];
   status: string;
   last_called_at?: number;
+  rate_limit_per_minute?: number | null;
+  rate_limit_burst?: number | null;
+  daily_quota?: number | null;
+  daily_quota_used?: number;
+  call_count?: number;
+  error_count?: number;
+  error_rate?: number;
 }
 interface WebhookRow {
   webhook_id: string;
@@ -39,13 +48,15 @@ interface WebhookRow {
 }
 
 const capabilities = useCapabilitiesStore();
-const tab = ref("applications");
+const tab = useRouteTab("applications");
 const loading = ref(true);
 const actionLoading = ref(false);
 const errorMessage = ref("");
 const applications = ref<ApplicationRow[]>([]);
 const webhooks = ref<WebhookRow[]>([]);
 const appDialogOpen = ref(false);
+const editDialogOpen = ref(false);
+const editingApp = ref<ApplicationRow | null>(null);
 const webhookDialogOpen = ref(false);
 const rotateConfirmOpen = ref(false);
 const rotateType = ref<"application" | "webhook">("application");
@@ -56,6 +67,14 @@ const appForm = reactive({
   name: "",
   owner: "",
   scopes: "infer,compare,gallery:read",
+});
+const editForm = reactive({
+  name: "",
+  owner: "",
+  scopes: "",
+  rate_limit_per_minute: null as number | null,
+  rate_limit_burst: null as number | null,
+  daily_quota: null as number | null,
 });
 const webhookForm = reactive({
   name: "",
@@ -109,6 +128,42 @@ async function createApplication(): Promise<void> {
     await load();
   } catch (error) {
     errorMessage.value = errorBannerMessage(error, "应用创建失败");
+  } finally {
+    actionLoading.value = false;
+  }
+}
+
+function openEdit(app: ApplicationRow): void {
+  editingApp.value = app;
+  editForm.name = app.name;
+  editForm.owner = app.owner;
+  editForm.scopes = app.scopes.join(",");
+  editForm.rate_limit_per_minute = app.rate_limit_per_minute ?? null;
+  editForm.rate_limit_burst = app.rate_limit_burst ?? null;
+  editForm.daily_quota = app.daily_quota ?? null;
+  editDialogOpen.value = true;
+}
+
+async function saveEdit(): Promise<void> {
+  if (!editingApp.value || !editForm.name.trim()) return;
+  actionLoading.value = true;
+  try {
+    await apiRequest("/v1/access/applications/" + encodeURIComponent(editingApp.value.app_id), {
+      method: "PATCH",
+      body: jsonBody({
+        name: editForm.name.trim(),
+        owner: editForm.owner.trim() || "platform",
+        scopes: splitList(editForm.scopes),
+        rate_limit_per_minute: editForm.rate_limit_per_minute,
+        rate_limit_burst: editForm.rate_limit_burst,
+        daily_quota: editForm.daily_quota,
+      }),
+    });
+    editDialogOpen.value = false;
+    ElMessage.success("应用配置已保存");
+    await load();
+  } catch (error) {
+    errorMessage.value = errorBannerMessage(error, "应用配置保存失败");
   } finally {
     actionLoading.value = false;
   }
@@ -252,6 +307,7 @@ onMounted(() => void load());
                     <th>权限范围</th>
                     <th>状态</th>
                     <th>最近调用</th>
+                    <th>用量</th>
                     <th>操作</th>
                   </tr>
                 </thead>
@@ -274,7 +330,13 @@ onMounted(() => void load());
                     </td>
                     <td>{{ formatTimestamp(app.last_called_at) }}</td>
                     <td>
+                      {{ app.call_count ?? 0 }} 次
+                      <small v-if="app.daily_quota"> / {{ app.daily_quota }} 日配额</small>
+                      <br /><small>错误率 {{ ((app.error_rate ?? 0) * 100).toFixed(2) }}%</small>
+                    </td>
+                    <td>
                       <div v-if="capabilities.hasPermission('access:write')" class="inline-actions">
+                        <ElButton text :icon="Pencil" @click="openEdit(app)">编辑</ElButton>
                         <ElButton text @click="toggleApplication(app)">{{
                           app.status === "active" ? "停用" : "启用"
                         }}</ElButton>
@@ -361,6 +423,23 @@ onMounted(() => void load());
           @click="createApplication"
           >创建</ElButton
         >
+      </template>
+    </ElDialog>
+
+    <ElDialog v-model="editDialogOpen" title="编辑接入应用" width="min(620px, 92vw)" :close-on-click-modal="false">
+      <div class="dialog-form">
+        <label><span>应用名称</span><ElInput v-model="editForm.name" maxlength="256" /></label>
+        <label><span>负责人</span><ElInput v-model="editForm.owner" maxlength="256" /></label>
+        <label><span>权限范围（逗号分隔）</span><ElInput v-model="editForm.scopes" type="textarea" maxlength="2000" /></label>
+        <div class="quota-grid">
+          <label><span>每分钟限流</span><ElInputNumber v-model="editForm.rate_limit_per_minute" :min="0" :max="1000000000" /></label>
+          <label><span>突发限流</span><ElInputNumber v-model="editForm.rate_limit_burst" :min="0" :max="1000000000" /></label>
+          <label><span>每日配额</span><ElInputNumber v-model="editForm.daily_quota" :min="0" :max="1000000000" /></label>
+        </div>
+      </div>
+      <template #footer>
+        <ElButton @click="editDialogOpen = false">取消</ElButton>
+        <ElButton type="primary" :loading="actionLoading" :disabled="!editForm.name.trim()" @click="saveEdit">保存</ElButton>
       </template>
     </ElDialog>
 
@@ -470,5 +549,16 @@ onMounted(() => void load());
   min-width: 0;
   flex: 1;
   overflow-wrap: anywhere;
+}
+.quota-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+.quota-grid label {
+  display: grid;
+  gap: 6px;
+  color: #62706d;
+  font-size: 12px;
 }
 </style>

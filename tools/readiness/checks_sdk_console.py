@@ -110,8 +110,11 @@ def check_sdk_and_console(root: Path) -> list[dict[str, Any]]:
             "name": "frontend:slo_panel_operational_contract",
             "ok": (
                 "export function summarizeSloCallLogs" in console_module_sources
+                and "export interface SloCallLogSummary" in console_module_sources
                 and "call_logs_30d" in console_module_sources
-                and '"/v1/access/call-logs?limit=500&created_since="' in console_module_sources
+                and '"/v1/access/call-logs/summary?created_since="' in console_module_sources
+                and "call_logs_complete" in console_module_sources
+                and "call_logs_retained" in console_module_sources
                 and "queue_p95_seconds" in console_module_sources
                 and "queue_p99_seconds" in console_module_sources
                 and "gpu_queue_depth" in console_module_sources

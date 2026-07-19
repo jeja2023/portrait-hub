@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   authHeaders,
@@ -6,6 +6,7 @@ import {
   clearSession,
   markSessionAuthenticated,
   sessionState,
+  setSessionExpiry,
 } from "../src/auth/session";
 
 describe("console session", () => {
@@ -51,5 +52,23 @@ describe("console session", () => {
     expect(sessionState.authenticated).toBe(false);
     expect(sessionState.bearer).toBe("");
     expect(authHeaders()).toEqual({});
+  });
+  it("clears an authenticated session when the server expiry is reached", () => {
+    vi.useFakeTimers();
+    const expired = vi.fn();
+    window.addEventListener("portrait:session-expired", expired, { once: true });
+    try {
+      beginSession({ authMode: "jwt", tenantId: "tenant-expiring", bearer: "jwt-token" });
+      markSessionAuthenticated();
+      setSessionExpiry(Date.now() / 1000 + 5);
+
+      vi.advanceTimersByTime(5_100);
+
+      expect(sessionState.authenticated).toBe(false);
+      expect(sessionState.expiresAt).toBeNull();
+      expect(expired).toHaveBeenCalledOnce();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

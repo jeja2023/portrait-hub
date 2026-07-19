@@ -87,11 +87,7 @@ test("[E2E-ROUTE-01] supports direct deep links after authentication", async ({ 
   expect(await page.evaluate(() => window.__portraitCspViolations)).toEqual([]);
 });
 
-test("[E2E-ROUTES-02] loads every product route and opens guarded dialogs without CSP violations", async ({
-  page,
-}, testInfo) => {
-  test.skip(testInfo.project.name !== "chromium-desktop");
-
+test("[E2E-ROUTES-02] loads every product route and opens guarded dialogs without CSP violations", async ({ page }) => {
   await page.goto("/console/next");
   await page.getByRole("button", { name: "进入控制台" }).click();
   await expect(page).toHaveURL(/\/console#\/$/);

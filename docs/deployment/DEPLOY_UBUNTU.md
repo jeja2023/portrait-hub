@@ -890,9 +890,10 @@ Compose 默认绑定：
 - 已设置 `API_TOKEN`，并配置 `API_TOKEN_TENANT_ID`；只有受控平台运维场景才可显式设置 `API_TOKEN_ALLOW_TENANT_OVERRIDE=true`。
 - 已设置调用方超时、重试和日志 request id。
 - 已完成至少一次真实模型压测。
+
 ## 新版控制台灰度与回退
 
-本节适用于 0.11.2。Console Next 是唯一生产控制台，根路径 / 是正式登录入口。0.11.2 在 0.11.1 迁移门禁基础上补齐二次复核修复：WS 主凭证禁止 query 回退、`/v1/*` 统一 no-store、默认 CSP 去除 `unsafe-inline` 与 jsdelivr，并补齐流详情深链、错误 request_id 与值级脱敏。
+本节适用于 0.12.0。Console Next 是唯一生产控制台，根路径 / 是正式登录入口。0.12.0 在既有安全基线之上补齐 SLO 聚合完整性、WebSocket 降级轮询、会话到期、URL 状态恢复、解析档案详情、图片推理高级参数、接入应用编辑与 Redis ws-ticket 多副本支持。
 
 构建镜像时，Node 22 builder 会在根 npm workspace 中执行 npm ci 与 npm run console:build；运行镜像只复制 frontend/console-next/dist，不安装 Node，也不再包含旧版 frontend/console。非镜像部署必须先在仓库根目录执行相同构建命令，并确认 dist/index.html 与 dist/.vite/manifest.json 存在。
 
@@ -906,6 +907,6 @@ Compose 默认绑定：
 
 上线前执行 `npm test`、`npm run console:e2e`、控制台/门禁定向或全量 `python -m pytest`、`python tools/deploy_check.py --json --import-app` 和 `python tools/portrait_production_readiness.py --scope platform --strict`。严格 readiness 必须为 strict_failure_count=0；真实 CSP 必须保持 script-src self，禁止 unsafe-inline 与 unsafe-eval。
 
-CONSOLE_WS_TICKET_TTL_SECONDS 默认 60 秒，ticket 单次消费并绑定租户、资源和权限。当前实现使用单进程有界内存，只适用于单 API worker；多 worker 或多副本拓扑必须先接入共享、原子消费、带 TTL 的存储，再扩大新版视频任务和视频流灰度。
+CONSOLE_WS_TICKET_TTL_SECONDS 默认 60 秒，ticket 单次消费并绑定租户、资源和权限。设置 `REDIS_URL` 后，ticket 使用 Redis TTL 与 Lua `GET + DEL` 原子消费，可供多 worker/多副本共享；未设置 Redis 时回退到进程内有界内存，仅适用于本地开发或单进程测试。生产多副本上线前必须验证 Redis 连通性、TTL、原子消费和故障告警。
 
 生产观察、上一版镜像回退演练和多副本 WS ticket 前置条件以根目录《控制台前端重建方案.md》及 docs/frontend/CONSOLE_NEXT_ACCEPTANCE.md 为准。

@@ -189,7 +189,13 @@ def strip_face_crop(face: dict[str, Any]) -> dict[str, Any]:
     return face
 
 
-async def run_scrfd_face_detection(image: Image.Image) -> list[dict[str, Any]] | None:
+async def run_scrfd_face_detection(
+    image: Image.Image,
+    *,
+    confidence_override: float | None = None,
+    iou_override: float | None = None,
+    max_detections_override: int | None = None,
+) -> list[dict[str, Any]] | None:
     runtime = await get_capability_runtime("face_detection", {"scrfd"})
     if runtime is None:
         return None
@@ -209,9 +215,21 @@ async def run_scrfd_face_detection(image: Image.Image) -> list[dict[str, Any]] |
     )
     if boxes.size == 0:
         return []
-    confidence = float(runtime_output_value(runtime, "confidence", runtime.capability.get("confidence", 0.35)))
-    iou_threshold = float(runtime_output_value(runtime, "iou", runtime.capability.get("iou", 0.45)))
-    max_detections = int(runtime_output_value(runtime, "max_detections", runtime.capability.get("max_detections", 32)))
+    confidence = float(
+        confidence_override
+        if confidence_override is not None
+        else runtime_output_value(runtime, "confidence", runtime.capability.get("confidence", 0.35))
+    )
+    iou_threshold = float(
+        iou_override
+        if iou_override is not None
+        else runtime_output_value(runtime, "iou", runtime.capability.get("iou", 0.45))
+    )
+    max_detections = int(
+        max_detections_override
+        if max_detections_override is not None
+        else runtime_output_value(runtime, "max_detections", runtime.capability.get("max_detections", 32))
+    )
     keep_mask = scores >= confidence
     boxes = boxes[keep_mask]
     scores = scores[keep_mask]
@@ -347,8 +365,16 @@ async def infer_face_records_for_image(
     *,
     include_embeddings: bool = False,
     fallback: bool = False,
+    confidence: float | None = None,
+    iou: float | None = None,
+    max_detections: int | None = None,
 ) -> list[dict[str, Any]]:
-    faces = await run_scrfd_face_detection(image)
+    faces = await run_scrfd_face_detection(
+        image,
+        confidence_override=confidence,
+        iou_override=iou,
+        max_detections_override=max_detections,
+    )
     if faces is None:
         faces = fallback_face_records_with_crops(image, fallback=fallback)
     elif not faces and fallback:

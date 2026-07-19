@@ -1,4 +1,4 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { Ban, Code2, Eye, Plus, RefreshCw } from "@lucide/vue";
@@ -101,6 +101,12 @@ function applyLivePayload(payload: unknown): void {
   }
 }
 
+async function refreshDetail(jobId: string): Promise<void> {
+  const payload = await apiRequest<{ job: JobSummary }>(`/v1/jobs/${encodeURIComponent(jobId)}`);
+  applyLivePayload({ job: payload.job });
+  if (payload.job.status === "completed") await loadDetailResult(jobId);
+}
+
 async function startLive(job: JobSummary): Promise<void> {
   stopLive?.();
   stopLive = null;
@@ -110,6 +116,7 @@ async function startLive(job: JobSummary): Promise<void> {
     resourceId: job.job_id,
     onMessage: applyLivePayload,
     onState: (state) => (liveState.value = state),
+    poll: () => refreshDetail(job.job_id),
   });
 }
 

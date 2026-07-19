@@ -9,15 +9,50 @@ export async function openTicketWebSocket(input: {
   resourceId: string;
   onMessage: (payload: unknown) => void;
   onState: (state: LiveConnectionState) => void;
+  poll?: () => Promise<void> | void;
+  pollIntervalMs?: number;
 }): Promise<() => void> {
   let stopped = false;
   let socket: WebSocket | null = null;
   let retry = 0;
   let retryTimer: number | null = null;
+  let pollTimer: number | null = null;
+  let pollInFlight = false;
+
+  const stopPolling = (): void => {
+    if (pollTimer !== null) {
+      window.clearInterval(pollTimer);
+      pollTimer = null;
+    }
+  };
+
+  const pollOnce = async (): Promise<void> => {
+    if (stopped || pollInFlight || !input.poll || document.visibilityState !== "visible") return;
+    pollInFlight = true;
+    try {
+      await input.poll();
+    } catch {
+      input.onState("degraded");
+    } finally {
+      pollInFlight = false;
+    }
+  };
+
+  const startPolling = (): void => {
+    if (pollTimer !== null || !input.poll) return;
+    void pollOnce();
+    pollTimer = window.setInterval(() => void pollOnce(), input.pollIntervalMs ?? 5_000);
+  };
+
+  const setState = (state: LiveConnectionState): void => {
+    input.onState(state);
+    if (state === "degraded") startPolling();
+    if (state === "open") stopPolling();
+  };
 
   const connect = async (): Promise<void> => {
     if (stopped) return;
-    input.onState("connecting");
+    setState("connecting");
     try {
       const issued = await apiRequest<WebSocketTicketResponse>("/v1/console/ws-ticket", {
         method: "POST",
@@ -28,7 +63,7 @@ export async function openTicketWebSocket(input: {
       socket = new WebSocket(`${scheme}//${window.location.host}${issued.websocket_path}?${query}`);
       socket.onopen = () => {
         retry = 0;
-        input.onState("open");
+        setState("open");
       };
       socket.onmessage = (event) => {
         try {
@@ -40,13 +75,13 @@ export async function openTicketWebSocket(input: {
       socket.onclose = () => {
         if (stopped) return;
         retry += 1;
-        input.onState(retry >= 3 ? "degraded" : "connecting");
+        setState(retry >= 3 ? "degraded" : "connecting");
         retryTimer = window.setTimeout(() => void connect(), Math.min(30_000, 1000 * 2 ** retry));
       };
     } catch {
       if (stopped) return;
       retry += 1;
-      input.onState("degraded");
+      setState("degraded");
       retryTimer = window.setTimeout(() => void connect(), Math.min(30_000, 1000 * 2 ** retry));
     }
   };
@@ -54,8 +89,9 @@ export async function openTicketWebSocket(input: {
   void connect();
   return () => {
     stopped = true;
+    stopPolling();
     if (retryTimer !== null) window.clearTimeout(retryTimer);
     socket?.close();
-    input.onState("closed");
+    setState("closed");
   };
 }

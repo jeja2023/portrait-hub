@@ -190,7 +190,7 @@ def check_http_auth_hardening(root: Path) -> list[dict[str, Any]]:
                 and "error_code: str | None = Query" in portrait_access_routes
                 and "created_since: float | None = Query" in portrait_access_routes
                 and "created_until: float | None = Query" in portrait_access_routes
-                and 'const errorCode = ref("")' in console_module_sources
+                and "const errorCode = ref(" in console_module_sources
                 and "const createdRange = ref" in console_module_sources
                 and 'params.set("error_code", errorCode.value)' in console_module_sources
                 and 'params.set("created_since"' in console_module_sources

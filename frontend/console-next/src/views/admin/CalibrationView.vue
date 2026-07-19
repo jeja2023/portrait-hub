@@ -19,6 +19,7 @@ import DangerConfirm from "../../components/DangerConfirm.vue";
 import { useCapabilitiesStore } from "../../stores/capabilities";
 import { errorBannerMessage } from "../../utils/errors";
 import { formatTimestamp } from "../../utils/format";
+import { useRouteTab } from "../../utils/routeState";
 
 interface ReviewSummary {
   total_annotations: number;
@@ -69,7 +70,7 @@ const reviewSummary = ref<ReviewSummary>({
 });
 const datasets = ref<EvaluationDataset[]>([]);
 const recommendationPayload = ref<RecommendationPayload>({});
-const tab = ref("thresholds");
+const tab = useRouteTab("thresholds");
 const profile = ref("normal");
 const saveConfirmOpen = ref(false);
 const draft = reactive<Record<string, number>>({});

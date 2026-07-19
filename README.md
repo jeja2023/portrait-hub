@@ -2,11 +2,19 @@
 
 面向 Ubuntu + Docker + NVIDIA GPU 的 ONNX 推理服务。服务通过 FastAPI 暴露接口，按 GPU 拆成多个 worker，适合给人像识别、人像检索、ReID 等业务项目提供共享推理能力。
 
-当前版本：0.11.2。本版本在 Console Next 唯一生产入口基础上完成二次复核修复：移除 WS query 主凭证回退、统一 `/v1/*` no-store、收紧默认 CSP，并补齐流详情深链、路由 meta 导航、可访问状态通告、错误展示、脱敏兜底、搜索质量分和对应契约测试；0.11.1 已完成迁移门禁与历史文档收口。
+当前版本：0.12.0。本版本对照控制台重建方案完成全面优化收口：修正 SLO 统计截断与覆盖说明，补齐 WebSocket 降级轮询、会话到期、筛选/页签深链、解析档案详情、图片分析高级参数和接入应用编辑，并为多副本 ws-ticket 接入 Redis 原子消费。
 
 > `0.9.0` 是破坏性升级。旧的 `/v1/vision/results`、`/v1/jobs/video/results` 及有限图片历史实现已删除，不提供兼容回退或旧记录自动迁移；接入方必须切换到统一档案接口。
 
 拆分后的模块映射、维护边界和验证命令见 [大型文件拆分维护指南](docs/maintenance/LARGE_FILE_SPLIT.md)，完整发布记录见 [更新日志](更新日志.md)。
+
+## 0.12.0 控制台全面优化收口
+
+- SLO 改用 `/v1/access/call-logs/summary` 聚合统计，区分完整 30 天、当前保留窗口和 Prometheus 回退；保留环达到上限时明确提示覆盖不完整。
+- 视频任务与实时流在 WebSocket 降级时自动轮询详情；会话按服务端 `expires_at` 到期并清理凭证，页签、筛选条件和详情均可通过 URL 恢复。
+- 解析结果新增按 `archive_id` 查询的租户隔离详情接口；图片人脸/人体分析支持置信度、IoU、最大检测数高级参数。
+- 接入中心支持编辑应用名称、负责人、scope、限流与配额，并展示调用量和错误率；归档和阈值读取失败改为可见错误。
+- 多副本部署配置 `REDIS_URL` 后，ws-ticket 使用 Redis TTL 与 Lua 原子单次消费；自动化覆盖 Vitest 13 项、Playwright 五项目 15 项以及新增后端契约。
 
 ## 0.11.2 Console Next 二次复核修复
 
@@ -917,6 +925,7 @@ curl -X POST http://127.0.0.1:9001/predict \
 2. 降低输入 batch size。
 3. 将模型拆到不同 worker 或不同 GPU。
 4. 考虑导出 FP16 或 TensorRT 版本。
+
 ## Console Next 构建与灰度
 
 新版控制台源码位于 frontend/console-next，使用 Node 22、Vue 3 和 TypeScript。npm ci 后执行 npm run console:build 生成 dist。根路径 / 提供登录页，认证成功后进入 /console；/console/next 仅作为新版直达验收别名。旧版 /console/legacy 与 /assets/console* 静态资源已删除。

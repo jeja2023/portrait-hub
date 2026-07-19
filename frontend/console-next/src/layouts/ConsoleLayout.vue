@@ -7,12 +7,14 @@ import { ElButton, ElMenu, ElMenuItem, ElSwitch, ElTooltip } from "element-plus"
 import { clearSession, sessionState } from "../auth/session";
 import { useCapabilitiesStore } from "../stores/capabilities";
 import { usePrefsStore } from "../stores/prefs";
+import { formatTimestamp } from "../utils/format";
 
 const route = useRoute();
 const router = useRouter();
 const capabilities = useCapabilitiesStore();
 const prefs = usePrefsStore();
 const activeMenuPath = computed(() => (route.path.startsWith("/analysis/") ? "/analysis/image" : route.path));
+const sessionExpiryLabel = computed(() => formatTimestamp(sessionState.expiresAt));
 
 // 单一导航数据源（方案 §6）：由路由表 meta.nav 派生侧栏，标题/权限/图标只在路由声明一次。
 const SECTION_ORDER = ["工作台", "开发者中心", "系统管理"];
@@ -85,6 +87,9 @@ function logout(): void {
         <div class="topbar-context">
           <span class="topbar-title">{{ route.meta.title }}</span>
           <span class="tenant-label">{{ sessionState.tenantId }}</span>
+          <span v-if="sessionState.expiresAt" class="session-expiry" title="当前凭证到期时间">
+            会话至 {{ sessionExpiryLabel }}
+          </span>
         </div>
         <div class="topbar-actions">
           <label class="developer-switch">

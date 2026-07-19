@@ -1,6 +1,7 @@
 import { defineStore } from "pinia";
 import { computed, ref } from "vue";
 
+import { setSessionExpiry } from "../auth/session";
 import { apiRequest } from "../api/client";
 import type { ConsoleCapabilities } from "../api/contracts";
 
@@ -18,6 +19,7 @@ export const useCapabilitiesStore = defineStore("capabilities", () => {
     loading.value = true;
     try {
       capabilities.value = await apiRequest<ConsoleCapabilities>("/v1/console/me");
+      setSessionExpiry(capabilities.value.expires_at);
       return capabilities.value;
     } finally {
       loading.value = false;

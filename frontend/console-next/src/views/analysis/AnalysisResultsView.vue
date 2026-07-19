@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from "vue";
 import { Archive, Code2, Eye, Image as ImageIcon, RefreshCw } from "@lucide/vue";
 import { ElAlert, ElButton, ElDrawer, ElInput, ElRadioButton, ElRadioGroup, ElSkeleton } from "element-plus";
+import { useRoute, useRouter } from "vue-router";
 
 import { apiRequest } from "../../api/client";
 import AnalysisNavigation from "../../components/AnalysisNavigation.vue";
@@ -41,10 +42,12 @@ interface AnalysisArchiveResponse {
   has_more: boolean;
 }
 
+const route = useRoute();
+const router = useRouter();
 const prefs = usePrefsStore();
 const archives = ref<AnalysisArchive[]>([]);
-const sourceType = ref("");
-const mode = ref("");
+const sourceType = ref(typeof route.query.source_type === "string" ? route.query.source_type : "");
+const mode = ref(typeof route.query.mode === "string" ? route.query.mode : "");
 const nextCursor = ref<string | null>(null);
 const total = ref(0);
 const loading = ref(true);
@@ -107,12 +110,47 @@ async function loadResults(append = false): Promise<void> {
   }
 }
 
+function openDetail(item: AnalysisArchive): void {
+  detail.value = item;
+  void router.replace({ query: { ...route.query, detail: item.archive_id } });
+}
+
+function closeDetail(): void {
+  detail.value = null;
+  void router.replace({ query: { ...route.query, detail: undefined } });
+}
+
 function applyFilters(): void {
   nextCursor.value = null;
+  void router.replace({
+    query: {
+      ...route.query,
+      source_type: sourceType.value || undefined,
+      mode: mode.value.trim() || undefined,
+      detail: undefined,
+    },
+  });
   void loadResults();
 }
 
-onMounted(() => void loadResults());
+onMounted(async () => {
+  await loadResults();
+  const detailId = typeof route.query.detail === "string" ? route.query.detail : "";
+  if (!detailId) return;
+  const loaded = archives.value.find((item) => item.archive_id === detailId);
+  if (loaded) {
+    detail.value = loaded;
+    return;
+  }
+  try {
+    const payload = await apiRequest<{ result: AnalysisArchive }>(
+      "/v1/analysis/results/" + encodeURIComponent(detailId),
+    );
+    detail.value = payload.result;
+  } catch (error) {
+    errorMessage.value = errorBannerMessage(error, "解析结果详情加载失败");
+  }
+});
 </script>
 
 <template>
@@ -161,7 +199,7 @@ onMounted(() => void loadResults());
       />
       <section v-else class="archive-grid" aria-label="解析结果列表">
         <article v-for="item in archives" :key="item.archive_id" class="archive-card">
-          <button type="button" class="archive-preview" @click="detail = item">
+          <button type="button" class="archive-preview" @click="openDetail(item)">
             <img
               v-if="item.previews[0]"
               :src="item.previews[0].src"
@@ -181,7 +219,7 @@ onMounted(() => void loadResults());
             <p>{{ resultSummary(item) }}</p>
             <code>{{ item.source_ref || item.request_id }}</code>
           </div>
-          <ElButton text :icon="Eye" @click="detail = item">查看详情</ElButton>
+          <ElButton text :icon="Eye" @click="openDetail(item)">查看详情</ElButton>
         </article>
       </section>
     </ElSkeleton>
@@ -193,7 +231,7 @@ onMounted(() => void loadResults());
       :model-value="Boolean(detail)"
       title="解析结果详情"
       size="min(820px, 94vw)"
-      @update:model-value="!$event && (detail = null)"
+      @update:model-value="!$event && closeDetail()"
     >
       <template v-if="detail">
         <dl class="detail-facts">

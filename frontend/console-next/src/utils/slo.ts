@@ -22,6 +22,18 @@ export interface AvailabilitySummary {
   error_budget_burn_rate: number;
 }
 
+export interface SloCallLogSummary {
+  request_count: number;
+  success_count: number;
+  error_count: number;
+  success_rate: number;
+  complete: boolean;
+  retained_count?: number;
+  retained_limit?: number;
+  oldest_created_at?: number | null;
+  newest_created_at?: number | null;
+}
+
 export function metricSamples(rawMetrics: string, name: string): MetricSample[] {
   const prefix = name + " ";
   const labeledPrefix = name + "{";
@@ -85,6 +97,10 @@ function availabilitySummary(requestCount: number, errorCount: number): Availabi
     error_budget_remaining: Math.min(1, Math.max(0, (allowedErrorRate - observedErrorRate) / allowedErrorRate)),
     error_budget_burn_rate: observedErrorRate / allowedErrorRate,
   };
+}
+
+export function summarizeSloCounts(requestCount: number, errorCount: number): AvailabilitySummary {
+  return availabilitySummary(requestCount, errorCount);
 }
 
 export function summarizeSloCallLogs(logs: SloCallLog[]): AvailabilitySummary {

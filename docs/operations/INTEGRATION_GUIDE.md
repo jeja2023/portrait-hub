@@ -23,12 +23,13 @@
 | 图片解析 | `POST /v1/infer/persons` |
 | 离线视频任务 | `POST /v1/jobs/video`、`GET /v1/jobs/{job_id}`、`GET /v1/jobs/{job_id}/result` |
 | 实时流 | `POST /v1/streams`、`POST /v1/streams/{stream_id}/start`、`GET /v1/streams/{stream_id}/events` |
-| 解析档案 | `GET /v1/analysis/results`、`GET /v1/analysis/artifacts/{archive_id}/{artifact_id}` |
+| 解析档案 | `GET /v1/analysis/results`、`GET /v1/analysis/results/{archive_id}`、`GET /v1/analysis/artifacts/{archive_id}/{artifact_id}` |
 | 模型状态 | `GET /v1/models` |
 | 阈值 | `GET /v1/thresholds` |
 | 多模态融合 | `POST /v1/fusion/compare` |
 | 租户目录 | `GET /v1/access/tenants`、`POST /v1/access/tenants` |
 | 接入应用 | `GET /v1/access/applications`、`POST /v1/access/applications`、`PATCH /v1/access/applications/{app_id}`、`POST /v1/access/applications/{app_id}/rotate` |
+| 调用统计 | `GET /v1/access/call-logs`、`GET /v1/access/call-logs/summary` |
 | Webhook | `GET /v1/access/webhooks`、`POST /v1/access/webhooks`、`PATCH /v1/access/webhooks/{webhook_id}`、`POST /v1/access/webhooks/{webhook_id}/rotate`、`POST /v1/access/webhooks/{webhook_id}/sample` |
 
 ## 解析档案
@@ -57,6 +58,15 @@ curl "https://portrait.internal.example/v1/analysis/artifacts/${ARCHIVE_ID}/${AR
 
 解析档案按租户隔离且不设数量上限。接入方应使用游标分页，不应一次拉取全部记录；生产运维必须同时备份数据库索引和对象存储，缺少任一部分都不能完整恢复档案。
 
+### 0.12.0 统计、深链与连接可靠性
+
+- 调用日志列表仍用于分页排障；SLO 和聚合统计应改用 `GET /v1/access/call-logs/summary`。响应中的 `complete` 表示当前查询窗口是否被保留上限截断，`retained_count`/`retained_limit` 用于说明覆盖范围。`complete=false` 时不得宣称数据覆盖完整 30 天。
+- 解析结果详情可通过 `GET /v1/analysis/results/{archive_id}` 读取，服务端继续执行租户隔离。控制台将 `source_type`、`mode`、`archive_id`、日志日期范围和人员搜索词保存在 URL query，接入网关不得丢弃这些参数。
+- `POST /v1/infer/faces` 与 `POST /v1/infer/persons` 的 multipart 请求支持 `confidence`、`iou` 和 `max_detections`。调用方应以模型校准值为准，服务端会把阈值限制在 0 到 1、检测数限制在 1 到 256。
+- 控制台视频任务和实时流 WebSocket 降级时会轮询详情，因此网关必须同时允许 ws-ticket WebSocket 和对应 HTTP 详情接口。长效 API Key/JWT 仍不得进入 WebSocket URL。
+- 多 API worker/多副本生产拓扑必须设置 `REDIS_URL`。ws-ticket 会写入 Redis 并通过 Lua 原子读取删除；未配置 Redis 时仅使用进程内存，不能跨副本消费。
+- 控制台按 `/v1/console/me` 的 `expires_at` 自动清理会话。身份系统应返回准确、带时区的到期时间；续期后需重新读取 capabilities，不能只延长浏览器本地状态。
+
 ### 0.11.2 控制台唯一入口、安全响应头与运维能力
 
 - 0.11.2 起，浏览器 WebSocket 主凭证不再接受 query 参数回退；接入方必须通过标准请求头完成主鉴权，并让控制台使用短期 ws-ticket 连接任务/视频流。所有 `/v1/*` 响应统一 `Cache-Control: no-store`，默认 CSP 不再依赖 `unsafe-inline` 或 jsdelivr。
@@ -71,6 +81,7 @@ curl "https://portrait.internal.example/v1/analysis/artifacts/${ARCHIVE_ID}/${AR
 - 总览 SLO 优先读取当前租户 30 天调用日志，缺少 access:read 或窗口为空时回退 Prometheus；对接方排障时应同时保留 request_id、HTTP 状态和稳定错误码。
 - 运维审计使用 /v1/admin/audit/events 的 records、summary 和 filters；备份快照只返回公开摘要，不包含对象 key、bucket、摘要值或服务端路径。
 - 轨迹复核标签限定为 confirmed、mismatch、false_positive、low_quality、uncertain；阈值建议 auto_apply 始终为 false，调用方不得自动写回生产阈值。
+
 ### 0.9.1 媒体上传兼容性与控制台展示
 
 - 图片格式以文件签名和解码器识别结果为准。JPEG、PNG、WebP、BMP 的扩展名缺失或与内容不匹配时不再拒绝请求，只记录不包含原文件名的告警；签名与实际解码格式不一致、文件损坏、尺寸或像素数超限仍会拒绝。
@@ -131,11 +142,13 @@ X-API-Key: <application-api-key>
 - 接入应用可配置 `rate_limit_per_minute`、`rate_limit_burst` 和 `daily_quota`；留空或 `0` 表示沿用平台默认/不限额，正整数会在入口限流中生效。
 - 调用日志可通过 `/v1/access/call-logs` 按 `request_id`、接口、状态、接入应用、`error_code`、`created_since` 和 `created_until` 筛选；日志只保存脱敏元数据，不记录请求体或响应体，并会回写接入应用的 `call_count`、`error_count`、`error_rate`、`last_called_at` 和 `last_error_at`。高频计数先在内存聚合，再按 `ACCESS_STATS_FLUSH_INTERVAL_SECONDS` 批量落盘；服务关闭和接入配置变更会强制刷新。
 - 错误码目录可通过 `/v1/access/error-codes` 读取，返回 `code`、`http_status`、`retryable`、`category`、`description` 和 `operator_action`。接入方应把 `retryable=true` 视为可预算内退避重试，而不是无限重放。
+
 ## 接口调试台 受控调试
 
 控制台“接口调试台”用于开发或受控内网环境的最小联调，不应替代业务侧自动化测试。它覆盖单图检索、批量检索、单图比对、批量比对、融合比对、图片解析、离线视频、实时流创建、实时流事件查询、模型状态和阈值查询。
 
 接口调试台会保留统一响应外层的 `request_id`、HTTP 状态和 `error.code`，并把接口模板、解析后的路径、耗时、文件数量、`async_mode` 和受控调试标记写入页面响应数据，方便和 `/v1/access/call-logs` 按 `request_id` 交叉定位。
+
 ## Python SDK 最小示例
 
 ```python
@@ -219,6 +232,7 @@ while (jobId && !terminal.has(status.data?.job?.status)) {
 const result = jobId ? await client.jobResult(jobId) : {};
 console.log(jobId, result.request_id);
 ```
+
 ## curl 示例
 
 以图搜人：

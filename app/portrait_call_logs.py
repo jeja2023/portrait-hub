@@ -79,12 +79,75 @@ def list_call_logs(
     created_until: float | None = None,
     limit: int = 100,
 ) -> list[dict[str, Any]]:
+    filtered = _filter_call_logs(
+        tenant_id,
+        request_id=request_id,
+        endpoint=endpoint,
+        status_text=status_text,
+        application_id=application_id,
+        error_code=error_code,
+        created_since=created_since,
+        created_until=created_until,
+    )
+    return filtered[: max(1, min(int(limit), 500))]
+
+
+def summarize_call_logs(
+    tenant_id: str,
+    *,
+    request_id: str | None = None,
+    endpoint: str | None = None,
+    status_text: str | None = None,
+    application_id: str | None = None,
+    error_code: str | None = None,
+    created_since: float | None = None,
+    created_until: float | None = None,
+) -> dict[str, Any]:
+    rows = _filter_call_logs(
+        tenant_id,
+        request_id=request_id,
+        endpoint=endpoint,
+        status_text=status_text,
+        application_id=application_id,
+        error_code=error_code,
+        created_since=created_since,
+        created_until=created_until,
+    )
+    success_count = sum(1 for row in rows if row.get("status") == "success")
+    error_count = len(rows) - success_count
+    with _CALL_LOGS_LOCK:
+        retained_count = len(_CALL_LOGS)
+    oldest = min((float(row.get("created_at") or 0) for row in rows), default=None)
+    newest = max((float(row.get("created_at") or 0) for row in rows), default=None)
+    return {
+        "request_count": len(rows),
+        "success_count": success_count,
+        "error_count": error_count,
+        "success_rate": success_count / len(rows) if rows else 1.0,
+        "oldest_created_at": oldest,
+        "newest_created_at": newest,
+        "complete": retained_count < _CALL_LOG_LIMIT,
+        "retained_count": retained_count,
+        "retained_limit": _CALL_LOG_LIMIT,
+    }
+
+
+def _filter_call_logs(
+    tenant_id: str,
+    *,
+    request_id: str | None = None,
+    endpoint: str | None = None,
+    status_text: str | None = None,
+    application_id: str | None = None,
+    error_code: str | None = None,
+    created_since: float | None = None,
+    created_until: float | None = None,
+) -> list[dict[str, Any]]:
     normalized_request = (request_id or "").strip().lower()
     normalized_endpoint = (endpoint or "").strip().lower()
     normalized_status = (status_text or "").strip().lower()
     normalized_application = (application_id or "").strip().lower()
     normalized_error_code = (error_code or "").strip().lower()
-    bounded_limit = max(1, min(int(limit), 500))
     with _CALL_LOGS_LOCK:
         rows = list(_CALL_LOGS)
     filtered: list[dict[str, Any]] = []
@@ -108,8 +171,6 @@ def list_call_logs(
         if created_until is not None and created_at > float(created_until):
             continue
         filtered.append(dict(row))
-        if len(filtered) >= bounded_limit:
-            break
     return filtered
 
 
@@ -118,4 +179,5 @@ __all__ = [
     "clear_call_logs",
     "list_call_logs",
     "record_call_log",
+    "summarize_call_logs",
 ]

@@ -4,6 +4,7 @@ import {
   deviceQueueDepths,
   histogramPercentile,
   summarizeSloCallLogs,
+  summarizeSloCounts,
   summarizeSloMetrics,
 } from "../src/utils/slo";
 
@@ -43,5 +44,11 @@ describe("SLO calculations", () => {
     expect(summary.success_rate).toBe(0.99);
     expect(histogramPercentile(metrics, "gpu_worker_queue_seconds", 0.95)).toBe(0.5);
     expect(deviceQueueDepths(metrics)).toEqual({ "0": 2, "1": 3 });
+  });
+  it("calculates availability from server-side aggregate counts", () => {
+    const summary = summarizeSloCounts(2_500, 5);
+    expect(summary.request_count).toBe(2_500);
+    expect(summary.error_count).toBe(5);
+    expect(summary.success_rate).toBeCloseTo(0.998);
   });
 });

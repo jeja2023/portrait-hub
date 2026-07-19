@@ -11,6 +11,7 @@ import {
   ElSelect,
   ElSkeleton,
 } from "element-plus";
+import { useRoute, useRouter } from "vue-router";
 import { apiRequest } from "../../api/client";
 import EmptyState from "../../components/EmptyState.vue";
 import { errorBannerMessage } from "../../utils/errors";
@@ -27,22 +28,46 @@ interface LogRow {
   created_at: number;
   duration_ms?: number;
 }
+const route = useRoute();
+const router = useRouter();
 const logs = ref<LogRow[]>([]);
 const loading = ref(true);
 const errorMessage = ref("");
-const requestId = ref("");
-const status = ref("");
-const endpoint = ref("");
-const applicationId = ref("");
-const errorCode = ref("");
-const createdRange = ref<[Date, Date] | null>(null);
+const requestId = ref(typeof route.query.request_id === "string" ? route.query.request_id : "");
+const status = ref(typeof route.query.status === "string" ? route.query.status : "");
+const endpoint = ref(typeof route.query.endpoint === "string" ? route.query.endpoint : "");
+const applicationId = ref(typeof route.query.application_id === "string" ? route.query.application_id : "");
+const errorCode = ref(typeof route.query.error_code === "string" ? route.query.error_code : "");
+const createdSince = typeof route.query.created_since === "string" ? Number(route.query.created_since) : NaN;
+const createdUntil = typeof route.query.created_until === "string" ? Number(route.query.created_until) : NaN;
+const createdRange = ref<[Date, Date] | null>(
+  Number.isFinite(createdSince) && Number.isFinite(createdUntil)
+    ? [new Date(createdSince * 1000), new Date(createdUntil * 1000)]
+    : null,
+);
 const applications = ref<Array<{ app_id: string; name?: string }>>([]);
 const errorCatalog = ref<Record<string, unknown>[]>([]);
 const selectedErrorCode = ref("");
 const selectedError = computed(() =>
   errorCatalog.value.find((item) => item.code === selectedErrorCode.value),
 );
+function syncQuery(): void {
+  void router.replace({
+    query: {
+      ...route.query,
+      request_id: requestId.value || undefined,
+      endpoint: endpoint.value || undefined,
+      status: status.value || undefined,
+      application_id: applicationId.value || undefined,
+      error_code: errorCode.value || undefined,
+      created_since: createdRange.value ? String(createdRange.value[0].getTime() / 1000) : undefined,
+      created_until: createdRange.value ? String(createdRange.value[1].getTime() / 1000) : undefined,
+    },
+  });
+}
+
 async function load(): Promise<void> {
+  syncQuery();
   loading.value = true;
   errorMessage.value = "";
   try {

@@ -1,7 +1,7 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { Code2, ImageUp, Play, RotateCcw } from "@lucide/vue";
-import { ElAlert, ElButton, ElCheckbox, ElOption, ElSelect } from "element-plus";
+import { ElAlert, ElButton, ElCheckbox, ElInputNumber, ElOption, ElSelect } from "element-plus";
 
 import { apiRequest } from "../../api/client";
 import AnalysisNavigation from "../../components/AnalysisNavigation.vue";
@@ -14,6 +14,9 @@ import { errorBannerMessage } from "../../utils/errors";
 const prefs = usePrefsStore();
 const endpoint = ref("/v1/infer/persons");
 const includeEmbeddings = ref(false);
+const confidence = ref(0.35);
+const iou = ref(0.45);
+const maxDetections = ref(32);
 const file = ref<File | null>(null);
 const previewUrl = ref("");
 const loading = ref(false);
@@ -86,6 +89,9 @@ async function analyze(): Promise<void> {
     const body = new FormData();
     body.append("files", file.value);
     body.append("include_embeddings", String(includeEmbeddings.value));
+    body.append("confidence", String(confidence.value));
+    body.append("iou", String(iou.value));
+    body.append("max_detections", String(maxDetections.value));
     result.value = await apiRequest<Record<string, unknown>>(
       endpoint.value,
       { method: "POST", body },
@@ -115,8 +121,8 @@ async function loadImageArchives(append = false): Promise<void> {
     const payload = await apiRequest<AnalysisArchiveResponse>(`/v1/analysis/results?${params}`);
     imageArchives.value = append ? [...imageArchives.value, ...payload.results] : payload.results;
     archiveNextCursor.value = payload.next_cursor;
-  } catch {
-    imageArchives.value = append ? imageArchives.value : [];
+  } catch (error) {
+    errorMessage.value = errorBannerMessage(error, "图片归档加载失败");
     archiveNextCursor.value = null;
   } finally {
     archiveLoading.value = false;
@@ -174,6 +180,11 @@ onBeforeUnmount(() => {
           <details class="advanced">
             <summary>高级参数</summary>
             <ElCheckbox v-model="includeEmbeddings">返回特征向量</ElCheckbox>
+            <div class="advanced-fields">
+              <label><span>置信度</span><ElInputNumber v-model="confidence" :min="0" :max="1" :step="0.05" /></label>
+              <label><span>IoU</span><ElInputNumber v-model="iou" :min="0" :max="1" :step="0.05" /></label>
+              <label><span>最大目标数</span><ElInputNumber v-model="maxDetections" :min="1" :max="256" /></label>
+            </div>
           </details>
           <ElButton type="primary" :icon="Play" :loading="loading" :disabled="!file" @click="analyze"
             >开始分析</ElButton
@@ -373,6 +384,18 @@ onBeforeUnmount(() => {
   .analysis-grid {
     grid-template-columns: 1fr;
   }
+}
+.advanced-fields {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+.advanced-fields label {
+  display: grid;
+  gap: 5px;
+  color: #62706d;
+  font-size: 12px;
 }
 </style>
 

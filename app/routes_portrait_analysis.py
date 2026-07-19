@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 
 from app.portrait_analysis_archive import (
     ARCHIVE_SOURCE_TYPES,
+    get_analysis_archive_record,
     get_analysis_artifact,
     list_analysis_archives,
     public_analysis_archive,
@@ -53,6 +54,22 @@ async def v1_list_analysis_results(
         ctx.request_id,
         {"results": results, "archives": results, **pagination},
     )
+
+
+@router.get(
+    "/v1/analysis/results/{archive_id}",
+    dependencies=[Depends(permission_dependency("infer"))],
+)
+async def v1_get_analysis_result(
+    archive_id: str,
+    ctx: PortraitRequestContext = Depends(portrait_request_context),
+) -> dict[str, Any]:
+    if len(archive_id) > 80:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="解析结果不存在")
+    record = await run_blocking_io(get_analysis_archive_record, ctx.tenant_id, archive_id)
+    if record is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="解析结果不存在")
+    return portrait_success(ctx.request_id, {"result": public_analysis_archive(record)})
 
 
 @router.get(

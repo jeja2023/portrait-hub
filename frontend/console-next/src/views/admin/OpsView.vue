@@ -20,6 +20,7 @@ import DangerConfirm from "../../components/DangerConfirm.vue";
 import { useCapabilitiesStore } from "../../stores/capabilities";
 import { errorBannerMessage } from "../../utils/errors";
 import { formatTimestamp } from "../../utils/format";
+import { useRouteTab } from "../../utils/routeState";
 
 interface AuditEvent {
   event?: string;
@@ -65,7 +66,7 @@ interface AuditChain {
 }
 
 const capabilities = useCapabilitiesStore();
-const tab = ref("status");
+const tab = useRouteTab("status");
 const loading = ref(true);
 const actionLoading = ref(false);
 const auditLoading = ref(false);

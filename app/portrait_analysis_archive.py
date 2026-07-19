@@ -576,26 +576,29 @@ def public_analysis_archive(record: AnalysisArchiveRecord) -> dict[str, Any]:
     }
 
 
-def get_analysis_artifact(
-    tenant_id: str, archive_id: str, artifact_id: str
-) -> AnalysisArtifact | None:
+def get_analysis_archive_record(tenant_id: str, archive_id: str) -> AnalysisArchiveRecord | None:
     if postgres_archive_enabled():
         from app.portrait_postgres import get_analysis_archive
 
         payload = get_analysis_archive(tenant_id, archive_id)
-        record = AnalysisArchiveRecord.from_state(payload) if payload else None
-    else:
-        with local_archive_connection() as connection:
-            row = connection.execute(
-                """
-                SELECT tenant_id, archive_id, request_id, source_type, source_ref,
-                       mode, endpoint, payload_json, artifacts_json, created_at
-                FROM analysis_archives
-                WHERE tenant_id = ? AND archive_id = ?
-                """,
-                (tenant_id, archive_id),
-            ).fetchone()
-        record = _record_from_sqlite_row(row) if row is not None else None
+        return AnalysisArchiveRecord.from_state(payload) if payload else None
+    with local_archive_connection() as connection:
+        row = connection.execute(
+            """
+            SELECT tenant_id, archive_id, request_id, source_type, source_ref,
+                   mode, endpoint, payload_json, artifacts_json, created_at
+            FROM analysis_archives
+            WHERE tenant_id = ? AND archive_id = ?
+            """,
+            (tenant_id, archive_id),
+        ).fetchone()
+    return _record_from_sqlite_row(row) if row is not None else None
+
+
+def get_analysis_artifact(
+    tenant_id: str, archive_id: str, artifact_id: str
+) -> AnalysisArtifact | None:
+    record = get_analysis_archive_record(tenant_id, archive_id)
     if record is None:
         return None
     return next(
@@ -608,6 +611,7 @@ __all__ = [
     "AnalysisArchiveRecord",
     "AnalysisArtifact",
     "create_analysis_archive",
+    "get_analysis_archive_record",
     "get_analysis_artifact",
     "list_analysis_archives",
     "load_analysis_archives_state",

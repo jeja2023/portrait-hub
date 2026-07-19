@@ -232,6 +232,8 @@ def check_platform_quality(root: Path) -> list[dict[str, Any]]:
                 and '"/v1/console/ws-ticket"' in console_next_ws
                 and "issued.websocket_path" in console_next_ws
                 and "ticket" in console_next_ws
+                and "startPolling" in console_next_ws
+                and "pollIntervalMs" in console_next_ws
             ),
         },
     ]

@@ -14,13 +14,16 @@ const pinia = createPinia();
 app.use(pinia);
 app.use(router);
 
-window.addEventListener("portrait:unauthorized", () => {
+function redirectToLogin(): void {
   clearSession();
   useCapabilitiesStore().clear();
   if (window.location.pathname !== "/") {
     const redirect = encodeURIComponent(router.currentRoute.value.fullPath);
     window.location.replace(`/?redirect=${redirect}`);
   }
-});
+}
+
+window.addEventListener("portrait:unauthorized", redirectToLogin);
+window.addEventListener("portrait:session-expired", redirectToLogin);
 
 app.mount("#app");

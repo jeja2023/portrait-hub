@@ -26,7 +26,7 @@ from app.portrait_access import (
 from app.portrait_async import run_blocking_io
 from app.portrait_audit import audit_event
 from app.portrait_auth import permission_dependency
-from app.portrait_call_logs import list_call_logs
+from app.portrait_call_logs import list_call_logs, summarize_call_logs
 from app.portrait_errors import error_code_catalog
 from app.portrait_request_context import PortraitRequestContext, portrait_request_context
 from app.portrait_response import portrait_success
@@ -278,6 +278,30 @@ async def v1_access_error_codes(ctx: PortraitRequestContext = Depends(portrait_r
         ctx.request_id,
         {"tenant_id": ctx.tenant_id, "error_codes": error_codes, "count": len(error_codes)},
     )
+
+@router.get("/v1/access/call-logs/summary", dependencies=[Depends(permission_dependency("access:read"))])
+async def v1_access_call_logs_summary(
+    request_id: str | None = Query(default=None, max_length=128),
+    endpoint: str | None = Query(default=None, max_length=256),
+    status_text: str | None = Query(default=None, alias="status", max_length=32),
+    application_id: str | None = Query(default=None, max_length=96),
+    error_code: str | None = Query(default=None, max_length=96),
+    created_since: float | None = Query(default=None, ge=0),
+    created_until: float | None = Query(default=None, ge=0),
+    ctx: PortraitRequestContext = Depends(portrait_request_context),
+) -> dict[str, Any]:
+    summary = await run_blocking_io(
+        summarize_call_logs,
+        ctx.tenant_id,
+        request_id=request_id,
+        endpoint=endpoint,
+        status_text=status_text,
+        application_id=application_id,
+        error_code=error_code,
+        created_since=created_since,
+        created_until=created_until,
+    )
+    return portrait_success(ctx.request_id, {"tenant_id": ctx.tenant_id, **summary})
 
 @router.get("/v1/access/call-logs", dependencies=[Depends(permission_dependency("access:read"))])
 async def v1_access_call_logs(

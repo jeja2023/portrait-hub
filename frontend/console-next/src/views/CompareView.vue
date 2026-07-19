@@ -153,8 +153,8 @@ onMounted(async () => {
       for (const profile of Object.keys(values)) profiles.add(profile);
     }
     if (profiles.size) thresholdProfiles.value = Array.from(profiles);
-  } catch {
-    // The comparison endpoint remains usable with the server's standard profiles.
+  } catch (error) {
+    errorMessage.value = errorBannerMessage(error, "阈值配置加载失败，当前使用本地标准方案");
   }
 });
 

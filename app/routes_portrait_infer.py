@@ -65,15 +65,28 @@ async def v1_infer_faces(
     files: list[UploadFile] = File(...),
     include_embeddings: bool = Form(False),
     fallback_to_image: bool = Form(False),
+    confidence: float | None = Form(None),
+    iou: float | None = Form(None),
+    max_detections: int | None = Form(None),
     ctx: PortraitRequestContext = Depends(portrait_request_context),
 ) -> dict[str, Any]:
     validate_file_count(files, MAX_VISION_IMAGES)
     decoded = await decode_upload_images(files)
+    confidence = max(0.0, min(1.0, confidence)) if confidence is not None else None
+    iou = max(0.0, min(1.0, iou)) if iou is not None else None
+    max_detections = max(1, min(256, max_detections)) if max_detections is not None else None
     frames = []
     face_count = 0
     model_summary: dict[str, Any] | None = None
     for index, item in enumerate(decoded):
-        faces = await infer_face_records_for_image(item.image, include_embeddings=include_embeddings, fallback=fallback_to_image)
+        faces = await infer_face_records_for_image(
+            item.image,
+            include_embeddings=include_embeddings,
+            fallback=fallback_to_image,
+            confidence=confidence,
+            iou=iou,
+            max_detections=max_detections,
+        )
         if model_summary is None:
             model_summary = face_model_summary(faces, include_embeddings=include_embeddings)
         face_count += len(faces)
@@ -106,14 +119,26 @@ async def v1_infer_faces(
 async def v1_infer_persons(
     files: list[UploadFile] = File(...),
     include_embeddings: bool = Form(False),
+    confidence: float | None = Form(None),
+    iou: float | None = Form(None),
+    max_detections: int | None = Form(None),
     ctx: PortraitRequestContext = Depends(portrait_request_context),
 ) -> dict[str, Any]:
     validate_file_count(files, MAX_VISION_IMAGES)
     decoded = await decode_upload_images(files)
+    confidence = max(0.0, min(1.0, confidence)) if confidence is not None else None
+    iou = max(0.0, min(1.0, iou)) if iou is not None else None
+    max_detections = max(1, min(256, max_detections)) if max_detections is not None else None
     frames = []
     model_summary: dict[str, Any] | None = None
     for index, item in enumerate(decoded):
-        person = await infer_body_record_for_image(item.image, include_embedding=include_embeddings)
+        person = await infer_body_record_for_image(
+            item.image,
+            include_embedding=include_embeddings,
+            confidence=confidence,
+            iou=iou,
+            max_detections=max_detections,
+        )
         if model_summary is None:
             model_summary = {
                 "id": person.get("embedding_model_id", FALLBACK_EMBEDDING_MODEL_ID),
