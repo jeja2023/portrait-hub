@@ -3,7 +3,14 @@ from collections.abc import Iterator
 import pytest
 from fastapi.testclient import TestClient
 
-from app import portrait_access, portrait_auth, portrait_security, routes_portrait_access, security
+from app import (
+    portrait_access,
+    portrait_auth,
+    portrait_security,
+    routes_portrait_access,
+    routes_portrait_console,
+    security,
+)
 from main import app
 
 
@@ -12,6 +19,7 @@ def isolated_access_state(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     portrait_access.clear_access_state()
     monkeypatch.setattr(portrait_access, "save_access_state", lambda: None)
     monkeypatch.setattr(routes_portrait_access, "audit_event", lambda *args, **kwargs: None)
+    monkeypatch.setattr(routes_portrait_console, "audit_event", lambda *args, **kwargs: None)
     yield
     portrait_access.clear_access_state()
 
@@ -47,6 +55,7 @@ def create_application(
     data = response.json()["data"]
     return data["application"], data["one_time_secret"]
 
+
 def test_access_tenant_catalog_creates_default_application() -> None:
     client = TestClient(app)
 
@@ -75,6 +84,7 @@ def test_access_tenant_catalog_creates_default_application() -> None:
     assert listed["count"] == 1
     assert listed["tenants"][0]["tenant_id"] == tenant["tenant_id"]
     assert listed["tenants"][0]["application_count"] == 1
+
 
 def test_access_tenant_catalog_rejects_duplicate_names() -> None:
     client = TestClient(app)
@@ -183,7 +193,6 @@ def test_access_application_rotation_keeps_old_key_in_grace_window(monkeypatch: 
     assert portrait_access.application_key_matches("tenant-a", new_secret) is not None
 
 
-
 def test_access_error_code_catalog_is_stable_redacted_and_tenant_scoped() -> None:
     client = TestClient(app)
 
@@ -213,6 +222,8 @@ def test_access_error_code_catalog_is_stable_redacted_and_tenant_scoped() -> Non
     assert "signing_secret_hash" not in body
     assert "phk_" not in body
     assert "whsec_" not in body
+
+
 def test_access_webhooks_validate_urls_hide_hashes_and_generate_sample_delivery() -> None:
     client = TestClient(app)
     create_application(client)
@@ -309,6 +320,7 @@ def test_access_application_api_key_rejects_missing_scope(monkeypatch: pytest.Mo
     assert denied.status_code == 403
     assert "缺少权限" in denied.text
 
+
 def test_access_application_api_key_infers_tenant_without_header(monkeypatch: pytest.MonkeyPatch) -> None:
     client = TestClient(app)
     _, secret = create_application(client, scopes=["access:read"])
@@ -338,3 +350,126 @@ def test_access_application_api_key_rejects_wrong_explicit_tenant(monkeypatch: p
     response = client.get("/v1/access/error-codes", headers={"X-Tenant-ID": "tenant-b", "X-API-Key": secret})
 
     assert response.status_code in {401, 403}
+
+
+def test_identity_member_lifecycle_and_tenant_status_enforcement() -> None:
+    client = TestClient(app)
+    created = client.post(
+        "/v1/access/tenants",
+        json={"name": "华东运营中心", "application_name": "华东业务系统"},
+    )
+    assert created.status_code == 200, created.text
+    tenant_data = created.json()["data"]
+    tenant_id = tenant_data["tenant"]["tenant_id"]
+    secret = tenant_data["one_time_secret"]
+
+    email_only = client.post(
+        "/v1/admin/members",
+        json={
+            "tenant_id": tenant_id,
+            "email": "owner@example.com",
+            "display_name": "旧邮箱成员",
+            "roles": ["viewer"],
+        },
+    )
+    assert email_only.status_code == 422
+
+    member_response = client.post(
+        "/v1/admin/members",
+        json={
+            "tenant_id": tenant_id,
+            "phone": "+8613800138000",
+            "display_name": "租户负责人",
+            "roles": ["operator", "viewer"],
+        },
+    )
+    assert member_response.status_code == 200, member_response.text
+    member = member_response.json()["data"]["member"]
+    assert member["phone"] == "+8613800138000"
+    assert member["roles"] == ["operator", "viewer"]
+    assert portrait_access.find_tenant(tenant_id)["member_count"] == 1
+
+    duplicate = client.post(
+        "/v1/admin/members",
+        json={
+            "tenant_id": tenant_id,
+            "phone": "+86 138-0013-8000",
+            "display_name": "重复成员",
+            "roles": ["viewer"],
+        },
+    )
+    assert duplicate.status_code == 409
+
+    patched = client.patch(
+        f"/v1/admin/members/{member['member_id']}",
+        json={"phone": "13900139000", "display_name": "华东负责人", "roles": ["auditor"], "status": "disabled"},
+    )
+    assert patched.status_code == 200, patched.text
+    assert patched.json()["data"]["member"]["phone"] == "+8613900139000"
+    assert patched.json()["data"]["member"]["roles"] == ["auditor"]
+    assert patched.json()["data"]["member"]["status"] == "disabled"
+
+    listed = client.get("/v1/admin/members?all_tenants=true")
+    assert listed.status_code == 200, listed.text
+    assert listed.headers["cache-control"] == "no-store"
+    assert listed.json()["data"]["members"][0]["display_name"] == "华东负责人"
+
+    disabled = client.patch(f"/v1/access/tenants/{tenant_id}", json={"status": "disabled"})
+    assert disabled.status_code == 200, disabled.text
+    assert portrait_access.application_key_matches_any_tenant(secret) is None
+
+    enabled = client.patch(f"/v1/access/tenants/{tenant_id}", json={"status": "active"})
+    assert enabled.status_code == 200, enabled.text
+    assert portrait_access.application_key_matches_any_tenant(secret)["tenant_id"] == tenant_id
+
+    removed = client.delete(f"/v1/admin/members/{member['member_id']}")
+    assert removed.status_code == 200, removed.text
+    assert portrait_access.list_members(tenant_id) == []
+    assert portrait_access.find_tenant(tenant_id)["member_count"] == 0
+
+
+def test_member_resolution_prefers_subject_and_binds_phone_once() -> None:
+    tenant = portrait_access.create_tenant("身份绑定租户", tenant_id="identity-tenant")
+    phone_member = portrait_access.create_member(
+        tenant["tenant_id"],
+        phone="13800138001",
+        display_name="手机号成员",
+        subject="subject-old",
+        roles=["viewer"],
+    )
+    subject_member = portrait_access.create_member(
+        tenant["tenant_id"],
+        phone="13800138002",
+        display_name="主体成员",
+        subject="subject-current",
+        roles=["operator"],
+    )
+    unbound_member = portrait_access.create_member(
+        tenant["tenant_id"],
+        phone="13800138003",
+        display_name="待绑定成员",
+        roles=["auditor"],
+    )
+
+    resolved = portrait_access.resolve_member(
+        tenant["tenant_id"],
+        subject="subject-current",
+        phone=phone_member["phone"],
+    )
+    assert resolved["member_id"] == subject_member["member_id"]
+
+    bound = portrait_access.resolve_member(
+        tenant["tenant_id"],
+        subject="subject-new",
+        phone="138 0013 8003",
+        bind_subject=True,
+    )
+    assert bound["member_id"] == unbound_member["member_id"]
+    assert portrait_access.find_member(unbound_member["member_id"])["subject"] == "subject-new"
+
+    mismatch = portrait_access.resolve_member(
+        tenant["tenant_id"],
+        subject="subject-other",
+        phone=unbound_member["phone"],
+    )
+    assert mismatch is None

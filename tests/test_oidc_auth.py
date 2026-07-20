@@ -9,7 +9,7 @@ from cryptography.hazmat.primitives.asymmetric import padding, rsa
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
-from app import oidc_auth
+from app import oidc_auth, portrait_access
 from main import app
 
 
@@ -33,20 +33,31 @@ def configured_oidc(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(oidc_auth, "OIDC_IDENTITY_ADMIN_URL", "https://identity.example.com/admin")
 
 
-def session_cookie(*, roles: list[str], tenant_id: str = "tenant-a", csrf: str = "csrf-test") -> str:
-    return oidc_auth._signed_payload(
-        {
-            "purpose": "session",
-            "sub": "user-01",
-            "name": "Test User",
-            "email": "user@example.com",
-            "tenant_id": tenant_id,
-            "roles": roles,
-            "csrf": csrf,
-            "iat": int(time.time()),
-            "exp": int(time.time()) + 300,
-        }
-    )
+def session_cookie(
+    *,
+    roles: list[str],
+    tenant_id: str = "tenant-a",
+    csrf: str = "csrf-test",
+    managed_member_id: str | None = None,
+    phone_number: str | None = None,
+) -> str:
+    payload = {
+        "purpose": "session",
+        "sub": "user-01",
+        "name": "Test User",
+        "email": "user@example.com",
+        "tenant_id": tenant_id,
+        "roles": roles,
+        "csrf": csrf,
+        "iat": int(time.time()),
+        "exp": int(time.time()) + 300,
+    }
+    if managed_member_id is not None:
+        payload["managed_member_id"] = managed_member_id
+    if phone_number is not None:
+        payload["phone_number"] = phone_number
+        payload["phone_number_verified"] = True
+    return oidc_auth._signed_payload(payload)
 
 
 def test_local_admin_login_uses_secure_browser_session(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -138,6 +149,7 @@ def test_remote_login_requires_non_default_credentials(monkeypatch: pytest.Monke
 
     assert oidc_auth.local_auth_is_configured() is False
 
+
 def test_local_default_password_is_disabled_in_production(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(oidc_auth, "LOCAL_AUTH_ENABLED", True)
     monkeypatch.setattr(oidc_auth, "LOCAL_AUTH_USERNAME", "admin")
@@ -156,6 +168,7 @@ def test_local_default_password_is_disabled_in_production(monkeypatch: pytest.Mo
         json={"username": "admin", "password": "123456"},
     )
     assert response.status_code == 503
+
 
 def test_oidc_public_config_is_safe_when_disabled() -> None:
     response = TestClient(app).get("/v1/auth/oidc/config")
@@ -379,3 +392,62 @@ async def test_oidc_callback_validates_rsa_token_and_sets_session(
     identity_payload = identity_response.json()["data"]
     assert identity_payload["identity"]["identity_admin_url"] == "https://identity.example.com/admin"
     assert any(item["role"] == "admin" for item in identity_payload["roles"])
+
+
+def test_managed_oidc_session_uses_member_roles_and_reacts_to_status(
+    configured_oidc: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    portrait_access.clear_access_state()
+    monkeypatch.setattr(portrait_access, "save_access_state", lambda: None)
+    try:
+        portrait_access.create_tenant("企业租户", tenant_id="tenant-a")
+        member = portrait_access.create_member(
+            "tenant-a",
+            phone="13800138005",
+            display_name="企业操作员",
+            roles=["operator"],
+        )
+        claims = {
+            "sub": "user-01",
+            "phone_number": "+8613800138005",
+            "phone_number_verified": False,
+            "tenant_id": "tenant-a",
+            "roles": [],
+        }
+
+        with pytest.raises(HTTPException):
+            oidc_auth._oidc_session_access(claims, "tenant-a")
+        claims["phone_number"] = "13800138005"
+        claims["phone_number_verified"] = True
+        roles, managed_member_id = oidc_auth._oidc_session_access(claims, "tenant-a")
+        assert roles == ["operator"]
+        assert managed_member_id == member["member_id"]
+        assert portrait_access.find_member(member["member_id"])["subject"] == "user-01"
+
+        client = TestClient(app)
+        client.cookies.set(
+            "portrait_oidc_session",
+            session_cookie(
+                roles=["operator"],
+                managed_member_id=member["member_id"],
+                phone_number="13800138005",
+            ),
+        )
+        me = client.get("/v1/console/me")
+        assert me.status_code == 200, me.text
+        assert me.json()["data"]["roles"] == ["operator"]
+        assert client.get("/v1/admin/identity").status_code == 403
+
+        portrait_access.update_member(member["member_id"], {"status": "disabled"})
+        disabled_me = client.get("/v1/console/me")
+        assert disabled_me.status_code == 200, disabled_me.text
+        assert disabled_me.json()["data"]["roles"] == []
+
+        portrait_access.update_member(member["member_id"], {"status": "active"})
+        portrait_access.delete_member(member["member_id"])
+        removed_me = client.get("/v1/console/me")
+        assert removed_me.status_code == 200, removed_me.text
+        assert removed_me.json()["data"]["roles"] == []
+    finally:
+        portrait_access.clear_access_state()

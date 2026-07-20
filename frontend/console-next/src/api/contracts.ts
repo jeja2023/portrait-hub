@@ -25,7 +25,6 @@ export interface Pagination {
   has_more: boolean;
 }
 
-
 export interface ConsoleIdentityMetadata {
   enabled: boolean;
   provider_name: string;
@@ -54,6 +53,39 @@ export interface ConsoleCapabilities {
 export interface IdentityAdminPayload {
   identity: ConsoleIdentityMetadata;
   roles: ConsoleRole[];
+}
+
+export interface IdentityMember {
+  member_id: string;
+  tenant_id: string;
+  phone: string;
+  display_name: string;
+  subject: string | null;
+  roles: string[];
+  status: "active" | "disabled";
+  created_at: number;
+  updated_at: number;
+}
+
+export interface IdentityMemberListPayload {
+  members: IdentityMember[];
+  count: number;
+}
+
+export interface AccessTenant {
+  tenant_id: string;
+  name: string;
+  status: "active" | "disabled";
+  member_count: number;
+  application_count: number;
+  webhook_count: number;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface AccessTenantListPayload {
+  tenants: AccessTenant[];
+  count: number;
 }
 
 export interface AuthPublicConfig {

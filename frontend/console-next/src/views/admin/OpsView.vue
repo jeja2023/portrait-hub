@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
-import { Archive, RefreshCw, Search, ShieldCheck, Trash2 } from "@lucide/vue";
+import { Archive, Download, RefreshCw, Search, ShieldCheck, Trash2 } from "@lucide/vue";
 import {
   ElAlert,
   ElButton,
   ElDatePicker,
+  ElDialog,
   ElInput,
   ElInputNumber,
   ElMessage,
@@ -16,11 +17,20 @@ import {
 } from "element-plus";
 
 import { apiRequest, jsonBody } from "../../api/client";
+import DataTablePagination from "../../components/DataTablePagination.vue";
 import DangerConfirm from "../../components/DangerConfirm.vue";
 import { useCapabilitiesStore } from "../../stores/capabilities";
 import { errorBannerMessage } from "../../utils/errors";
-import { formatTimestamp, auditCategoryLabel, backendAreaLabel, backendLabel, eventLabel, outcomeLabel } from "../../utils/format";
+import {
+  formatTimestamp,
+  auditCategoryLabel,
+  backendAreaLabel,
+  backendLabel,
+  eventLabel,
+  outcomeLabel,
+} from "../../utils/format";
 import { useRouteTab } from "../../utils/routeState";
+import { useTablePagination } from "../../utils/tablePagination";
 
 interface AuditEvent {
   event?: string;
@@ -84,8 +94,15 @@ const auditPayload = ref<AuditPayload>({
 const backupPayload = ref<BackupPayload>({ snapshots: [], count: 0, scanned_count: 0, malformed_count: 0 });
 const auditChain = ref<AuditChain | null>(null);
 const backupOpen = ref(false);
+const exportOpen = ref(false);
 const cleanupOpen = ref(false);
 const retentionDays = ref(90);
+const backupSince = ref<Date | null>(null);
+const exportSince = ref<Date | null>(null);
+const exportPeopleLimit = ref(500);
+const exportJobsLimit = ref(500);
+const exportStreamsLimit = ref(500);
+const exportEventsLimit = ref(100);
 const auditEventFilter = ref("");
 const auditRequestIdFilter = ref("");
 const auditOutcomeFilter = ref("");
@@ -94,6 +111,8 @@ const auditCreatedRange = ref<[Date, Date] | null>(null);
 
 const audit = computed(() => auditPayload.value.records);
 const backups = computed(() => backupPayload.value.snapshots);
+const backupsPager = useTablePagination(backups);
+const auditPager = useTablePagination(audit);
 const backends = computed(() =>
   status.value.configured_backends && typeof status.value.configured_backends === "object"
     ? Object.entries(status.value.configured_backends as Record<string, unknown>)
@@ -179,16 +198,47 @@ async function verifyAudit(): Promise<void> {
   }
 }
 
+async function downloadExport(): Promise<void> {
+  actionLoading.value = true;
+  errorMessage.value = "";
+  try {
+    const params = new URLSearchParams({
+      people_limit: String(exportPeopleLimit.value),
+      jobs_limit: String(exportJobsLimit.value),
+      streams_limit: String(exportStreamsLimit.value),
+      stream_events_limit: String(exportEventsLimit.value),
+    });
+    if (exportSince.value) params.set("updated_since", String(exportSince.value.getTime() / 1000));
+    const payload = await apiRequest<Record<string, unknown>>("/v1/admin/export?" + params);
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = "portrait-hub-export-" + new Date().toISOString().replace(/[:.]/g, "-") + ".json";
+    anchor.click();
+    URL.revokeObjectURL(url);
+    exportOpen.value = false;
+    ElMessage.success("数据导出已生成");
+  } catch (error) {
+    errorMessage.value = errorText(error, "数据导出失败");
+  } finally {
+    actionLoading.value = false;
+  }
+}
+
 async function createBackup(): Promise<void> {
   actionLoading.value = true;
   errorMessage.value = "";
   try {
     await apiRequest("/v1/admin/backup", {
       method: "POST",
-      body: jsonBody({ updated_since: null, confirm: "backup" }),
+      body: jsonBody({
+        updated_since: backupSince.value ? backupSince.value.getTime() / 1000 : null,
+        confirm: "backup",
+      }),
     });
     backupOpen.value = false;
-    ElMessage.success("备份快照已创建");
+    ElMessage.success(backupSince.value ? "增量备份快照已创建" : "完整备份快照已创建");
     await loadBackups();
     tab.value = "backups";
   } catch (error) {
@@ -228,7 +278,18 @@ onMounted(() => void load());
       </div>
       <div class="page-actions">
         <ElButton :icon="RefreshCw" :loading="loading" @click="load">刷新</ElButton>
-        <ElButton v-if="capabilities.hasPermission('admin:export')" :icon="Archive" @click="backupOpen = true">
+        <ElButton
+          v-if="capabilities.hasPermission('admin:export')"
+          :icon="Download"
+          @click="exportOpen = true"
+        >
+          导出数据
+        </ElButton>
+        <ElButton
+          v-if="capabilities.hasPermission('admin:export')"
+          :icon="Archive"
+          @click="backupOpen = true"
+        >
           创建备份
         </ElButton>
         <ElButton
@@ -257,7 +318,8 @@ onMounted(() => void load());
           <ElSkeleton :loading="loading" :rows="5" animated>
             <div class="backend-grid">
               <div v-for="item in backends" :key="item[0]">
-                <span>{{ backendAreaLabel(item[0]) }}</span><strong>{{ backendLabel(item[1]) }}</strong>
+                <span>{{ backendAreaLabel(item[0]) }}</span
+                ><strong>{{ backendLabel(item[1]) }}</strong>
               </div>
             </div>
           </ElSkeleton>
@@ -285,13 +347,16 @@ onMounted(() => void load());
           <div class="summary-strip">
             <span>快照 {{ backupPayload.count }}</span>
             <span>扫描 {{ backupPayload.scanned_count }}</span>
-            <span :data-warning="backupPayload.malformed_count > 0">异常记录 {{ backupPayload.malformed_count }}</span>
+            <span :data-warning="backupPayload.malformed_count > 0"
+              >异常记录 {{ backupPayload.malformed_count }}</span
+            >
           </div>
           <div v-if="backups.length === 0" class="tab-note">没有可见备份快照</div>
           <div v-else class="table-wrap">
             <table class="data-table">
               <thead>
                 <tr>
+                  <th class="sequence-column">序号</th>
                   <th>快照</th>
                   <th>创建时间</th>
                   <th>后端</th>
@@ -301,17 +366,31 @@ onMounted(() => void load());
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="(item, index) in backups" :key="String(item.snapshot_id ?? index)">
-                  <td><code :title="item.snapshot_id">{{ shortHash(item.snapshot_id) }}</code></td>
+                <tr
+                  v-for="(item, index) in backupsPager.items"
+                  :key="String(item.snapshot_id ?? backupsPager.startIndex + index)"
+                >
+                  <td class="sequence-column">{{ backupsPager.startIndex + index + 1 }}</td>
+                  <td>
+                    <code :title="item.snapshot_id">{{ shortHash(item.snapshot_id) }}</code>
+                  </td>
                   <td>{{ formatTimestamp(Number(item.created_at)) }}</td>
                   <td>{{ backendLabel(item.object_backend) }}</td>
                   <td>{{ formatBytes(item.bytes) }}</td>
-                  <td>{{ item.updated_since == null ? "完整" : formatTimestamp(Number(item.updated_since)) }}</td>
+                  <td>
+                    {{ item.updated_since == null ? "完整" : formatTimestamp(Number(item.updated_since)) }}
+                  </td>
                   <td>{{ outcomeLabel(item.outcome || "success") }}</td>
                 </tr>
               </tbody>
             </table>
           </div>
+          <DataTablePagination
+            v-if="backups.length"
+            v-model:page="backupsPager.page"
+            v-model:page-size="backupsPager.pageSize"
+            :total="backupsPager.total"
+          />
         </ElTabPane>
 
         <ElTabPane label="审计" name="audit">
@@ -332,7 +411,12 @@ onMounted(() => void load());
 
           <div class="audit-filters">
             <ElInput v-model="auditEventFilter" clearable placeholder="事件名称" @keyup.enter="loadAudit" />
-            <ElInput v-model="auditRequestIdFilter" clearable placeholder="请求 ID" @keyup.enter="loadAudit" />
+            <ElInput
+              v-model="auditRequestIdFilter"
+              clearable
+              placeholder="请求 ID"
+              @keyup.enter="loadAudit"
+            />
             <ElSelect v-model="auditOutcomeFilter" clearable placeholder="全部结果">
               <ElOption label="成功" value="success" />
               <ElOption label="失败" value="failure" />
@@ -357,8 +441,12 @@ onMounted(() => void load());
           <div class="summary-strip">
             <span>匹配 {{ auditPayload.matched_count }}</span>
             <span>扫描 {{ auditPayload.scanned_count }}</span>
-            <span :data-warning="auditPayload.malformed_count > 0">异常记录 {{ auditPayload.malformed_count }}</span>
-            <span v-for="item in categorySummary" :key="item[0]">{{ auditCategoryLabel(item[0]) }} {{ item[1] }}</span>
+            <span :data-warning="auditPayload.malformed_count > 0"
+              >异常记录 {{ auditPayload.malformed_count }}</span
+            >
+            <span v-for="item in categorySummary" :key="item[0]"
+              >{{ auditCategoryLabel(item[0]) }} {{ item[1] }}</span
+            >
           </div>
 
           <div v-if="audit.length === 0" class="tab-note">没有符合条件的审计事件</div>
@@ -366,6 +454,7 @@ onMounted(() => void load());
             <table class="data-table">
               <thead>
                 <tr>
+                  <th class="sequence-column">序号</th>
                   <th>时间</th>
                   <th>事件</th>
                   <th>类别</th>
@@ -375,32 +464,93 @@ onMounted(() => void load());
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="(item, index) in audit" :key="String(item.audit_hash ?? index)">
+                <tr
+                  v-for="(item, index) in auditPager.items"
+                  :key="String(item.audit_hash ?? auditPager.startIndex + index)"
+                >
+                  <td class="sequence-column">{{ auditPager.startIndex + index + 1 }}</td>
                   <td>{{ formatTimestamp(Number(item.created_at)) }}</td>
                   <td>{{ eventLabel(item.event) }}</td>
                   <td>{{ auditCategoryLabel(item.category) }}</td>
                   <td>{{ outcomeLabel(item.outcome) }}</td>
-                  <td><code>{{ item.request_id }}</code></td>
-                  <td><code :title="item.audit_hash">{{ shortHash(item.audit_hash) }}</code></td>
+                  <td>
+                    <code>{{ item.request_id }}</code>
+                  </td>
+                  <td>
+                    <code :title="item.audit_hash">{{ shortHash(item.audit_hash) }}</code>
+                  </td>
                 </tr>
               </tbody>
             </table>
           </div>
+          <DataTablePagination
+            v-if="audit.length"
+            v-model:page="auditPager.page"
+            v-model:page-size="auditPager.pageSize"
+            :total="auditPager.total"
+          />
         </ElTabPane>
       </ElTabs>
     </section>
 
-    <DangerConfirm
-      v-model="backupOpen"
-      title="创建完整备份"
-      description="将当前租户可导出的人员、任务、视频流和阈值写入新的受控备份对象。"
-      :loading="actionLoading"
-      @confirm="createBackup"
-    />
+    <ElDialog
+      v-model="exportOpen"
+      title="导出租户数据"
+      width="min(680px, 94vw)"
+      :close-on-click-modal="false"
+    >
+      <div class="operation-form">
+        <label>
+          <span>增量起始时间</span>
+          <ElDatePicker v-model="exportSince" type="datetime" clearable placeholder="留空则完整导出" />
+        </label>
+        <div class="limit-grid">
+          <label
+            ><span>人员上限</span><ElInputNumber v-model="exportPeopleLimit" :min="1" :max="500"
+          /></label>
+          <label><span>任务上限</span><ElInputNumber v-model="exportJobsLimit" :min="1" :max="500" /></label>
+          <label
+            ><span>视频流上限</span><ElInputNumber v-model="exportStreamsLimit" :min="1" :max="500"
+          /></label>
+          <label
+            ><span>单流事件上限</span><ElInputNumber v-model="exportEventsLimit" :min="1" :max="500"
+          /></label>
+        </div>
+      </div>
+      <template #footer>
+        <ElButton @click="exportOpen = false">取消</ElButton>
+        <ElButton type="primary" :icon="Download" :loading="actionLoading" @click="downloadExport">
+          生成并下载
+        </ElButton>
+      </template>
+    </ElDialog>
+
+    <ElDialog v-model="backupOpen" title="创建备份" width="min(560px, 94vw)" :close-on-click-modal="false">
+      <div class="operation-form">
+        <ElAlert
+          title="留空起始时间会创建完整备份；指定时间则只备份此后更新的数据。"
+          type="info"
+          :closable="false"
+          show-icon
+        />
+        <label>
+          <span>增量起始时间</span>
+          <ElDatePicker v-model="backupSince" type="datetime" clearable placeholder="留空则完整备份" />
+        </label>
+      </div>
+      <template #footer>
+        <ElButton @click="backupOpen = false">取消</ElButton>
+        <ElButton type="primary" :icon="Archive" :loading="actionLoading" @click="createBackup">
+          {{ backupSince ? "创建增量备份" : "创建完整备份" }}
+        </ElButton>
+      </template>
+    </ElDialog>
     <DangerConfirm
       v-model="cleanupOpen"
       title="执行数据清理"
-      :description="'将永久清理当前租户中早于 ' + retentionDays + ' 天的任务、事件和人员数据，同时删除关联对象。'"
+      :description="
+        '将永久清理当前租户中早于 ' + retentionDays + ' 天的任务、事件和人员数据，同时删除关联对象。'
+      "
       high-risk
       confirmation-text="清理数据"
       :loading="actionLoading"
@@ -487,6 +637,27 @@ onMounted(() => void load());
   border: 1px solid #d8e0de;
   font-size: 12px;
 }
+.operation-form,
+.operation-form label {
+  display: grid;
+  gap: 8px;
+}
+.operation-form {
+  gap: 18px;
+}
+.operation-form label > span {
+  color: #62706d;
+  font-size: 13px;
+}
+.limit-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.operation-form :deep(.el-date-editor),
+.operation-form :deep(.el-input-number) {
+  width: 100%;
+}
 [data-warning="true"] {
   color: #b4232f;
 }
@@ -497,7 +668,8 @@ onMounted(() => void load());
 }
 @media (max-width: 700px) {
   .backend-grid,
-  .audit-filters {
+  .audit-filters,
+  .limit-grid {
     grid-template-columns: 1fr;
   }
   .retention-control,

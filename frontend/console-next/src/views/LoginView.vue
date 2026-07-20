@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { Building2, KeyRound, LockKeyhole, ScanSearch, ShieldCheck, UserRound } from "@lucide/vue";
+import { Building2, KeyRound, LockKeyhole, ShieldCheck, UserRound } from "@lucide/vue";
 import {
   ElAlert,
   ElButton,
@@ -16,6 +16,7 @@ import {
 } from "element-plus";
 
 import { apiRequest } from "../api/client";
+import brandMarkUrl from "../assets/portrait-hub-mark.svg";
 import type { AuthPublicConfig } from "../api/contracts";
 import { beginSession, clearSession, markSessionAuthenticated, type AuthMode } from "../auth/session";
 import { useCapabilitiesStore } from "../stores/capabilities";
@@ -82,7 +83,6 @@ async function loginWithLocalAccount(): Promise<void> {
   }
 }
 
-
 async function restoreBrowserSession(authMode: "local" | "oidc", silent = false): Promise<void> {
   beginSession({ tenantId: "", authMode });
   try {
@@ -145,7 +145,9 @@ onMounted(async () => {
   <main class="login-view">
     <section class="login-panel" aria-labelledby="login-title">
       <div class="login-brand">
-        <span class="login-brand__mark"><ScanSearch :size="28" /></span>
+        <span class="login-brand__mark" aria-hidden="true">
+          <img :src="brandMarkUrl" alt="" />
+        </span>
         <div><strong>影鉴</strong><span>业务控制台</span></div>
       </div>
       <div class="login-heading">
@@ -169,11 +171,7 @@ onMounted(async () => {
           @submit.prevent="loginWithLocalAccount"
         >
           <ElFormItem label="用户名">
-            <ElInput
-              v-model="username"
-              autocomplete="username"
-              :prefix-icon="UserRound"
-            />
+            <ElInput v-model="username" autocomplete="username" :prefix-icon="UserRound" />
           </ElFormItem>
           <ElFormItem label="密码">
             <ElInput
@@ -188,13 +186,7 @@ onMounted(async () => {
             登录
           </ElButton>
         </ElForm>
-        <ElAlert
-          v-else
-          title="本地账号登录未配置"
-          type="warning"
-          show-icon
-          :closable="false"
-        />
+        <ElAlert v-else title="本地账号登录未配置" type="warning" show-icon :closable="false" />
 
         <div v-if="authConfig.oidc_enabled" class="login-separator"><span>或</span></div>
         <ElButton
@@ -206,11 +198,7 @@ onMounted(async () => {
           使用{{ authConfig.provider_name }}登录
         </ElButton>
 
-        <ElCollapse
-          v-if="authConfig.credential_login_available"
-          v-model="advanced"
-          class="login-advanced"
-        >
+        <ElCollapse v-if="authConfig.credential_login_available" v-model="advanced" class="login-advanced">
           <ElCollapseItem title="高级凭证登录" name="credentials">
             <p class="credential-note">仅用于开发、自动化验证或受控应急访问。</p>
           </ElCollapseItem>
@@ -246,9 +234,7 @@ onMounted(async () => {
           </ElButton>
         </ElForm>
       </ElSkeleton>
-      <p class="login-footnote">
-        账号凭证仅用于验证身份，不会写入浏览器存储。
-      </p>
+      <p class="login-footnote">账号凭证仅用于验证身份，不会写入浏览器存储。</p>
     </section>
   </main>
 </template>
@@ -279,11 +265,13 @@ onMounted(async () => {
 .login-brand__mark {
   width: 44px;
   height: 44px;
-  display: grid;
-  place-items: center;
-  color: #fff;
-  background: #087682;
-  border-radius: 5px;
+  overflow: hidden;
+  border-radius: 8px;
+}
+.login-brand__mark img {
+  width: 100%;
+  height: 100%;
+  display: block;
 }
 .login-brand div {
   display: flex;

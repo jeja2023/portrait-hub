@@ -4,6 +4,13 @@ import { defineConfig, devices } from "@playwright/test";
 
 const projectRoot = fileURLToPath(new URL("../../", import.meta.url));
 const runtimeRoot = fileURLToPath(new URL("../../.codex-tmp/e2e-runtime/", import.meta.url));
+const e2ePort = Number(process.env.PLAYWRIGHT_PORT ?? "8766");
+
+if (!Number.isInteger(e2ePort) || e2ePort < 1 || e2ePort > 65_535) {
+  throw new Error("PLAYWRIGHT_PORT must be an integer between 1 and 65535");
+}
+
+const e2eBaseUrl = `http://127.0.0.1:${e2ePort}`;
 
 export default defineConfig({
   testDir: "./e2e",
@@ -16,7 +23,7 @@ export default defineConfig({
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? [["line"], ["html", { open: "never" }]] : "line",
   use: {
-    baseURL: "http://127.0.0.1:8766",
+    baseURL: e2eBaseUrl,
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
     video: "retain-on-failure",
@@ -59,10 +66,10 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: "python -m uvicorn main:app --host 127.0.0.1 --port 8766",
+    command: `python -m uvicorn main:app --host 127.0.0.1 --port ${e2ePort}`,
     cwd: projectRoot,
     env: {
-      AUTH_REQUIRED: "false",
+      AUTH_REQUIRED: "true",
       RBAC_ENABLED: "false",
       TENANT_HEADER_REQUIRED: "false",
       ENABLE_API_DOCS: "true",
@@ -82,7 +89,7 @@ export default defineConfig({
       PORTRAIT_OBJECT_STORAGE_BACKEND: "local",
       TASK_QUEUE_BACKEND: "local",
     },
-    url: "http://127.0.0.1:8766/health",
+    url: `${e2eBaseUrl}/health`,
     reuseExistingServer: false,
     timeout: 120_000,
   },

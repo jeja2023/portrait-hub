@@ -92,9 +92,13 @@ a {
   flex: 0 0 36px;
   display: grid;
   place-items: center;
-  color: #dff7f4;
-  background: #087682;
-  border-radius: 5px;
+  overflow: hidden;
+  border-radius: 7px;
+}
+.brand-mark img {
+  width: 100%;
+  height: 100%;
+  display: block;
 }
 .brand-copy {
   display: flex;
@@ -411,17 +415,33 @@ a {
   width: 100%;
   overflow-x: auto;
 }
+.el-table {
+  --el-table-border-color: var(--line);
+}
 .data-table {
   width: 100%;
+  border: 1px solid var(--line);
   border-collapse: collapse;
   font-size: 13px;
 }
 .data-table th,
 .data-table td {
-  padding: 11px 12px;
-  border-bottom: 1px solid var(--line);
+  padding: 8px 10px;
+  border: 1px solid var(--line);
   text-align: left;
   vertical-align: middle;
+}
+.data-table .sequence-column {
+  width: 64px;
+  min-width: 64px;
+  text-align: center;
+  white-space: nowrap;
+}
+.el-table .el-table__cell {
+  padding: 7px 0;
+}
+.el-table .cell {
+  line-height: 20px;
 }
 .data-table th {
   color: var(--muted);
@@ -429,9 +449,7 @@ a {
   font-weight: 600;
   white-space: nowrap;
 }
-.data-table tr:last-child td {
-  border-bottom: 0;
-}
+
 .inline-actions {
   display: flex;
   align-items: center;

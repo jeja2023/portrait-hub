@@ -2,10 +2,20 @@
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { Code2, Eye, Pause, Play, Plus, RefreshCw, Trash2 } from "@lucide/vue";
-import { ElAlert, ElButton, ElDialog, ElDrawer, ElInput, ElSkeleton } from "element-plus";
+import {
+  ElAlert,
+  ElButton,
+  ElCheckbox,
+  ElDialog,
+  ElDrawer,
+  ElInput,
+  ElInputNumber,
+  ElSkeleton,
+} from "element-plus";
 
 import { apiRequest, jsonBody } from "../../api/client";
 import { openTicketWebSocket, type LiveConnectionState } from "../../api/ws";
+import DataTablePagination from "../../components/DataTablePagination.vue";
 import EmptyState from "../../components/EmptyState.vue";
 import FrameGrid from "../../components/FrameGrid.vue";
 import RawDataDrawer from "../../components/RawDataDrawer.vue";
@@ -13,6 +23,7 @@ import { useCapabilitiesStore } from "../../stores/capabilities";
 import { usePrefsStore } from "../../stores/prefs";
 import { errorBannerMessage } from "../../utils/errors";
 import { formatTimestamp, statusLabel, eventLabel } from "../../utils/format";
+import { useTablePagination } from "../../utils/tablePagination";
 
 interface StreamSummary {
   stream_id: string;
@@ -20,6 +31,7 @@ interface StreamSummary {
   name: string | null;
   status: string;
   metadata: Record<string, unknown>;
+  settings?: Record<string, unknown>;
   created_at: number;
   updated_at: number;
   event_count: number;
@@ -42,6 +54,7 @@ const router = useRouter();
 const capabilities = useCapabilitiesStore();
 const prefs = usePrefsStore();
 const streams = ref<StreamSummary[]>([]);
+const streamsPager = useTablePagination(streams);
 const loading = ref(true);
 const errorMessage = ref("");
 const createOpen = ref(false);
@@ -49,6 +62,17 @@ const createLoading = ref(false);
 const streamName = ref("");
 const streamUrl = ref("");
 const metadataRows = ref<{ key: string; value: string }[]>([]);
+const detectorProject = ref("");
+const detectorModel = ref("");
+const reidProject = ref("");
+const reidModel = ref("");
+const streamConfidence = ref<number | null>(null);
+const streamIou = ref<number | null>(null);
+const streamMaxDetections = ref<number | null>(null);
+const streamSampleInterval = ref<number | null>(null);
+const streamBatchSize = ref<number | null>(null);
+const streamReadTimeout = ref<number | null>(null);
+const streamIncludeEmbeddings = ref(false);
 const detail = ref<StreamDetail | null>(null);
 const detailEvents = ref<StreamEvent[]>([]);
 const liveState = ref<LiveConnectionState>("closed");
@@ -89,6 +113,27 @@ function collectedMetadata(): Record<string, string> {
   return metadata;
 }
 
+function collectedSettings(): Record<string, unknown> {
+  const settings: Record<string, unknown> = { include_embeddings: streamIncludeEmbeddings.value };
+  const textValues: Array<[string, string]> = [
+    ["detector_project_name", detectorProject.value],
+    ["detector_model_name", detectorModel.value],
+    ["reid_project_name", reidProject.value],
+    ["reid_model_name", reidModel.value],
+  ];
+  for (const [key, value] of textValues) if (value.trim()) settings[key] = value.trim();
+  const numberValues: Array<[string, number | null]> = [
+    ["confidence", streamConfidence.value],
+    ["iou", streamIou.value],
+    ["max_detections", streamMaxDetections.value],
+    ["sample_interval_seconds", streamSampleInterval.value],
+    ["batch_size", streamBatchSize.value],
+    ["read_timeout_seconds", streamReadTimeout.value],
+  ];
+  for (const [key, value] of numberValues) if (value !== null) settings[key] = value;
+  return settings;
+}
+
 async function createStream(): Promise<void> {
   createLoading.value = true;
   try {
@@ -97,7 +142,7 @@ async function createStream(): Promise<void> {
       body: jsonBody({
         stream_url: streamUrl.value,
         name: streamName.value || null,
-        settings: {},
+        settings: collectedSettings(),
         metadata: collectedMetadata(),
       }),
     });
@@ -143,9 +188,7 @@ function applyLivePayload(payload: unknown): void {
 }
 
 async function refreshDetail(streamId: string): Promise<void> {
-  const payload = await apiRequest<{ stream: StreamDetail }>(
-    `/v1/streams/${encodeURIComponent(streamId)}`,
-  );
+  const payload = await apiRequest<{ stream: StreamDetail }>(`/v1/streams/${encodeURIComponent(streamId)}`);
   applyLivePayload({ stream: payload.stream });
 }
 
@@ -164,9 +207,7 @@ async function startLive(stream: StreamSummary): Promise<void> {
 async function openDetail(streamId: string): Promise<void> {
   errorMessage.value = "";
   try {
-    const payload = await apiRequest<{ stream: StreamDetail }>(
-      `/v1/streams/${encodeURIComponent(streamId)}`,
-    );
+    const payload = await apiRequest<{ stream: StreamDetail }>(`/v1/streams/${encodeURIComponent(streamId)}`);
     applyDetail(payload.stream);
     await router.replace(`/analysis/stream/${encodeURIComponent(streamId)}`);
     await startLive(payload.stream);
@@ -233,6 +274,7 @@ onBeforeUnmount(() => {
           <table class="data-table">
             <thead>
               <tr>
+                <th class="sequence-column">序号</th>
                 <th>名称</th>
                 <th>地址</th>
                 <th>状态</th>
@@ -242,7 +284,8 @@ onBeforeUnmount(() => {
               </tr>
             </thead>
             <tbody>
-              <tr v-for="stream in streams" :key="stream.stream_id">
+              <tr v-for="(stream, index) in streamsPager.items" :key="stream.stream_id">
+                <td class="sequence-column">{{ streamsPager.startIndex + index + 1 }}</td>
                 <td>
                   <strong>{{ stream.name || stream.stream_id }}</strong>
                 </td>
@@ -277,11 +320,64 @@ onBeforeUnmount(() => {
           </table>
         </div></ElSkeleton
       >
+      <DataTablePagination
+        v-if="streams.length"
+        v-model:page="streamsPager.page"
+        v-model:page-size="streamsPager.pageSize"
+        :total="streamsPager.total"
+      />
     </section>
     <ElDialog v-model="createOpen" title="注册视频流" width="min(560px, 92vw)" :close-on-click-modal="false"
       ><div class="stream-form">
         <label><span>名称</span><ElInput v-model="streamName" maxlength="256" /></label
         ><label><span>流地址</span><ElInput v-model="streamUrl" placeholder="rtsp:// 或 https://" /></label>
+        <details class="stream-advanced">
+          <summary>分析参数</summary>
+          <div class="stream-settings-grid">
+            <label
+              ><span>检测模型项目</span><ElInput v-model="detectorProject" placeholder="留空使用默认值"
+            /></label>
+            <label
+              ><span>检测模型文件</span><ElInput v-model="detectorModel" placeholder="留空使用默认值"
+            /></label>
+            <label
+              ><span>ReID 模型项目</span><ElInput v-model="reidProject" placeholder="留空使用默认值"
+            /></label>
+            <label
+              ><span>ReID 模型文件</span><ElInput v-model="reidModel" placeholder="留空使用默认值"
+            /></label>
+            <label
+              ><span>置信度</span
+              ><ElInputNumber v-model="streamConfidence" :min="0" :max="1" :step="0.05" placeholder="默认"
+            /></label>
+            <label
+              ><span>IoU</span
+              ><ElInputNumber v-model="streamIou" :min="0" :max="1" :step="0.05" placeholder="默认"
+            /></label>
+            <label
+              ><span>最大目标数</span
+              ><ElInputNumber v-model="streamMaxDetections" :min="1" :max="10000" placeholder="默认"
+            /></label>
+            <label
+              ><span>采样间隔（秒）</span
+              ><ElInputNumber
+                v-model="streamSampleInterval"
+                :min="0.01"
+                :max="3600"
+                :step="0.5"
+                placeholder="默认"
+            /></label>
+            <label
+              ><span>批次大小</span
+              ><ElInputNumber v-model="streamBatchSize" :min="1" :max="256" placeholder="默认"
+            /></label>
+            <label
+              ><span>读取超时（秒）</span
+              ><ElInputNumber v-model="streamReadTimeout" :min="1" :max="3600" placeholder="默认"
+            /></label>
+          </div>
+          <ElCheckbox v-model="streamIncludeEmbeddings">在流事件中包含特征向量</ElCheckbox>
+        </details>
         <div class="metadata-heading">
           <span>业务元数据</span><ElButton text :icon="Plus" @click="addMetadataRow">添加字段</ElButton>
         </div>
@@ -315,9 +411,7 @@ onBeforeUnmount(() => {
           <div>
             <span>视频流</span><strong>{{ detail.name || detail.stream_id }}</strong>
           </div>
-          <span class="status-pill" :data-status="detail.status">{{
-            statusLabel(detail.status)
-          }}</span>
+          <span class="status-pill" :data-status="detail.status">{{ statusLabel(detail.status) }}</span>
         </div>
         <dl class="detail-grid">
           <div>
@@ -326,10 +420,7 @@ onBeforeUnmount(() => {
           </div>
           <div>
             <dt>实时连接</dt>
-            <dd
-              role="status"
-              aria-live="polite"
-            >
+            <dd role="status" aria-live="polite">
               {{ liveState === "open" ? "已连接" : liveState === "degraded" ? "已降级" : "连接中" }}
             </dd>
           </div>
@@ -342,6 +433,15 @@ onBeforeUnmount(() => {
             <dd>{{ formatTimestamp(detail.updated_at) }}</dd>
           </div>
         </dl>
+        <section v-if="Object.keys(detail.settings ?? {}).length" class="metadata-view">
+          <h3>分析参数</h3>
+          <dl>
+            <div v-for="(value, key) in detail.settings" :key="key">
+              <dt>{{ key }}</dt>
+              <dd>{{ value }}</dd>
+            </div>
+          </dl>
+        </section>
         <section v-if="Object.keys(detail.metadata ?? {}).length" class="metadata-view">
           <h3>业务元数据</h3>
           <dl>
@@ -392,6 +492,23 @@ onBeforeUnmount(() => {
   gap: 7px;
   color: #62706d;
   font-size: 13px;
+}
+.stream-advanced {
+  padding: 12px;
+  border: 1px solid #d8e0de;
+}
+.stream-advanced summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.stream-settings-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 14px 0;
+}
+.stream-settings-grid :deep(.el-input-number) {
+  width: 100%;
 }
 .metadata-heading {
   display: flex;
@@ -525,6 +642,9 @@ onBeforeUnmount(() => {
   margin-top: 18px;
 }
 @media (max-width: 767px) {
+  .stream-settings-grid {
+    grid-template-columns: 1fr;
+  }
   .event-timeline li {
     grid-template-columns: 1fr;
     gap: 3px;

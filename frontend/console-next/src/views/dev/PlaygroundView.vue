@@ -17,9 +17,11 @@ import {
 } from "element-plus";
 
 import { ApiError, apiRaw, apiRequest, jsonBody } from "../../api/client";
+import DataTablePagination from "../../components/DataTablePagination.vue";
 import { errorBannerMessage } from "../../utils/errors";
 import { redactForDisplay } from "../../utils/redact";
 import { useRouteTab } from "../../utils/routeState";
+import { useTablePagination } from "../../utils/tablePagination";
 
 type EndpointKind = "read" | "batch-search" | "batch-compare" | "stream-create" | "stream-events";
 interface EndpointDefinition {
@@ -49,7 +51,13 @@ const options: EndpointDefinition[] = [
   { value: "/v1/models", label: "模型列表", method: "GET", kind: "read", controlledUse: "只读" },
   { value: "/v1/thresholds", label: "阈值方案", method: "GET", kind: "read", controlledUse: "只读" },
   { value: "/v1/admin/status", label: "平台状态", method: "GET", kind: "read", controlledUse: "只读" },
-  { value: "/v1/access/error-codes", label: "错误码目录", method: "GET", kind: "read", controlledUse: "只读" },
+  {
+    value: "/v1/access/error-codes",
+    label: "错误码目录",
+    method: "GET",
+    kind: "read",
+    controlledUse: "只读",
+  },
   {
     value: "/v1/gallery/search/batch",
     label: "批量以图搜人",
@@ -91,7 +99,9 @@ const response = ref<unknown>(null);
 const diagnostics = ref<Diagnostics | null>(null);
 const referenceLoading = ref(false);
 const errorCodes = ref<Record<string, unknown>[]>([]);
+const errorCodesPager = useTablePagination(errorCodes);
 const openapiPaths = ref<Array<{ method: string; path: string; summary: string }>>([]);
+const openapiPager = useTablePagination(openapiPaths);
 const tab = useRouteTab("debug");
 const filesA = ref<File[]>([]);
 const filesB = ref<File[]>([]);
@@ -208,7 +218,9 @@ async function loadReference(value: string): Promise<void> {
   if (value === "openapi" && openapiPaths.value.length === 0) {
     referenceLoading.value = true;
     try {
-      const specification = await apiRequest<{ paths?: Record<string, Record<string, unknown>> }>("/openapi.json");
+      const specification = await apiRequest<{ paths?: Record<string, Record<string, unknown>> }>(
+        "/openapi.json",
+      );
       openapiPaths.value = Object.entries(specification.paths ?? {}).flatMap(([path, methods]) =>
         Object.entries(methods)
           .filter(([method]) => ["get", "post", "put", "patch", "delete"].includes(method))
@@ -337,7 +349,9 @@ async function execute(): Promise<void> {
                 <code>{{ endpointTemplate }}</code>
               </div>
 
-              <template v-if="selectedEndpoint.kind === 'batch-search' || selectedEndpoint.kind === 'batch-compare'">
+              <template
+                v-if="selectedEndpoint.kind === 'batch-search' || selectedEndpoint.kind === 'batch-compare'"
+              >
                 <label>
                   <span>{{ selectedEndpoint.kind === "batch-search" ? "检索图片" : "左侧图片" }}</span>
                   <input type="file" multiple accept="image/*" @change="selectFiles('a', $event)" />
@@ -374,7 +388,9 @@ async function execute(): Promise<void> {
               </template>
 
               <template v-if="selectedEndpoint.kind === 'stream-create'">
-                <label><span>视频流地址</span><ElInput v-model="streamUrl" placeholder="https://..." /></label>
+                <label
+                  ><span>视频流地址</span><ElInput v-model="streamUrl" placeholder="https://..."
+                /></label>
                 <label><span>显示名称</span><ElInput v-model="streamName" maxlength="256" /></label>
               </template>
 
@@ -393,7 +409,9 @@ async function execute(): Promise<void> {
                 发送请求
               </ElButton>
             </div>
-            <pre class="response-code">{{ response === null && diagnostics === null ? "等待请求" : formatted }}</pre>
+            <pre class="response-code">{{
+              response === null && diagnostics === null ? "等待请求" : formatted
+            }}</pre>
           </div>
         </ElTabPane>
 
@@ -406,7 +424,10 @@ async function execute(): Promise<void> {
               :data-example="example.id"
             >
               <header>
-                <div><strong>{{ example.title }}</strong><span>{{ example.language }}</span></div>
+                <div>
+                  <strong>{{ example.title }}</strong
+                  ><span>{{ example.language }}</span>
+                </div>
                 <ElButton text :icon="Copy" @click="copyExample(example)">复制</ElButton>
               </header>
               <pre class="reference-code">{{ example.code }}</pre>
@@ -420,6 +441,7 @@ async function execute(): Promise<void> {
               <table class="data-table">
                 <thead>
                   <tr>
+                    <th class="sequence-column">序号</th>
                     <th>错误码</th>
                     <th>协议状态</th>
                     <th>可重试</th>
@@ -428,8 +450,11 @@ async function execute(): Promise<void> {
                   </tr>
                 </thead>
                 <tbody>
-                  <tr v-for="item in errorCodes" :key="String(item.code)">
-                    <td><code>{{ item.code }}</code></td>
+                  <tr v-for="(item, index) in errorCodesPager.items" :key="String(item.code)">
+                    <td class="sequence-column">{{ errorCodesPager.startIndex + index + 1 }}</td>
+                    <td>
+                      <code>{{ item.code }}</code>
+                    </td>
                     <td>{{ item.http_status }}</td>
                     <td>{{ item.retryable ? "是" : "否" }}</td>
                     <td>{{ item.description }}</td>
@@ -439,6 +464,11 @@ async function execute(): Promise<void> {
               </table>
             </div>
           </ElSkeleton>
+          <DataTablePagination
+            v-model:page="errorCodesPager.page"
+            v-model:page-size="errorCodesPager.pageSize"
+            :total="errorCodesPager.total"
+          />
         </ElTabPane>
 
         <ElTabPane label="接口定义" name="openapi">
@@ -449,17 +479,34 @@ async function execute(): Promise<void> {
             </div>
             <div class="table-wrap openapi-table">
               <table class="data-table">
-                <thead><tr><th>方法</th><th>路径</th><th>摘要</th></tr></thead>
+                <thead>
+                  <tr>
+                    <th class="sequence-column">序号</th>
+                    <th>方法</th>
+                    <th>路径</th>
+                    <th>摘要</th>
+                  </tr>
+                </thead>
                 <tbody>
-                  <tr v-for="item in openapiPaths" :key="item.method + item.path">
-                    <td><code>{{ item.method }}</code></td>
-                    <td><code>{{ item.path }}</code></td>
+                  <tr v-for="(item, index) in openapiPager.items" :key="item.method + item.path">
+                    <td class="sequence-column">{{ openapiPager.startIndex + index + 1 }}</td>
+                    <td>
+                      <code>{{ item.method }}</code>
+                    </td>
+                    <td>
+                      <code>{{ item.path }}</code>
+                    </td>
                     <td>{{ operationSummary(item.summary) }}</td>
                   </tr>
                 </tbody>
               </table>
             </div>
           </ElSkeleton>
+          <DataTablePagination
+            v-model:page="openapiPager.page"
+            v-model:page-size="openapiPager.pageSize"
+            :total="openapiPager.total"
+          />
         </ElTabPane>
       </ElTabs>
     </section>
@@ -527,7 +574,10 @@ async function execute(): Promise<void> {
   color: #d9ebe7;
   background: #17201f;
   border-radius: 4px;
-  font: 12px/1.65 "Cascadia Code", Consolas, monospace;
+  font:
+    12px/1.65 "Cascadia Code",
+    Consolas,
+    monospace;
   white-space: pre-wrap;
 }
 .sdk-grid {
@@ -559,7 +609,10 @@ async function execute(): Promise<void> {
   padding: 14px;
   color: #d9ebe7;
   background: #17201f;
-  font: 12px/1.65 "Cascadia Code", Consolas, monospace;
+  font:
+    12px/1.65 "Cascadia Code",
+    Consolas,
+    monospace;
   white-space: pre-wrap;
 }
 .reference-toolbar {

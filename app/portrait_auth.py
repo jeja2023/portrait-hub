@@ -402,6 +402,11 @@ async def require_permission(
     claims = verify_hs256_jwt(authorization.removeprefix("Bearer ").strip())
     if not jwt_tenant_matches(claims, tenant_id):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="JWT 与租户不匹配")
+    if tenant_id:
+        from app.portrait_access import tenant_is_active
+
+        if not tenant_is_active(tenant_id):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="租户已停用")
     if not has_permission(roles_from_claims(claims), permission):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=f"缺少权限：{permission}")
 

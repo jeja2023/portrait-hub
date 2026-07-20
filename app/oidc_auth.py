@@ -98,7 +98,9 @@ def oidc_is_configured() -> bool:
 
 def _require_oidc_config() -> None:
     if not oidc_is_configured():
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Enterprise login is not configured")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Enterprise login is not configured"
+        )
     if not OIDC_ALLOW_INSECURE_HTTP and not OIDC_ISSUER.startswith("https://"):
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="OIDC issuer must use HTTPS")
 
@@ -120,8 +122,7 @@ def local_auth_is_configured() -> bool:
     if len(LOCAL_AUTH_SESSION_SECRET) < 32 or not _TENANT_PATTERN.fullmatch(LOCAL_AUTH_TENANT_ID):
         return False
     uses_default_credentials = (
-        LOCAL_AUTH_PASSWORD == _DEFAULT_LOCAL_PASSWORD
-        or LOCAL_AUTH_SESSION_SECRET == _DEFAULT_LOCAL_SESSION_SECRET
+        LOCAL_AUTH_PASSWORD == _DEFAULT_LOCAL_PASSWORD or LOCAL_AUTH_SESSION_SECRET == _DEFAULT_LOCAL_SESSION_SECRET
     )
     return not (uses_default_credentials and (_production_profile() or LOCAL_AUTH_ALLOW_REMOTE))
 
@@ -183,13 +184,47 @@ def browser_session_claims(request: Request | None) -> dict[str, Any] | None:
             purpose="session",
         )
         if oidc_claims is not None:
-            return oidc_claims
+            return _managed_session_claims(oidc_claims)
     return None
+
+
+def _managed_session_claims(claims: dict[str, Any]) -> dict[str, Any]:
+    from app.portrait_access import find_tenant, resolve_member
+
+    tenant_id = str(claims.get("tenant_id") or "").strip()
+    tenant = find_tenant(tenant_id) if tenant_id else None
+    member = (
+        resolve_member(
+            tenant_id,
+            subject=str(claims.get("sub") or ""),
+            phone=(str(claims.get("phone_number") or "") if claims.get("phone_number_verified") is True else ""),
+        )
+        if tenant_id
+        else None
+    )
+    managed_member_id = str(claims.get("managed_member_id") or "")
+    if tenant is None and member is None and not managed_member_id:
+        return claims
+    managed = dict(claims)
+    if tenant is not None and tenant.get("status") != "active":
+        managed["roles"] = []
+        managed["managed_access_status"] = "tenant_disabled"
+        return managed
+    if member is None:
+        managed["roles"] = []
+        managed["managed_access_status"] = "member_removed"
+        return managed
+    managed["roles"] = list(member.get("roles") or []) if member.get("status") == "active" else []
+    managed["name"] = str(member.get("display_name") or managed.get("name") or managed.get("sub") or "")
+    managed["managed_member_id"] = member.get("member_id")
+    managed["managed_access_status"] = member.get("status")
+    return managed
 
 
 def oidc_session_claims(request: Request | None) -> dict[str, Any] | None:
     claims = browser_session_claims(request)
     return claims if claims and claims.get("auth_kind") == "oidc" else None
+
 
 def require_browser_session_csrf(request: Request, claims: dict[str, Any]) -> None:
     if request.method.upper() in {"GET", "HEAD", "OPTIONS", "TRACE"}:
@@ -244,7 +279,9 @@ def _local_roles(claims: dict[str, Any]) -> list[str]:
     if not roles and OIDC_DEFAULT_ROLE in ROLE_PERMISSIONS:
         roles.add(OIDC_DEFAULT_ROLE)
     if not roles:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Enterprise identity is missing a valid role or tenant")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Enterprise identity is missing a valid role or tenant"
+        )
     return sorted(roles)
 
 
@@ -252,7 +289,9 @@ def _tenant_id(claims: dict[str, Any]) -> str:
     value = _claim_value(claims, OIDC_TENANT_CLAIM)
     tenant_id = value.strip() if isinstance(value, str) else OIDC_DEFAULT_TENANT_ID
     if not tenant_id or not _TENANT_PATTERN.fullmatch(tenant_id):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Enterprise identity is missing a valid role or tenant")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Enterprise identity is missing a valid role or tenant"
+        )
     return tenant_id
 
 
@@ -276,9 +315,7 @@ async def _discovery() -> dict[str, Any]:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Invalid OIDC discovery document")
     for key in ("authorization_endpoint", "token_endpoint", "jwks_uri"):
         endpoint = document.get(key)
-        if not isinstance(endpoint, str) or (
-            not OIDC_ALLOW_INSECURE_HTTP and not endpoint.startswith("https://")
-        ):
+        if not isinstance(endpoint, str) or (not OIDC_ALLOW_INSECURE_HTTP and not endpoint.startswith("https://")):
             raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Invalid OIDC discovery endpoint")
     _DISCOVERY_CACHE = (now + 300, document)
     return document
@@ -310,8 +347,8 @@ def _verify_jwk_signature(token: str, jwk: dict[str, Any], algorithm: str) -> No
         if algorithm.startswith("RS") and jwk.get("kty") == "RSA":
             modulus = int.from_bytes(_b64url_decode(str(jwk["n"])), "big")
             exponent = int.from_bytes(_b64url_decode(str(jwk["e"])), "big")
-            public_key = rsa.RSAPublicNumbers(exponent, modulus).public_key()
-            public_key.verify(signature, signing_input, padding.PKCS1v15(), digest)
+            rsa_public_key = rsa.RSAPublicNumbers(exponent, modulus).public_key()
+            rsa_public_key.verify(signature, signing_input, padding.PKCS1v15(), digest)
             return
         if algorithm.startswith("ES") and jwk.get("kty") == "EC":
             curves = {"P-256": ec.SECP256R1(), "P-384": ec.SECP384R1(), "P-521": ec.SECP521R1()}
@@ -320,17 +357,21 @@ def _verify_jwk_signature(token: str, jwk: dict[str, Any], algorithm: str) -> No
                 raise ValueError("invalid EC key")
             x_value = int.from_bytes(_b64url_decode(str(jwk["x"])), "big")
             y_value = int.from_bytes(_b64url_decode(str(jwk["y"])), "big")
-            public_key = ec.EllipticCurvePublicNumbers(x_value, y_value, curve).public_key()
+            ec_public_key = ec.EllipticCurvePublicNumbers(x_value, y_value, curve).public_key()
             half = len(signature) // 2
             der_signature = encode_dss_signature(
                 int.from_bytes(signature[:half], "big"),
                 int.from_bytes(signature[half:], "big"),
             )
-            public_key.verify(der_signature, signing_input, ec.ECDSA(digest))
+            ec_public_key.verify(der_signature, signing_input, ec.ECDSA(digest))
             return
     except Exception as exc:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid OIDC ID token validation") from exc
-    raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="OIDC JWK does not match the signature algorithm")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid OIDC ID token validation"
+        ) from exc
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED, detail="OIDC JWK does not match the signature algorithm"
+    )
 
 
 async def _validate_id_token(token: str, *, nonce: str) -> dict[str, Any]:
@@ -367,7 +408,11 @@ async def _validate_id_token(token: str, *, nonce: str) -> dict[str, Any]:
     now = time.time()
     issuer = claims.get("iss")
     audience = claims.get("aud")
-    audiences = ({audience} if isinstance(audience, str) else {str(item) for item in audience if isinstance(item, str)}) if isinstance(audience, (str, list)) else set()
+    audiences = (
+        ({audience} if isinstance(audience, str) else {str(item) for item in audience if isinstance(item, str)})
+        if isinstance(audience, (str, list))
+        else set()
+    )
     if issuer != OIDC_ISSUER.rstrip("/") or OIDC_CLIENT_ID not in audiences:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid OIDC issuer or audience")
     if len(audiences) > 1 and claims.get("azp") != OIDC_CLIENT_ID:
@@ -395,24 +440,49 @@ def _redirect_uri(request: Request) -> str:
     return value
 
 
+def _oidc_session_access(claims: dict[str, Any], tenant_id: str) -> tuple[list[str], str | None]:
+    from app.portrait_access import find_tenant, resolve_member
+
+    tenant = find_tenant(tenant_id)
+    if tenant is not None and tenant.get("status") != "active":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant is disabled")
+    member = resolve_member(
+        tenant_id,
+        subject=str(claims.get("sub") or ""),
+        phone=(str(claims.get("phone_number") or "") if claims.get("phone_number_verified") is True else ""),
+        bind_subject=True,
+    )
+    if member is None:
+        return _local_roles(claims), None
+    if member.get("status") != "active":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Member is disabled")
+    return list(member.get("roles") or []), str(member.get("member_id") or "") or None
+
+
 def _set_oidc_session(response: RedirectResponse, claims: dict[str, Any]) -> None:
     response.delete_cookie(_LOCAL_SESSION_COOKIE, path="/", secure=LOCAL_AUTH_COOKIE_SECURE, samesite="lax")
     now = int(time.time())
     token_expiry = int(float(claims["exp"]))
     expires_at = min(token_expiry, now + OIDC_SESSION_MAX_AGE_SECONDS)
     csrf = secrets.token_urlsafe(24)
+    tenant_id = _tenant_id(claims)
+    roles, managed_member_id = _oidc_session_access(claims, tenant_id)
     session = {
         "purpose": "session",
         "auth_kind": "oidc",
         "sub": str(claims["sub"]),
         "name": str(claims.get("name") or claims.get("preferred_username") or claims["sub"]),
         "email": str(claims.get("email") or ""),
-        "tenant_id": _tenant_id(claims),
-        "roles": _local_roles(claims),
+        "phone_number": str(claims.get("phone_number") or ""),
+        "phone_number_verified": claims.get("phone_number_verified") is True,
+        "tenant_id": tenant_id,
+        "roles": roles,
         "csrf": csrf,
         "iat": now,
         "exp": expires_at,
     }
+    if managed_member_id is not None:
+        session["managed_member_id"] = managed_member_id
     response.set_cookie(
         OIDC_SESSION_COOKIE_NAME,
         _signed_payload(session),
@@ -483,9 +553,7 @@ def clear_browser_session_cookies(response: JSONResponse | RedirectResponse) -> 
 
 @router.get("/v1/auth/config")
 async def auth_public_config(request: Request) -> dict[str, Any]:
-    local_enabled = local_auth_is_configured() and (
-        LOCAL_AUTH_ALLOW_REMOTE or _request_is_loopback(request)
-    )
+    local_enabled = local_auth_is_configured() and (LOCAL_AUTH_ALLOW_REMOTE or _request_is_loopback(request))
     return {
         "local_enabled": local_enabled,
         "oidc_enabled": oidc_is_configured(),
@@ -613,6 +681,7 @@ async def browser_logout(request: Request) -> JSONResponse:
     response = JSONResponse({"status": "success"})
     clear_browser_session_cookies(response)
     return response
+
 
 def oidc_identity_metadata(*, include_admin_url: bool = False) -> dict[str, Any]:
     return {

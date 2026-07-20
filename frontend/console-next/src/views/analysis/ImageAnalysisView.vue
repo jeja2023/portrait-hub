@@ -14,10 +14,11 @@ import { modalityLabel } from "../../utils/format";
 const prefs = usePrefsStore();
 const endpoint = ref("/v1/infer/persons");
 const includeEmbeddings = ref(false);
+const fallbackToImage = ref(false);
 const confidence = ref(0.35);
 const iou = ref(0.45);
 const maxDetections = ref(32);
-const file = ref<File | null>(null);
+const files = ref<File[]>([]);
 const previewUrl = ref("");
 const loading = ref(false);
 const errorMessage = ref("");
@@ -54,9 +55,14 @@ const endpointOptions = [
   { value: "/v1/infer/persons", label: "人体解析" },
   { value: "/v1/infer/faces", label: "人脸检测" },
   { value: "/v1/infer/pose", label: "姿态估计" },
+  { value: "/v1/infer/tracks", label: "人员轨迹" },
   { value: "/v1/infer/appearance", label: "衣着外观" },
   { value: "/v1/infer/gait", label: "步态特征" },
 ];
+const isTracks = computed(() => endpoint.value === "/v1/infer/tracks");
+const supportsDetectionOptions = computed(() =>
+  ["/v1/infer/persons", "/v1/infer/faces", "/v1/infer/tracks"].includes(endpoint.value),
+);
 
 const summary = computed(() => {
   const data = result.value;
@@ -70,16 +76,16 @@ const summary = computed(() => {
 });
 
 function selectFile(event: Event): void {
-  const selected = (event.target as HTMLInputElement).files?.[0] ?? null;
+  const selected = Array.from((event.target as HTMLInputElement).files ?? []);
   if (previewUrl.value) URL.revokeObjectURL(previewUrl.value);
-  file.value = selected;
-  previewUrl.value = selected ? URL.createObjectURL(selected) : "";
+  files.value = isTracks.value ? selected : selected.slice(0, 1);
+  previewUrl.value = files.value[0] ? URL.createObjectURL(files.value[0]) : "";
   result.value = null;
   errorMessage.value = "";
 }
 
 async function analyze(): Promise<void> {
-  if (!file.value) {
+  if (!files.value.length) {
     errorMessage.value = "请先选择图片";
     return;
   }
@@ -87,11 +93,17 @@ async function analyze(): Promise<void> {
   errorMessage.value = "";
   try {
     const body = new FormData();
-    body.append("files", file.value);
-    body.append("include_embeddings", String(includeEmbeddings.value));
-    body.append("confidence", String(confidence.value));
-    body.append("iou", String(iou.value));
-    body.append("max_detections", String(maxDetections.value));
+    for (const file of files.value) body.append("files", file);
+    body.append(
+      endpoint.value === "/v1/infer/gait" ? "include_embedding" : "include_embeddings",
+      String(includeEmbeddings.value),
+    );
+    if (endpoint.value === "/v1/infer/faces") body.append("fallback_to_image", String(fallbackToImage.value));
+    if (supportsDetectionOptions.value) {
+      body.append("confidence", String(confidence.value));
+      body.append("iou", String(iou.value));
+      body.append("max_detections", String(maxDetections.value));
+    }
     result.value = await apiRequest<Record<string, unknown>>(
       endpoint.value,
       { method: "POST", body },
@@ -106,7 +118,7 @@ async function analyze(): Promise<void> {
 }
 
 function reset(): void {
-  file.value = null;
+  files.value = [];
   result.value = null;
   errorMessage.value = "";
   if (previewUrl.value) URL.revokeObjectURL(previewUrl.value);
@@ -163,9 +175,10 @@ onBeforeUnmount(() => {
         <div class="tool-surface__header"><h2 id="input-title" class="section-title">分析输入</h2></div>
         <div class="tool-surface__body input-form">
           <label class="file-drop">
-            <input type="file" accept="image/*" @change="selectFile" />
+            <input type="file" accept="image/*" :multiple="isTracks" @change="selectFile" />
             <img v-if="previewUrl" :src="previewUrl" alt="待分析图片预览" />
-            <span v-else><ImageUp :size="30" />选择图片</span>
+            <span v-else><ImageUp :size="30" />{{ isTracks ? "选择连续帧图片" : "选择图片" }}</span>
+            <small v-if="files.length > 1">{{ files.length }} 帧</small>
           </label>
           <label class="field"
             ><span>分析能力</span
@@ -179,13 +192,20 @@ onBeforeUnmount(() => {
           <details class="advanced">
             <summary>高级参数</summary>
             <ElCheckbox v-model="includeEmbeddings">返回特征向量</ElCheckbox>
-            <div class="advanced-fields">
-              <label><span>置信度</span><ElInputNumber v-model="confidence" :min="0" :max="1" :step="0.05" /></label>
+            <ElCheckbox v-if="endpoint === '/v1/infer/faces'" v-model="fallbackToImage"
+              >无人脸时回退整图</ElCheckbox
+            >
+            <div v-if="supportsDetectionOptions" class="advanced-fields">
+              <label
+                ><span>置信度</span><ElInputNumber v-model="confidence" :min="0" :max="1" :step="0.05"
+              /></label>
               <label><span>IoU</span><ElInputNumber v-model="iou" :min="0" :max="1" :step="0.05" /></label>
-              <label><span>最大目标数</span><ElInputNumber v-model="maxDetections" :min="1" :max="256" /></label>
+              <label
+                ><span>最大目标数</span><ElInputNumber v-model="maxDetections" :min="1" :max="256"
+              /></label>
             </div>
           </details>
-          <ElButton type="primary" :icon="Play" :loading="loading" :disabled="!file" @click="analyze"
+          <ElButton type="primary" :icon="Play" :loading="loading" :disabled="!files.length" @click="analyze"
             >开始分析</ElButton
           >
         </div>
@@ -397,5 +417,3 @@ onBeforeUnmount(() => {
   font-size: 12px;
 }
 </style>
-
-

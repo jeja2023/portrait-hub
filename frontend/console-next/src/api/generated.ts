@@ -21,6 +21,40 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/auth/oidc/callback": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Oidc Callback */
+    get: operations["oidc_callback_auth_oidc_callback_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/auth/oidc/login": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Oidc Login */
+    get: operations["oidc_login_auth_oidc_login_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/console": {
     parameters: {
       query?: never;
@@ -278,6 +312,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/v1/access/tenants/{tenant_id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /** V1 Access Patch Tenant */
+    patch: operations["v1_access_patch_tenant_v1_access_tenants__tenant_id__patch"];
+    trace?: never;
+  };
   "/v1/access/webhooks": {
     parameters: {
       query?: never;
@@ -430,6 +481,59 @@ export interface paths {
     options?: never;
     head?: never;
     patch?: never;
+    trace?: never;
+  };
+  "/v1/admin/identity": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Portrait Identity Admin */
+    get: operations["portrait_identity_admin_v1_admin_identity_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/admin/members": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Portrait Identity Members */
+    get: operations["portrait_identity_members_v1_admin_members_get"];
+    put?: never;
+    /** Portrait Identity Create Member */
+    post: operations["portrait_identity_create_member_v1_admin_members_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/admin/members/{member_id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    /** Portrait Identity Delete Member */
+    delete: operations["portrait_identity_delete_member_v1_admin_members__member_id__delete"];
+    options?: never;
+    head?: never;
+    /** Portrait Identity Update Member */
+    patch: operations["portrait_identity_update_member_v1_admin_members__member_id__patch"];
     trace?: never;
   };
   "/v1/admin/models/reload": {
@@ -662,6 +766,74 @@ export interface paths {
     };
     /** V1 Get Analysis Result */
     get: operations["v1_get_analysis_result_v1_analysis_results__archive_id__get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/auth/config": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Auth Public Config */
+    get: operations["auth_public_config_v1_auth_config_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/auth/local/login": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Local Login */
+    post: operations["local_login_v1_auth_local_login_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/auth/logout": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Browser Logout */
+    post: operations["browser_logout_v1_auth_logout_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/auth/oidc/config": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Oidc Public Config */
+    get: operations["oidc_public_config_v1_auth_oidc_config_get"];
     put?: never;
     post?: never;
     delete?: never;
@@ -1457,6 +1629,13 @@ export interface components {
       /** Tenant Id */
       tenant_id?: string | null;
     };
+    /** AccessTenantPatchRequest */
+    AccessTenantPatchRequest: {
+      /** Name */
+      name?: string | null;
+      /** Status */
+      status?: string | null;
+    };
     /** AdminBackupRequest */
     AdminBackupRequest: {
       /** Confirm */
@@ -1513,15 +1692,18 @@ export interface components {
     };
     /** Body_debug_model_output_debug_model_output_post */
     Body_debug_model_output_debug_model_output_post: {
-      /** File */
-      file: string;
-      /** Model Name */
-      model_name: string;
+      /** Artifact Name */
+      artifact_name: string;
       /**
-       * Model Type
+       * Debug Model Type
        * @default yolo
        */
-      model_type: string;
+      debug_model_type: string;
+      /**
+       * File
+       * Format: binary
+       */
+      file: string;
       /** Project Name */
       project_name: string;
       /**
@@ -1538,10 +1720,10 @@ export interface components {
        */
       confidence: number;
       /**
-       * Detector Model Name
+       * Detector Artifact Name
        * @default yolov8n.onnx
        */
-      detector_model_name: string;
+      detector_artifact_name: string;
       /**
        * Detector Project Name
        * @default portrait_hub
@@ -1565,10 +1747,10 @@ export interface components {
        */
       max_detections: number;
       /**
-       * Reid Model Name
+       * Reid Artifact Name
        * @default osnet_ibn_x1_0.onnx
        */
-      reid_model_name: string;
+      reid_artifact_name: string;
       /**
        * Reid Project Name
        * @default portrait_hub
@@ -1604,9 +1786,15 @@ export interface components {
     };
     /** Body_v1_compare_faces_v1_compare_faces_post */
     Body_v1_compare_faces_v1_compare_faces_post: {
-      /** Image A */
+      /**
+       * Image A
+       * Format: binary
+       */
       image_a: string;
-      /** Image B */
+      /**
+       * Image B
+       * Format: binary
+       */
       image_b: string;
       /**
        * Include Vectors
@@ -1638,9 +1826,15 @@ export interface components {
     };
     /** Body_v1_compare_persons_v1_compare_persons_post */
     Body_v1_compare_persons_v1_compare_persons_post: {
-      /** Image A */
+      /**
+       * Image A
+       * Format: binary
+       */
       image_a: string;
-      /** Image B */
+      /**
+       * Image B
+       * Format: binary
+       */
       image_b: string;
       /**
        * Include Vectors
@@ -1666,16 +1860,19 @@ export interface components {
        */
       confidence: number;
       /**
-       * Detector Model Name
+       * Detector Artifact Name
        * @default yolov8n.onnx
        */
-      detector_model_name: string;
+      detector_artifact_name: string;
       /**
        * Detector Project Name
        * @default portrait_hub
        */
       detector_project_name: string;
-      /** File */
+      /**
+       * File
+       * Format: binary
+       */
       file: string;
       /**
        * Include Embeddings
@@ -1693,10 +1890,10 @@ export interface components {
        */
       max_detections: number;
       /**
-       * Reid Model Name
+       * Reid Artifact Name
        * @default osnet_ibn_x1_0.onnx
        */
-      reid_model_name: string;
+      reid_artifact_name: string;
       /**
        * Reid Project Name
        * @default portrait_hub
@@ -1710,9 +1907,15 @@ export interface components {
     };
     /** Body_v1_fusion_compare_v1_fusion_compare_post */
     Body_v1_fusion_compare_v1_fusion_compare_post: {
-      /** Image A */
+      /**
+       * Image A
+       * Format: binary
+       */
       image_a: string;
-      /** Image B */
+      /**
+       * Image B
+       * Format: binary
+       */
       image_b: string;
       /**
        * Modalities
@@ -1768,7 +1971,10 @@ export interface components {
     };
     /** Body_v1_gallery_search_v1_gallery_search_post */
     Body_v1_gallery_search_v1_gallery_search_post: {
-      /** File */
+      /**
+       * File
+       * Format: binary
+       */
       file: string;
       /**
        * Modality
@@ -1863,12 +2069,12 @@ export interface components {
       iou?: number | null;
       /** Max Detections */
       max_detections?: number | null;
-      /** Model Id */
-      model_id?: string | null;
-      /** Model Name */
-      model_name?: string | null;
       /** Project Name */
       project_name?: string | null;
+      /** Requested Model Id */
+      requested_model_id?: string | null;
+      /** Requested Model Name */
+      requested_model_name?: string | null;
       /** Task */
       task?: string | null;
       /** Top K */
@@ -1891,14 +2097,43 @@ export interface components {
       /** Display Name */
       display_name?: string | null;
       /** Metadata */
-      metadata?: {
-        [key: string]: unknown;
-      } | null;
+      metadata?: Record<string, never> | null;
     };
     /** HTTPValidationError */
     HTTPValidationError: {
       /** Detail */
       detail?: components["schemas"]["ValidationError"][];
+    };
+    /** IdentityMemberCreateRequest */
+    IdentityMemberCreateRequest: {
+      /** Display Name */
+      display_name: string;
+      /** Phone */
+      phone: string;
+      /** Roles */
+      roles: string[];
+      /**
+       * Status
+       * @default active
+       */
+      status: string;
+      /** Subject */
+      subject?: string | null;
+      /** Tenant Id */
+      tenant_id: string;
+    };
+    /** IdentityMemberPatchRequest */
+    IdentityMemberPatchRequest: {
+      /** Display Name */
+      display_name?: string | null;
+      /** Phone */
+      phone?: string | null;
+      /** Roles */
+      roles?: string[] | null;
+      /** Status */
+      status?: string | null;
+      /** Subject */
+      subject?: string | null;
     };
     /** InferenceRequest */
     InferenceRequest: {
@@ -1908,6 +2143,13 @@ export interface components {
       project_name: string;
       /** Tensor Data */
       tensor_data: unknown[];
+    };
+    /** LocalLoginRequest */
+    LocalLoginRequest: {
+      /** Password */
+      password: string;
+      /** Username */
+      username: string;
     };
     /** ModelRequest */
     ModelRequest: {
@@ -1926,15 +2168,11 @@ export interface components {
     /** StreamCreateRequest */
     StreamCreateRequest: {
       /** Metadata */
-      metadata?: {
-        [key: string]: unknown;
-      };
+      metadata?: Record<string, never>;
       /** Name */
       name?: string | null;
       /** Settings */
-      settings?: {
-        [key: string]: unknown;
-      };
+      settings?: Record<string, never>;
       /** Stream Url */
       stream_url: string;
     };
@@ -1972,10 +2210,6 @@ export interface components {
     };
     /** ValidationError */
     ValidationError: {
-      /** Context */
-      ctx?: Record<string, never>;
-      /** Input */
-      input?: unknown;
       /** Location */
       loc: (string | number)[];
       /** Message */
@@ -2073,6 +2307,70 @@ export interface operations {
       };
     };
   };
+  oidc_callback_auth_oidc_callback_get: {
+    parameters: {
+      query?: {
+        code?: string | null;
+        state?: string | null;
+        error?: string | null;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": unknown;
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  oidc_login_auth_oidc_login_get: {
+    parameters: {
+      query?: {
+        return_to?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": unknown;
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
   portrait_console_console_get: {
     parameters: {
       query?: never;
@@ -2136,9 +2434,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": {
-            [key: string]: unknown;
-          };
+          "application/json": Record<string, never>;
         };
       };
       /** @description Validation Error */
@@ -2167,9 +2463,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": {
-            [key: string]: unknown;
-          };
+          "application/json": Record<string, never>;
         };
       };
     };
@@ -2230,9 +2524,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": {
-            [key: string]: unknown;
-          };
+          "application/json": Record<string, never>;
         };
       };
       /** @description Validation Error */
@@ -2265,9 +2557,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": {
-            [key: string]: unknown;
-          };
+          "application/json": Record<string, never>;
         };
       };
       /** @description Validation Error */
@@ -2303,9 +2593,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": {
-            [key: string]: unknown;
-          };
+          "application/json": Record<string, never>;
         };
       };
       /** @description Validation Error */
@@ -2338,9 +2626,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": {
-            [key: string]: unknown;
-          };
+          "application/json": Record<string, never>;
         };
       };
       /** @description Validation Error */
@@ -2377,9 +2663,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": {
-            [key: string]: unknown;
-          };
+          "application/json": Record<string, never>;
         };
       };
       /** @description Validation Error */
@@ -2418,9 +2702,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": {
-            [key: string]: unknown;
-          };
+          "application/json": Record<string, never>;
         };
       };
       /** @description Validation Error */
@@ -2455,9 +2737,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": {
-            [key: string]: unknown;
-          };
+          "application/json": Record<string, never>;
         };
       };
       /** @description Validation Error */
@@ -2499,9 +2779,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": {
-            [key: string]: unknown;
-          };
+          "application/json": Record<string, never>;
         };
       };
       /** @description Validation Error */
@@ -2542,9 +2820,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": {
-            [key: string]: unknown;
-          };
+          "application/json": Record<string, never>;
         };
       };
       /** @description Validation Error */
@@ -2577,9 +2853,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": {
-            [key: string]: unknown;
-          };
+          "application/json": Record<string, never>;
         };
       };
       /** @description Validation Error */
@@ -2612,9 +2886,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": {
-            [key: string]: unknown;
-          };
+          "application/json": Record<string, never>;
         };
       };
       /** @description Validation Error */
@@ -2651,9 +2923,46 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": {
-            [key: string]: unknown;
-          };
+          "application/json": Record<string, never>;
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  v1_access_patch_tenant_v1_access_tenants__tenant_id__patch: {
+    parameters: {
+      query?: never;
+      header?: {
+        authorization?: string | null;
+        "x-api-key"?: string | null;
+        "x-tenant-id"?: string | null;
+      };
+      path: {
+        tenant_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["AccessTenantPatchRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": Record<string, never>;
         };
       };
       /** @description Validation Error */
@@ -2686,9 +2995,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": {
-            [key: string]: unknown;
-          };
+          "application/json": Record<string, never>;
         };
       };
       /** @description Validation Error */
@@ -2725,9 +3032,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": {
-            [key: string]: unknown;
-          };
+          "application/json": Record<string, never>;
         };
       };
       /** @description Validation Error */
@@ -2766,9 +3071,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": {
-            [key: string]: unknown;
-          };
+          "application/json": Record<string, never>;
         };
       };
       /** @description Validation Error */
@@ -2803,9 +3106,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": {
-            [key: string]: unknown;
-          };
+          "application/json": Record<string, never>;
         };
       };
       /** @description Validation Error */
@@ -2840,9 +3141,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": {
-            [key: string]: unknown;
-          };
+          "application/json": Record<string, never>;
         };
       };
       /** @description Validation Error */
@@ -2883,9 +3182,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": {
-            [key: string]: unknown;
-          };
+          "application/json": Record<string, never>;
         };
       };
       /** @description Validation Error */
@@ -2918,9 +3215,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": {
-            [key: string]: unknown;
-          };
+          "application/json": Record<string, never>;
         };
       };
       /** @description Validation Error */
@@ -2957,9 +3252,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": {
-            [key: string]: unknown;
-          };
+          "application/json": Record<string, never>;
         };
       };
       /** @description Validation Error */
@@ -2994,9 +3287,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": {
-            [key: string]: unknown;
-          };
+          "application/json": Record<string, never>;
         };
       };
       /** @description Validation Error */
@@ -3043,9 +3334,187 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": {
-            [key: string]: unknown;
-          };
+          "application/json": Record<string, never>;
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  portrait_identity_admin_v1_admin_identity_get: {
+    parameters: {
+      query?: never;
+      header?: {
+        authorization?: string | null;
+        "x-api-key"?: string | null;
+        "x-tenant-id"?: string | null;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": Record<string, never>;
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  portrait_identity_members_v1_admin_members_get: {
+    parameters: {
+      query?: {
+        tenant_id?: string | null;
+        all_tenants?: boolean;
+      };
+      header?: {
+        authorization?: string | null;
+        "x-api-key"?: string | null;
+        "x-tenant-id"?: string | null;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": Record<string, never>;
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  portrait_identity_create_member_v1_admin_members_post: {
+    parameters: {
+      query?: never;
+      header?: {
+        authorization?: string | null;
+        "x-api-key"?: string | null;
+        "x-tenant-id"?: string | null;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["IdentityMemberCreateRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": Record<string, never>;
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  portrait_identity_delete_member_v1_admin_members__member_id__delete: {
+    parameters: {
+      query?: never;
+      header?: {
+        authorization?: string | null;
+        "x-api-key"?: string | null;
+        "x-tenant-id"?: string | null;
+      };
+      path: {
+        member_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": Record<string, never>;
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  portrait_identity_update_member_v1_admin_members__member_id__patch: {
+    parameters: {
+      query?: never;
+      header?: {
+        authorization?: string | null;
+        "x-api-key"?: string | null;
+        "x-tenant-id"?: string | null;
+      };
+      path: {
+        member_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["IdentityMemberPatchRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": Record<string, never>;
         };
       };
       /** @description Validation Error */
@@ -3082,9 +3551,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": {
-            [key: string]: unknown;
-          };
+          "application/json": Record<string, never>;
         };
       };
       /** @description Validation Error */
@@ -3117,9 +3584,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": {
-            [key: string]: unknown;
-          };
+          "application/json": Record<string, never>;
         };
       };
       /** @description Validation Error */
@@ -3152,9 +3617,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": {
-            [key: string]: unknown;
-          };
+          "application/json": Record<string, never>;
         };
       };
       /** @description Validation Error */
@@ -3190,9 +3653,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": {
-            [key: string]: unknown;
-          };
+          "application/json": Record<string, never>;
         };
       };
       /** @description Validation Error */
@@ -3229,9 +3690,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": {
-            [key: string]: unknown;
-          };
+          "application/json": Record<string, never>;
         };
       };
       /** @description Validation Error */
@@ -3268,9 +3727,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": {
-            [key: string]: unknown;
-          };
+          "application/json": Record<string, never>;
         };
       };
       /** @description Validation Error */
@@ -3307,9 +3764,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": {
-            [key: string]: unknown;
-          };
+          "application/json": Record<string, never>;
         };
       };
       /** @description Validation Error */
@@ -3344,9 +3799,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": {
-            [key: string]: unknown;
-          };
+          "application/json": Record<string, never>;
         };
       };
       /** @description Validation Error */
@@ -3383,9 +3836,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": {
-            [key: string]: unknown;
-          };
+          "application/json": Record<string, never>;
         };
       };
       /** @description Validation Error */
@@ -3422,9 +3873,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": {
-            [key: string]: unknown;
-          };
+          "application/json": Record<string, never>;
         };
       };
       /** @description Validation Error */
@@ -3457,9 +3906,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": {
-            [key: string]: unknown;
-          };
+          "application/json": Record<string, never>;
         };
       };
       /** @description Validation Error */
@@ -3534,9 +3981,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": {
-            [key: string]: unknown;
-          };
+          "application/json": Record<string, never>;
         };
       };
       /** @description Validation Error */
@@ -3571,9 +4016,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": {
-            [key: string]: unknown;
-          };
+          "application/json": Record<string, never>;
         };
       };
       /** @description Validation Error */
@@ -3583,6 +4026,99 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  auth_public_config_v1_auth_config_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": Record<string, never>;
+        };
+      };
+    };
+  };
+  local_login_v1_auth_local_login_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["LocalLoginRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": unknown;
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  browser_logout_v1_auth_logout_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": unknown;
+        };
+      };
+    };
+  };
+  oidc_public_config_v1_auth_oidc_config_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": Record<string, never>;
         };
       };
     };
@@ -3610,9 +4146,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": {
-            [key: string]: unknown;
-          };
+          "application/json": Record<string, never>;
         };
       };
       /** @description Validation Error */
@@ -3649,9 +4183,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": {
-            [key: string]: unknown;
-          };
+          "application/json": Record<string, never>;
         };
       };
       /** @description Validation Error */
@@ -3688,9 +4220,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": {
-            [key: string]: unknown;
-          };
+          "application/json": Record<string, never>;
         };
       };
       /** @description Validation Error */
@@ -3727,9 +4257,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": {
-            [key: string]: unknown;
-          };
+          "application/json": Record<string, never>;
         };
       };
       /** @description Validation Error */
@@ -3762,9 +4290,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": {
-            [key: string]: unknown;
-          };
+          "application/json": Record<string, never>;
         };
       };
       /** @description Validation Error */
@@ -3801,9 +4327,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": {
-            [key: string]: unknown;
-          };
+          "application/json": Record<string, never>;
         };
       };
       /** @description Validation Error */
@@ -3838,9 +4362,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": {
-            [key: string]: unknown;
-          };
+          "application/json": Record<string, never>;
         };
       };
       /** @description Validation Error */
@@ -3873,9 +4395,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": {
-            [key: string]: unknown;
-          };
+          "application/json": Record<string, never>;
         };
       };
       /** @description Validation Error */
@@ -3913,9 +4433,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": {
-            [key: string]: unknown;
-          };
+          "application/json": Record<string, never>;
         };
       };
       /** @description Validation Error */
@@ -3952,9 +4470,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": {
-            [key: string]: unknown;
-          };
+          "application/json": Record<string, never>;
         };
       };
       /** @description Validation Error */
@@ -3992,9 +4508,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": {
-            [key: string]: unknown;
-          };
+          "application/json": Record<string, never>;
         };
       };
       /** @description Validation Error */
@@ -4031,9 +4545,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": {
-            [key: string]: unknown;
-          };
+          "application/json": Record<string, never>;
         };
       };
       /** @description Validation Error */
@@ -4072,9 +4584,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": {
-            [key: string]: unknown;
-          };
+          "application/json": Record<string, never>;
         };
       };
       /** @description Validation Error */
@@ -4111,9 +4621,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": {
-            [key: string]: unknown;
-          };
+          "application/json": Record<string, never>;
         };
       };
       /** @description Validation Error */
@@ -4150,9 +4658,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": {
-            [key: string]: unknown;
-          };
+          "application/json": Record<string, never>;
         };
       };
       /** @description Validation Error */
@@ -4189,9 +4695,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": {
-            [key: string]: unknown;
-          };
+          "application/json": Record<string, never>;
         };
       };
       /** @description Validation Error */
@@ -4228,9 +4732,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": {
-            [key: string]: unknown;
-          };
+          "application/json": Record<string, never>;
         };
       };
       /** @description Validation Error */
@@ -4265,9 +4767,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": {
-            [key: string]: unknown;
-          };
+          "application/json": Record<string, never>;
         };
       };
       /** @description Validation Error */
@@ -4302,9 +4802,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": {
-            [key: string]: unknown;
-          };
+          "application/json": Record<string, never>;
         };
       };
       /** @description Validation Error */
@@ -4343,9 +4841,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": {
-            [key: string]: unknown;
-          };
+          "application/json": Record<string, never>;
         };
       };
       /** @description Validation Error */
@@ -4382,9 +4878,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": {
-            [key: string]: unknown;
-          };
+          "application/json": Record<string, never>;
         };
       };
       /** @description Validation Error */
@@ -4421,9 +4915,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": {
-            [key: string]: unknown;
-          };
+          "application/json": Record<string, never>;
         };
       };
       /** @description Validation Error */
@@ -4460,9 +4952,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": {
-            [key: string]: unknown;
-          };
+          "application/json": Record<string, never>;
         };
       };
       /** @description Validation Error */
@@ -4499,9 +4989,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": {
-            [key: string]: unknown;
-          };
+          "application/json": Record<string, never>;
         };
       };
       /** @description Validation Error */
@@ -4538,9 +5026,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": {
-            [key: string]: unknown;
-          };
+          "application/json": Record<string, never>;
         };
       };
       /** @description Validation Error */
@@ -4577,9 +5063,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": {
-            [key: string]: unknown;
-          };
+          "application/json": Record<string, never>;
         };
       };
       /** @description Validation Error */
@@ -4620,9 +5104,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": {
-            [key: string]: unknown;
-          };
+          "application/json": Record<string, never>;
         };
       };
       /** @description Validation Error */
@@ -4659,9 +5141,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": {
-            [key: string]: unknown;
-          };
+          "application/json": Record<string, never>;
         };
       };
       /** @description Validation Error */
@@ -4696,9 +5176,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": {
-            [key: string]: unknown;
-          };
+          "application/json": Record<string, never>;
         };
       };
       /** @description Validation Error */
@@ -4733,9 +5211,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": {
-            [key: string]: unknown;
-          };
+          "application/json": Record<string, never>;
         };
       };
       /** @description Validation Error */
@@ -4770,9 +5246,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": {
-            [key: string]: unknown;
-          };
+          "application/json": Record<string, never>;
         };
       };
       /** @description Validation Error */
@@ -4805,9 +5279,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": {
-            [key: string]: unknown;
-          };
+          "application/json": Record<string, never>;
         };
       };
       /** @description Validation Error */
@@ -4844,9 +5316,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": {
-            [key: string]: unknown;
-          };
+          "application/json": Record<string, never>;
         };
       };
       /** @description Validation Error */
@@ -4881,9 +5351,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": {
-            [key: string]: unknown;
-          };
+          "application/json": Record<string, never>;
         };
       };
       /** @description Validation Error */
@@ -4918,9 +5386,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": {
-            [key: string]: unknown;
-          };
+          "application/json": Record<string, never>;
         };
       };
       /** @description Validation Error */
@@ -4957,9 +5423,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": {
-            [key: string]: unknown;
-          };
+          "application/json": Record<string, never>;
         };
       };
       /** @description Validation Error */
@@ -4996,9 +5460,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": {
-            [key: string]: unknown;
-          };
+          "application/json": Record<string, never>;
         };
       };
       /** @description Validation Error */
@@ -5033,9 +5495,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": {
-            [key: string]: unknown;
-          };
+          "application/json": Record<string, never>;
         };
       };
       /** @description Validation Error */
@@ -5074,9 +5534,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": {
-            [key: string]: unknown;
-          };
+          "application/json": Record<string, never>;
         };
       };
       /** @description Validation Error */
@@ -5111,9 +5569,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": {
-            [key: string]: unknown;
-          };
+          "application/json": Record<string, never>;
         };
       };
       /** @description Validation Error */
@@ -5148,9 +5604,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": {
-            [key: string]: unknown;
-          };
+          "application/json": Record<string, never>;
         };
       };
       /** @description Validation Error */
@@ -5185,9 +5639,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": {
-            [key: string]: unknown;
-          };
+          "application/json": Record<string, never>;
         };
       };
       /** @description Validation Error */
@@ -5220,9 +5672,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": {
-            [key: string]: unknown;
-          };
+          "application/json": Record<string, never>;
         };
       };
       /** @description Validation Error */
@@ -5261,9 +5711,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": {
-            [key: string]: unknown;
-          };
+          "application/json": Record<string, never>;
         };
       };
       /** @description Validation Error */
@@ -5300,9 +5748,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": {
-            [key: string]: unknown;
-          };
+          "application/json": Record<string, never>;
         };
       };
       /** @description Validation Error */

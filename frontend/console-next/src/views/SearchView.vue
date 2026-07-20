@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { Code2, ImagePlus, Search, UserRound } from "@lucide/vue";
 import { ElAlert, ElButton, ElInputNumber, ElOption, ElSelect } from "element-plus";
 
@@ -13,6 +13,8 @@ const prefs = usePrefsStore();
 const file = ref<File | null>(null);
 const previewUrl = ref("");
 const modality = ref("body");
+const thresholdProfile = ref("normal");
+const thresholdProfiles = ref(["strict", "normal", "loose"]);
 const topK = ref(5);
 const loading = ref(false);
 const errorMessage = ref("");
@@ -66,7 +68,7 @@ async function search(): Promise<void> {
     body.append("file", file.value);
     body.append("modality", modality.value);
     body.append("top_k", String(topK.value));
-    body.append("threshold_profile", "normal");
+    body.append("threshold_profile", thresholdProfile.value);
     result.value = await apiRequest<Record<string, unknown>>(
       "/v1/gallery/search",
       { method: "POST", body },
@@ -78,6 +80,20 @@ async function search(): Promise<void> {
     loading.value = false;
   }
 }
+onMounted(async () => {
+  try {
+    const payload = await apiRequest<{ thresholds: Record<string, Record<string, number>> }>(
+      "/v1/thresholds",
+    );
+    const profiles = new Set<string>();
+    for (const values of Object.values(payload.thresholds)) {
+      for (const profile of Object.keys(values)) profiles.add(profile);
+    }
+    if (profiles.size) thresholdProfiles.value = Array.from(profiles);
+  } catch {
+    // Keep the standard local profiles when discovery is unavailable.
+  }
+});
 onBeforeUnmount(() => {
   if (previewUrl.value) URL.revokeObjectURL(previewUrl.value);
 });
@@ -120,6 +136,15 @@ onBeforeUnmount(() => {
             ><ElOption label="人体" value="body" /><ElOption label="人脸" value="face" /><ElOption
               label="衣着"
               value="appearance" /></ElSelect></label
+        ><label
+          ><span>阈值方案</span
+          ><ElSelect v-model="thresholdProfile">
+            <ElOption
+              v-for="profile in thresholdProfiles"
+              :key="profile"
+              :label="profile"
+              :value="profile"
+            /> </ElSelect></label
         ><label><span>候选数</span><ElInputNumber v-model="topK" :min="1" :max="100" /></label
         ><ElButton type="primary" :icon="Search" :disabled="!file" :loading="loading" @click="search"
           >开始检索</ElButton
@@ -161,7 +186,8 @@ onBeforeUnmount(() => {
             </div>
             <div class="candidate-meta">
               置信度 {{ formatPercent(Number(candidateDecision(candidate).confidence ?? 0)) }} · 风险
-              {{ riskLabel(candidateRisk(candidate)) }}<template v-if="candidateQuality(candidate) !== null">
+              {{ riskLabel(candidateRisk(candidate))
+              }}<template v-if="candidateQuality(candidate) !== null">
                 · 质量 {{ formatPercent(candidateQuality(candidate)!) }}</template
               ><template v-if="candidateModality(candidate)">
                 · 模态 {{ modalityLabel(candidateModality(candidate)) }}</template

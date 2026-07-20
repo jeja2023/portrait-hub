@@ -1,13 +1,15 @@
 # 控制台重建行为对照清单
 
 - 冻结日期：2026-07-17
-- 交付版本：0.13.0
+- 交付版本：0.14.0
 - 范围：legacy 模板中全部 27 个 data-view 和其写操作
 - 正式入口：/ 登录，认证成功后进入 /console；/console/next 仅保留直达验收
 - 状态定义：实现完成表示代码与自动化链路已落库；观察中表示必须在生产灰度后收集指标，不能以本地测试代替。
 - 通用状态：所有新路由均有加载骨架、空状态、错误横幅、权限路由和直接深链；列表使用服务端数据，不静默回退本地假数据。
 
 
+> 2026-07-20 / 0.14.0：后端能力与控制台入口全面对齐，完成受管成员/租户、模型灰度、运维导出、轨迹与视频高级参数、比对检索、人员库重建、统一分页和品牌 Logo。
+>
 > 2026-07-19 / 0.13.0：工作台导航扁平化、/analysis 删除、人员比对命名、调试信息改名、本地管理员登录、OIDC 企业 SSO、浏览器会话安全边界和身份权限页面已完成。
 > 2026-07-19 / 0.12.1：配置模板漂移检查、资源热读取、路由滚动顶部、标题/说明单行布局、中文说明和空租户标签修复已完成。
 > 2026-07-19 / 0.12.0：补齐 SLO 聚合完整性、WS 降级轮询、expires_at 会话失效、URL 状态恢复、解析档案详情、图片高级参数、接入应用编辑/配额/用量和 Redis ws-ticket 多副本原子消费。
@@ -15,6 +17,19 @@
 > 2026-07-18 / 0.11.2：二次复核补齐流详情深链、meta.nav 导航、aria-live、错误 request_id、值级脱敏、搜索质量分，并同步后端 WS/no-store/CSP 契约和 me/ws-ticket/gallery 回归测试。
 
 > 2026-07-18 / 0.11.1：迁移后补强 deploy_check 与 readiness，确认旧目录、旧灰度变量、旧静态路径、data-view= 属性和 PortraitConsoleModules 不会回归。
+
+## 0.14.0 增量验收
+
+| 范围 | 完成状态 | 关键入口/契约 |
+|---|---|---|
+| 成员与租户 | 完成 | /admin/identity；/v1/admin/members；PATCH /v1/access/tenants/{tenant_id} |
+| 接入应用与 Webhook | 完成 | JWT issuer/audience、限流/配额、Webhook 编辑/启停/重试/超时 |
+| 模型与运维 | 完成 | 模型详情/预热/重载；weighted/preview/rollback/audit；/v1/admin/export；增量备份 |
+| 图片/视频/流 | 完成 | /v1/infer/tracks；视频与流检测/ReID/阈值/采样/向量参数 |
+| 比对/检索/人员库 | 完成 | include_vectors、async_mode、融合模态、阈值方案、注册 metadata、定向 reindex |
+| 表格与响应式 | 完成 | 共享分页、序号、游标续载；390px 无横向溢出；灰度发布无重叠 |
+| 品牌资产 | 完成 | SVG/PNG Logo；登录页、侧栏、favicon |
+| 契约与门禁 | 完成 | OpenAPI 类型再生成；featureCoverage 与 tablePagination 测试；统一版本检查 |
 
 ## 对照矩阵
 
@@ -85,23 +100,23 @@
 
 ## 本轮自动化验证
 
-- python -m pytest -q：通过，563 passed / 4 skipped。
-- 本地账号与 OIDC 专项及限流回归：23 passed。
+- python -m pytest -q：通过，567 passed / 4 skipped；Python SDK 定向测试 11 passed。
+- OIDC、接入治理与版本一致性定向回归：29 passed。
 - python tools/type_check.py --fallback-ok：fallback 注解门禁通过；当前环境未安装 mypy，未宣称严格 mypy 通过。
 - python -m ruff check app tools tests：通过。
-- npm run check：通过，覆盖 Node SDK、ESLint、Vitest 6 files / 19 tests、Vue TypeScript 和 Vite production build。
+- npm run check：通过，覆盖 Node SDK、ESLint、Vitest 8 files / 32 tests、Vue TypeScript 和 Vite production build。
 - deploy_check --json --import-app：ok=true，确认应用导入、依赖锁、Compose、旧控制台删除和 Console Next 源码契约。
 - platform strict readiness：ok=true，strict_failure_count=0。
-- Docker Compose GPU/CPU 配置解析、统一 0.13.0 版本断言和 git diff --check：通过。
-- Java SDK 主源码使用 javac -encoding UTF-8 编译通过；本机未安装 Maven，未执行 JUnit。
-- 当前环境未安装 Go 工具链，未复跑 go test ./...；Node SDK 契约已随 npm run check 通过。
+- Docker Compose GPU/CPU 配置解析、统一 0.14.0 版本断言和 git diff --check：通过。
+- Java SDK 使用 Maven 3.9.9 / JDK 17 完成 JUnit，5 passed；主源码 UTF-8 编译同时通过。
+- Go SDK 使用 Go 1.22.12 执行 go test ./... 通过；Node SDK 契约已随 npm run check 通过。
 - 本机浏览器完成 admin / 123456 登录、工作台导航、身份与权限页面及退出流程验收。
 
 ## 生产上线待办
 
 以下事项依赖真实发布环境，不以代码门禁结果代替：
 
-- [ ] 产品、安全、运维负责人完成 0.13.0 上线签字。
+- [ ] 产品、安全、运维负责人完成 0.14.0 上线签字。
 - [ ] 使用上一版镜像或受控静态构件完成回退演练，验证业务数据和解析档案不变。
 - [ ] 记录真实登录、前端异常、API 4xx/5xx、关键流程成功率和 p95/p99 观察结果。
 - [x] WS ticket 在配置 REDIS_URL 时使用共享 Redis TTL 与 Lua 原子单次消费；无 Redis 的本地开发保留进程内实现。

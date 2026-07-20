@@ -21,6 +21,7 @@ import {
 
 import { apiRequest, jsonBody } from "../api/client";
 import type { GalleryListResponse, PersonSummary } from "../api/contracts";
+import DataTablePagination from "../components/DataTablePagination.vue";
 import DangerConfirm from "../components/DangerConfirm.vue";
 import EmptyState from "../components/EmptyState.vue";
 import RawDataDrawer from "../components/RawDataDrawer.vue";
@@ -28,12 +29,14 @@ import { useCapabilitiesStore } from "../stores/capabilities";
 import { usePrefsStore } from "../stores/prefs";
 import { formatTimestamp, modalityLabel } from "../utils/format";
 import { errorBannerMessage } from "../utils/errors";
+import { useTablePagination } from "../utils/tablePagination";
 
 const route = useRoute();
 const router = useRouter();
 const capabilities = useCapabilitiesStore();
 const prefs = usePrefsStore();
 const people = ref<PersonSummary[]>([]);
+const peoplePager = useTablePagination(people);
 const loading = ref(true);
 const errorMessage = ref("");
 const query = ref(typeof route.query.q === "string" ? route.query.q : "");
@@ -49,6 +52,7 @@ const enrollFiles = ref<File[]>([]);
 const enrollId = ref("");
 const enrollName = ref("");
 const enrollModality = ref("body");
+const enrollMetadata = ref<Array<{ key: string; value: string }>>([]);
 const enrollStep = ref(0);
 const enrollResult = ref<Record<string, unknown> | null>(null);
 const deleteOpen = ref(false);
@@ -57,6 +61,8 @@ const reindexOpen = ref(false);
 const reindexConfirmOpen = ref(false);
 const reindexLoading = ref(false);
 const reindexPreview = ref<Record<string, unknown> | null>(null);
+const reindexModality = ref("");
+const reindexModelId = ref("");
 const detailPersonId = computed(() =>
   typeof detail.value?.person_id === "string" ? detail.value.person_id : "",
 );
@@ -139,6 +145,7 @@ function resetEnroll(): void {
   enrollId.value = "";
   enrollName.value = "";
   enrollModality.value = "body";
+  enrollMetadata.value = [];
   enrollResult.value = null;
   enrollStep.value = 0;
 }
@@ -163,6 +170,12 @@ async function enroll(): Promise<void> {
     if (enrollId.value.trim()) body.append("person_id", enrollId.value.trim());
     if (enrollName.value.trim()) body.append("display_name", enrollName.value.trim());
     body.append("modality", enrollModality.value);
+    const metadata: Record<string, string> = {};
+    for (const row of enrollMetadata.value) {
+      const key = row.key.trim();
+      if (key) metadata[key] = row.value;
+    }
+    if (Object.keys(metadata).length) body.append("metadata", JSON.stringify(metadata));
     enrollResult.value = await apiRequest<Record<string, unknown>>(
       "/v1/gallery/enroll",
       { method: "POST", body },
@@ -176,6 +189,15 @@ async function enroll(): Promise<void> {
     enrollLoading.value = false;
   }
 }
+
+function addEnrollMetadata(): void {
+  enrollMetadata.value = [...enrollMetadata.value, { key: "", value: "" }];
+}
+
+function removeEnrollMetadata(index: number): void {
+  enrollMetadata.value = enrollMetadata.value.filter((_, rowIndex) => rowIndex !== index);
+}
+
 function addMetadataRow(): void {
   detailMetadata.value.push({ key: "", value: "" });
 }
@@ -215,7 +237,10 @@ async function previewReindex(): Promise<void> {
   reindexLoading.value = true;
   errorMessage.value = "";
   try {
-    reindexPreview.value = await apiRequest<Record<string, unknown>>("/v1/gallery/reindex?dry_run=true", {
+    const params = new URLSearchParams({ dry_run: "true" });
+    if (reindexModality.value) params.set("modality", reindexModality.value);
+    if (reindexModelId.value.trim()) params.set("model_id", reindexModelId.value.trim());
+    reindexPreview.value = await apiRequest<Record<string, unknown>>("/v1/gallery/reindex?" + params, {
       method: "POST",
     });
     reindexOpen.value = true;
@@ -229,7 +254,10 @@ async function previewReindex(): Promise<void> {
 async function executeReindex(): Promise<void> {
   reindexLoading.value = true;
   try {
-    await apiRequest("/v1/gallery/reindex?dry_run=false", { method: "POST" }, 120_000);
+    const params = new URLSearchParams({ dry_run: "false" });
+    if (reindexModality.value) params.set("modality", reindexModality.value);
+    if (reindexModelId.value.trim()) params.set("model_id", reindexModelId.value.trim());
+    await apiRequest("/v1/gallery/reindex?" + params, { method: "POST" }, 120_000);
     reindexConfirmOpen.value = false;
     reindexOpen.value = false;
     ElMessage.success("特征索引重建已完成");
@@ -286,7 +314,7 @@ watch(
         <ElDropdown
           v-if="capabilities.hasPermission('gallery:write')"
           trigger="click"
-          @command="previewReindex"
+          @command="reindexOpen = true"
         >
           <ElButton :icon="Settings2" :loading="reindexLoading">高级操作</ElButton>
           <template #dropdown>
@@ -325,6 +353,7 @@ watch(
           <table class="data-table">
             <thead>
               <tr>
+                <th class="sequence-column">序号</th>
                 <th>人员</th>
                 <th>ID</th>
                 <th>模态</th>
@@ -334,7 +363,8 @@ watch(
               </tr>
             </thead>
             <tbody>
-              <tr v-for="person in people" :key="person.person_id">
+              <tr v-for="(person, index) in peoplePager.items" :key="person.person_id">
+                <td class="sequence-column">{{ peoplePager.startIndex + index + 1 }}</td>
                 <td>
                   <div class="person-cell">
                     <span class="person-thumb"
@@ -356,7 +386,15 @@ watch(
           </table>
         </div></ElSkeleton
       >
-      <div v-if="nextCursor" class="load-more"><ElButton @click="loadPeople(true)">加载更多</ElButton></div>
+      <DataTablePagination
+        v-if="people.length"
+        v-model:page="peoplePager.page"
+        v-model:page-size="peoplePager.pageSize"
+        :total="peoplePager.total"
+        :has-more="Boolean(nextCursor)"
+        :loading-more="loading"
+        @load-more="loadPeople(true)"
+      />
     </section>
     <ElDrawer
       :model-value="Boolean(detail)"
@@ -449,6 +487,17 @@ watch(
             <ElOption label="衣着" value="appearance" />
           </ElSelect>
         </label>
+        <div class="metadata-heading">
+          <span>业务元数据</span>
+          <ElButton text :icon="Plus" @click="addEnrollMetadata">添加字段</ElButton>
+        </div>
+        <div v-if="enrollMetadata.length" class="metadata-editor">
+          <div v-for="(row, index) in enrollMetadata" :key="index">
+            <ElInput v-model="row.key" placeholder="字段名" maxlength="128" />
+            <ElInput v-model="row.value" placeholder="字段值" maxlength="512" />
+            <ElButton :icon="Trash2" aria-label="删除注册元数据" @click="removeEnrollMetadata(index)" />
+          </div>
+        </div>
       </div>
       <div v-else-if="enrollStep === 1" class="enroll-form">
         <label>
@@ -489,6 +538,21 @@ watch(
       width="min(560px, 92vw)"
       :close-on-click-modal="false"
     >
+      <div class="reindex-controls">
+        <label>
+          <span>限定模态</span>
+          <ElSelect v-model="reindexModality" clearable placeholder="全部模态">
+            <ElOption label="人体" value="body" />
+            <ElOption label="人脸" value="face" />
+            <ElOption label="衣着" value="appearance" />
+          </ElSelect>
+        </label>
+        <label>
+          <span>目标模型</span>
+          <ElInput v-model="reindexModelId" clearable placeholder="留空使用当前模型" maxlength="128" />
+        </label>
+        <ElButton :icon="RefreshCw" :loading="reindexLoading" @click="previewReindex">执行预演</ElButton>
+      </div>
       <dl v-if="reindexPreview" class="reindex-summary">
         <div>
           <dt>人员</dt>
@@ -509,7 +573,9 @@ watch(
       </dl>
       <template #footer>
         <ElButton @click="reindexOpen = false">关闭</ElButton>
-        <ElButton type="danger" @click="reindexConfirmOpen = true">执行重建</ElButton>
+        <ElButton type="danger" :disabled="!reindexPreview" @click="reindexConfirmOpen = true"
+          >执行重建</ElButton
+        >
       </template>
     </ElDialog>
     <DangerConfirm
@@ -675,6 +741,36 @@ watch(
   object-fit: cover;
 }
 .reindex-summary {
+  .metadata-heading,
+  .metadata-editor > div {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .metadata-heading {
+    justify-content: space-between;
+  }
+  .metadata-editor {
+    display: grid;
+    gap: 8px;
+  }
+  .metadata-editor > div {
+    display: grid;
+    grid-template-columns: minmax(120px, 0.7fr) minmax(160px, 1fr) 36px;
+  }
+  .reindex-controls {
+    display: grid;
+    grid-template-columns: minmax(160px, 0.7fr) minmax(220px, 1fr) auto;
+    gap: 10px;
+    align-items: end;
+    margin-bottom: 16px;
+  }
+  .reindex-controls label {
+    display: grid;
+    gap: 6px;
+    color: #62706d;
+    font-size: 13px;
+  }
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 1px;
@@ -735,5 +831,3 @@ watch(
   color: #71807c;
 }
 </style>
-
-

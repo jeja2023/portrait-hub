@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { Code2, ImagePlus, Play } from "@lucide/vue";
-import { ElAlert, ElButton, ElOption, ElSelect } from "element-plus";
+import { ElAlert, ElButton, ElCheckbox, ElCheckboxGroup, ElOption, ElSelect } from "element-plus";
 
 import { apiRequest } from "../api/client";
+import DataTablePagination from "../components/DataTablePagination.vue";
 import RawDataDrawer from "../components/RawDataDrawer.vue";
 import { usePrefsStore } from "../stores/prefs";
 import {
@@ -14,6 +15,7 @@ import {
   thresholdProfileLabel,
 } from "../utils/format";
 import { errorBannerMessage } from "../utils/errors";
+import { useTablePagination } from "../utils/tablePagination";
 
 type CompareMode = "face" | "body" | "gait" | "fusion" | "batch";
 
@@ -21,6 +23,9 @@ const prefs = usePrefsStore();
 const mode = ref<CompareMode>("body");
 const batchModality = ref("body");
 const thresholdProfile = ref("normal");
+const includeVectors = ref(false);
+const asyncMode = ref(false);
+const fusionModalities = ref(["face", "body", "appearance"]);
 const thresholdProfiles = ref(["strict", "normal", "loose"]);
 const filesA = ref<File[]>([]);
 const filesB = ref<File[]>([]);
@@ -57,8 +62,12 @@ const fusionRows = computed(() => {
 const batchRows = computed(() =>
   Array.isArray(result.value?.results) ? (result.value.results as Record<string, unknown>[]) : [],
 );
+const fusionPager = useTablePagination(fusionRows);
+const batchPager = useTablePagination(batchRows);
+
 const canCompare = computed(
   () =>
+    (mode.value !== "fusion" || fusionModalities.value.length > 0) &&
     filesA.value.length > 0 &&
     filesB.value.length > 0 &&
     (mode.value !== "batch" || filesA.value.length === filesB.value.length),
@@ -115,6 +124,7 @@ async function compare(): Promise<void> {
   try {
     const body = new FormData();
     body.append("threshold_profile", thresholdProfile.value);
+    if (mode.value !== "fusion") body.append("include_vectors", String(includeVectors.value));
     let endpoint = "/v1/compare/persons";
 
     if (mode.value === "gait") {
@@ -126,14 +136,14 @@ async function compare(): Promise<void> {
       appendFiles(body, "image_a", filesA.value);
       appendFiles(body, "image_b", filesB.value);
       body.append("modality", batchModality.value);
-      body.append("async_mode", "false");
+      body.append("async_mode", String(asyncMode.value));
     } else {
       appendFiles(body, "image_a", filesA.value.slice(0, 1));
       appendFiles(body, "image_b", filesB.value.slice(0, 1));
       if (mode.value === "face") endpoint = "/v1/compare/faces";
       if (mode.value === "fusion") {
         endpoint = "/v1/fusion/compare";
-        body.append("modalities", "face,body,appearance");
+        body.append("modalities", fusionModalities.value.join(","));
       }
     }
 
@@ -207,7 +217,12 @@ onBeforeUnmount(() => {
         <label
           ><span>阈值方案</span
           ><ElSelect v-model="thresholdProfile">
-            <ElOption v-for="profile in thresholdProfiles" :key="profile" :label="thresholdProfileLabel(profile)" :value="profile" />
+            <ElOption
+              v-for="profile in thresholdProfiles"
+              :key="profile"
+              :label="thresholdProfileLabel(profile)"
+              :value="profile"
+            />
           </ElSelect>
         </label>
         <label v-if="mode === 'batch'"
@@ -218,6 +233,18 @@ onBeforeUnmount(() => {
             <ElOption label="衣着" value="appearance" />
           </ElSelect>
         </label>
+      </div>
+      <div class="compare-toggles">
+        <ElCheckbox v-if="mode !== 'fusion'" v-model="includeVectors">返回特征向量</ElCheckbox>
+        <ElCheckbox v-if="mode === 'batch'" v-model="asyncMode">异步提交批量任务</ElCheckbox>
+        <div v-if="mode === 'fusion'" class="fusion-options">
+          <span>参与融合的模态</span>
+          <ElCheckboxGroup v-model="fusionModalities">
+            <ElCheckbox value="face">人脸</ElCheckbox>
+            <ElCheckbox value="body">人体</ElCheckbox>
+            <ElCheckbox value="appearance">衣着</ElCheckbox>
+          </ElCheckboxGroup>
+        </div>
       </div>
       <div class="image-pair">
         <label class="compare-file">
@@ -270,6 +297,7 @@ onBeforeUnmount(() => {
         <table class="data-table">
           <thead>
             <tr>
+              <th class="sequence-column">序号</th>
               <th>模态</th>
               <th>参与</th>
               <th>分数</th>
@@ -279,7 +307,8 @@ onBeforeUnmount(() => {
             </tr>
           </thead>
           <tbody>
-            <tr v-for="[name, item] in fusionRows" :key="name">
+            <tr v-for="([name, item], index) in fusionPager.items" :key="name">
+              <td class="sequence-column">{{ fusionPager.startIndex + index + 1 }}</td>
               <td>{{ modalityLabel(name) }}</td>
               <td>{{ item.used ? "是" : "否" }}</td>
               <td>{{ typeof item.score === "number" ? formatPercent(Number(item.score)) : "--" }}</td>
@@ -290,6 +319,11 @@ onBeforeUnmount(() => {
           </tbody>
         </table>
       </div>
+      <DataTablePagination
+        v-model:page="fusionPager.page"
+        v-model:page-size="fusionPager.pageSize"
+        :total="fusionPager.total"
+      />
     </section>
 
     <section v-if="mode === 'batch' && result" class="result-table">
@@ -299,6 +333,7 @@ onBeforeUnmount(() => {
           <thead>
             <tr>
               <th>序号</th>
+              <th class="sequence-column">序号</th>
               <th>模态</th>
               <th>结论</th>
               <th>相似度</th>
@@ -306,8 +341,8 @@ onBeforeUnmount(() => {
             </tr>
           </thead>
           <tbody>
-            <tr v-for="row in batchRows" :key="String(row.index)">
-              <td>{{ Number(row.index) + 1 }}</td>
+            <tr v-for="(row, index) in batchPager.items" :key="String(row.index)">
+              <td class="sequence-column">{{ batchPager.startIndex + index + 1 }}</td>
               <td>{{ modalityLabel(row.modality) }}</td>
               <td>{{ batchComparison(row).passed ? "通过" : "未通过" }}</td>
               <td>{{ formatPercent(batchScore(row)) }}</td>
@@ -316,6 +351,11 @@ onBeforeUnmount(() => {
           </tbody>
         </table>
       </div>
+      <DataTablePagination
+        v-model:page="batchPager.page"
+        v-model:page-size="batchPager.pageSize"
+        :total="batchPager.total"
+      />
     </section>
     <RawDataDrawer v-model="rawOpen" :data="result" />
   </div>
@@ -335,6 +375,23 @@ onBeforeUnmount(() => {
   width: 200px;
   display: grid;
   gap: 7px;
+  color: #62706d;
+  font-size: 13px;
+}
+.compare-toggles {
+  min-height: 36px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 18px;
+  align-items: center;
+}
+.fusion-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+}
+.fusion-options > span {
   color: #62706d;
   font-size: 13px;
 }

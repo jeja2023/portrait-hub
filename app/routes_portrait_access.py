@@ -20,6 +20,7 @@ from app.portrait_access import (
     rotate_application_secret,
     rotate_webhook_secret,
     update_application,
+    update_tenant,
     update_webhook,
     webhook_sample_delivery,
 )
@@ -61,6 +62,13 @@ class AccessTenantCreateRequest(BaseModel):
     rate_limit_per_minute: int | None = Field(default=None, ge=0, le=1_000_000_000)
     rate_limit_burst: int | None = Field(default=None, ge=0, le=1_000_000_000)
     daily_quota: int | None = Field(default=None, ge=0, le=1_000_000_000)
+
+
+class AccessTenantPatchRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str | None = Field(default=None, min_length=1, max_length=256)
+    status: str | None = Field(default=None, max_length=32)
 
 
 class AccessApplicationCreateRequest(BaseModel):
@@ -183,6 +191,25 @@ async def v1_access_create_tenant(payload: AccessTenantCreateRequest, request: R
         data["application"] = application
         data["one_time_secret"] = secret
     return portrait_success(request_id, data)
+
+
+@router.patch("/v1/access/tenants/{tenant_id}", dependencies=[Depends(permission_dependency("tenants:write"))])
+async def v1_access_patch_tenant(
+    tenant_id: str,
+    payload: AccessTenantPatchRequest,
+    request: Request,
+) -> dict[str, Any]:
+    request_id = request_id_from_headers(request)
+    snapshot = await run_blocking_io(access_state_payload)
+    tenant = await run_blocking_io(update_tenant, tenant_id, payload.model_dump(exclude_unset=True))
+    await audit_or_restore(
+        "access_tenant_updated",
+        snapshot,
+        request_id=request_id,
+        tenant_id=tenant_id,
+        changed_fields=sorted(payload.model_fields_set),
+    )
+    return portrait_success(request_id, {"tenant": tenant})
 
 
 @router.get("/v1/access/applications", dependencies=[Depends(permission_dependency("access:read"))])

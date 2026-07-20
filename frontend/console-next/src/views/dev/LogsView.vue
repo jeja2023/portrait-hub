@@ -13,9 +13,11 @@ import {
 } from "element-plus";
 import { useRoute, useRouter } from "vue-router";
 import { apiRequest } from "../../api/client";
+import DataTablePagination from "../../components/DataTablePagination.vue";
 import EmptyState from "../../components/EmptyState.vue";
 import { errorBannerMessage } from "../../utils/errors";
 import { formatTimestamp, statusLabel } from "../../utils/format";
+import { useTablePagination } from "../../utils/tablePagination";
 interface LogRow {
   request_id: string;
   endpoint?: string;
@@ -31,6 +33,7 @@ interface LogRow {
 const route = useRoute();
 const router = useRouter();
 const logs = ref<LogRow[]>([]);
+const logsPager = useTablePagination(logs);
 const loading = ref(true);
 const errorMessage = ref("");
 const requestId = ref(typeof route.query.request_id === "string" ? route.query.request_id : "");
@@ -160,6 +163,7 @@ onMounted(async () => {
           <table class="data-table">
             <thead>
               <tr>
+                <th class="sequence-column">序号</th>
                 <th>时间</th>
                 <th>请求 ID</th>
                 <th>方法/接口</th>
@@ -169,7 +173,8 @@ onMounted(async () => {
               </tr>
             </thead>
             <tbody>
-              <tr v-for="log in logs" :key="`${log.request_id}-${log.created_at}`">
+              <tr v-for="(log, index) in logsPager.items" :key="`${log.request_id}-${log.created_at}`">
+                <td class="sequence-column">{{ logsPager.startIndex + index + 1 }}</td>
                 <td>{{ formatTimestamp(log.created_at) }}</td>
                 <td>
                   <code>{{ log.request_id }}</code>
@@ -192,6 +197,12 @@ onMounted(async () => {
           </table>
         </div></ElSkeleton
       >
+      <DataTablePagination
+        v-if="logs.length"
+        v-model:page="logsPager.page"
+        v-model:page-size="logsPager.pageSize"
+        :total="logsPager.total"
+      />
     </section>
     <ElDialog
       :model-value="Boolean(selectedErrorCode)"

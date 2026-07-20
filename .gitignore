@@ -57,3 +57,6 @@ node_modules/
 frontend/console-next/dist/
 frontend/console-next/test-results/
 frontend/console-next/playwright-report/
+
+# Java build output
+sdk/java/target/

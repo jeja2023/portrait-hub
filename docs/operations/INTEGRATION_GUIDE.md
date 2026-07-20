@@ -58,6 +58,20 @@ curl "https://portrait.internal.example/v1/analysis/artifacts/${ARCHIVE_ID}/${AR
 
 解析档案按租户隔离且不设数量上限。接入方应使用游标分页，不应一次拉取全部记录；生产运维必须同时备份数据库索引和对象存储，缺少任一部分都不能完整恢复档案。
 
+### 0.14.0 成员治理、管理操作与高级参数
+
+- 企业 OIDC 登录仍由身份平台完成认证，但授权角色现在可由影鉴受管成员目录覆盖。上线前应先通过 `POST /v1/admin/members` 预配置租户、手机号、角色和状态。
+- 只有 ID Token 中 `phone_number_verified=true` 的手机号可参与成员匹配；首次匹配可绑定 subject，后续登录优先按 subject 解析，避免手机号变更或身份冒用。
+- 停用租户、停用成员或删除成员会让既有浏览器会话在下一次权限读取时失去角色；身份平台停用流程应同时更新影鉴成员状态。
+- 租户可通过 `PATCH /v1/access/tenants/{tenant_id}` 更新名称和状态。新建租户时可同时创建默认应用，并设置 owner、scopes、rate_limit_per_minute、burst_limit 和 daily_quota。
+- 接入应用支持 `jwt_issuer` 与 `jwt_audience`；Webhook 支持 PATCH 编辑 status、events、retry_limit 与 timeout_seconds。
+- 模型运维新增 warmup、reload、reload-config、weighted rollout、traffic preview、rollback 和 rollout audit。正式灰度/回滚必须在同配置预演后执行。
+- `GET /v1/admin/export` 支持 updated_since 与资源上限；备份接口支持 updated_since 增量起点。大租户应分批导出并同时校验审计记录。
+- 图片轨迹使用 `POST /v1/infer/tracks`；视频任务与实时流可传 detector/reid 项目和模型、confidence、iou、max_detections、sample_interval_seconds、batch_size、read_timeout_seconds 与 include_embeddings。
+- 比对按接口支持 `include_vectors`、`async_mode` 和融合模态列表；人员库 reindex 可按 modality 和 target_model 定向预演/执行。
+- SDK User-Agent 和项目运行时版本统一升级为 `0.14.0`。旧 SDK 仍可调用兼容接口，但升级 SDK 便于日志与支持团队准确识别客户端版本。
+
+
 ### 0.13.0 控制台登录、导航与身份接入
 
 - 工作台导航改为总览、图片分析、视频任务、实时视频流、分析结果、人员比对、以图搜人和人员库八个直接入口，不再提供“智能分析”中间菜单；/analysis 也不再作为兼容路由。

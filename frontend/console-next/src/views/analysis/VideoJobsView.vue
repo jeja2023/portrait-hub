@@ -2,11 +2,23 @@
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { Ban, Code2, Eye, Plus, RefreshCw } from "@lucide/vue";
-import { ElAlert, ElButton, ElDialog, ElDrawer, ElInputNumber, ElSkeleton } from "element-plus";
+import {
+  ElAlert,
+  ElButton,
+  ElCheckbox,
+  ElDialog,
+  ElDrawer,
+  ElInput,
+  ElInputNumber,
+  ElOption,
+  ElSelect,
+  ElSkeleton,
+} from "element-plus";
 
 import { apiRequest } from "../../api/client";
 import type { JobListResponse, JobSummary } from "../../api/contracts";
 import { openTicketWebSocket, type LiveConnectionState } from "../../api/ws";
+import DataTablePagination from "../../components/DataTablePagination.vue";
 import DangerConfirm from "../../components/DangerConfirm.vue";
 import EmptyState from "../../components/EmptyState.vue";
 import FrameGrid from "../../components/FrameGrid.vue";
@@ -15,6 +27,7 @@ import { useCapabilitiesStore } from "../../stores/capabilities";
 import { usePrefsStore } from "../../stores/prefs";
 import { errorBannerMessage } from "../../utils/errors";
 import { formatPercent, formatTimestamp, statusLabel } from "../../utils/format";
+import { useTablePagination } from "../../utils/tablePagination";
 
 const route = useRoute();
 const router = useRouter();
@@ -23,12 +36,23 @@ const prefs = usePrefsStore();
 const loading = ref(true);
 const errorMessage = ref("");
 const jobs = ref<JobSummary[]>([]);
+const jobsPager = useTablePagination(jobs);
 const nextCursor = ref<string | null>(null);
 const createOpen = ref(false);
 const createLoading = ref(false);
 const createFile = ref<File | null>(null);
 const sampleInterval = ref(1);
 const batchSize = ref(16);
+const detectorProject = ref("");
+const detectorModel = ref("");
+const reidProject = ref("");
+const reidModel = ref("");
+const confidence = ref(0.35);
+const iou = ref(0.45);
+const maxDetections = ref(100);
+const includeEmbeddings = ref(false);
+const kindFilter = ref("");
+const statusFilter = ref("");
 const detail = ref<{ job: JobSummary; result?: unknown } | null>(null);
 const detailOpen = computed(() => detail.value !== null);
 const liveState = ref<LiveConnectionState>("closed");
@@ -50,6 +74,8 @@ async function loadJobs(append = false): Promise<void> {
   try {
     const query = new URLSearchParams({ limit: "30" });
     if (append && nextCursor.value) query.set("cursor", nextCursor.value);
+    if (kindFilter.value) query.set("kind", kindFilter.value);
+    if (statusFilter.value) query.set("status", statusFilter.value);
     const payload = await apiRequest<JobListResponse>(`/v1/jobs?${query}`);
     jobs.value = append ? [...jobs.value, ...payload.items] : payload.items;
     nextCursor.value = payload.next_cursor;
@@ -72,6 +98,14 @@ async function createJob(): Promise<void> {
     body.append("file", createFile.value);
     body.append("sample_interval_seconds", String(sampleInterval.value));
     body.append("batch_size", String(batchSize.value));
+    if (detectorProject.value.trim()) body.append("detector_project_name", detectorProject.value.trim());
+    if (detectorModel.value.trim()) body.append("detector_model_name", detectorModel.value.trim());
+    if (reidProject.value.trim()) body.append("reid_project_name", reidProject.value.trim());
+    if (reidModel.value.trim()) body.append("reid_model_name", reidModel.value.trim());
+    body.append("confidence", String(confidence.value));
+    body.append("iou", String(iou.value));
+    body.append("max_detections", String(maxDetections.value));
+    body.append("include_embeddings", String(includeEmbeddings.value));
     const payload = await apiRequest<{ job: JobSummary }>(
       "/v1/jobs/video",
       { method: "POST", body },
@@ -207,6 +241,20 @@ onBeforeUnmount(() => {
       show-icon
       :closable="false"
     />
+    <div class="job-filters">
+      <ElSelect v-model="kindFilter" clearable placeholder="全部任务类型" @change="loadJobs()">
+        <ElOption label="视频任务" value="video" />
+        <ElOption label="批量任务" value="batch" />
+      </ElSelect>
+      <ElSelect v-model="statusFilter" clearable placeholder="全部状态" @change="loadJobs()">
+        <ElOption label="排队中" value="queued" />
+        <ElOption label="运行中" value="running" />
+        <ElOption label="已完成" value="completed" />
+        <ElOption label="失败" value="failed" />
+        <ElOption label="已取消" value="cancelled" />
+      </ElSelect>
+      <ElButton :icon="RefreshCw" @click="loadJobs()">应用筛选</ElButton>
+    </div>
     <section class="tool-surface">
       <ElSkeleton :loading="loading" animated :rows="7">
         <EmptyState
@@ -219,6 +267,7 @@ onBeforeUnmount(() => {
           <table class="data-table">
             <thead>
               <tr>
+                <th class="sequence-column">序号</th>
                 <th>任务</th>
                 <th>类型</th>
                 <th>状态</th>
@@ -228,13 +277,12 @@ onBeforeUnmount(() => {
               </tr>
             </thead>
             <tbody>
-              <tr v-for="job in jobs" :key="job.job_id">
+              <tr v-for="(job, index) in jobsPager.items" :key="job.job_id">
+                <td class="sequence-column">{{ jobsPager.startIndex + index + 1 }}</td>
                 <td>{{ job.job_id }}</td>
                 <td>{{ job.kind === "batch" ? "批量任务" : "视频任务" }}</td>
                 <td>
-                  <span class="status-pill" :data-status="job.status">{{
-                    statusLabel(job.status)
-                  }}</span>
+                  <span class="status-pill" :data-status="job.status">{{ statusLabel(job.status) }}</span>
                 </td>
                 <td>
                   <progress class="job-progress" :value="job.progress" max="1">{{ job.progress }}</progress
@@ -259,7 +307,15 @@ onBeforeUnmount(() => {
           </table>
         </div>
       </ElSkeleton>
-      <div v-if="nextCursor" class="load-more"><ElButton @click="loadJobs(true)">加载更多</ElButton></div>
+      <DataTablePagination
+        v-if="jobs.length"
+        v-model:page="jobsPager.page"
+        v-model:page-size="jobsPager.pageSize"
+        :total="jobsPager.total"
+        :has-more="Boolean(nextCursor)"
+        :loading-more="loading"
+        @load-more="loadJobs(true)"
+      />
     </section>
 
     <ElDialog
@@ -278,6 +334,28 @@ onBeforeUnmount(() => {
             ><span>采样间隔（秒）</span
             ><ElInputNumber v-model="sampleInterval" :min="0.01" :max="60" :step="0.5" /></label
           ><label><span>批次大小</span><ElInputNumber v-model="batchSize" :min="1" :max="256" /></label>
+          <label
+            ><span>检测模型项目</span><ElInput v-model="detectorProject" placeholder="留空使用默认值"
+          /></label>
+          <label
+            ><span>检测模型文件</span><ElInput v-model="detectorModel" placeholder="留空使用默认值"
+          /></label>
+          <label
+            ><span>ReID 模型项目</span><ElInput v-model="reidProject" placeholder="留空使用默认值"
+          /></label>
+          <label
+            ><span>ReID 模型文件</span><ElInput v-model="reidModel" placeholder="留空使用默认值"
+          /></label>
+          <div class="advanced-grid">
+            <label
+              ><span>置信度</span><ElInputNumber v-model="confidence" :min="0" :max="1" :step="0.05"
+            /></label>
+            <label><span>IoU</span><ElInputNumber v-model="iou" :min="0" :max="1" :step="0.05" /></label>
+            <label
+              ><span>最大目标数</span><ElInputNumber v-model="maxDetections" :min="1" :max="10000"
+            /></label>
+          </div>
+          <ElCheckbox v-model="includeEmbeddings">在任务结果中包含特征向量</ElCheckbox>
         </details>
       </div>
       <template #footer
@@ -359,6 +437,15 @@ onBeforeUnmount(() => {
   padding: 12px;
   border-top: 1px solid #d8e0de;
 }
+.job-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.job-filters :deep(.el-select) {
+  width: min(220px, 100%);
+}
 .create-form {
   display: grid;
   gap: 16px;
@@ -383,6 +470,18 @@ onBeforeUnmount(() => {
 }
 .create-form details label + label {
   margin-top: 12px;
+}
+.advanced-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+.advanced-grid label + label {
+  margin-top: 0;
+}
+.advanced-grid :deep(.el-input-number) {
+  width: 100%;
 }
 .detail-head {
   display: flex;
@@ -435,5 +534,17 @@ onBeforeUnmount(() => {
   justify-content: flex-end;
   margin-top: 18px;
 }
+@media (max-width: 620px) {
+  .job-filters,
+  .advanced-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .job-filters :deep(.el-select) {
+    width: 100%;
+  }
+  .detail-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
 </style>
-

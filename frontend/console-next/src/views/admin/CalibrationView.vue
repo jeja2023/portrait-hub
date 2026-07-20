@@ -9,12 +9,14 @@ import {
   ElMessage,
   ElOption,
   ElSelect,
+  ElSegmented,
   ElSkeleton,
   ElTabPane,
   ElTabs,
 } from "element-plus";
 
 import { apiRequest, jsonBody } from "../../api/client";
+import DataTablePagination from "../../components/DataTablePagination.vue";
 import DangerConfirm from "../../components/DangerConfirm.vue";
 import { useCapabilitiesStore } from "../../stores/capabilities";
 import { errorBannerMessage } from "../../utils/errors";
@@ -30,6 +32,7 @@ import {
   thresholdProfileLabel,
 } from "../../utils/format";
 import { useRouteTab } from "../../utils/routeState";
+import { useTablePagination } from "../../utils/tablePagination";
 
 interface ReviewSummary {
   total_annotations: number;
@@ -102,8 +105,15 @@ const reviewForm = reactive<{
   evidence_ref: "",
 });
 const profileOptions = ["strict", "normal", "loose"];
+const profileSegments = computed(() =>
+  profileOptions.map((value) => ({ label: thresholdProfileLabel(value), value })),
+);
 const modalities = computed(() => Object.keys(thresholds.value).sort());
 const recommendations = computed(() => recommendationPayload.value.recommendations ?? []);
+const modalitiesPager = useTablePagination(modalities);
+const reviewsPager = useTablePagination(reviews);
+const datasetsPager = useTablePagination(datasets);
+const recommendationsPager = useTablePagination(recommendations);
 
 function syncDraft(): void {
   for (const key of Object.keys(draft)) delete draft[key];
@@ -215,11 +225,15 @@ onMounted(() => void load());
       <ElTabs v-model="tab" class="page-tabs">
         <ElTabPane label="阈值" name="thresholds">
           <div class="threshold-toolbar">
-            <label>
+            <label class="threshold-profile">
               <span>阈值方案</span>
-              <ElSelect v-model="profile" @change="syncDraft">
-                <ElOption v-for="item in profileOptions" :key="item" :label="thresholdProfileLabel(item)" :value="item" />
-              </ElSelect>
+              <ElSegmented
+                v-model="profile"
+                class="profile-segmented"
+                :options="profileSegments"
+                aria-label="阈值方案"
+                @change="syncDraft"
+              />
             </label>
             <ElButton
               v-if="capabilities.hasPermission('thresholds:write')"
@@ -234,9 +248,17 @@ onMounted(() => void load());
           <ElSkeleton :loading="loading" :rows="6" animated>
             <div class="table-wrap">
               <table class="data-table">
-                <thead><tr><th>模态</th><th>当前阈值</th><th>允许范围</th></tr></thead>
+                <thead>
+                  <tr>
+                    <th class="sequence-column">序号</th>
+                    <th>模态</th>
+                    <th>当前阈值</th>
+                    <th>允许范围</th>
+                  </tr>
+                </thead>
                 <tbody>
-                  <tr v-for="modality in modalities" :key="modality">
+                  <tr v-for="(modality, index) in modalitiesPager.items" :key="modality">
+                    <td class="sequence-column">{{ modalitiesPager.startIndex + index + 1 }}</td>
                     <td>{{ modalityLabel(modality) }}</td>
                     <td>
                       <ElInputNumber
@@ -254,13 +276,24 @@ onMounted(() => void load());
               </table>
             </div>
           </ElSkeleton>
+          <DataTablePagination
+            v-model:page="modalitiesPager.page"
+            v-model:page-size="modalitiesPager.pageSize"
+            :total="modalitiesPager.total"
+          />
         </ElTabPane>
 
         <ElTabPane label="轨迹审阅" name="reviews">
           <div class="review-summary">
-            <div><span>总标注</span><strong>{{ reviewSummary.total_annotations }}</strong></div>
-            <div><span>任务</span><strong>{{ reviewSummary.unique_job_count }}</strong></div>
-            <div><span>轨迹</span><strong>{{ reviewSummary.unique_track_count }}</strong></div>
+            <div>
+              <span>总标注</span><strong>{{ reviewSummary.total_annotations }}</strong>
+            </div>
+            <div>
+              <span>任务</span><strong>{{ reviewSummary.unique_job_count }}</strong>
+            </div>
+            <div>
+              <span>轨迹</span><strong>{{ reviewSummary.unique_track_count }}</strong>
+            </div>
             <div>
               <span>待关注</span>
               <strong :data-warning="reviewSummary.review_attention_count > 0">
@@ -287,7 +320,9 @@ onMounted(() => void load());
                 <span>证据帧</span>
                 <ElInputNumber v-model="reviewForm.frame_index" :min="0" :max="1000000000" />
               </label>
-              <label><span>证据引用</span><ElInput v-model="reviewForm.evidence_ref" maxlength="512" /></label>
+              <label
+                ><span>证据引用</span><ElInput v-model="reviewForm.evidence_ref" maxlength="512"
+              /></label>
               <label><span>复核人</span><ElInput v-model="reviewForm.reviewer" maxlength="128" /></label>
               <label>
                 <span>备注</span>
@@ -308,10 +343,25 @@ onMounted(() => void load());
               <div v-if="reviews.length === 0" class="tab-note">当前没有轨迹标注</div>
               <div v-else class="table-wrap">
                 <table class="data-table">
-                  <thead><tr><th>轨迹</th><th>结论</th><th>复核人</th><th>证据</th><th>时间</th></tr></thead>
+                  <thead>
+                    <tr>
+                      <th class="sequence-column">序号</th>
+                      <th>轨迹</th>
+                      <th>结论</th>
+                      <th>复核人</th>
+                      <th>证据</th>
+                      <th>时间</th>
+                    </tr>
+                  </thead>
                   <tbody>
-                    <tr v-for="(review, index) in reviews" :key="String(review.annotation_id ?? index)">
-                      <td>{{ review.track_id }}<br /><code>{{ review.job_id }}</code></td>
+                    <tr
+                      v-for="(review, index) in reviewsPager.items"
+                      :key="String(review.annotation_id ?? reviewsPager.startIndex + index)"
+                    >
+                      <td class="sequence-column">{{ reviewsPager.startIndex + index + 1 }}</td>
+                      <td>
+                        {{ review.track_id }}<br /><code>{{ review.job_id }}</code>
+                      </td>
                       <td>{{ reviewLabel(review.label) }}</td>
                       <td>{{ review.reviewer || "--" }}</td>
                       <td>{{ review.frame_index == null ? "--" : "帧 " + review.frame_index }}</td>
@@ -320,6 +370,12 @@ onMounted(() => void load());
                   </tbody>
                 </table>
               </div>
+              <DataTablePagination
+                v-if="reviews.length"
+                v-model:page="reviewsPager.page"
+                v-model:page-size="reviewsPager.pageSize"
+                :total="reviewsPager.total"
+              />
             </section>
           </div>
         </ElTabPane>
@@ -331,9 +387,22 @@ onMounted(() => void load());
               <div v-if="datasets.length === 0" class="tab-note">复核标注不足，尚未形成评估数据集</div>
               <div v-else class="table-wrap">
                 <table class="data-table">
-                  <thead><tr><th>数据集</th><th>用途</th><th>样本</th><th>任务/轨迹</th><th>最新证据</th></tr></thead>
+                  <thead>
+                    <tr>
+                      <th class="sequence-column">序号</th>
+                      <th>数据集</th>
+                      <th>用途</th>
+                      <th>样本</th>
+                      <th>任务/轨迹</th>
+                      <th>最新证据</th>
+                    </tr>
+                  </thead>
                   <tbody>
-                    <tr v-for="(dataset, index) in datasets" :key="String(dataset.dataset_id ?? index)">
+                    <tr
+                      v-for="(dataset, index) in datasetsPager.items"
+                      :key="String(dataset.dataset_id ?? datasetsPager.startIndex + index)"
+                    >
+                      <td class="sequence-column">{{ datasetsPager.startIndex + index + 1 }}</td>
                       <td>{{ datasetNameLabel(dataset.name || dataset.dataset_id) }}</td>
                       <td>{{ datasetPurposeLabel(dataset.purpose) }}</td>
                       <td>{{ dataset.sample_count ?? 0 }}</td>
@@ -343,6 +412,12 @@ onMounted(() => void load());
                   </tbody>
                 </table>
               </div>
+              <DataTablePagination
+                v-if="datasets.length"
+                v-model:page="datasetsPager.page"
+                v-model:page-size="datasetsPager.pageSize"
+                :total="datasetsPager.total"
+              />
             </section>
             <section>
               <div class="recommendation-heading">
@@ -352,9 +427,23 @@ onMounted(() => void load());
               <div v-if="recommendations.length === 0" class="tab-note">当前没有阈值建议</div>
               <div v-else class="table-wrap">
                 <table class="data-table">
-                  <thead><tr><th>模态/方案</th><th>当前</th><th>建议</th><th>变化</th><th>动作</th><th>置信度</th></tr></thead>
+                  <thead>
+                    <tr>
+                      <th class="sequence-column">序号</th>
+                      <th>模态/方案</th>
+                      <th>当前</th>
+                      <th>建议</th>
+                      <th>变化</th>
+                      <th>动作</th>
+                      <th>置信度</th>
+                    </tr>
+                  </thead>
                   <tbody>
-                    <tr v-for="(item, index) in recommendations" :key="String(item.modality ?? index)">
+                    <tr
+                      v-for="(item, index) in recommendationsPager.items"
+                      :key="String(item.modality ?? recommendationsPager.startIndex + index)"
+                    >
+                      <td class="sequence-column">{{ recommendationsPager.startIndex + index + 1 }}</td>
                       <td>{{ modalityLabel(item.modality) }} / {{ thresholdProfileLabel(item.profile) }}</td>
                       <td>{{ item.current_threshold }}</td>
                       <td>{{ item.recommended_threshold }}</td>
@@ -365,6 +454,12 @@ onMounted(() => void load());
                   </tbody>
                 </table>
               </div>
+              <DataTablePagination
+                v-if="recommendations.length"
+                v-model:page="recommendationsPager.page"
+                v-model:page-size="recommendationsPager.pageSize"
+                :total="recommendationsPager.total"
+              />
             </section>
           </div>
         </ElTabPane>
@@ -374,7 +469,13 @@ onMounted(() => void load());
     <DangerConfirm
       v-model="saveConfirmOpen"
       title="保存阈值方案"
-      :description="'将更新“' + thresholdProfileLabel(profile) + '”方案的 ' + modalities.length + ' 个模态阈值，后续比对将使用新值。'"
+      :description="
+        '将更新“' +
+        thresholdProfileLabel(profile) +
+        '”方案的 ' +
+        modalities.length +
+        ' 个模态阈值，后续比对将使用新值。'
+      "
       :loading="saving"
       @confirm="saveThresholds"
     />
@@ -398,12 +499,29 @@ onMounted(() => void load());
   gap: 12px;
 }
 .threshold-toolbar {
-  padding: 8px 0 16px;
+  min-height: 58px;
+  margin-top: 8px;
+  padding: 10px 12px;
+  background: #f8faf9;
+  border: 1px solid var(--line);
+  border-bottom: 0;
 }
-.threshold-toolbar label {
-  gap: 10px;
-  color: #62706d;
+.threshold-profile {
+  min-width: 0;
+  gap: 12px;
+}
+.threshold-profile > span {
+  color: var(--ink);
   font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.profile-segmented {
+  width: 240px;
+}
+.profile-segmented :deep(.el-segmented__item-label) {
+  padding: 0 12px;
+  white-space: nowrap;
 }
 .review-summary {
   display: grid;
@@ -482,6 +600,20 @@ onMounted(() => void load());
   }
   .review-summary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 700px) {
+  .threshold-toolbar,
+  .threshold-profile {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .threshold-toolbar {
+    padding: 12px;
+  }
+  .profile-segmented {
+    width: 100%;
   }
 }
 </style>

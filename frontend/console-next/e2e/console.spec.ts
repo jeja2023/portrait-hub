@@ -55,7 +55,10 @@ test("[E2E-SHELL-01] loads the public shell, logs in, and keeps credentials out 
     url: window.location.href,
   }));
   expect(browserState.localValues).toEqual([]);
-  const storedSession = JSON.parse(browserState.sessionValues[0] ?? "{}") as { apiKey?: string; bearer?: string };
+  const storedSession = JSON.parse(browserState.sessionValues[0] ?? "{}") as {
+    apiKey?: string;
+    bearer?: string;
+  };
   expect(storedSession.apiKey).toBe("");
   expect(storedSession.bearer).toBe("");
   expect(browserState.localValues.join(" ")).not.toContain("123456");
@@ -108,7 +111,9 @@ test("[E2E-ROUTE-01] supports direct deep links after authentication", async ({ 
   expect(await page.evaluate(() => window.__portraitCspViolations)).toEqual([]);
 });
 
-test("[E2E-ROUTES-02] loads every product route and opens guarded dialogs without CSP violations", async ({ page }) => {
+test("[E2E-ROUTES-02] loads every product route and opens guarded dialogs without CSP violations", async ({
+  page,
+}) => {
   await page.goto("/console/next");
   await loginAsDefaultAdmin(page);
   await expect(page).toHaveURL(/\/console#\/$/);
@@ -145,6 +150,8 @@ test("[E2E-ROUTES-02] loads every product route and opens guarded dialogs withou
   await page.goto("/console#/gallery");
   await page.getByRole("button", { name: "高级操作" }).click();
   await page.getByRole("menuitem", { name: "特征重建" }).click();
+  await page.getByRole("button", { name: "执行预演" }).click();
+  await expect(page.getByRole("button", { name: "执行重建" })).toBeEnabled();
   await expect(page.getByRole("dialog", { name: "特征重建预演" })).toBeVisible();
   await page.getByRole("button", { name: "执行重建" }).click();
   await expect(page.getByRole("dialog", { name: "执行特征重建" })).toBeVisible();

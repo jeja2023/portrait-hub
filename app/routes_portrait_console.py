@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response, status
 from fastapi.responses import FileResponse, HTMLResponse
@@ -7,6 +7,16 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.observability import logger
 from app.oidc_auth import oidc_identity_metadata
+from app.portrait_access import (
+    access_state_payload,
+    create_member,
+    delete_member,
+    list_members,
+    restore_access_state,
+    update_member,
+)
+from app.portrait_async import run_blocking_io
+from app.portrait_audit import audit_event
 from app.portrait_auth import ROLE_PERMISSIONS, permission_dependency, require_permission
 from app.portrait_console_access import console_principal, issue_console_ws_ticket
 from app.portrait_jobs import get_video_job
@@ -59,6 +69,39 @@ class ConsoleWebSocketTicketRequest(BaseModel):
     resource_id: str = Field(min_length=1, max_length=128)
 
 
+class IdentityMemberCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    tenant_id: str = Field(min_length=1, max_length=64)
+    phone: str = Field(min_length=7, max_length=32)
+    display_name: str = Field(min_length=1, max_length=256)
+    subject: str | None = Field(default=None, max_length=256)
+    roles: list[str] = Field(min_length=1)
+    status: str = Field(default="active", max_length=32)
+
+
+class IdentityMemberPatchRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    phone: str | None = Field(default=None, min_length=7, max_length=32)
+    display_name: str | None = Field(default=None, min_length=1, max_length=256)
+    subject: str | None = Field(default=None, max_length=256)
+    roles: list[str] | None = Field(default=None, min_length=1)
+    status: str | None = Field(default=None, max_length=32)
+
+
+async def audit_identity_or_restore(
+    event: str,
+    snapshot: dict[str, list[dict[str, Any]]],
+    **payload: Any,
+) -> None:
+    try:
+        await run_blocking_io(audit_event, event, **payload)
+    except Exception:
+        await run_blocking_io(restore_access_state, snapshot)
+        raise
+
+
 @router.get("/v1/console/me", dependencies=[Depends(require_api_token)])
 async def portrait_console_me(
     request: Request,
@@ -100,6 +143,92 @@ async def portrait_identity_admin(
             "roles": role_catalog(),
         },
     )
+
+
+@router.get(
+    "/v1/admin/members",
+    dependencies=[Depends(require_api_token), Depends(permission_dependency("admin:identity"))],
+)
+async def portrait_identity_members(
+    response: Response,
+    tenant_id: str | None = None,
+    all_tenants: bool = False,
+    ctx: PortraitRequestContext = Depends(portrait_request_context),
+) -> dict[str, object]:
+    members = await run_blocking_io(list_members, None if all_tenants else tenant_id or ctx.tenant_id)
+    response.headers["Cache-Control"] = "no-store"
+    return portrait_success(ctx.request_id, {"members": members, "count": len(members)})
+
+
+@router.post(
+    "/v1/admin/members",
+    dependencies=[Depends(require_api_token), Depends(permission_dependency("admin:identity"))],
+)
+async def portrait_identity_create_member(
+    payload: IdentityMemberCreateRequest,
+    ctx: PortraitRequestContext = Depends(portrait_request_context),
+) -> dict[str, object]:
+    snapshot = await run_blocking_io(access_state_payload)
+    member = await run_blocking_io(
+        create_member,
+        payload.tenant_id,
+        phone=payload.phone,
+        display_name=payload.display_name,
+        subject=payload.subject,
+        roles=payload.roles,
+        status_value=payload.status,
+    )
+    await audit_identity_or_restore(
+        "identity_member_created",
+        snapshot,
+        request_id=ctx.request_id,
+        tenant_id=payload.tenant_id,
+        member_id=member["member_id"],
+        roles=member["roles"],
+    )
+    return portrait_success(ctx.request_id, {"member": member})
+
+
+@router.patch(
+    "/v1/admin/members/{member_id}",
+    dependencies=[Depends(require_api_token), Depends(permission_dependency("admin:identity"))],
+)
+async def portrait_identity_update_member(
+    member_id: str,
+    payload: IdentityMemberPatchRequest,
+    ctx: PortraitRequestContext = Depends(portrait_request_context),
+) -> dict[str, object]:
+    snapshot = await run_blocking_io(access_state_payload)
+    member = await run_blocking_io(update_member, member_id, payload.model_dump(exclude_unset=True))
+    await audit_identity_or_restore(
+        "identity_member_updated",
+        snapshot,
+        request_id=ctx.request_id,
+        tenant_id=member["tenant_id"],
+        member_id=member_id,
+        changed_fields=sorted(payload.model_fields_set),
+    )
+    return portrait_success(ctx.request_id, {"member": member})
+
+
+@router.delete(
+    "/v1/admin/members/{member_id}",
+    dependencies=[Depends(require_api_token), Depends(permission_dependency("admin:identity"))],
+)
+async def portrait_identity_delete_member(
+    member_id: str,
+    ctx: PortraitRequestContext = Depends(portrait_request_context),
+) -> dict[str, object]:
+    snapshot = await run_blocking_io(access_state_payload)
+    member = await run_blocking_io(delete_member, member_id)
+    await audit_identity_or_restore(
+        "identity_member_deleted",
+        snapshot,
+        request_id=ctx.request_id,
+        tenant_id=member["tenant_id"],
+        member_id=member_id,
+    )
+    return portrait_success(ctx.request_id, {"member": member})
 
 
 @router.post("/v1/console/ws-ticket", dependencies=[Depends(require_api_token)])
