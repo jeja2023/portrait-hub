@@ -48,7 +48,7 @@ def parse_csv_env(name: str, default: str = "") -> list[str]:
     return [item.strip() for item in os.getenv(name, default).split(",") if item.strip()]
 
 
-APP_VERSION = "0.14.1"
+APP_VERSION = "0.14.3"
 PORTRAIT_RUNTIME_PROFILE = (
     os.getenv("PORTRAIT_RUNTIME_PROFILE", os.getenv("APP_ENV", "development")).strip().lower() or "development"
 )
@@ -201,7 +201,9 @@ OIDC_ROLE_MAPPING = os.getenv("OIDC_ROLE_MAPPING", "{}")
 OIDC_DEFAULT_ROLE = os.getenv("OIDC_DEFAULT_ROLE", "").strip()
 OIDC_DEFAULT_TENANT_ID = os.getenv("OIDC_DEFAULT_TENANT_ID", "").strip()
 OIDC_SESSION_SECRET = os.getenv("OIDC_SESSION_SECRET", "")
-OIDC_SESSION_COOKIE_NAME = os.getenv("OIDC_SESSION_COOKIE_NAME", "portrait_oidc_session").strip() or "portrait_oidc_session"
+OIDC_SESSION_COOKIE_NAME = (
+    os.getenv("OIDC_SESSION_COOKIE_NAME", "portrait_oidc_session").strip() or "portrait_oidc_session"
+)
 OIDC_SESSION_MAX_AGE_SECONDS = max(300, min(parse_int_env("OIDC_SESSION_MAX_AGE_SECONDS", 28_800), 86_400))
 OIDC_HTTP_TIMEOUT_SECONDS = max(1.0, min(parse_float_env("OIDC_HTTP_TIMEOUT_SECONDS", 10.0), 60.0))
 OIDC_COOKIE_SECURE = parse_bool_env("OIDC_COOKIE_SECURE", True)

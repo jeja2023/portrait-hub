@@ -12,6 +12,10 @@ function source(path: string): string {
 describe("backend feature coverage", () => {
   it.each([
     [
+      "src/views/LoginView.vue",
+      ["authConfig.local_enabled", "本地账号登录不可用，请检查服务端 LOCAL_AUTH_* 配置"],
+    ],
+    [
       "src/views/admin/ModelsView.vue",
       [
         "/v1/models/",

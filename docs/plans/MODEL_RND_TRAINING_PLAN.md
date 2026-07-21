@@ -1,6 +1,6 @@
 # 训练、标注与模型研发配套方案
 
-本文档面向独立于 `gpu-services` 的算法研发体系。目标是建立一套可持续的图像识别模型研发、标注、训练、评估、导出和交付流程，并与 `INFERENCE_SERVICE_UPGRADE_PLAN.md` 中的推理服务升级方案匹配。
+本文档面向独立于 `portrait-hub` 的算法研发体系。目标是建立一套可持续的图像识别模型研发、标注、训练、评估、导出和交付流程，并与 `INFERENCE_SERVICE_UPGRADE_PLAN.md` 中的推理服务升级方案匹配。
 
 核心原则：训练研发侧不直接侵入推理服务代码，推理服务也不承载训练任务。双方通过标准模型包、模型卡、配置契约和验收样例对接。
 
@@ -23,7 +23,7 @@
 - 线上视频流读取。
 - 业务系统接口适配。
 
-这些由 `gpu-services` 推理服务负责。
+这些由 `portrait-hub` 推理服务负责。
 
 ## 2. 与推理服务的匹配边界
 
@@ -317,7 +317,7 @@ color: RGB
 
 模型包必须能被推理服务直接消费。
 
-短期兼容当前 `gpu-services` 路径：
+短期兼容当前 `portrait-hub` 路径：
 
 ```text
 shared-models/
@@ -438,7 +438,7 @@ models:
 
 推理服务最终以 `models.yml` 为运行配置，以模型卡为审计和验收材料。两者不一致时，模型包应进入待确认状态，不能直接上线。
 
-算法侧交付前应使用推理服务侧校验脚本做一次自检。假设 `gpu-services` 与 `shared-models` 同级：
+算法侧交付前应使用推理服务侧校验脚本做一次自检。假设 `portrait-hub` 与 `shared-models` 同级：
 
 ```bash
 cd portrait-hub
@@ -566,7 +566,7 @@ error_analysis/
 
 推理服务工程师：
 
-- 维护 `gpu-services`。
+- 维护 `portrait-hub`。
 - 实现任务插件。
 - 模型包校验。
 - API、监控、灰度和回滚。

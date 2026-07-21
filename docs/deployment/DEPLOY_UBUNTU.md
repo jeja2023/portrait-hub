@@ -1,926 +1,990 @@
-# Ubuntu 服务器部署教程
+# PortraitHub Ubuntu 部署教程
 
-本文档用于把本项目部署到 Ubuntu 服务器，通过 Docker Compose 启动两个 GPU 推理 worker，为其它业务容器提供 ONNX GPU 推理服务。
+本文档面向当前 PortraitHub 项目，说明如何在 Ubuntu 服务器上通过 Docker Compose 部署 GPU 推理服务。文档按仓库版本 0.14.3、当前 Dockerfile、docker-compose.yml、.env.example 和生产门禁实现编写。
 
-官方参考：
+> 项目名称、仓库目录和 Compose 项目名统一为 portrait-hub。
 
-- Docker Engine Ubuntu 安装文档: <https://docs.docker.com/engine/install/ubuntu/>
-- NVIDIA Container Toolkit 安装文档: <https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html>
+官方安装入口：
 
-## 1. 服务器准备
+- Docker Engine：<https://docs.docker.com/engine/install/ubuntu/>
+- NVIDIA Container Toolkit：<https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html>
 
-推荐环境：
+## 1. 当前部署架构
 
-- Ubuntu 22.04 LTS 或 24.04 LTS
-- NVIDIA GPU 2 张，例如 2080 Ti
-- NVIDIA 驱动正常
-- Docker Engine + Docker Compose v2
-- NVIDIA Container Toolkit
-- 服务容器内运行 Python 3.12，镜像构建时会安装 Python 3.12
+GPU Compose 定义四个服务：
 
-先登录服务器：
+| 服务                      |     默认设备 |           端口 | 用途                  |
+| ------------------------- | -----------: | -------------: | --------------------- |
+| gpu-worker-0              | 宿主机 GPU 0 | 127.0.0.1:9001 | API、控制台和同步推理 |
+| gpu-worker-1              | 宿主机 GPU 1 | 127.0.0.1:9002 | API、控制台和同步推理 |
+| portrait-video-job-worker | 宿主机 GPU 0 |             无 | 异步视频任务          |
+| portrait-stream-worker    |     默认 CPU |             无 | 实时流守护进程        |
 
-```bash
-ssh your_user@your_server_ip
+所有服务共享：
+
+- 可写的宿主机 runtime-state/models.yml；
+- 只读的宿主机模型目录；
+- 可写的宿主机 runtime-state；
+- 同一个 gpu-bridge Docker 网络；
+- 同一份 .env 配置。
+
+### 1.1 双 GPU 编号规则
+
+默认每个 API 容器只看到一张物理 GPU。NVIDIA Runtime 会把容器可见的单张卡映射为容器内逻辑 GPU 0：
+
+- gpu-worker-0 内的逻辑 GPU 0 对应宿主机物理 GPU 0；
+- gpu-worker-1 内的逻辑 GPU 0 对应宿主机物理 GPU 1。
+
+因此双卡单 worker 模式下保持：
+
+```dotenv
+GPU_WORKER_0_DEVICE=0
+GPU_WORKER_1_DEVICE=1
+GPU_DEVICE_IDS=0
 ```
 
-更新系统包索引：
+不要把共享的 GPU_DEVICE_IDS 改成 0,1。模型中心显示 GPU 0 是正常现象，物理卡分配由 Compose 的 GPU_WORKER_*_DEVICE 决定。
+
+### 1.2 推荐启动方式
+
+首次部署只启动两个 API worker：
 
 ```bash
-sudo apt-get update
-sudo apt-get install -y ca-certificates curl gnupg lsb-release git
+docker compose -p portrait-hub up -d gpu-worker-0 gpu-worker-1
 ```
 
-## 2. 安装或确认 NVIDIA 驱动
+确认同步推理稳定后，再根据业务需要启动视频或视频流 worker。直接执行不带服务名的 docker compose up -d 会启动全部四个服务。
 
-如果服务器已经装好驱动，直接检查：
+## 2. 部署模式
+
+### 2.1 单机验收模式
+
+适合首次安装、内网验收和功能测试：
+
+- PORTRAIT_RUNTIME_PROFILE=development；
+- JSON/SQLite/本地对象目录；
+- 本地持久任务队列；
+- API 端口只绑定 127.0.0.1；
+- 通过 SSH 隧道访问，不能直接暴露公网。
+
+该模式不是多副本生产数据架构。两个 API worker 会共享本地文件，不能替代 PostgreSQL、Redis 和对象存储提供的一致性。
+
+### 2.2 严格生产模式
+
+当 PORTRAIT_RUNTIME_PROFILE=production 且 PRODUCTION_EXTERNAL_SERVICES_REQUIRED=true 时，应用启动会执行硬门禁，至少要求：
+
+- PostgreSQL 业务存储；
+- pgvector 或 Qdrant 向量后端；
+- S3 兼容对象存储；
+- Redis 任务队列；
+- OpenTelemetry OTLP 采集端；
+- API Token 或 RBAC；
+- 生产模型能力门禁；
+- 生产可选 Python 依赖。
+
+ops/production.env.example 只是生产变量参考，不会被 Compose 自动读取。需要把适用配置合并到根目录 .env。
+
+## 3. 服务器要求
+
+推荐基线：
+
+- Ubuntu 22.04 LTS 或 24.04 LTS；
+- 两张 NVIDIA GPU；
+- NVIDIA 驱动支持 CUDA 12.4；
+- Docker Engine 与 Docker Compose v2；
+- NVIDIA Container Toolkit；
+- 至少 32 GiB 系统内存；
+- 至少 50 GiB 可用系统盘空间，另行预留模型、日志、数据库和对象存储容量。
+
+当前 GPU 镜像基于：
+
+- nvidia/cuda:12.4.1-cudnn-runtime-ubuntu22.04；
+- Python 3.12；
+- onnxruntime-gpu==1.20.1；
+- Node.js 22.14 构建 Console Next。
+
+宿主机不需要另装 CUDA Toolkit 或 cuDNN，只需要兼容驱动和 NVIDIA Container Toolkit。为避免兼容性不确定，建议 Linux 驱动不低于 550.54.14，并确认 nvidia-smi 显示的最高 CUDA 版本不低于 12.4。
+
+## 4. 安装 NVIDIA 驱动
+
+已有驱动时先检查：
 
 ```bash
 nvidia-smi
+nvidia-smi --query-gpu=index,name,memory.total,driver_version,uuid --format=csv
 ```
 
-能看到 GPU 列表、驱动版本、显存信息，就可以继续。
+必须能看到预期数量的 GPU，且没有驱动通信错误。
 
-如果是纯 CPU 主机，可以跳过 NVIDIA 驱动检查，直接使用 CPU-only 编排：`docker compose -f docker-compose.cpu.yml up -d --build`。该编排使用 `Dockerfile.cpu`、`requirements-cpu.txt` 和 `requirements-cpu.lock`，安装 CPU 版 `onnxruntime==1.20.1`，并在 compose 中固定 `FORCE_CPU="true"`。即使共享 `.env` 仍保留 GPU 部署默认的 `FORCE_CPU=false`，CPU 容器也会强制使用 `CPUExecutionProvider`。CPU 版 Host 白名单使用 `CPU_TRUSTED_HOSTS`，默认包含 `cpu-worker-0`。
-
-> 镜像基于 CUDA 12.4（`onnxruntime-gpu==1.20.1`，需 cuDNN 9）。宿主机 NVIDIA 驱动需满足 CUDA 12.4 的最低版本要求（Linux ≥ 550.54.14）。默认 `CPU_FALLBACK_ENABLED=true` 时，容器内 `CUDAExecutionProvider` 不可用会回退 `CPUExecutionProvider` 继续推理；生产若必须强制 GPU，请设为 `false`。`nvidia-smi` 右上角的 `CUDA Version` 表示驱动支持的最高 CUDA 版本，需 ≥ 12.4。
-
-如果没有驱动，可以用 Ubuntu 推荐驱动安装：
+没有驱动时可以使用 Ubuntu 推荐驱动：
 
 ```bash
+sudo apt-get update
+sudo apt-get install -y ubuntu-drivers-common
 sudo ubuntu-drivers devices
 sudo ubuntu-drivers autoinstall
 sudo reboot
 ```
 
-重启后再次确认：
+重启后重新执行 nvidia-smi。生产服务器不要同时安装发行版驱动、NVIDIA runfile 驱动和多个第三方驱动源。
+
+## 5. 安装 Docker Engine
+
+优先按照 Docker 官方 Ubuntu 文档安装。以下命令使用 Docker 官方 apt 仓库：
 
 ```bash
-nvidia-smi
-```
-
-## 3. 安装 Docker Engine 和 Compose 插件
-
-卸载可能存在的旧版本：
-
-```bash
-for pkg in docker.io docker-doc docker-compose docker-compose-v2 podman-docker containerd runc; do
-  sudo apt-get remove -y "$pkg"
-done
-```
-
-添加 Docker 官方 apt 源：
-
-```bash
+sudo apt-get update
+sudo apt-get install -y ca-certificates curl gnupg
 sudo install -m 0755 -d /etc/apt/keyrings
-sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
+  -o /etc/apt/keyrings/docker.asc
 sudo chmod a+r /etc/apt/keyrings/docker.asc
+
 echo \
   "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu \
   $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
-  sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+  sudo tee /etc/apt/sources.list.d/docker.list >/dev/null
+
 sudo apt-get update
-```
-
-安装 Docker：
-
-```bash
-sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+sudo apt-get install -y \
+  docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 ```
 
 验证：
 
 ```bash
-docker --version
-docker compose version
+sudo docker version
+sudo docker compose version
 sudo docker run --rm hello-world
 ```
 
-可选：允许当前用户免 `sudo` 运行 Docker：
+如需免 sudo 使用 Docker：
 
 ```bash
 sudo usermod -aG docker "$USER"
 newgrp docker
-docker run --rm hello-world
 ```
 
-## 4. 安装 NVIDIA Container Toolkit
+> Docker 用户组等价于主机 root 权限，只能授予受信任的运维账号。
 
-添加 NVIDIA 官方 apt 源：
+## 6. 安装 NVIDIA Container Toolkit
 
 ```bash
 curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | \
   sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
+
 curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | \
   sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | \
   sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
+
 sudo apt-get update
-```
-
-安装：
-
-```bash
 sudo apt-get install -y nvidia-container-toolkit
-```
-
-配置 Docker runtime 并重启 Docker：
-
-```bash
 sudo nvidia-ctk runtime configure --runtime=docker
 sudo systemctl restart docker
 ```
 
-验证 GPU 容器：
+验证容器 GPU：
 
 ```bash
-docker run --rm --gpus all nvidia/cuda:12.4.1-base-ubuntu22.04 nvidia-smi
+docker run --rm --gpus all \
+  nvidia/cuda:12.4.1-base-ubuntu22.04 nvidia-smi
 ```
 
-能在容器内看到 GPU 列表，说明 Docker GPU 环境正常。
+这里必须看到与宿主机一致的 GPU 数量和 UUID。
 
-## 5. 上传项目代码
-
-方式一：使用 Git：
+## 7. 获取 PortraitHub
 
 ```bash
-cd /opt
-sudo mkdir -p /opt/gpu-services
-sudo chown -R "$USER":"$USER" /opt/gpu-services
-git clone <your_repo_url> /opt/gpu-services
-cd /opt/gpu-services
+sudo install -d -o "$USER" -g "$USER" /opt/portrait-hub
+git clone https://github.com/jeja2023/portrait-hub.git /opt/portrait-hub
+cd /opt/portrait-hub
+git checkout main
+git pull --ff-only origin main
 ```
 
-方式二：从本地机器上传项目目录。下面命令在你的本地电脑执行，按实际本地路径调整：
+确认当前版本和提交：
 
 ```bash
-scp -r /path/to/gpu-services your_user@your_server_ip:/opt/gpu-services
-ssh your_user@your_server_ip
-cd /opt/gpu-services
+git status --short --branch
+git log -1 --oneline
+grep '^version = ' pyproject.toml
 ```
 
-确认文件：
+正式环境应记录部署提交 SHA。不要在服务器工作目录直接修改受版本控制的源码。
+
+## 8. 准备环境配置
 
 ```bash
-ls -la
-```
-
-应该能看到：
-
-```text
-Dockerfile
-docker-compose.yml
-main.py
-requirements.txt
-README.md
-DEPLOY_UBUNTU.md
-.env.example
-```
-
-## 6. 配置环境变量
-
-复制配置模板：
-
-```bash
+cd /opt/portrait-hub
 cp .env.example .env
+chmod 600 .env
 ```
 
-编辑：
+.env 已被 Git 忽略。不要把真实密钥提交到仓库、镜像或工单。
+
+分别生成 API Token、会话密钥和数据加密密钥：
 
 ```bash
-nano .env
+openssl rand -hex 32
+openssl rand -hex 32
+openssl rand -hex 32
 ```
 
-常用配置：
+每个用途必须使用不同值。
+
+### 8.1 双卡验收配置
+
+编辑 .env，至少复核以下项目：
 
 ```dotenv
-LOG_LEVEL=INFO
+COMPOSE_PROJECT_NAME=portrait-hub
+
 MODELS_HOST_DIR=./models
-MODEL_CONFIG_HOST_FILE=./models.yml
+MODEL_CONFIG_HOST_FILE=./runtime-state/models.yml
 MODEL_CONFIG_PATH=/workspace/models.yml
-MODEL_CONFIG_READ_FAIL_CLOSED=true
-MAX_TENSOR_ITEMS=12582912
-MAX_LOADED_MODELS=0
-GPU_QUEUE_LIMIT=1
-MODEL_CONCURRENCY_LIMIT=1
-MODEL_QUEUE_TIMEOUT_SECONDS=0
-ENABLE_TENSORRT=false
-ALLOW_STREAM_URLS=false
-STREAM_WORKER_LEASE_TTL_SECONDS=30
-STREAM_WORKER_PROCESS_LOCK_STALE_SECONDS=300
 RUNTIME_STATE_HOST_DIR=./runtime-state
-STREAM_WORKER_LOCK_DIR=/workspace/runtime-state/stream-worker-locks
-STATE_READ_FAIL_CLOSED=true
-ROLLOUT_AUDIT_PATH=/workspace/runtime-state/rollout-audit.jsonl
-PORTRAIT_STORAGE_BACKEND=postgres
-POSTGRES_DSN=postgresql://portrait:change-me@postgres.internal:5432/portrait
-PORTRAIT_OBJECT_STORAGE_BACKEND=s3
-S3_ENDPOINT_URL=https://minio.internal
-S3_REGION=us-east-1
-S3_BUCKET=portrait-hub
-S3_ACCESS_KEY_ID=change-me
-S3_SECRET_ACCESS_KEY=change-me
-ENCRYPTION_KEY=change-me-to-a-different-long-random-secret
-ENCRYPTION_KEY_ID=primary
-ENCRYPTION_KEYRING=
-REQUIRE_ENCRYPTION=true
-ANALYSIS_ARCHIVE_ENABLED=true
-ANALYSIS_ARCHIVE_PREVIEW_MAX_SIDE=480
-WARMUP_MODELS=
-API_TOKEN=change-me-to-a-long-random-token
+
 GPU_WORKER_0_DEVICE=0
 GPU_WORKER_1_DEVICE=1
+GPU_DEVICE_IDS=0
+GPU_QUEUE_LIMIT=1
+GPU_QUEUE_LIMIT_PER_DEVICE=1
+MODEL_CONCURRENCY_LIMIT=1
+MODEL_QUEUE_TIMEOUT_SECONDS=30
+MAX_LOADED_MODELS=2
+CPU_FALLBACK_ENABLED=false
+FORCE_CPU=false
+ENABLE_TENSORRT=false
+
+INSTALL_PROD_OPTIONAL=true
+PORTRAIT_RUNTIME_PROFILE=development
+PRODUCTION_EXTERNAL_SERVICES_REQUIRED=true
+
+AUTH_REQUIRED=true
+API_TOKEN=替换为独立随机值
+API_TOKEN_TENANT_ID=default
+API_TOKEN_ALLOW_TENANT_OVERRIDE=false
+
+LOCAL_AUTH_ENABLED=true
+LOCAL_AUTH_ALLOW_REMOTE=true
+LOCAL_AUTH_USERNAME=admin
+LOCAL_AUTH_PASSWORD=替换默认密码
+LOCAL_AUTH_SESSION_SECRET=替换为至少32字节随机值
+LOCAL_AUTH_COOKIE_SECURE=false
+
+REQUIRE_ENCRYPTION=true
+ENCRYPTION_KEY=替换为独立随机值
+ENCRYPTION_KEY_ID=primary
+
+DEBUG_ENDPOINTS_ENABLED=false
+ENABLE_API_DOCS=false
+TENANT_HEADER_REQUIRED=true
+TRUSTED_HOSTS=127.0.0.1,localhost,gpu-worker-0,gpu-worker-1
+
+VIDEO_JOB_WORKER_IN_PROCESS=false
+VIDEO_JOB_WORKER_GPU_DEVICES=0
+STREAM_WORKER_FORCE_CPU=true
+STREAM_WORKER_GPU_DEVICES=none
 ```
 
 说明：
 
-- `API_TOKEN` 建议生产环境设置为长随机字符串。
-- `MODEL_CONFIG_HOST_FILE` 默认指向当前目录的 `models.yml`，该文件会可写挂载进容器；别名切换、灰度和回滚写回后可持久化。
-- `MODEL_CONFIG_READ_FAIL_CLOSED=true` 会让缺失、损坏或根节点格式错误的 `models.yml` 直接导致启动/重载失败，避免静默退化为空配置。
-- `RUNTIME_STATE_HOST_DIR` 默认保存审计日志等运行期文件，容器重建后不会丢失。
-- `STATE_READ_FAIL_CLOSED=true` 会让已有 JSON 状态文件损坏或根结构错误时直接失败，避免重启后静默丢失 gallery、任务、流和阈值状态。
-- `ANALYSIS_ARCHIVE_ENABLED=true` 会让图片、离线视频和每个实时流完成批次写入统一解析档案。生产使用 `PORTRAIT_STORAGE_BACKEND=postgres` 时索引进入 PostgreSQL；本地 JSON 存储配置下索引位于 `PORTRAIT_ANALYSIS_ARCHIVE_DB_PATH` 指定的 SQLite 文件。
-- `PORTRAIT_OBJECT_STORAGE_BACKEND=s3` 用于长期保存完整结果图、预览图和视频源文件。API、视频 worker 与流 worker 必须共享同一个 PostgreSQL、S3 bucket 和加密密钥配置。
-- `REQUIRE_ENCRYPTION=true` 时必须设置 `ENCRYPTION_KEY`。它与 `API_TOKEN` 必须使用不同的随机值；轮换后把旧密钥按 `key_id=secret` 写入 `ENCRYPTION_KEYRING`，直到全部历史对象完成重写。详细格式见 `docs/security/docs-security.md`。
-- `STREAM_WORKER_LOCK_DIR` 建议跟随 `RUNTIME_STATE_HOST_DIR` 持久化；多个 stream daemon 共享同一运行期状态时，应共享该 lock 目录，`STREAM_WORKER_LEASE_TTL_SECONDS` 和 `STREAM_WORKER_PROCESS_LOCK_STALE_SECONDS` 控制 lease 过期与 stale lock 回收。
-- `WARMUP_MODELS` 可写成 `portrait_hub/yolov8n.onnx,portrait_hub/osnet_ibn_x1_0.onnx`。
-- `MODEL_CONCURRENCY_LIMIT` 和 `GPU_QUEUE_LIMIT` 建议先保持 `1`，压测后再提高。
-- `ENABLE_TENSORRT=true` 只在确认容器内 ONNX Runtime 暴露 `TensorrtExecutionProvider` 后开启。
-- 如果服务器只有 1 张 GPU，先删除或注释 `docker-compose.yml` 里的 `gpu-worker-1` 服务，或者只启动 `gpu-worker-0`。
+- 验收阶段通过 HTTP/SSH 隧道访问时，LOCAL_AUTH_COOKIE_SECURE=false；
+- 正式 HTTPS 网关部署必须改为 LOCAL_AUTH_COOKIE_SECURE=true；
+- Docker 部署使用本地账号时应设置 LOCAL_AUTH_ALLOW_REMOTE=true，因为应用看到的来源可能是 Docker 网桥地址；此时必须替换默认密码和默认会话密钥；
+- 不需要本地账号时设置 LOCAL_AUTH_ENABLED=false，生产优先使用 OIDC；
+- 强制 GPU 环境设置 CPU_FALLBACK_ENABLED=false，否则 CUDA 故障可能静默回退到 CPU。
+- 视频 worker 通过 NVIDIA runtime 使用 VIDEO_JOB_WORKER_GPU_DEVICES；流 worker 默认强制 CPU，改用 GPU 时必须同时设置 STREAM_WORKER_FORCE_CPU=false 和 STREAM_WORKER_GPU_DEVICES=设备编号。
 
-### 6.1 从 0.8.x 升级到 0.9.0
+### 8.2 严格生产配置
 
-`0.9.0` 删除旧结果历史接口和存储实现，不迁移旧记录，也不会读取旧 JSON/PostgreSQL 图片历史。升级窗口按以下顺序执行：
+将 ops/production.env.example 中的生产项合并进 .env，并配置真实端点：
 
-1. 停止所有 API、视频 worker 和流 worker，备份当前 PostgreSQL、`runtime-state` 和对象存储。
-2. 更新代码与镜像，确认 `.env` 已启用 PostgreSQL 索引和持久对象存储，并让所有服务使用相同配置。
-3. 幂等应用数据库架构：
+```dotenv
+PORTRAIT_RUNTIME_PROFILE=production
+PRODUCTION_EXTERNAL_SERVICES_REQUIRED=true
 
-```bash
-psql "$POSTGRES_DSN" -v ON_ERROR_STOP=1 -f tools/portrait_postgres_schema.sql
+AUTH_REQUIRED=true
+RBAC_ENABLED=true
+ENABLE_API_DOCS=false
+DEBUG_ENDPOINTS_ENABLED=false
+
+PORTRAIT_STORAGE_BACKEND=postgres
+POSTGRES_DSN=postgresql://用户:密码@postgres.example:5432/portrait
+
+PORTRAIT_VECTOR_BACKEND=pgvector
+PORTRAIT_REQUIRE_PRODUCTION_VECTOR_BACKEND=true
+PORTRAIT_REQUIRE_PRODUCTION_MODEL_CAPABILITIES=true
+
+PORTRAIT_OBJECT_STORAGE_BACKEND=s3
+S3_ENDPOINT_URL=https://s3.example
+S3_REGION=us-east-1
+S3_BUCKET=portrait-hub
+S3_ACCESS_KEY_ID=替换为真实值
+S3_SECRET_ACCESS_KEY=替换为真实值
+
+TASK_QUEUE_BACKEND=redis
+REDIS_URL=redis://:密码@redis.example:6379/0
+
+READY_CHECK_DEPENDENCIES=true
+OPENTELEMETRY_ENABLED=true
+OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector.example:4318/v1/traces
+
+REQUIRE_ENCRYPTION=true
+CPU_FALLBACK_ENABLED=false
+INSTALL_PROD_OPTIONAL=true
 ```
 
-4. 重新构建并启动服务：
+生产模式启动前必须应用 PostgreSQL/pgvector 架构：
 
 ```bash
-docker compose up -d --build
+export POSTGRES_DSN='替换为真实 PostgreSQL DSN'
+psql "$POSTGRES_DSN" -v ON_ERROR_STOP=1 \
+  -f tools/portrait_postgres_schema.sql
 ```
 
-5. 分别完成一次图片解析、视频任务和视频流批次，然后检查：
+数据库账号需要创建 vector 扩展和表结构的权限。API、视频 worker、流 worker 必须使用相同的 PostgreSQL、S3、Redis 和加密密钥配置。
 
-```bash
-curl -G "http://127.0.0.1:9001/v1/analysis/results" \
-  -H "X-API-Key: ${API_TOKEN}" \
-  --data-urlencode "source_type=image" \
-  --data-urlencode "limit=1"
-```
+## 9. 准备模型
 
-把 `source_type` 依次改为 `video` 和 `stream`，并使用响应中的 `content_url` 验证完整对象可读取。档案默认不设数量上限，上线前应为 PostgreSQL、S3 bucket 或 `OBJECT_STORAGE_DIR` 配置容量告警和联合备份。
+当前 models.yml 使用以下模型 ID：
 
-生成随机 token 示例：
+- portrait_hub/yolov8n.onnx；
+- portrait_hub/osnet_ibn_x1_0.onnx。
 
-```bash
-openssl rand -hex 32
-```
-
-## 7. 创建共享模型目录
-
-默认模型目录与本项目目录同级。推荐结构：
+模型 ID 中包含项目命名空间，但当前 artifact.path 是模型目录根部文件名，因此宿主机实际结构为：
 
 ```text
-~/project/
-├── gpu-services/
-├── other-project/
+/opt/portrait-hub/
+├── models.yml
+├── model-capabilities.yml
+├── runtime-state/
+│   └── models.yml
 └── models/
+    ├── yolov8n.onnx
+    ├── yolov8n.model-card.yml
+    ├── yolov8n.labels.txt
+    ├── yolov8n.governance.yml
+    ├── osnet_ibn_x1_0.onnx
+    ├── osnet_ibn_x1_0.model-card.yml
+    └── osnet_ibn_x1_0.governance.yml
 ```
 
-如果本项目在 `~/project/gpu-services`，模型目录就是：
-
-```text
-~/project/gpu-services/models
-```
-
-创建目录：
+仓库根目录的 models.yml 是只读模板；容器实际读写 runtime-state/models.yml。首次部署时初始化一次，后续更新不得覆盖运行时副本：
 
 ```bash
-cd /opt/gpu-services
-mkdir -p ./models
+cd /opt/portrait-hub
+mkdir -p models runtime-state
+chmod 750 models runtime-state
+if [ ! -f runtime-state/models.yml ]; then
+  install -m 640 models.yml runtime-state/models.yml
+fi
+find models -maxdepth 1 -type f -print
 ```
 
-准备本地模型目录，例如：
+严格校验应在装有 Python 3.12 开发环境的受控机器上运行：
 
 ```bash
-mkdir -p /opt/model-upload/portrait_hub
-cp /path/to/yolov8n.onnx /opt/model-upload/portrait_hub/
-cp /path/to/osnet_ibn_x1_0.onnx /opt/model-upload/portrait_hub/
-```
-
-把模型复制到共享目录，目录必须是 `项目名/模型文件`：
-
-```bash
-mkdir -p ./models
-cp /opt/model-upload/portrait_hub/*.onnx ./models/
-```
-
-检查共享目录内模型：
-
-```bash
-find ./models -maxdepth 2 -type f -name '*.onnx' -print
-```
-
-预期类似：
-
-```text
-./models/yolov8n.onnx
-./models/osnet_ibn_x1_0.onnx
-```
-
-如果你之前已经按旧结构放过模型，例如：
-
-```text
-./models/portrait_hub/models/yolov8n.onnx
-```
-
-可以迁移成新结构：
-
-```bash
-for d in ./models/*/models; do
-  [ -d "$d" ] || continue
-  project="$(dirname "$d")"
-  cp "$d"/*.onnx "$project"/
-done
-```
-
-确认新结构没问题后，再按需清理旧的 `models` 子目录。
-
-上线前建议先校验模型包。开发依赖只用于服务器验收，不会进入生产镜像：
-
-```bash
-python3 -m pip install -r requirements-dev.txt
-python3 tools/validate_model_package.py \
-  --config models.yml \
-  --models-root ./models \
+python3.12 -m venv .venv
+. .venv/bin/activate
+python -m pip install -r requirements/dev.txt
+python tools/validate_model_package.py \
+  --config runtime-state/models.yml \
+  --models-root models \
   --strict-hash \
   --strict-sidecars
 ```
 
-如果模型刚开始接入、sha256 或侧车文件还没补齐，可以先去掉 `--strict-hash --strict-sidecars` 查看告警；正式上线前应补齐模型卡、labels 或类别定义、sha256。
+不要在生产服务器上临时修改 artifact.sha256 来绕过校验。
 
-同时执行本地部署静态检查：
-
-```bash
-python3 tools/deploy_check.py --import-app
-pytest -q
-```
-
-## 8. 构建并启动服务
-
-在项目目录执行：
+## 10. 构建前检查
 
 ```bash
-cd /opt/gpu-services
+cd /opt/portrait-hub
+test -f .env
 test -f models.yml
-mkdir -p ./runtime-state
-docker compose up -d --build
+test -f runtime-state/models.yml
+test -d models
+mkdir -p runtime-state
+
+docker compose -p portrait-hub config --quiet
+docker compose -p portrait-hub config --services
+docker compose -p portrait-hub config --images
 ```
 
-构建镜像时会访问 Docker Hub、Ubuntu apt 源、deadsnakes Python 3.12 PPA 和 Python 包镜像源。Dockerfile 已将 Ubuntu apt 源切到清华镜像，并使用 `python3.12 -m ensurepip` 初始化 pip，避免访问 `bootstrap.pypa.io`。服务器如果不能访问外网，建议在能联网的机器上构建镜像后推送到内网镜像仓库。
+当前应看到四个服务和以下镜像名：
 
-### 8.1 离线/无网部署镜像搬运
-
-如果部署服务器处于完全无互联网的环境（如内网物理机或隔离专网），无法执行在线 build。可以采用“有网构建 - 离线搬运”的方案：
-
-1. **在有网的开发机上构建镜像**：
-   ```bash
-   docker compose build
-   ```
-   构建完成后，镜像会被打上 `portrait-hub:latest` 的标签。
-
-2. **导出镜像为归档文件**：
-   ```bash
-   docker save -o portrait-hub-latest.tar portrait-hub:latest
-   ```
-
-3. **搬运至无网服务器**：
-   通过移动硬盘或内网中转将 `portrait-hub-latest.tar` 归档文件以及项目代码拷贝到目标无网服务器。
-
-4. **在无网服务器上导入镜像**：
-   ```bash
-   docker load -i portrait-hub-latest.tar
-   ```
-
-5. **在无网服务器上直接启动服务**：
-   在项目目录内执行：
-   ```bash
-   docker compose up -d
-   ```
-   Docker Compose 会自动匹配并拉起本地已导入的 `portrait-hub:latest` 镜像，无需任何联网请求。
-
-> **注意事项**：如果在无网环境下需要接入局域网内部视频流（如私有 RTSP 流地址），请务必在 `.env` 中将 `ALLOW_PRIVATE_STREAM_HOSTS` 设置为 `true`。否则，服务默认将拦截私网/局域网 IP 以防范 SSRF 安全漏洞。
-
-### 8.2 查看容器：
-
-```bash
-docker compose ps
+```text
+portrait-hub-gpu-worker-0
+portrait-hub-gpu-worker-1
+portrait-hub-portrait-video-job-worker
+portrait-hub-portrait-stream-worker
 ```
 
-查看日志：
+在装有 Python 3.12 开发环境的发布机上，还应运行：
 
 ```bash
-docker compose logs -f --tail=100
+python tools/deploy_check.py --json --import-app
+python tools/portrait_production_readiness.py --scope platform --strict
 ```
 
-只看某个 worker：
+严格生产门禁必须没有失败项。
+
+## 11. 构建与启动
+
+构建镜像：
 
 ```bash
-docker compose logs -f --tail=100 gpu-worker-0
+cd /opt/portrait-hub
+docker compose -p portrait-hub build --pull
 ```
 
-确认容器内 Python 版本：
+镜像构建会访问 Docker Hub、Ubuntu 软件源、deadsnakes PPA、npm registry 和 Python 包镜像。受限网络环境应提前配置代理或内部镜像源。
+
+首次只启动 API worker：
 
 ```bash
-docker exec gpu-worker-0 python --version
+docker compose -p portrait-hub up -d gpu-worker-0 gpu-worker-1
 ```
 
-预期为 Python 3.12.x。
-
-## 9. 验证服务
-
-检查健康状态：
+查看状态和日志：
 
 ```bash
-curl http://127.0.0.1:9001/health
-curl http://127.0.0.1:9001/ready
+docker compose -p portrait-hub ps
+docker compose -p portrait-hub logs --tail=200 gpu-worker-0
+docker compose -p portrait-hub logs --tail=200 gpu-worker-1
 ```
 
-如果启用了 `API_TOKEN`：
+两个 API worker 都应进入 healthy。
+
+需要异步视频和视频流时再启动：
 
 ```bash
-TOKEN="你的API_TOKEN"
-# 如果这里使用接入中心生成的应用密钥，下面的 smoke/regression 命令增加 --auth-scheme api-key。
+docker compose -p portrait-hub up -d \
+  portrait-video-job-worker portrait-stream-worker
 ```
 
-推荐用内置冒烟测试做一次完整接口检查：
+## 12. 上线验证
+
+### 12.1 验证 GPU 隔离
+
+先记录宿主机 UUID：
 
 ```bash
-python3 tools/service_smoke_test.py \
-  --base-url http://127.0.0.1:9001 \
-  --token "$TOKEN" \
-  --auth-scheme api-key \
-  --require-ready \
-  --model-id person_detector_default
+nvidia-smi --query-gpu=index,uuid,name,memory.total --format=csv
 ```
 
-如果需要在上线前加载模型并跑虚拟推理：
+再检查容器：
 
 ```bash
-python3 tools/service_smoke_test.py \
-  --base-url http://127.0.0.1:9001 \
-  --token "$TOKEN" \
-  --auth-scheme api-key \
-  --require-ready \
-  --deep-ready \
-  --load-models \
-  --dummy-inference
+docker exec gpu-worker-0 \
+  nvidia-smi --query-gpu=index,uuid,name,memory.total --format=csv
+docker exec gpu-worker-1 \
+  nvidia-smi --query-gpu=index,uuid,name,memory.total --format=csv
 ```
 
-如果已经准备固定样例回归集，可以继续执行：
+每个容器只能看到一张卡，容器中的 UUID 应分别对应宿主机 GPU 0 和 GPU 1。
+
+如已启动异步视频 worker，还必须确认 NVIDIA runtime 已实际注入 GPU：
 
 ```bash
-python3 tools/regression_check.py \
-  --manifest regression.yml \
-  --base-url http://127.0.0.1:9001 \
-  --token "$TOKEN" \
-  --auth-scheme api-key
+docker exec portrait-video-job-worker \
+  nvidia-smi --query-gpu=index,uuid,name,memory.total --format=csv
 ```
 
-新模型通过校验后，可以用别名切换接口发布。先 dry-run：
+默认配置下它只能看到宿主机 GPU 0。容器显示 Started 但该命令失败，说明视频任务尚不能执行 GPU 推理。
+
+### 12.2 验证 ONNX Runtime
 
 ```bash
-curl -X POST http://127.0.0.1:9001/v1/admin/models/rollout/aliases/switch \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "alias_name": "person_detector_default",
-    "target_model_id": "portrait_hub/person_detector_yolov8n_v1.1.0_fp32.onnx",
-    "expected_current_target": "portrait_hub/yolov8n.onnx",
-    "dry_run": true
-  }'
+docker exec gpu-worker-0 python -c \
+  "import onnxruntime as ort; print(ort.get_available_providers())"
+docker exec gpu-worker-1 python -c \
+  "import onnxruntime as ort; print(ort.get_available_providers())"
 ```
 
-确认目标、模型包和回归结果都正确后，将 `dry_run` 改为 `false`。需要撤回时：
+必须包含 CUDAExecutionProvider。TensorRT 默认关闭，不要求出现 TensorrtExecutionProvider。
 
-`docker-compose.yml` 默认把 `models.yml` 可写挂载到所有 worker。切换接口会写回这个宿主机文件并重载当前 worker；其它 worker 可以通过统一控制工具同步配置：
+视频 worker 启动后也应检查：
 
 ```bash
-python3 tools/worker_control.py --action reload-config --token "$TOKEN"
+docker exec portrait-video-job-worker python -c \
+  "import onnxruntime as ort; print(ort.get_available_providers())"
 ```
 
+### 12.3 健康检查
+
 ```bash
-curl -X POST http://127.0.0.1:9001/v1/admin/models/rollout/aliases/rollback \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"alias_name":"person_detector_default","dry_run":false}'
+curl --fail http://127.0.0.1:9001/health
+curl --fail http://127.0.0.1:9001/ready
+curl --fail http://127.0.0.1:9002/health
+curl --fail http://127.0.0.1:9002/ready
 ```
 
-如果需要按比例灰度，可以配置 weighted alias。下面示例表示 90% 旧模型、10% 新模型：
+深度检查需要鉴权：
 
 ```bash
-curl -X POST http://127.0.0.1:9001/v1/admin/models/rollout/aliases/weighted \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "alias_name": "person_detector_default",
-    "expected_current_target": "portrait_hub/yolov8n.onnx",
-    "dry_run": true,
-    "targets": [
-      {"target_model_id": "portrait_hub/yolov8n.onnx", "weight": 90, "status": "active"},
-      {"target_model_id": "portrait_hub/person_detector_yolov8n_v1.1.0_fp32.onnx", "weight": 10, "status": "candidate"}
-    ]
-  }'
-```
+export PORTRAIT_TOKEN='替换为 .env 中的 API_TOKEN'
 
-预览某个业务 key 的命中结果：
-
-```bash
-curl -H "Authorization: Bearer $TOKEN" \
-  "http://127.0.0.1:9001/v1/admin/models/rollout/aliases/preview?alias_name=person_detector_default&traffic_key=customer-001"
-```
-
-多个 worker 的健康检查、配置重载和预热可以用统一控制工具：
-
-```bash
-python3 tools/worker_control.py --action health
-python3 tools/worker_control.py --action reload-config --token "$TOKEN"
-python3 tools/worker_control.py --action warmup --token "$TOKEN" --model portrait_hub/yolov8n.onnx
-```
-
-如果 worker 端口不是默认的 `9001/9002`，可以重复传入 `--base-url`：
-
-```bash
-python3 tools/worker_control.py \
-  --base-url http://127.0.0.1:9001 \
-  --base-url http://127.0.0.1:9002 \
-  --action aliases \
-  --token "$TOKEN"
-```
-
-查看模型元信息：
-
-```bash
-curl -H "Authorization: Bearer $TOKEN" \
-  "http://127.0.0.1:9001/v1/models/portrait_hub/yolov8n.onnx"
-```
-
-查看模型配置：
-
-```bash
-curl -H "Authorization: Bearer $TOKEN" \
-  http://127.0.0.1:9001/v1/models
-```
-
-深度 readiness 检查：
-
-```bash
-curl -H "Authorization: Bearer $TOKEN" \
+curl --fail \
+  -H "Authorization: Bearer $PORTRAIT_TOKEN" \
+  -H "X-Tenant-ID: default" \
   "http://127.0.0.1:9001/ready/deep?load_models=true"
 ```
 
-手动预热：
+另一个 worker 也必须单独检查：
 
 ```bash
-curl -X POST http://127.0.0.1:9001/v1/admin/models/warmup \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"models":[{"project_name":"portrait_hub","model_name":"yolov8n.onnx"}]}'
+curl --fail \
+  -H "Authorization: Bearer $PORTRAIT_TOKEN" \
+  -H "X-Tenant-ID: default" \
+  "http://127.0.0.1:9002/ready/deep?load_models=true"
 ```
 
-查看 Prometheus 指标：
+如发布机已安装项目开发环境，可以执行：
 
 ```bash
-curl http://127.0.0.1:9001/metrics
+python -m tools.service_smoke_test \
+  --base-url http://127.0.0.1:9001 \
+  --token "$PORTRAIT_TOKEN" \
+  --auth-scheme bearer \
+  --tenant-id default \
+  --require-ready \
+  --deep-ready \
+  --load-models \
+  --model-id person_detector_default
 ```
 
-推理请求示例：
+注意必须使用 python -m tools.service_smoke_test；直接执行脚本文件会破坏项目包导入路径。
+
+## 13. 控制台与网关
+
+根路径 / 是正式登录入口，登录后进入 /console。不要使用已经删除的旧控制台路径。
+
+### 13.1 SSH 隧道验收
+
+服务端口默认只监听回环地址。管理人员可以从本地电脑建立隧道：
 
 ```bash
-curl -X POST http://127.0.0.1:9001/predict \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "X-Request-ID: test-001" \
-  -H "Content-Type: application/json" \
-  -d '{"project_name":"portrait_hub","model_name":"yolov8n.onnx","tensor_data":[[[[0.1,0.2,0.3]]]]}'
+ssh -L 9001:127.0.0.1:9001 user@服务器地址
 ```
 
-注意：上面的 `tensor_data` 只是格式示例，实际 shape 必须匹配 ONNX 模型输入。
-
-多人检测请求示例：
-
-```bash
-curl -X POST http://127.0.0.1:9001/v1/vision/infer \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "X-Request-ID: persons-test-001" \
-  -F "project_name=portrait_hub" \
-  -F "model_name=yolov8n.onnx" \
-  -F "confidence=0.25" \
-  -F "iou=0.45" \
-  -F "files=@frame-001.jpg" \
-  -F "files=@frame-002.jpg"
-```
-
-`/v1/vision/infer` 在统一 `data.results` 中返回每张图的检测、分类或 ReID 结果；检测任务包含人体框、置信度和类别信息。
-
-ReID 向量请求示例：
-
-```bash
-curl -X POST http://127.0.0.1:9001/v1/vision/infer \
-  -H "Authorization: Bearer $TOKEN" \
-  -F "project_name=portrait_hub" \
-  -F "model_name=osnet_ibn_x1_0.onnx" \
-  -F "include_vectors=true" \
-  -F "files=@person-001.jpg"
-```
-
-检测 + ReID 组合请求示例：
-
-```bash
-curl -X POST http://127.0.0.1:9001/v1/infer/tracks \
-  -H "Authorization: Bearer $TOKEN" \
-  -F "detector_project_name=portrait_hub" \
-  -F "detector_model_name=yolov8n.onnx" \
-  -F "reid_project_name=portrait_hub" \
-  -F "reid_model_name=osnet_ibn_x1_0.onnx" \
-  -F "include_embeddings=false" \
-  -F "files=@frame-001.jpg" \
-  -F "files=@frame-002.jpg"
-```
-
-离线视频解析请求示例：
-
-```bash
-curl -X POST http://127.0.0.1:9001/v1/jobs/video \
-  -H "Authorization: Bearer $TOKEN" \
-  -F "file=@clip.mp4" \
-  -F "sample_interval_seconds=0.5" \
-  -F "batch_size=64" \
-  -F "include_embeddings=false"
-```
-
-接口返回任务 ID；通过 `GET /v1/jobs/{job_id}` 查询状态，通过 `GET /v1/jobs/{job_id}/result` 获取检测、ReID 和轨迹结果。
-
-视频流解析请求示例：
-
-```bash
-curl -X POST http://127.0.0.1:9001/v1/streams \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"stream_url":"rtsp://user:password@camera-host/stream1","name":"camera-1","settings":{"sample_interval_seconds":0.5,"batch_size":32,"read_timeout_seconds":10,"include_embeddings":false}}'
-```
-
-随后调用 POST /v1/streams/{stream_id}/start 启动分析，通过 GET /v1/streams/{stream_id}/events 或 WS /ws/streams/{stream_id} 读取 stream_analysis_completed 事件。
-
-视频流解析默认关闭。需要在 .env 中设置 ALLOW_STREAM_URLS=true；开发机访问私网流时还需设置 ALLOW_PRIVATE_STREAM_HOSTS=true。生产环境建议只允许可信内网摄像头地址。
-
-长驻视频流拉取推荐使用 python -m app.portrait_stream_worker_daemon 或 Compose 中的 portrait-stream-worker 服务。daemon 会为每条运行中的 stream 获取可过期的 state lease，并在 STREAM_WORKER_LOCK_DIR 下创建原子 lock 文件做进程级兜底，避免重复拉流。
-
-#### 视频流无解析图片排查
-
-先查询最近事件，而不是只读取默认的少量起始事件：
-
-```bash
-curl "http://127.0.0.1:9001/v1/streams/{stream_id}/events?limit=200" \
-  -H "Authorization: Bearer $TOKEN"
-```
-
-- 出现 `stream_analysis_completed` 且 payload 中有 `thumbnails`，说明服务端已经产出图片；控制台会选择最新分析批次展示。
-- 若只有 `stream_registered`、`stream_started`、`stream_worker_start_requested` 或 `stream_worker_session_started`，同时 `processed_frames=0`，优先检查 `portrait-stream-worker` 是否运行、是否持续重启以及日志中的拉流错误。
-- API 与 worker 必须共享相同的状态后端和路径；JSON 后端需共享 `PORTRAIT_STREAMS_STATE_PATH`，容器部署需挂载同一数据卷。两者还必须使用一致的 `ALLOW_STREAM_URLS`、`ALLOW_PRIVATE_STREAM_HOSTS` 和 `STREAM_ALLOWED_HOSTS`。
-- `worker_lease_active=false` 通常表示 daemon 未接管该流；若 daemon 已运行，检查 `STREAM_WORKER_LOCK_DIR` 权限、残留锁和 lease 过期时间。
-- CPU 兜底推理首批结果可能需要 20～60 秒。启动后应等待一个完整批次，再以 `stream_analysis_completed` 事件确认结果，而不是仅凭流状态为“分析中”判断成功。
-
-本地开发使用 `python dev_start.py` 时会自动启动 API 和流 worker，并把同一份 `.dev_start.env` 传给两个进程；生产环境仍应使用 Compose、systemd 或 Kubernetes 中的独立 worker 服务。
-
-模型输出调试：
-
-```bash
-curl -X POST http://127.0.0.1:9001/debug/model-output \
-  -H "Authorization: Bearer $TOKEN" \
-  -F "project_name=portrait_hub" \
-  -F "model_name=yolov8n.onnx" \
-  -F "model_type=yolo" \
-  -F "file=@frame-001.jpg"
-```
-
-## 10. 业务容器接入
-
-如果业务项目也运行在同一台 Docker 主机上，把业务容器加入 `gpu-bridge` 网络。
-
-业务项目的 Compose 中加入：
-
-```yaml
-networks:
-  gpu-bridge:
-    external: true
-```
-
-服务中引用：
-
-```yaml
-services:
-  your-business-service:
-    networks:
-      - gpu-bridge
-
-networks:
-  gpu-bridge:
-    external: true
-```
-
-业务容器内调用：
+然后访问：
 
 ```text
-http://gpu-worker-0:8000/predict
-http://gpu-worker-1:8000/predict
+http://127.0.0.1:9001/
 ```
 
-建议：
+SSH 隧道可以避免端口暴露公网，但 Docker 容器仍可能把请求来源识别为网桥地址；使用本地账号时仍按前文设置 LOCAL_AUTH_ALLOW_REMOTE=true 和强凭据。
 
-- 低延迟场景固定访问一个 worker，避免重复冷加载。
-- 高吞吐场景在业务侧按 worker 做负载均衡。
-- 调用方读取超时要覆盖排队时间、模型加载时间和推理时间。
-- 生产环境建议统一携带 `X-Request-ID`，方便串联业务日志和推理日志。
+### 13.2 HTTPS 反向代理
 
-## 11. 更新模型
+正式环境使用 Nginx、HAProxy 或受控网关把请求负载均衡到：
 
-把新 ONNX 文件复制进共享模型目录后，已加载模型不会自动热更新。
-
-复制新模型：
-
-```bash
-mkdir -p ./models
-cp /opt/model-upload/portrait_hub/yolov8n.onnx ./models/yolov8n.onnx
+```text
+127.0.0.1:9001
+127.0.0.1:9002
 ```
 
-重载单个 worker 的模型：
+ops/nginx-gateway.example.conf 是 API 网关参考模板，生产使用前必须：
+
+- 把 upstream 改成实际可达地址；
+- 配置证书和正式域名；
+- 代理根路径、/assets/console-next/、/v1/ 和 /ws/；
+- 为 WebSocket 保留 Upgrade 和 Connection 请求头；
+- 透传 Host、X-Request-ID、X-Tenant-ID、鉴权头和外部协议；
+- 将请求体上限与 MAX_REQUEST_BODY_BYTES 对齐；
+- 将正式域名加入 TRUSTED_HOSTS；
+- 设置 LOCAL_AUTH_COOKIE_SECURE=true 和 OIDC_COOKIE_SECURE=true。
+
+不要把 9001/9002 改为监听 0.0.0.0 后直接暴露公网。
+
+## 14. 模型中心的 GPU 配置
+
+模型中心会从当前请求命中的 worker 读取 GPU 清单。在默认单卡容器模式下：
+
+- 两个 worker 的界面通常都显示逻辑 GPU 0；
+- 建议模型保持“自动分配”；
+- 不要通过共享的 runtime-state/models.yml 给单卡容器指定逻辑 device_id=1；
+- 物理 GPU 路由通过 GPU_WORKER_0_DEVICE 和 GPU_WORKER_1_DEVICE 管理。
+
+模型中心修改 GPU、别名或灰度配置时，会写回共享的 runtime-state/models.yml，但请求只会主动卸载当前命中的 worker 会话。修改后应同步两个 worker：
 
 ```bash
-curl -X POST http://127.0.0.1:9001/v1/admin/models/reload \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"project_name":"portrait_hub","model_name":"yolov8n.onnx"}'
+python -m tools.worker_control \
+  --action reload-config \
+  --token "$PORTRAIT_TOKEN" \
+  --auth-scheme bearer \
+  --tenant-id default
 ```
 
-也可以直接重启 worker：
+涉及已加载模型的 GPU 归属或模型文件更新时，最稳妥的是滚动重启两个 worker：
 
 ```bash
-docker compose restart gpu-worker-0
-docker compose restart gpu-worker-1
+docker compose -p portrait-hub restart gpu-worker-0
+curl --fail http://127.0.0.1:9001/ready
+
+docker compose -p portrait-hub restart gpu-worker-1
+curl --fail http://127.0.0.1:9002/ready
 ```
 
-## 12. 常用运维命令
+任何控制台配置写操作前都应备份 runtime-state/models.yml，并避免多个管理员同时写入。
 
-停止服务：
+## 15. 视频任务和视频流注意事项
 
-```bash
-docker compose down
+### 15.1 GPU 竞争
+
+portrait-video-job-worker 默认使用宿主机 GPU 0，会与 gpu-worker-0 竞争显存和计算资源。GPU 队列信号量只在单进程内生效，不会跨容器协调。
+
+两张 11 GiB GPU 的建议：
+
+- 只做同步图片推理：不启动视频和流 worker；
+- API 优先：保留两个 API worker，降低视频批次并接受 GPU 0 竞争；
+- 视频优先：只运行 gpu-worker-0，把 GPU 1 专用于视频 worker；
+- 上线前分别压测 API、视频以及混合负载。
+
+显存紧张时先降低：
+
+```dotenv
+GPU_QUEUE_LIMIT=1
+GPU_QUEUE_LIMIT_PER_DEVICE=1
+MODEL_CONCURRENCY_LIMIT=1
+VIDEO_INFERENCE_BATCH_SIZE=4
+STREAM_INFERENCE_BATCH_SIZE=4
+MAX_LOADED_MODELS=2
 ```
 
-重启服务：
+### 15.2 实时流
 
-```bash
-docker compose restart
+portrait-stream-worker 默认使用 CPU 推理：
+
+```dotenv
+STREAM_WORKER_FORCE_CPU=true
+STREAM_WORKER_GPU_DEVICES=none
 ```
 
-重新构建：
+需要让流 worker 使用 GPU 时，必须成对修改并重建容器：
 
-```bash
-docker compose up -d --build
+```dotenv
+STREAM_WORKER_FORCE_CPU=false
+STREAM_WORKER_GPU_DEVICES=1
 ```
 
-查看资源：
+```bash
+docker compose -p portrait-hub up -d --force-recreate portrait-stream-worker
+docker exec portrait-stream-worker nvidia-smi -L
+```
+
+启用私网 RTSP/HTTP 地址前，还必须同时审查：
+
+```dotenv
+ALLOW_STREAM_URLS=true
+ALLOW_PRIVATE_STREAM_HOSTS=true
+STREAM_ALLOWED_HOSTS=camera.internal.example
+```
+
+生产环境应优先使用域名白名单，不要无条件允许任意私网地址。
+
+## 16. 配置变更与日常运维
+
+### 16.1 修改环境变量
+
+docker compose restart 不会重新读取新的环境变量。修改 .env 后应重建容器：
 
 ```bash
+docker compose -p portrait-hub up -d --force-recreate
+```
+
+仅修改代码或依赖时重新构建：
+
+```bash
+docker compose -p portrait-hub up -d --build
+```
+
+### 16.2 常用命令
+
+```bash
+docker compose -p portrait-hub ps
+docker compose -p portrait-hub logs -f --tail=200
+docker compose -p portrait-hub restart gpu-worker-0
+docker compose -p portrait-hub stop
+docker compose -p portrait-hub down
 docker stats
-nvidia-smi
 watch -n 1 nvidia-smi
 ```
 
-进入容器：
+docker compose down 不会删除 bind mount 中的 runtime-state/models.yml、模型文件和其它运行状态，但执行前仍应备份。
+
+### 16.3 从旧的可写 models.yml 迁移
+
+旧部署如果仍设置 MODEL_CONFIG_HOST_FILE=./models.yml，控制台写回后会把 Git 工作区变脏，进而阻塞 git pull 或回退。首次升级到新方案时，在维护窗口禁止模型中心配置写入，并执行：
 
 ```bash
-docker exec -it gpu-worker-0 bash
+cd /opt/portrait-hub
+mkdir -p runtime-state
+cp -a models.yml runtime-state/models.yml
+cmp --silent models.yml runtime-state/models.yml
+
+if grep -q '^MODEL_CONFIG_HOST_FILE=' .env; then
+  sed -i 's#^MODEL_CONFIG_HOST_FILE=.*#MODEL_CONFIG_HOST_FILE=./runtime-state/models.yml#' .env
+else
+  printf '\nMODEL_CONFIG_HOST_FILE=./runtime-state/models.yml\n' >>.env
+fi
+
+# 仅在上面的 cmp 成功且运行时副本已备份后，恢复仓库模板。
+git restore --source=HEAD -- models.yml
+git status --short
 ```
 
-容器内确认 ONNX Runtime provider：
+不要在后续代码更新中用仓库模板覆盖 runtime-state/models.yml。
+
+### 16.4 更新代码
+
+先按第 17 节创建完整备份和镜像归档，再更新：
 
 ```bash
-python -c "import onnxruntime as ort; print(ort.get_available_providers())"
+cd /opt/portrait-hub
+git fetch origin
+git status --short
+git pull --ff-only origin main
+
+test -f runtime-state/models.yml
+docker compose -p portrait-hub config --quiet
+docker compose -p portrait-hub build --pull
+docker compose -p portrait-hub up -d --remove-orphans
+docker compose -p portrait-hub ps
 ```
 
-## 13. 常见问题
+如果 git status --short 非空，应先确认修改来源。正常情况下，控制台写入只会修改被 Git 忽略的 runtime-state/models.yml，不应再污染仓库。不要使用 git reset --hard 覆盖服务器配置。
 
-### `/ready/deep` 显示没有 `CUDAExecutionProvider`
+## 17. 备份、升级与回退
 
-检查：
+升级前至少备份：
+
+- 当前部署提交 SHA；
+- .env 的加密备份；
+- runtime-state/models.yml；
+- runtime-state；
+- PostgreSQL；
+- S3 bucket；
+- Redis 中尚未完成的任务；
+- 当前可用镜像的离线归档。
+
+本地文件备份示例：
+
+```bash
+cd /opt/portrait-hub
+stamp="$(date +%Y%m%d-%H%M%S)"
+backup_dir="/opt/portrait-hub-backup/$stamp"
+install -d -m 700 "$backup_dir"
+cp -a .env runtime-state "$backup_dir/"
+git rev-parse HEAD >"$backup_dir/git-sha.txt"
+docker compose -p portrait-hub config --images >"$backup_dir/images.txt"
+docker save -o "$backup_dir/images.tar" $(cat "$backup_dir/images.txt")
+```
+
+镜像归档让回退不依赖 Docker Hub、Ubuntu 软件源或 Python/npm 镜像。回退时加载旧镜像并切换到对应提交，不要重新构建：
+
+```bash
+cd /opt/portrait-hub
+backup_dir=/opt/portrait-hub-backup/替换为备份时间戳
+docker load -i "$backup_dir/images.tar"
+git checkout "$(cat "$backup_dir/git-sha.txt")"
+docker compose -p portrait-hub config --quiet
+docker compose -p portrait-hub up -d --no-build --force-recreate --remove-orphans
+```
+
+仅当版本说明明确要求回退数据时，才恢复备份中的 runtime-state、数据库或对象存储；盲目恢复会覆盖升级后产生的新数据。回退验收完成后，后续更新前执行 git switch main 返回主分支。
+
+不要只回退 frontend/console-next/dist/index.html；HTML、manifest 和哈希静态资源必须来自同一次构建。
+
+历史破坏性升级和数据迁移要求见对应版本发布说明，不再放入当前新装主流程：
+
+- docs/releases/0.14.0.md；
+- docs/releases/0.14.1.md；
+- docs/releases/0.14.2.md；
+- docs/releases/0.14.3.md。
+
+## 18. 离线部署
+
+Compose 没有固定单一 portrait-hub:latest 镜像；当前会生成四个服务镜像。必须使用固定 Compose 项目名构建和导出。
+
+联网构建机：
+
+```bash
+cd /opt/portrait-hub
+docker compose -p portrait-hub build
+docker compose -p portrait-hub config --images
+
+docker save -o portrait-hub-0.14.3-images.tar \
+  portrait-hub-gpu-worker-0 \
+  portrait-hub-gpu-worker-1 \
+  portrait-hub-portrait-video-job-worker \
+  portrait-hub-portrait-stream-worker
+```
+
+同时传输：
+
+- 项目源码与 Compose 文件；
+- .env 的安全副本；
+- 仓库模板 models.yml 和运行时配置 runtime-state/models.yml；
+- 模型目录；
+- 镜像归档。
+
+离线服务器：
+
+```bash
+docker load -i portrait-hub-0.14.3-images.tar
+cd /opt/portrait-hub
+test -f runtime-state/models.yml
+docker compose -p portrait-hub up -d --no-build gpu-worker-0 gpu-worker-1
+```
+
+构建机和部署机必须使用相同的 Compose 项目名 portrait-hub，否则镜像名称不会匹配。
+
+## 19. CPU 备用部署
+
+无 GPU 主机使用：
+
+```bash
+mkdir -p runtime-state
+if [ ! -f runtime-state/models.yml ]; then
+  install -m 640 models.yml runtime-state/models.yml
+fi
+docker compose -p portrait-hub-cpu \
+  -f docker-compose.cpu.yml up -d --build
+```
+
+CPU 编排使用 Dockerfile.cpu、requirements-cpu.txt，并强制：
+
+```dotenv
+FORCE_CPU=true
+NVIDIA_VISIBLE_DEVICES=none
+```
+
+GPU 与 CPU 编排不能同时占用宿主机 127.0.0.1:9001。
+
+## 20. 故障排查
+
+### 20.1 容器没有 CUDAExecutionProvider
 
 ```bash
 nvidia-smi
-docker run --rm --gpus all nvidia/cuda:12.4.1-base-ubuntu22.04 nvidia-smi
-docker compose logs --tail=100 gpu-worker-0
+docker run --rm --gpus all \
+  nvidia/cuda:12.4.1-base-ubuntu22.04 nvidia-smi
+docker compose -p portrait-hub logs --tail=200 gpu-worker-0
 ```
 
-通常原因：
+检查驱动、NVIDIA Container Toolkit、nvidia-ctk runtime configure 和 Docker 重启状态。
 
-- 宿主机驱动未安装或异常。
-- NVIDIA Container Toolkit 未安装。
-- 没有执行 `sudo nvidia-ctk runtime configure --runtime=docker`。
-- Docker 没有重启。
+### 20.2 worker 1 也显示 GPU 0
 
-### `model not found`
+这是单卡容器的正常逻辑编号。比较 UUID，不要比较容器内索引。
 
-确认模型路径：
+### 20.3 模型不存在
 
 ```bash
-find ./models -maxdepth 2 -type f -print
+find /opt/portrait-hub/models -maxdepth 1 -type f -print
+docker exec gpu-worker-0 ls -la /models
 ```
 
-服务要求路径：
+当前模型文件直接位于 models/ 根目录，不是 models/portrait_hub/models/。
 
-```text
-./models/<artifact.path from models.yml>
+### 20.4 显存不足
+
+- 保持 Uvicorn --workers 1；
+- 降低推理和视频批次；
+- 保持 GPU 与模型并发为 1；
+- 减少预热和同时加载的模型；
+- 设置 MAX_LOADED_MODELS；
+- 避免 API 与视频 worker 同时占用同一张卡；
+- 通过压测验证 FP16 或 TensorRT 后再启用。
+
+### 20.5 修改 .env 后未生效
+
+使用：
+
+```bash
+docker compose -p portrait-hub up -d --force-recreate
 ```
 
-请求里的 `project_name` 和 `model_name` 必须和共享目录里的目录、文件名完全一致。
+不要只执行 docker compose restart。
 
-### 显存不足
+### 20.6 生产模式启动失败
 
-处理方式：
+查看启动日志中的 production external services are not fully configured，逐项补齐 PostgreSQL、向量后端、S3、Redis、OTLP、鉴权和生产模型能力配置。不要通过关闭 PRODUCTION_EXTERNAL_SERVICES_REQUIRED 绕过正式上线门禁。
 
-- 降低 batch size。
-- 减少同一个 worker 加载的模型数。
-- 设置 `MAX_LOADED_MODELS` 启用 LRU 缓存淘汰。
-- 固定某些模型只走某张 GPU。
-- 使用 FP16 / TensorRT 优化后的模型。
+### 20.7 远程登录入口不显示
 
-### 首次请求很慢
+登录页根据 `/v1/auth/config` 的 `local_enabled` 决定是否显示用户名和密码表单。Docker 或反向代理访问通常会被应用识别为网桥来源，必须同时满足：
 
-首次请求会加载 ONNX 模型并初始化 CUDA provider。可以使用：
-
-- `WARMUP_MODELS` 启动预热。
-- `/v1/admin/models/warmup` 手动预热。
-
-### 外部机器访问不到 9001/9002
-
-Compose 默认绑定：
-
-```yaml
-127.0.0.1:9001:8000
-127.0.0.1:9002:8000
+```dotenv
+LOCAL_AUTH_ENABLED=true
+LOCAL_AUTH_ALLOW_REMOTE=true
+LOCAL_AUTH_USERNAME=admin
+LOCAL_AUTH_PASSWORD=替换为强随机密码
+LOCAL_AUTH_SESSION_SECRET=替换为至少32字节随机值
 ```
 
-这是为了避免推理服务直接暴露公网。跨机器访问建议使用内网反向代理或 API 网关，并开启鉴权、限流和请求体大小限制。
+默认密码 `123456` 或默认会话密钥不能用于远程登录。生成两个互不相同的安全值：
 
-## 14. 上线检查清单
+```bash
+openssl rand -hex 16
+openssl rand -hex 32
+```
 
-- `nvidia-smi` 正常。
-- GPU 容器内 `nvidia-smi` 正常。
-- `docker compose ps` 显示 worker healthy。
-- `/ready/deep` 的 `runtime_provider.available_providers` 包含 `CUDAExecutionProvider`。
-- `/v1/models/{model_id}` 能返回正确输入 shape 和 dtype。
-- `/v1/admin/models/warmup` 成功。
-- 业务请求 tensor shape 与模型输入一致。
-- 已设置 `API_TOKEN`，并配置 `API_TOKEN_TENANT_ID`；只有受控平台运维场景才可显式设置 `API_TOKEN_ALLOW_TENANT_OVERRIDE=true`。
-- 已设置调用方超时、重试和日志 request id。
-- 已完成至少一次真实模型压测。
+将第一个值写入 `LOCAL_AUTH_PASSWORD`，第二个值写入 `LOCAL_AUTH_SESSION_SECRET`。HTTPS 入口设置 `LOCAL_AUTH_COOKIE_SECURE=true`；直接 HTTP 或 SSH 隧道验收阶段暂时设置为 `false`。
 
-## 新版控制台灰度与回退
+修改 `.env` 后不能只执行 `restart`，必须重建两个 API worker：
 
-本节适用于 0.14.1。Console Next 是唯一生产控制台，根路径 / 是正式登录入口。0.14.1 修复退出后自动续登，支持按实际可见 GPU 配置模型调度，并优化按权重灰度的版本角色选择；公开 PortraitHub v1 API 保持兼容。0.13.0 和 0.14.0 的登录、导航和会话安全边界继续有效。
+```bash
+docker compose -p portrait-hub up -d \
+  --force-recreate gpu-worker-0 gpu-worker-1
+```
 
-构建镜像时，Node 22 builder 会在根 npm workspace 中执行 npm ci 与 npm run console:build；运行镜像只复制 frontend/console-next/dist，不安装 Node，也不再包含旧版 frontend/console。非镜像部署必须先在仓库根目录执行相同构建命令，并确认 dist/index.html 与 dist/.vite/manifest.json 存在。
+分别验证两个 worker，响应都必须包含 `"local_enabled":true`：
 
-入口与回退：
+```bash
+curl --fail --silent http://127.0.0.1:9001/v1/auth/config
+curl --fail --silent http://127.0.0.1:9002/v1/auth/config
+```
 
-- /：新版登录入口；默认显示本地管理员用户名/密码表单，已有有效浏览器会话时自动进入 /console。
-- 默认本地账号为 admin / 123456，仅允许 loopback 登录；生产或远程使用必须更换 LOCAL_AUTH_PASSWORD 和至少 32 字节的 LOCAL_AUTH_SESSION_SECRET，否则本地登录自动禁用。
-- 不需要本地账号时设置 LOCAL_AUTH_ENABLED=false；允许远程本地账号前必须设置 LOCAL_AUTH_ALLOW_REMOTE=true 并替换默认密码和会话密钥。
-- 企业登录设置 OIDC_ENABLED=true，并配置 OIDC_ISSUER、OIDC_CLIENT_ID、OIDC_CLIENT_SECRET、OIDC_SESSION_SECRET、OIDC_ROLE_MAPPING 和回调地址；生产保持 Secure Cookie 与 HTTPS。
-- /console：登录后的新版业务控制台，已是唯一生产入口。
-- /console/next：新版直接验收别名；/console/legacy 已删除。
-- CONSOLE_WORKBENCH_V2、CONSOLE_DEVELOPER_V2、CONSOLE_ADMIN_V2 与 CONSOLE_DEFAULT_VERSION 已删除，不再作为生产回退手段。
-- 旧版删除后，控制台回退必须使用上一版镜像或受控静态构件；不得删除业务数据，也不得通过已移除的 legacy 环境变量回退。
+仍为 `false` 时执行以下诊断。命令只输出布尔值和密钥长度，不输出真实凭据：
 
-浏览器账号会话使用 HttpOnly、SameSite Cookie；所有写请求必须携带与 CSRF Cookie 一致的 X-CSRF-Token。反向代理必须保留 Cookie、X-CSRF-Token、Host 和外部协议，并确保本地登录来源判断不被伪造的转发头绕过。OIDC 回调地址必须与身份平台登记值完全一致，外部角色/用户组必须显式映射为 admin、operator、algorithm、auditor、viewer。
-上线前执行 `npm test`、`npm run console:e2e`、控制台/门禁定向或全量 `python -m pytest`、`python tools/deploy_check.py --json --import-app` 和 `python tools/portrait_production_readiness.py --scope platform --strict`。严格 readiness 必须为 strict_failure_count=0；真实 CSP 必须保持 script-src self，禁止 unsafe-inline 与 unsafe-eval。
+```bash
+docker exec gpu-worker-0 python -c \
+"from app import settings as s; print({
+'version': s.APP_VERSION,
+'enabled': s.LOCAL_AUTH_ENABLED,
+'allow_remote': s.LOCAL_AUTH_ALLOW_REMOTE,
+'username_configured': bool(s.LOCAL_AUTH_USERNAME),
+'password_is_default': s.LOCAL_AUTH_PASSWORD == '123456',
+'session_secret_length': len(s.LOCAL_AUTH_SESSION_SECRET),
+'profile': s.PORTRAIT_RUNTIME_PROFILE
+})"
+```
 
-0.14.1 额外上线检查：
+同时确认 TRUSTED_HOSTS 包含正式域名，反向代理透传 Host、Cookie 和外部协议。修复后刷新登录页即可显示用户名和密码表单。
 
-- 确认 APP_VERSION、Python/npm 工程和四种 SDK 均为 0.14.1，受保护的 /ready/deep 返回 version=0.14.1。
-- 整体发布新版 index.html、哈希 JS/CSS 与 portrait-hub-mark SVG；不要只替换 HTML 或单个资源。
-- 在生产 OIDC 目录中验证已验证手机号、subject 绑定、成员启停和租户停用能即时收回权限。
-- 用只读账号确认成员、模型、导出、备份、Webhook 和特征重建写操作均被权限拒绝。
-- 对模型权重灰度、回滚、特征重建和数据清理执行预演与审计检查后再确认正式操作。
-- 在模型中心确认 GPU 清单与容器实际暴露设备一致；需要显存信息时安装 `requirements/prod-optional.txt` 中的 `nvidia-ml-py`。
-- 确认退出按钮清理浏览器会话并回到登录页，且不会因匿名开发会话自动恢复；确认灰度目标中的版本角色显示为“当前稳定版本/候选灰度版本”。
+## 21. 上线检查清单
 
-CONSOLE_WS_TICKET_TTL_SECONDS 默认 60 秒，ticket 单次消费并绑定租户、资源和权限。设置 `REDIS_URL` 后，ticket 使用 Redis TTL 与 Lua `GET + DEL` 原子消费，可供多 worker/多副本共享；未设置 Redis 时回退到进程内有界内存，仅适用于本地开发或单进程测试。生产多副本上线前必须验证 Redis 连通性、TTL、原子消费和故障告警。
-
-生产观察、上一版镜像回退演练和多副本 WS ticket 前置条件以根目录《控制台前端重建方案.md》及 docs/frontend/CONSOLE_NEXT_ACCEPTANCE.md 为准。
+- [ ] 记录当前 Git SHA 和版本号。
+- [ ] 宿主机能识别全部 GPU，驱动满足 CUDA 12.4。
+- [ ] GPU 容器测试能看到正确 UUID。
+- [ ] .env 权限为 600，所有默认密码和密钥已替换。
+- [ ] API Token、会话密钥、OIDC 密钥和数据加密密钥互不相同。
+- [ ] 使用本地账号时，两个 worker 的 /v1/auth/config 都返回 local_enabled=true。
+- [ ] runtime-state/models.yml、模型文件、模型卡、标签和 SHA256 校验通过。
+- [ ] docker compose config --quiet 通过。
+- [ ] 两个 API worker 都是 healthy。
+- [ ] 两个 worker 都提供 CUDAExecutionProvider。
+- [ ] 两个 worker 的 /ready/deep?load_models=true 都通过。
+- [ ] 视频 worker 启用时，容器内 nvidia-smi 和 CUDAExecutionProvider 检查通过。
+- [ ] 流 worker 的 STREAM_WORKER_FORCE_CPU 与 STREAM_WORKER_GPU_DEVICES 配置一致。
+- [ ] 视频/API 混合负载经过显存和延迟压测。
+- [ ] 生产外部服务和 PostgreSQL schema 已配置。
+- [ ] 严格生产 readiness 没有失败项。
+- [ ] 正式入口使用 HTTPS，9001/9002 未直接暴露公网。
+- [ ] 已验证登录、退出、模型中心、GPU 清单和灰度发布界面。
+- [ ] 已完成数据库、对象存储、runtime-state/models.yml、运行状态和当前镜像归档备份。
+- [ ] 已记录并演练上一版镜像或提交 SHA 的回退步骤。

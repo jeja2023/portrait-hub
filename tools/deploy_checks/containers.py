@@ -60,7 +60,10 @@ def check_docker_files(root: Path, report: DeployReport) -> None:
         "compose_stream_worker_service",
         isinstance(stream_worker, dict)
         and "app.portrait_stream_worker_daemon" in str(stream_worker.get("command", ""))
-        and stream_worker.get("healthcheck", {}).get("disable") is True,
+        and stream_worker.get("healthcheck", {}).get("disable") is True
+        and stream_worker.get("runtime") == "nvidia"
+        and str(stream_worker.get("environment", {}).get("FORCE_CPU", "")).lower()
+        == "${stream_worker_force_cpu:-true}",
         {"service": stream_worker},
     )
     video_job_worker = services.get("portrait-video-job-worker") if isinstance(services, dict) else None
@@ -68,7 +71,8 @@ def check_docker_files(root: Path, report: DeployReport) -> None:
         "compose_video_job_worker_service",
         isinstance(video_job_worker, dict)
         and "app.portrait_video_job_worker" in str(video_job_worker.get("command", ""))
-        and str(video_job_worker.get("environment", {}).get("VIDEO_JOB_WORKER_IN_PROCESS", "")).lower() == "false",
+        and str(video_job_worker.get("environment", {}).get("VIDEO_JOB_WORKER_IN_PROCESS", "")).lower() == "false"
+        and video_job_worker.get("runtime") == "nvidia",
         {"service": video_job_worker},
     )
     gpu_like = (
@@ -164,6 +168,29 @@ def check_docker_files(root: Path, report: DeployReport) -> None:
         ),
         {"volumes": volumes},
     )
+    model_config_sources = [
+        str(volume.get("source"))
+        for volume in volumes
+        if isinstance(volume, dict) and volume.get("target") == "/workspace/models.yml"
+    ]
+    cpu_model_config_sources = [
+        str(volume.get("source"))
+        for service in cpu_services.values()
+        if isinstance(service, dict)
+        for volume in service.get("volumes", [])
+        if isinstance(volume, dict) and volume.get("target") == "/workspace/models.yml"
+    ]
+    report.add(
+        "compose_model_config_outside_git_worktree",
+        bool(model_config_sources)
+        and bool(cpu_model_config_sources)
+        and all("runtime-state/models.yml" in source for source in model_config_sources + cpu_model_config_sources)
+        and "MODEL_CONFIG_HOST_FILE=./runtime-state/models.yml" in read_text(root / ".env.example"),
+        {
+            "gpu_sources": model_config_sources,
+            "cpu_sources": cpu_model_config_sources,
+        },
+    )
     report.add(
         "compose_runtime_state_mount",
         "/workspace/runtime-state" in volume_targets,
@@ -236,6 +263,34 @@ def check_docker_files(root: Path, report: DeployReport) -> None:
                 "ENCRYPTION_KEY_ID",
                 "ENCRYPTION_KEYRING",
                 "REQUIRE_ENCRYPTION",
+            ]
+        ),
+        None,
+    )
+    report.add(
+        "compose_local_auth_env",
+        all(
+            item in env_text
+            for item in [
+                "LOCAL_AUTH_ENABLED",
+                "LOCAL_AUTH_ALLOW_REMOTE",
+                "LOCAL_AUTH_USERNAME",
+                "LOCAL_AUTH_PASSWORD",
+                "LOCAL_AUTH_TENANT_ID",
+                "LOCAL_AUTH_SESSION_SECRET",
+                "LOCAL_AUTH_COOKIE_SECURE",
+            ]
+        )
+        and all(
+            item in cpu_env_text
+            for item in [
+                "LOCAL_AUTH_ENABLED",
+                "LOCAL_AUTH_ALLOW_REMOTE",
+                "LOCAL_AUTH_USERNAME",
+                "LOCAL_AUTH_PASSWORD",
+                "LOCAL_AUTH_TENANT_ID",
+                "LOCAL_AUTH_SESSION_SECRET",
+                "LOCAL_AUTH_COOKIE_SECURE",
             ]
         ),
         None,

@@ -1,4 +1,4 @@
-"""gpu-services 静态部署校验脚本。"""
+"""PortraitHub 静态部署校验脚本。"""
 
 from __future__ import annotations
 
@@ -321,6 +321,7 @@ def check_code_quality(root: Path, report: DeployReport) -> None:
         None,
     )
 
+
 def requirement_lines(text: str) -> list[str]:
     return [line.strip() for line in text.splitlines() if line.strip() and not line.strip().startswith("#")]
 
@@ -633,7 +634,7 @@ def run_checks(args: argparse.Namespace) -> DeployReport:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="运行 gpu-services 静态部署检查。")
+    parser = argparse.ArgumentParser(description="运行 PortraitHub 静态部署检查。")
     parser.add_argument("--root", default=".", help="项目根目录。")
     parser.add_argument("--import-app", action="store_true", help="导入 main.app 并校验关键路由。")
     parser.add_argument("--json", action="store_true", help="输出机器可读 JSON。")

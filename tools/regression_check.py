@@ -232,11 +232,16 @@ def run_regression(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="针对运行中的 gpu-services 端点执行固定回归用例。")
+    parser = argparse.ArgumentParser(description="针对运行中的 PortraitHub 端点执行固定回归用例。")
     parser.add_argument("--manifest", required=True, help="回归清单 YAML/JSON。")
     parser.add_argument("--base-url", default="http://127.0.0.1:9001", help="服务基础 URL。")
     parser.add_argument("--token", default=None, help="受保护端点的 API 令牌。")
-    parser.add_argument("--auth-scheme", choices=["bearer", "api-key"], default="bearer", help="--token 的发送方式，除非用例覆盖 auth_scheme。")
+    parser.add_argument(
+        "--auth-scheme",
+        choices=["bearer", "api-key"],
+        default="bearer",
+        help="--token 的发送方式，除非用例覆盖 auth_scheme。",
+    )
     parser.add_argument("--tenant-id", default="default", help="作为 X-Tenant-ID 发送的默认租户 ID。")
     parser.add_argument("--timeout", type=float, default=30.0, help="请求超时时间（秒）。")
     parser.add_argument("--tolerance", type=float, default=1e-6, help="默认浮点比较容差。")

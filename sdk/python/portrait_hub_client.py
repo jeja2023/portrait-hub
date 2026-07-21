@@ -9,7 +9,7 @@ from urllib.error import HTTPError
 from urllib.parse import quote, urlencode
 from urllib import request as urllib_request
 
-SDK_VERSION = "0.14.1"
+SDK_VERSION = "0.14.3"
 USER_AGENT = f"portrait-hub-sdk-python/{SDK_VERSION}"
 
 
@@ -58,6 +58,7 @@ class PortraitHubClient:
             else:
                 headers["Authorization"] = f"Bearer {self.api_token}"
         return headers
+
     def _path_with_query(self, path: str, params: dict[str, Any] | None = None) -> str:
         clean_params: dict[str, Any] = {}
         for key, value in (params or {}).items():
@@ -148,14 +149,18 @@ class PortraitHubClient:
     def health(self) -> dict[str, Any]:
         return self._get("/health")
 
-    def compare_faces(self, image_a: str | Path, image_b: str | Path, threshold_profile: str = "normal") -> dict[str, Any]:
+    def compare_faces(
+        self, image_a: str | Path, image_b: str | Path, threshold_profile: str = "normal"
+    ) -> dict[str, Any]:
         return self._multipart(
             "/v1/compare/faces",
             fields={"threshold_profile": threshold_profile},
             files=[("image_a", image_a), ("image_b", image_b)],
         )
 
-    def compare_persons(self, image_a: str | Path, image_b: str | Path, threshold_profile: str = "normal") -> dict[str, Any]:
+    def compare_persons(
+        self, image_a: str | Path, image_b: str | Path, threshold_profile: str = "normal"
+    ) -> dict[str, Any]:
         return self._multipart(
             "/v1/compare/persons",
             fields={"threshold_profile": threshold_profile},
@@ -229,7 +234,9 @@ class PortraitHubClient:
     ) -> dict[str, Any]:
         return self._json(
             "POST",
-            self._path_with_query("/v1/gallery/reindex", {"modality": modality, "model_id": model_id, "dry_run": dry_run}),
+            self._path_with_query(
+                "/v1/gallery/reindex", {"modality": modality, "model_id": model_id, "dry_run": dry_run}
+            ),
         )
 
     def create_video_job(
@@ -238,7 +245,11 @@ class PortraitHubClient:
         sample_interval_seconds: float | None = None,
         batch_size: int | None = None,
     ) -> dict[str, Any]:
-        fields = {key: value for key, value in {"sample_interval_seconds": sample_interval_seconds, "batch_size": batch_size}.items() if value is not None}
+        fields = {
+            key: value
+            for key, value in {"sample_interval_seconds": sample_interval_seconds, "batch_size": batch_size}.items()
+            if value is not None
+        }
         return self._multipart("/v1/jobs/video", fields=fields, files=[("file", video)])
 
     def get_job(self, job_id: str) -> dict[str, Any]:
@@ -268,7 +279,9 @@ class PortraitHubClient:
             },
         )
 
-    def list_streams(self, limit: int | None = None, offset: int | None = None, cursor: str | None = None) -> dict[str, Any]:
+    def list_streams(
+        self, limit: int | None = None, offset: int | None = None, cursor: str | None = None
+    ) -> dict[str, Any]:
         return self._get("/v1/streams", {"limit": limit, "offset": offset, "cursor": cursor})
 
     def get_stream(self, stream_id: str) -> dict[str, Any]:

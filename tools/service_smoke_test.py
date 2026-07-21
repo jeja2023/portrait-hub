@@ -1,4 +1,4 @@
-"""针对运行中的 gpu-services 工作节点或网关的 HTTP 冒烟测试脚本。"""
+"""针对运行中的 PortraitHub 工作节点或网关的 HTTP 冒烟测试脚本。"""
 
 from __future__ import annotations
 
@@ -19,9 +19,7 @@ class SmokeReport:
     checks: list[dict[str, Any]] = field(default_factory=list)
 
     def add(self, name: str, ok: bool, detail: Any = None) -> None:
-        self.checks.append(
-            {"name": name, "ok": ok, "detail": redact_for_report(detail)}
-        )
+        self.checks.append({"name": name, "ok": ok, "detail": redact_for_report(detail)})
 
     @property
     def ok(self) -> bool:
@@ -35,9 +33,7 @@ def normalize_auth_scheme(value: str) -> str:
     return normalized
 
 
-def auth_headers(
-    token: str | None, tenant_id: str = "default", auth_scheme: str = "bearer"
-) -> dict[str, str]:
+def auth_headers(token: str | None, tenant_id: str = "default", auth_scheme: str = "bearer") -> dict[str, str]:
     headers = {"Accept": "application/json", "X-Tenant-ID": tenant_id}
     if token:
         if normalize_auth_scheme(auth_scheme) == "api-key":
@@ -97,9 +93,7 @@ def check_json_endpoint(
     auth_scheme: str = "bearer",
 ) -> Any:
     try:
-        status, payload = request_json(
-            base_url, path, token, timeout, tenant_id, auth_scheme
-        )
+        status, payload = request_json(base_url, path, token, timeout, tenant_id, auth_scheme)
     except (TimeoutError, URLError) as exc:
         report.add(name, False, f"请求失败: {exc}")
         return None
@@ -130,22 +124,14 @@ def check_openapi(
         auth_scheme,
     )
     openapi_status = report.checks[-1]["detail"]["status"] if report.checks else None
-    if (
-        openapi_status == 200
-        and isinstance(openapi, dict)
-        and isinstance(openapi.get("paths"), dict)
-    ):
+    if openapi_status == 200 and isinstance(openapi, dict) and isinstance(openapi.get("paths"), dict):
         paths = set(openapi.get("paths", {}))
         missing = sorted(REQUIRED_OPENAPI_PATHS - paths)
         report.add("openapi_required_paths", not missing, {"missing": missing})
     elif required:
-        report.add(
-            "openapi_required_paths", False, "openapi.json 未返回开放接口定义文档"
-        )
+        report.add("openapi_required_paths", False, "openapi.json 未返回开放接口定义文档")
     else:
-        report.add(
-            "openapi_optional", True, "openapi.json is disabled or not a JSON document"
-        )
+        report.add("openapi_optional", True, "openapi.json is disabled or not a JSON document")
 
 
 def run_smoke(args: argparse.Namespace) -> SmokeReport:
@@ -255,12 +241,8 @@ def run_smoke(args: argparse.Namespace) -> SmokeReport:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(
-        description="针对运行中的 gpu-services 端点执行冒烟测试。"
-    )
-    parser.add_argument(
-        "--base-url", default="http://127.0.0.1:9001", help="服务基础 URL。"
-    )
+    parser = argparse.ArgumentParser(description="针对运行中的 PortraitHub 端点执行冒烟测试。")
+    parser.add_argument("--base-url", default="http://127.0.0.1:9001", help="服务基础 URL。")
     parser.add_argument("--token", default=None, help="受保护端点的 API 令牌。")
     parser.add_argument(
         "--auth-scheme",
@@ -273,24 +255,16 @@ def main() -> int:
         default="default",
         help="租户范围端点中作为 X-Tenant-ID 发送的租户 ID。",
     )
-    parser.add_argument(
-        "--timeout", type=float, default=10.0, help="请求超时时间（秒）。"
-    )
-    parser.add_argument(
-        "--require-ready", action="store_true", help="/ready 未达到运行时就绪时失败。"
-    )
+    parser.add_argument("--timeout", type=float, default=10.0, help="请求超时时间（秒）。")
+    parser.add_argument("--require-ready", action="store_true", help="/ready 未达到运行时就绪时失败。")
     parser.add_argument(
         "--check-openapi",
         action="store_true",
         help="要求 /openapi.json 已启用且包含核心路径。",
     )
     parser.add_argument("--deep-ready", action="store_true", help="调用 /ready/deep。")
-    parser.add_argument(
-        "--load-models", action="store_true", help="要求 /ready/deep 加载已配置模型。"
-    )
-    parser.add_argument(
-        "--dummy-inference", action="store_true", help="要求 /ready/deep 执行模拟推理。"
-    )
+    parser.add_argument("--load-models", action="store_true", help="要求 /ready/deep 加载已配置模型。")
+    parser.add_argument("--dummy-inference", action="store_true", help="要求 /ready/deep 执行模拟推理。")
     parser.add_argument(
         "--model-id",
         action="append",
@@ -306,11 +280,7 @@ def main() -> int:
 
     report = run_smoke(args)
     if args.json:
-        print(
-            json.dumps(
-                {"ok": report.ok, "checks": report.checks}, ensure_ascii=False, indent=2
-            )
-        )
+        print(json.dumps({"ok": report.ok, "checks": report.checks}, ensure_ascii=False, indent=2))
     else:
         print(f"服务冒烟测试：{'通过' if report.ok else '失败'}")
         for item in report.checks:

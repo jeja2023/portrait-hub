@@ -2,16 +2,32 @@
 
 面向 Ubuntu + Docker + NVIDIA GPU 的 ONNX 推理服务。服务通过 FastAPI 暴露接口，按 GPU 拆成多个 worker，适合给人像识别、人像检索、ReID 等业务项目提供共享推理能力。
 
-当前版本：0.14.1。本补丁版本修复控制台退出后自动续登，支持按实际 GPU 设备配置模型调度，并优化按权重灰度的版本角色选择；公开 PortraitHub v1 API 保持兼容。
+当前版本：0.14.3。本补丁版本完善 Docker 本地管理员登录配置、登录页提示和服务器排障流程，并包含 0.14.2 的容器与更新部署修复；公开 PortraitHub v1 API 保持兼容。
 
 > `0.9.0` 是破坏性升级。旧的 `/v1/vision/results`、`/v1/jobs/video/results` 及有限图片历史实现已删除，不提供兼容回退或旧记录自动迁移；接入方必须切换到统一档案接口。
 
 拆分后的模块映射、维护边界和验证命令见 [大型文件拆分维护指南](docs/maintenance/LARGE_FILE_SPLIT.md)，完整发布记录见 [更新日志](更新日志.md)。
 
+## 0.14.3 服务器本地登录与部署诊断
+
+- 登录页在本地账号不可用时明确提示检查服务端 `LOCAL_AUTH_*` 配置，不再笼统显示“未配置”。
+- `.env.example` 明确说明 Docker/反向代理访问需要 `LOCAL_AUTH_ALLOW_REMOTE=true`，并且必须替换默认密码和至少 32 字节的会话密钥。
+- Ubuntu 教程新增可直接执行的随机凭据生成、API worker 强制重建、双 worker 登录配置验证和脱敏诊断命令。
+- 部署门禁新增 GPU/CPU Compose 本地认证变量传递检查，防止后续编排遗漏登录所需配置。
+- 完整升级与排障步骤见 [0.14.3 发布说明](docs/releases/0.14.3.md) 和 [更新日志](更新日志.md)。
+
+## 0.14.2 Docker 部署与更新可靠性
+
+- GPU Compose 为异步视频 worker 显式启用 NVIDIA runtime，确保 `VIDEO_JOB_WORKER_GPU_DEVICES` 在 Docker 默认 runtime 为 `runc` 时仍能实际挂载 GPU。
+- 流 worker 默认使用 `STREAM_WORKER_FORCE_CPU=true` 和 `STREAM_WORKER_GPU_DEVICES=none`；需要 GPU 时必须成对切换，避免容器已启动但模型加载失败。
+- 可写模型配置默认迁移到 `runtime-state/models.yml`，仓库根目录的 `models.yml` 仅作为初始化模板，前端写回不再阻塞 `git pull` 或版本回退。
+- Ubuntu 教程新增旧部署迁移、视频 worker GPU 验收、更新前镜像归档和无网络回退流程；部署门禁增加对应防回归检查。
+- 完整升级与回退步骤见 [0.14.2 发布说明](docs/releases/0.14.2.md) 和 [更新日志](更新日志.md)。
+
 ## 0.14.1 会话退出、GPU 调度与灰度界面优化
 
 - 退出按钮立即清理浏览器会话，服务端退出请求采用有限等待；退出后回到登录页，不会被匿名开发会话自动恢复。
-- 模型中心展示运行时 GPU 设备和显存信息，支持模型选择固定 GPU 或自动分配，配置会保存到 `models.yml` 并在下一次加载时生效。
+- 模型中心展示运行时 GPU 设备和显存信息，支持模型选择固定 GPU 或自动分配；Docker 部署会将配置保存到 `runtime-state/models.yml`，避免运行时写入 Git 跟踪的模板文件。
 - GPU 设备通过 NVML 探测时只允许选择当前可见设备；没有 NVML 时回退到运行时配置，容器可见设备和 worker 数量仍由部署配置控制。
 - 按权重灰度区域的目标模型、流量权重和版本角色分组展示，版本下拉框使用“当前稳定版本”和“候选灰度版本”完整文案。
 - 完整变更、兼容性、升级与回退步骤见 [0.14.1 发布说明](docs/releases/0.14.1.md) 和 [更新日志](更新日志.md)。
@@ -26,7 +42,6 @@
 - 全站列表统一分页与序号，并修复移动端溢出、灰度发布控件重叠和 Element Plus 分页弃用提示。
 - 新增“影鉴”原创 SVG/PNG Logo，已用于登录页、侧栏和 favicon。
 - 完整变更、兼容性、升级与回退步骤见 [0.14.0 发布说明](docs/releases/0.14.0.md) 和 [更新日志](更新日志.md)。
-
 
 ## 0.13.0 导航、登录与身份权限升级
 
@@ -229,7 +244,7 @@ CPU-only（无 GPU / 无 CUDA）部署请使用独立编排：`docker compose -f
 ## 目录结构
 
 ```text
-gpu-services/
+portrait-hub/
 ├── app/
 │   ├── constants.py
 │   ├── core.py
@@ -269,7 +284,7 @@ gpu-services/
 
 ```text
 ~/project/
-├── gpu-services/
+├── portrait-hub/
 ├── other-project/
 └── models/
     └── your_project/
@@ -415,7 +430,7 @@ curl -X POST http://127.0.0.1:9001/v1/vision/infer \
 
 响应示例：
 
-```json
+````json
 {
   "status": "success",
   "request_id": "req_...",
@@ -454,7 +469,7 @@ curl -X POST http://127.0.0.1:9001/v1/vision/infer \
   -F "include_vectors=true" \
   -F "files=@person-001.jpg" \
   -F "files=@person-002.jpg"
-```
+````
 
 组合检测 + ReID 接口：
 
@@ -709,7 +724,7 @@ curl -X POST http://127.0.0.1:9001/v1/admin/models/rollout/aliases/switch \
   }'
 ```
 
-确认后把 `dry_run` 改为 `false`。服务会写回宿主机挂载的 `models.yml`，并重新加载当前 worker 的配置；其它 worker 可通过 `tools/worker_control.py --action reload-config` 同步新配置。回滚到上一个目标：
+确认后把 `dry_run` 改为 `false`。服务会写回容器内的 `/workspace/models.yml`；Docker 默认对应宿主机 `runtime-state/models.yml`。当前 worker 会重新加载配置，其它 worker 可通过 `tools/worker_control.py --action reload-config` 同步。回滚到上一个目标：
 
 ```bash
 curl -X POST http://127.0.0.1:9001/v1/admin/models/rollout/aliases/rollback \
@@ -829,7 +844,7 @@ http://gpu-worker-1:8000/predict
 
 - `MODELS_HOST_DIR`: 宿主机模型目录，默认 `./models`，即本项目目录下的 `models`。
 - `MODELS_ROOT`: 容器内模型目录，固定为 `/models`。
-- `MODEL_CONFIG_HOST_FILE`: 宿主机模型配置文件，默认 `./models.yml`，Compose 会可写挂载到容器内。
+- `MODEL_CONFIG_HOST_FILE`: 宿主机运行时模型配置文件，默认 `./runtime-state/models.yml`；首次部署从仓库根目录的 `models.yml` 初始化，Compose 只写运行时副本。
 - `MODEL_CONFIG_PATH`: 容器内模型配置文件路径，默认 `/workspace/models.yml`；本地直接运行默认读取当前目录 `models.yml`。
 - `MODEL_CONFIG_READ_FAIL_CLOSED`: 模型配置文件缺失、损坏或根节点格式错误时是否启动/重载失败，默认 `true`。
 - `CONFIG_HOT_RELOAD_ENABLED`: 是否启用 `models.yml` / `model-capabilities.yml` 轻量 mtime 热重载，默认 `true`。
@@ -856,6 +871,9 @@ http://gpu-worker-1:8000/predict
 - `VIDEO_UPLOAD_CHUNK_BYTES` / `VIDEO_JOB_INPUT_DIR`: 视频上传分块大小和私有暂存目录；API 与独立视频 worker 必须共享该目录。
 - `TASK_QUEUE_DIR` / `TASK_QUEUE_VISIBILITY_TIMEOUT_SECONDS` / `TASK_QUEUE_POLL_INTERVAL_SECONDS`: 本地持久化 spool、失联任务重新认领和 worker 轮询参数。
 - `VIDEO_JOB_WORKER_IN_PROCESS`: 本地开发可启用内置 worker；生产必须设为 `false` 并运行独立 worker。
+- `VIDEO_JOB_WORKER_GPU_DEVICES`: 异步视频 worker 可见的 GPU 编号列表，GPU Compose 会显式使用 NVIDIA runtime。
+- `STREAM_WORKER_FORCE_CPU`: 流 worker 是否强制使用 CPU，默认 `true`。
+- `STREAM_WORKER_GPU_DEVICES`: 流 worker 可见的 GPU 编号列表；启用 GPU 时需同时设置 `STREAM_WORKER_FORCE_CPU=false`。
 - `ACCESS_STATS_FLUSH_INTERVAL_SECONDS`: 应用调用统计批量落盘周期；配置变更和服务关闭仍会立即刷新。
 - `MAX_VIDEO_FRAME_UPLOADS`: 图片帧序列上传接口的单次文件数限制，默认 `64`。
 - `MAX_REQUEST_BODY_BYTES`: 全局 HTTP 请求体大小上限，默认 `117440512`（112 MiB）；本地可设为 `0` 关闭，生产环境必须比 `MAX_VIDEO_BYTES` 多 `1` 至 `16 MiB`。
@@ -934,18 +952,18 @@ curl -X POST http://127.0.0.1:9001/predict \
 
 上线前建议为每个模型记录一次压测结果：
 
-| 项目 | 数值 |
-| --- | --- |
-| 模型 | `portrait_hub/yolov8n.onnx` |
-| GPU | 例如 `RTX 2080 Ti 11GB` |
-| 输入 shape | 例如 `[1, 3, 256, 128]` |
-| batch size | 例如 `1` |
-| 冷启动耗时 | 例如 `2.3s` |
-| 热缓存平均延迟 | 例如 `18ms` |
-| P95 / P99 | 例如 `35ms / 60ms` |
-| 稳定 QPS | 例如 `40` |
-| 单模型显存占用 | 例如 `1.2GB` |
-| 推荐 `GPU_QUEUE_LIMIT` | 例如 `1` |
+| 项目                   | 数值                        |
+| ---------------------- | --------------------------- |
+| 模型                   | `portrait_hub/yolov8n.onnx` |
+| GPU                    | 例如 `RTX 2080 Ti 11GB`     |
+| 输入 shape             | 例如 `[1, 3, 256, 128]`     |
+| batch size             | 例如 `1`                    |
+| 冷启动耗时             | 例如 `2.3s`                 |
+| 热缓存平均延迟         | 例如 `18ms`                 |
+| P95 / P99              | 例如 `35ms / 60ms`          |
+| 稳定 QPS               | 例如 `40`                   |
+| 单模型显存占用         | 例如 `1.2GB`                |
+| 推荐 `GPU_QUEUE_LIMIT` | 例如 `1`                    |
 
 ## 常见问题
 

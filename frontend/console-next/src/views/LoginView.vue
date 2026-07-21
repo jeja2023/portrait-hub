@@ -191,7 +191,13 @@ onMounted(async () => {
             登录
           </ElButton>
         </ElForm>
-        <ElAlert v-else title="本地账号登录未配置" type="warning" show-icon :closable="false" />
+        <ElAlert
+          v-else
+          title="本地账号登录不可用，请检查服务端 LOCAL_AUTH_* 配置"
+          type="warning"
+          show-icon
+          :closable="false"
+        />
 
         <div v-if="authConfig.oidc_enabled" class="login-separator"><span>或</span></div>
         <ElButton

@@ -133,9 +133,9 @@ x-cpu-worker-common: &cpu-worker-common
   env_file:
     - .env
   volumes:
-    # 模型配置以可写方式挂载，灰度切换/回滚写回后可持久化。
+    # 运行时模型配置放在 Git 忽略目录中，避免控制台写回后阻塞代码更新或回退。
     - type: bind
-      source: ${MODEL_CONFIG_HOST_FILE:-./models.yml}
+      source: ${MODEL_CONFIG_HOST_FILE:-./runtime-state/models.yml}
       target: /workspace/models.yml
       bind:
         create_host_path: false

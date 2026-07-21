@@ -127,9 +127,9 @@ x-gpu-worker-common: &gpu-worker-common
   env_file:
     - .env
   volumes:
-    # 模型配置以可写方式挂载，灰度切换/回滚写回后可持久化，并可被多个 worker 重载共享。
+    # 运行时模型配置放在 Git 忽略目录中，避免控制台写回后阻塞代码更新或回退。
     - type: bind
-      source: ${MODEL_CONFIG_HOST_FILE:-./models.yml}
+      source: ${MODEL_CONFIG_HOST_FILE:-./runtime-state/models.yml}
       target: /workspace/models.yml
       bind:
         create_host_path: false
@@ -197,6 +197,8 @@ services:
     <<: *gpu-worker-common
     container_name: portrait-video-job-worker
     hostname: portrait-video-job-worker
+    # 显式选择 NVIDIA runtime，让 NVIDIA_VISIBLE_DEVICES 在非默认 nvidia runtime 的主机上也生效。
+    runtime: nvidia
     command: ["python", "-m", "app.portrait_video_job_worker"]
     ports: []
     healthcheck:
@@ -206,16 +208,20 @@ services:
       VIDEO_JOB_WORKER_IN_PROCESS: "false"
       NVIDIA_VISIBLE_DEVICES: ${VIDEO_JOB_WORKER_GPU_DEVICES:-0}
       NVIDIA_DRIVER_CAPABILITIES: "compute,utility"
+
   portrait-stream-worker:
     <<: *gpu-worker-common
     container_name: portrait-stream-worker
     hostname: portrait-stream-worker
+    # 默认走 CPU；需要 GPU 推理时同时设置 STREAM_WORKER_FORCE_CPU=false 和可见设备。
+    runtime: nvidia
     command: ["python", "-m", "app.portrait_stream_worker_daemon"]
     ports: []
     healthcheck:
       disable: true
     environment:
       <<: *worker-environment
+      FORCE_CPU: ${STREAM_WORKER_FORCE_CPU:-true}
       NVIDIA_VISIBLE_DEVICES: ${STREAM_WORKER_GPU_DEVICES:-none}
       NVIDIA_DRIVER_CAPABILITIES: "compute,utility"
 
