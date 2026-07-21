@@ -536,6 +536,23 @@ export interface paths {
     patch: operations["portrait_identity_update_member_v1_admin_members__member_id__patch"];
     trace?: never;
   };
+  "/v1/admin/models/gpu-devices": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Model Gpu Devices */
+    get: operations["model_gpu_devices_v1_admin_models_gpu_devices_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/v1/admin/models/reload": {
     parameters: {
       query?: never;
@@ -687,6 +704,23 @@ export interface paths {
     options?: never;
     head?: never;
     patch?: never;
+    trace?: never;
+  };
+  "/v1/admin/models/{model_id}/gpu-device": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /** Update Model Gpu Device */
+    patch: operations["update_model_gpu_device_v1_admin_models__model_id__gpu_device_patch"];
     trace?: never;
   };
   "/v1/admin/retention/cleanup": {
@@ -2151,6 +2185,11 @@ export interface components {
       /** Username */
       username: string;
     };
+    /** ModelGpuDeviceRequest */
+    ModelGpuDeviceRequest: {
+      /** Device Id */
+      device_id?: number | null;
+    };
     /** ModelRequest */
     ModelRequest: {
       /** Model Name */
@@ -3528,6 +3567,39 @@ export interface operations {
       };
     };
   };
+  model_gpu_devices_v1_admin_models_gpu_devices_get: {
+    parameters: {
+      query?: never;
+      header?: {
+        authorization?: string | null;
+        "x-api-key"?: string | null;
+        "x-tenant-id"?: string | null;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": Record<string, never>;
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
   reload_model_v1_admin_models_reload_post: {
     parameters: {
       query?: never;
@@ -3827,6 +3899,45 @@ export interface operations {
     requestBody: {
       content: {
         "application/json": components["schemas"]["WarmupRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": Record<string, never>;
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  update_model_gpu_device_v1_admin_models__model_id__gpu_device_patch: {
+    parameters: {
+      query?: never;
+      header?: {
+        authorization?: string | null;
+        "x-api-key"?: string | null;
+        "x-tenant-id"?: string | null;
+      };
+      path: {
+        model_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ModelGpuDeviceRequest"];
       };
     };
     responses: {

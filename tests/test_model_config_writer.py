@@ -92,6 +92,63 @@ def test_configure_weighted_alias_rollout(monkeypatch, workspace_tmp_path: Path)
     assert raw["aliases"]["detector_default"]["rollout"][1]["target"] == "project/new.onnx"
 
 
+def test_configure_model_gpu_device_supports_fixed_and_automatic_assignment(
+    monkeypatch, workspace_tmp_path: Path
+) -> None:
+    config_path = workspace_tmp_path / "models.yml"
+    initial = {
+        "models": {
+            "project/model.onnx": {
+                "task": "detection",
+                "runtime": "onnxruntime",
+            }
+        }
+    }
+    write_model_config(config_path, initial)
+    monkeypatch.setattr(model_config_writer, "MODEL_CONFIG_PATH", config_path)
+
+    fixed = model_config_writer.configure_model_gpu_device(
+        "project/model.onnx", 2, [0, 1, 2]
+    )
+
+    assert fixed == {
+        "model_id": "project/model.onnx",
+        "previous_device_id": None,
+        "device_id": 2,
+        "assignment": "fixed",
+    }
+    raw = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    assert raw["models"]["project/model.onnx"]["runtime"] == "onnxruntime"
+    assert raw["models"]["project/model.onnx"]["device_id"] == 2
+
+    automatic = model_config_writer.configure_model_gpu_device(
+        "project/model.onnx", None, [0, 1, 2]
+    )
+
+    assert automatic["previous_device_id"] == 2
+    assert automatic["assignment"] == "automatic"
+    raw = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    assert "device_id" not in raw["models"]["project/model.onnx"]
+
+
+def test_configure_model_gpu_device_rejects_unavailable_device(
+    monkeypatch, workspace_tmp_path: Path
+) -> None:
+    config_path = workspace_tmp_path / "models.yml"
+    initial = {"models": {"project/model.onnx": {"task": "detection"}}}
+    write_model_config(config_path, initial)
+    monkeypatch.setattr(model_config_writer, "MODEL_CONFIG_PATH", config_path)
+
+    with pytest.raises(HTTPException) as exc_info:
+        model_config_writer.configure_model_gpu_device(
+            "project/model.onnx", 3, [0, 1]
+        )
+
+    assert exc_info.value.status_code == 400
+    assert exc_info.value.detail["allowed_device_ids"] == [0, 1]
+    assert yaml.safe_load(config_path.read_text(encoding="utf-8")) == initial
+
+
 def test_alias_switch_rolls_back_config_when_audit_fails(monkeypatch, workspace_tmp_path: Path) -> None:
     case_root = workspace_tmp_path / "audit_rollback_case"
     case_root.mkdir(parents=True, exist_ok=True)

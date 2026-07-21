@@ -16,10 +16,14 @@ describe("backend feature coverage", () => {
       [
         "/v1/models/",
         "/v1/admin/models/reload-config",
+        "/v1/admin/models/gpu-devices",
+        "/gpu-device",
         "/v1/admin/models/rollout/aliases/weighted",
         "/v1/admin/models/rollout/aliases/rollback",
         "/v1/admin/models/rollout/aliases/preview",
         "/v1/admin/models/rollout/audit",
+        "当前稳定版本",
+        "候选灰度版本",
       ],
     ],
     ["src/views/admin/OpsView.vue", ["/v1/admin/export", "updated_since", "/v1/admin/backup"]],
@@ -58,6 +62,8 @@ describe("backend feature coverage", () => {
       "/v1/access/tenants/{tenant_id}",
       "/v1/admin/identity",
       "/v1/admin/members",
+      "/v1/admin/models/gpu-devices",
+      "/v1/admin/models/{model_id}/gpu-device",
       "/v1/admin/export",
     ]) {
       expect(generated).toContain(endpoint);

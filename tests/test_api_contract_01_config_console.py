@@ -235,6 +235,8 @@ def test_openapi_keeps_core_routes() -> None:
         "/v1/admin/models/warmup",
         "/v1/admin/models/reload",
         "/v1/admin/models/reload-config",
+        "/v1/admin/models/gpu-devices",
+        "/v1/admin/models/{model_id}/gpu-device",
         "/v1/admin/models/rollout/aliases",
         "/v1/admin/models/rollout/audit",
         "/v1/admin/models/rollout/aliases/preview",

@@ -893,7 +893,7 @@ Compose 默认绑定：
 
 ## 新版控制台灰度与回退
 
-本节适用于 0.14.0。Console Next 是唯一生产控制台，根路径 / 是正式登录入口。0.14.0 完成受管成员与租户治理、后端能力对齐、管理操作补全、统一分页和品牌升级；公开 PortraitHub v1 API 保持兼容。0.13.0 的登录、导航和会话安全边界继续有效。
+本节适用于 0.14.1。Console Next 是唯一生产控制台，根路径 / 是正式登录入口。0.14.1 修复退出后自动续登，支持按实际可见 GPU 配置模型调度，并优化按权重灰度的版本角色选择；公开 PortraitHub v1 API 保持兼容。0.13.0 和 0.14.0 的登录、导航和会话安全边界继续有效。
 
 构建镜像时，Node 22 builder 会在根 npm workspace 中执行 npm ci 与 npm run console:build；运行镜像只复制 frontend/console-next/dist，不安装 Node，也不再包含旧版 frontend/console。非镜像部署必须先在仓库根目录执行相同构建命令，并确认 dist/index.html 与 dist/.vite/manifest.json 存在。
 
@@ -911,13 +911,15 @@ Compose 默认绑定：
 浏览器账号会话使用 HttpOnly、SameSite Cookie；所有写请求必须携带与 CSRF Cookie 一致的 X-CSRF-Token。反向代理必须保留 Cookie、X-CSRF-Token、Host 和外部协议，并确保本地登录来源判断不被伪造的转发头绕过。OIDC 回调地址必须与身份平台登记值完全一致，外部角色/用户组必须显式映射为 admin、operator、algorithm、auditor、viewer。
 上线前执行 `npm test`、`npm run console:e2e`、控制台/门禁定向或全量 `python -m pytest`、`python tools/deploy_check.py --json --import-app` 和 `python tools/portrait_production_readiness.py --scope platform --strict`。严格 readiness 必须为 strict_failure_count=0；真实 CSP 必须保持 script-src self，禁止 unsafe-inline 与 unsafe-eval。
 
-0.14.0 额外上线检查：
+0.14.1 额外上线检查：
 
-- 确认 APP_VERSION、Python/npm 工程和四种 SDK 均为 0.14.0，受保护的 /ready/deep 返回 version=0.14.0。
+- 确认 APP_VERSION、Python/npm 工程和四种 SDK 均为 0.14.1，受保护的 /ready/deep 返回 version=0.14.1。
 - 整体发布新版 index.html、哈希 JS/CSS 与 portrait-hub-mark SVG；不要只替换 HTML 或单个资源。
 - 在生产 OIDC 目录中验证已验证手机号、subject 绑定、成员启停和租户停用能即时收回权限。
 - 用只读账号确认成员、模型、导出、备份、Webhook 和特征重建写操作均被权限拒绝。
 - 对模型权重灰度、回滚、特征重建和数据清理执行预演与审计检查后再确认正式操作。
+- 在模型中心确认 GPU 清单与容器实际暴露设备一致；需要显存信息时安装 `requirements/prod-optional.txt` 中的 `nvidia-ml-py`。
+- 确认退出按钮清理浏览器会话并回到登录页，且不会因匿名开发会话自动恢复；确认灰度目标中的版本角色显示为“当前稳定版本/候选灰度版本”。
 
 CONSOLE_WS_TICKET_TTL_SECONDS 默认 60 秒，ticket 单次消费并绑定租户、资源和权限。设置 `REDIS_URL` 后，ticket 使用 Redis TTL 与 Lua `GET + DEL` 原子消费，可供多 worker/多副本共享；未设置 Redis 时回退到进程内有界内存，仅适用于本地开发或单进程测试。生产多副本上线前必须验证 Redis 连通性、TTL、原子消费和故障告警。
 

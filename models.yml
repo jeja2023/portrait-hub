@@ -3,7 +3,6 @@ aliases:
     target: portrait_hub/yolov8n.onnx
   person_reid_default:
     target: portrait_hub/osnet_ibn_x1_0.onnx
-
 models:
   portrait_hub/yolov8n.onnx:
     task: detection
@@ -12,7 +11,9 @@ models:
     version: 1.0.0
     precision: fp32
     input:
-      size: [640, 640]
+      size:
+      - 640
+      - 640
       layout: nchw
       dtype: float32
       color: rgb
@@ -21,7 +22,8 @@ models:
     output:
       format: yolo
       classes: coco
-      class_filter: [person]
+      class_filter:
+      - person
       confidence: 0.25
       iou: 0.45
       max_detections: 100
@@ -29,11 +31,10 @@ models:
       path: yolov8n.onnx
       model_card: yolov8n.model-card.yml
       labels: yolov8n.labels.txt
-      sha256: "546218e6f1ac8f4ecc5042e02cfbdc19f6dfd3ade8f7014523e4af19692196a7"
+      sha256: 546218e6f1ac8f4ecc5042e02cfbdc19f6dfd3ade8f7014523e4af19692196a7
     rollout:
       status: active
       warmup: false
-
   portrait_hub/osnet_ibn_x1_0.onnx:
     task: reid
     type: reid
@@ -41,7 +42,9 @@ models:
     version: 1.0.0
     precision: fp32
     input:
-      size: [256, 128]
+      size:
+      - 256
+      - 128
       layout: nchw
       dtype: float32
       color: rgb
@@ -53,7 +56,7 @@ models:
     artifact:
       path: osnet_ibn_x1_0.onnx
       model_card: osnet_ibn_x1_0.model-card.yml
-      sha256: "13ad83cf00d67359f9d2ec20303b275ccae7e047ab59bd8ffc190805ba859cc6"
+      sha256: 13ad83cf00d67359f9d2ec20303b275ccae7e047ab59bd8ffc190805ba859cc6
     rollout:
       status: active
       warmup: false

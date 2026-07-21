@@ -126,6 +126,58 @@ def aliases_mapping(raw: dict[str, Any]) -> dict[str, Any]:
     return aliases
 
 
+def configured_model_device_id(config: dict[str, Any]) -> int | None:
+    runtime = config.get("runtime")
+    raw_device = runtime.get("device_id") if isinstance(runtime, dict) else config.get("device_id")
+    if isinstance(raw_device, bool):
+        return None
+    try:
+        return int(raw_device)
+    except (TypeError, ValueError):
+        return None
+
+
+def configure_model_gpu_device(
+    model_id: str,
+    device_id: int | None,
+    allowed_device_ids: list[int],
+) -> dict[str, Any]:
+    model_id = validate_model_target(model_id)
+    allowed_devices = sorted({int(item) for item in allowed_device_ids})
+    if device_id is not None and device_id not in allowed_devices:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "message": "GPU device is not available to this worker",
+                "allowed_device_ids": allowed_devices,
+            },
+        )
+
+    raw = load_raw_model_config()
+    models = models_mapping(raw)
+    config = models.get(model_id)
+    if not isinstance(config, dict):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="模型未配置")
+
+    previous_device_id = configured_model_device_id(config)
+    runtime = config.get("runtime")
+    config.pop("device_id", None)
+    if isinstance(runtime, dict):
+        runtime.pop("device_id", None)
+        if device_id is not None:
+            runtime["device_id"] = device_id
+    elif device_id is not None:
+        config["device_id"] = device_id
+
+    write_raw_model_config(raw)
+    return {
+        "model_id": model_id,
+        "previous_device_id": previous_device_id,
+        "device_id": device_id,
+        "assignment": "fixed" if device_id is not None else "automatic",
+    }
+
+
 def current_alias_target(alias_name: str, alias_config: Any) -> str:
     try:
         return alias_target(alias_name, alias_config)

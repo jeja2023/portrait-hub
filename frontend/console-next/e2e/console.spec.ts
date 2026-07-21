@@ -111,6 +111,76 @@ test("[E2E-ROUTE-01] supports direct deep links after authentication", async ({ 
   expect(await page.evaluate(() => window.__portraitCspViolations)).toEqual([]);
 });
 
+test("[E2E-AUTH-02] clears the local session immediately while server logout is pending", async ({ page }) => {
+  await page.goto("/");
+  await loginAsDefaultAdmin(page);
+  await expect(page).toHaveURL(/\/console#\/$/);
+  await expect(page.getByRole("heading", { name: "总览", exact: true })).toBeVisible();
+
+  let restoreAttempts = 0;
+  await page.route("**/v1/console/me", async (route) => {
+    restoreAttempts += 1;
+    await route.fulfill({
+      json: {
+        status: "success",
+        data: {
+          tenant_id: "default",
+          auth_kind: "development_anonymous",
+          subject: "anonymous",
+          roles: ["admin"],
+          permissions: ["*"],
+          scopes: [],
+          expires_at: null,
+          identity: { enabled: false, provider_name: "", issuer: "", identity_admin_url: "" },
+        },
+      },
+    });
+  });
+
+  let continueLogout: (() => void) | undefined;
+  const logoutCanContinue = new Promise<void>((resolve) => {
+    continueLogout = resolve;
+  });
+  await page.route("**/v1/auth/logout", async (route) => {
+    await logoutCanContinue;
+    await route.continue();
+  });
+
+  try {
+    await page.getByRole("button", { name: "退出", exact: true }).click();
+
+    await expect(page.getByRole("button", { name: "退出", exact: true })).toBeDisabled();
+    await expect.poll(() => page.evaluate(() => window.sessionStorage.length)).toBe(0);
+  } finally {
+    continueLogout?.();
+  }
+
+  await expect(page).toHaveURL(/^http:\/\/127\.0\.0\.1:\d+\/\?logged_out=1$/);
+  await expect(page.getByRole("heading", { name: "登录控制台" })).toBeVisible();
+  expect(restoreAttempts).toBe(0);
+});
+
+test("[E2E-MODELS-01] shows GPU assignment and clear weighted rollout roles", async ({ page }) => {
+  await page.goto("/");
+  await loginAsDefaultAdmin(page);
+  await page.goto("/console#/admin/models");
+
+  await expect(page.getByRole("heading", { name: "模型中心", exact: true })).toBeVisible();
+  await expect(page.getByText("运行时 GPU", { exact: true })).toBeVisible();
+  const selectors = page.locator(".gpu-device-select");
+  await expect(selectors).toHaveCount(2);
+  await selectors.first().click();
+  await expect(page.getByRole("option", { name: "自动分配", exact: true })).toBeVisible();
+  await expect(page.getByRole("option", { name: /GPU 0/ })).toBeVisible();
+
+  await page.getByRole("tab", { name: "发布", exact: true }).click();
+  await expect(page.getByText("灰度目标 1", { exact: true })).toBeVisible();
+  const rolloutRoles = page.locator(".weighted-role-select");
+  await expect(rolloutRoles).toHaveCount(2);
+  await expect(rolloutRoles.first()).toContainText("当前稳定版本");
+  await expect(rolloutRoles.nth(1)).toContainText("候选灰度版本");
+});
+
 test("[E2E-ROUTES-02] loads every product route and opens guarded dialogs without CSP violations", async ({
   page,
 }) => {

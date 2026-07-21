@@ -151,6 +151,83 @@ def test_legacy_reload_config_is_audited(monkeypatch) -> None:
     assert events[0][1]["model_count"] == 1
 
 
+def test_model_gpu_device_inventory_uses_detected_devices(monkeypatch) -> None:
+    monkeypatch.setattr(routes_model_query, "gpu_device_ids", lambda: [0, 1])
+    monkeypatch.setattr(
+        routes_model_query,
+        "gpu_memory_metrics",
+        lambda: [
+            {"device": 0, "used": 2, "free": 6, "total": 8},
+            {"device": 2, "used": 1, "free": 15, "total": 16},
+        ],
+    )
+    client = TestClient(app)
+
+    response = client.get("/v1/admin/models/gpu-devices")
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["detection_source"] == "nvml"
+    assert data["detected_device_ids"] == [0, 2]
+    assert [(item["device_id"], item["assignable"]) for item in data["devices"]] == [
+        (0, True),
+        (1, False),
+        (2, True),
+    ]
+
+
+def test_model_gpu_device_assignment_is_audited_and_unloads_old_session(
+    monkeypatch,
+) -> None:
+    model_id = "project/model.onnx"
+    events = []
+    configure_calls = []
+    retry_after = {model_id: 123.0}
+
+    monkeypatch.setattr(routes_model_query, "MODEL_REGISTRY", {model_id: {}})
+    monkeypatch.setattr(routes_model_query, "MODEL_LOAD_RETRY_AFTER", retry_after)
+    monkeypatch.setattr(routes_model_query, "load_raw_model_config", lambda: {"models": {model_id: {}}})
+    monkeypatch.setattr(
+        routes_model_query,
+        "gpu_device_inventory",
+        lambda: {"devices": [{"device_id": 2, "assignable": True}]},
+    )
+
+    def fake_configure(target, device_id, allowed):
+        configure_calls.append((target, device_id, allowed))
+        return {
+            "model_id": target,
+            "previous_device_id": None,
+            "device_id": device_id,
+            "assignment": "fixed",
+        }
+
+    async def fake_unload(target):
+        assert target == model_id
+        return True
+
+    monkeypatch.setattr(routes_model_query, "configure_model_gpu_device", fake_configure)
+    monkeypatch.setattr(routes_model_query, "reload_model_config_state", lambda: ({}, {}))
+    monkeypatch.setattr(routes_model_query, "unload_model_by_key", fake_unload)
+    monkeypatch.setattr(
+        routes_model_query,
+        "audit_event",
+        lambda event, **fields: events.append((event, fields)),
+    )
+    client = TestClient(app)
+
+    response = client.patch(
+        "/v1/admin/models/project/model.onnx/gpu-device",
+        json={"device_id": 2},
+    )
+
+    assert response.status_code == 200
+    assert configure_calls == [(model_id, 2, [2])]
+    assert events[0][0] == "model_gpu_device_updated"
+    assert response.json()["data"]["unloaded"] is True
+    assert model_id not in retry_after
+
+
 def test_v1_model_management_responses_do_not_expose_filesystem_paths(
     monkeypatch,
 ) -> None:

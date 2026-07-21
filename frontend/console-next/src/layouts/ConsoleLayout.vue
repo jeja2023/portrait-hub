@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { ChevronLeft, Code2, LogOut, Menu } from "@lucide/vue";
 import { ElButton, ElMenu, ElMenuItem, ElSwitch, ElTooltip } from "element-plus";
@@ -15,6 +15,7 @@ const route = useRoute();
 const router = useRouter();
 const capabilities = useCapabilitiesStore();
 const prefs = usePrefsStore();
+const logoutPending = ref(false);
 const activeMenuPath = computed(() => {
   if (route.path.startsWith("/analysis/video/")) return "/analysis/video";
   if (route.path.startsWith("/analysis/stream/")) return "/analysis/stream";
@@ -85,16 +86,18 @@ const visibleSections = computed(() => {
 });
 
 async function logout(): Promise<void> {
-  if (sessionState.authMode === "oidc" || sessionState.authMode === "local") {
-    try {
-      await apiRequest("/v1/auth/logout", { method: "POST" });
-    } catch {
-      // The local UI session is still cleared if the server session already expired.
-    }
-  }
+  if (logoutPending.value) return;
+  logoutPending.value = true;
+
+  const browserSession = sessionState.authMode === "oidc" || sessionState.authMode === "local";
+  const serverLogout = browserSession
+    ? apiRequest("/v1/auth/logout", { method: "POST" }, 3_000).catch(() => undefined)
+    : Promise.resolve();
+
   clearSession();
   capabilities.clear();
-  window.location.assign("/");
+  await serverLogout;
+  window.location.replace("/?logged_out=1");
 }
 </script>
 
@@ -151,7 +154,7 @@ async function logout(): Promise<void> {
             <ElSwitch v-model="prefs.developerMode" aria-label="调试信息" />
           </label>
           <ElTooltip content="退出当前会话" placement="bottom">
-            <ElButton :icon="LogOut" circle aria-label="退出" @click="logout" />
+            <ElButton :icon="LogOut" circle aria-label="退出" :loading="logoutPending" @click="logout" />
           </ElTooltip>
         </div>
       </header>

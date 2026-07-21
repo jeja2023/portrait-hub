@@ -226,6 +226,11 @@ def model_package_info(cache_key_value: str, model_path: Path, digest: str | Non
 
 def public_model_config(cache_key_value: str, config: Mapping[str, Any], *, loaded: bool = False) -> dict[str, Any]:
     artifact = config_section(config, "artifact")
+    raw_device_id = config_value(config, "runtime", "device_id", config.get("device_id"))
+    try:
+        gpu_device_id = None if isinstance(raw_device_id, bool) else int(raw_device_id)
+    except (TypeError, ValueError):
+        gpu_device_id = None
     return {
         "model_id": cache_key_value,
         "task": config.get("task"),
@@ -233,6 +238,7 @@ def public_model_config(cache_key_value: str, config: Mapping[str, Any], *, load
         "runtime": config.get("runtime"),
         "version": config.get("version"),
         "precision": config.get("precision"),
+        "gpu_device_id": gpu_device_id,
         "rollout": config.get("rollout", {}),
         "thresholds": config.get("thresholds", {}),
         "artifact": {

@@ -20,6 +20,30 @@ GPU_DEVICE_QUEUE_WAITERS = {int(device_id): 0 for device_id in GPU_DEVICE_SEMAPH
 
 
 def gpu_device_ids() -> list[int]:
+    try:
+        from app.model_config_state import MODEL_CONFIGS
+
+        pending_ids: set[int] = set()
+        for config in MODEL_CONFIGS.values():
+            runtime = config.get("runtime")
+            raw_device = runtime.get("device_id") if isinstance(runtime, dict) else config.get("device_id")
+            if isinstance(raw_device, bool):
+                continue
+            try:
+                device_id = int(raw_device)
+            except (TypeError, ValueError):
+                continue
+            if device_id not in GPU_DEVICE_SEMAPHORES:
+                pending_ids.add(device_id)
+        if pending_ids:
+            from app.metrics import gpu_memory_metrics
+
+            detected_ids = {int(item["device"]) for item in gpu_memory_metrics()}
+            for device_id in pending_ids & detected_ids:
+                GPU_DEVICE_SEMAPHORES[device_id] = asyncio.Semaphore(max(1, GPU_QUEUE_LIMIT_PER_DEVICE))
+                GPU_DEVICE_QUEUE_WAITERS[device_id] = 0
+    except Exception:
+        pass
     return list(GPU_DEVICE_SEMAPHORES.keys()) or [0]
 
 

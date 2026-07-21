@@ -125,6 +125,7 @@ async function loginWithCredential(): Promise<void> {
 
 onMounted(async () => {
   const params = new URLSearchParams(window.location.search);
+  const explicitlyLoggedOut = params.get("logged_out") === "1";
   if (params.get("oidc_error")) errorMessage.value = "企业账号登录失败，请重试或联系管理员。";
   try {
     authConfig.value = await apiRequest<AuthPublicConfig>("/v1/auth/config");
@@ -135,7 +136,11 @@ onMounted(async () => {
   }
   if (params.get("oidc") === "success") {
     await restoreBrowserSession("oidc");
-  } else if ((authConfig.value.local_enabled || authConfig.value.oidc_enabled) && !params.get("oidc_error")) {
+  } else if (
+    !explicitlyLoggedOut &&
+    (authConfig.value.local_enabled || authConfig.value.oidc_enabled) &&
+    !params.get("oidc_error")
+  ) {
     await restoreBrowserSession(authConfig.value.local_enabled ? "local" : "oidc", true);
   }
 });

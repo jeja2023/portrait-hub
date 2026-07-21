@@ -44,6 +44,22 @@ interface ModelRow {
   capability?: string;
   status?: string;
   adapter?: string;
+  gpu_device_id?: number | null;
+}
+interface GpuDeviceRow {
+  device_id: number;
+  configured: boolean;
+  detected: boolean;
+  assignable: boolean;
+  memory_used_bytes: number;
+  memory_free_bytes: number;
+  memory_total_bytes: number;
+}
+interface GpuDevicePayload {
+  configured_device_ids: number[];
+  detected_device_ids: number[];
+  detection_source: "nvml" | "configuration";
+  devices: GpuDeviceRow[];
 }
 interface AliasRow {
   alias: string;
@@ -85,6 +101,9 @@ const releasePreview = ref<Record<string, unknown> | null>(null);
 const modelDetail = ref<Record<string, unknown> | null>(null);
 const modelDetailOpen = ref(false);
 const maintenanceLoading = ref(false);
+const gpuDevices = ref<GpuDeviceRow[]>([]);
+const gpuDetectionSource = ref<GpuDevicePayload["detection_source"]>("configuration");
+const gpuAssignmentId = ref("");
 const trafficKey = ref("");
 const trafficPreview = ref<Record<string, unknown> | null>(null);
 const weightedTargets = ref<WeightedTarget[]>([
@@ -126,16 +145,24 @@ async function load(): Promise<void> {
   loading.value = true;
   errorMessage.value = "";
   try {
-    const [modelPayload, aliasPayload, auditResult] = await Promise.all([
+    const [modelPayload, aliasPayload, auditResult, gpuPayload] = await Promise.all([
       apiRequest<{ models: ModelRow[] }>("/v1/models"),
       apiRequest<{ aliases: AliasRow[] }>("/v1/admin/models/rollout/aliases"),
       apiRequest<{ records: RolloutRecord[] }>("/v1/admin/models/rollout/audit?limit=100").catch(() => ({
         records: [],
       })),
+      apiRequest<GpuDevicePayload>("/v1/admin/models/gpu-devices").catch(() => ({
+        configured_device_ids: [],
+        detected_device_ids: [],
+        detection_source: "configuration" as const,
+        devices: [],
+      })),
     ]);
     models.value = modelPayload.models;
     aliases.value = aliasPayload.aliases;
     rolloutAudit.value = auditResult.records;
+    gpuDevices.value = gpuPayload.devices;
+    gpuDetectionSource.value = gpuPayload.detection_source;
     const [datasetResult, recommendationResult] = await Promise.allSettled([
       apiRequest<{ datasets: Record<string, unknown>[] }>("/v1/evaluation/datasets?limit=20"),
       apiRequest<{ threshold_recommendations: Record<string, unknown> }>(
@@ -164,6 +191,38 @@ async function load(): Promise<void> {
 function modelRequest(id: string): { project_name: string; model_name: string } {
   const [project_name = "", ...modelParts] = id.split("/");
   return { project_name, model_name: modelParts.join("/") };
+}
+
+function gpuSelection(model: ModelRow): number {
+  return typeof model.gpu_device_id === "number" ? model.gpu_device_id : -1;
+}
+
+function gpuDeviceLabel(device: GpuDeviceRow): string {
+  if (device.memory_total_bytes > 0) {
+    const freeGiB = device.memory_free_bytes / 1024 ** 3;
+    const totalGiB = device.memory_total_bytes / 1024 ** 3;
+    return `GPU ${device.device_id} · ${freeGiB.toFixed(1)}/${totalGiB.toFixed(1)} GiB`;
+  }
+  return `GPU ${device.device_id}${device.assignable ? "" : " · 不可用"}`;
+}
+
+async function assignGpuDevice(model: ModelRow, selection: number): Promise<void> {
+  const modelId = idOf(model);
+  const deviceId = selection >= 0 ? selection : null;
+  gpuAssignmentId.value = modelId;
+  errorMessage.value = "";
+  try {
+    await apiRequest("/v1/admin/models/" + modelPath(modelId) + "/gpu-device", {
+      method: "PATCH",
+      body: jsonBody({ device_id: deviceId }),
+    });
+    ElMessage.success(deviceId === null ? "模型已改为自动分配 GPU" : `模型已分配到 GPU ${deviceId}`);
+    await load();
+  } catch (error) {
+    errorMessage.value = errorBannerMessage(error, "GPU 分配保存失败");
+  } finally {
+    gpuAssignmentId.value = "";
+  }
 }
 
 async function openModelDetail(model: ModelRow): Promise<void> {
@@ -352,6 +411,18 @@ onMounted(() => void load());
       <ElTabs v-model="tab" class="page-tabs">
         <ElTabPane label="模型" name="models">
           <ElSkeleton :loading="loading" :rows="7" animated>
+            <div class="gpu-inventory">
+              <strong>{{ gpuDetectionSource === "nvml" ? "检测到的 GPU" : "运行时 GPU" }}</strong>
+              <span v-if="gpuDevices.length === 0" class="gpu-inventory__empty">暂无可用设备信息</span>
+              <span
+                v-for="device in gpuDevices"
+                :key="device.device_id"
+                class="status-pill"
+                :data-status="device.assignable ? 'completed' : 'failed'"
+              >
+                {{ gpuDeviceLabel(device) }}
+              </span>
+            </div>
             <EmptyState v-if="models.length === 0" title="没有已配置模型" />
             <div v-else class="table-wrap">
               <table class="data-table">
@@ -361,6 +432,7 @@ onMounted(() => void load());
                     <th>模型</th>
                     <th>别名</th>
                     <th>能力</th>
+                    <th>GPU 调度</th>
                     <th>状态</th>
                     <th>操作</th>
                   </tr>
@@ -373,6 +445,29 @@ onMounted(() => void load());
                     </td>
                     <td>{{ model.alias || "--" }}</td>
                     <td>{{ capabilityLabel(model.capability || model.task || model.adapter) }}</td>
+                    <td class="gpu-assignment-cell">
+                      <ElSelect
+                        v-if="capabilities.hasPermission('models:write')"
+                        class="gpu-device-select"
+                        size="small"
+                        :model-value="gpuSelection(model)"
+                        :loading="gpuAssignmentId === idOf(model)"
+                        aria-label="GPU 调度"
+                        @change="assignGpuDevice(model, Number($event))"
+                      >
+                        <ElOption label="自动分配" :value="-1" />
+                        <ElOption
+                          v-for="device in gpuDevices"
+                          :key="device.device_id"
+                          :label="gpuDeviceLabel(device)"
+                          :value="device.device_id"
+                          :disabled="!device.assignable"
+                        />
+                      </ElSelect>
+                      <span v-else>
+                        {{ typeof model.gpu_device_id === "number" ? `GPU ${model.gpu_device_id}` : "自动分配" }}
+                      </span>
+                    </td>
                     <td>
                       <span class="status-pill" :data-status="model.loaded ? 'completed' : ''">
                         {{ model.loaded ? "已加载" : model.status ? statusLabel(model.status) : "未加载" }}
@@ -473,26 +568,48 @@ onMounted(() => void load());
                 <ElButton text :icon="Plus" @click="addWeightedTarget">添加目标</ElButton>
               </div>
               <div class="weighted-targets">
-                <div v-for="(target, index) in weightedTargets" :key="index" class="weighted-row">
-                  <ElSelect v-model="target.target_model_id" filterable placeholder="目标模型">
-                    <ElOption
-                      v-for="model in models"
-                      :key="idOf(model)"
-                      :label="idOf(model)"
-                      :value="idOf(model)"
+                <div v-for="(target, index) in weightedTargets" :key="index" class="weighted-target">
+                  <div class="weighted-target__heading">
+                    <strong>灰度目标 {{ index + 1 }}</strong>
+                    <ElButton
+                      text
+                      :icon="Trash2"
+                      aria-label="删除灰度目标"
+                      :disabled="weightedTargets.length <= 1"
+                      @click="removeWeightedTarget(index)"
                     />
-                  </ElSelect>
-                  <ElInputNumber v-model="target.weight" :min="0" :max="100000" aria-label="流量权重" />
-                  <ElSelect v-model="target.status" aria-label="发布状态">
-                    <ElOption label="当前版本" value="active" />
-                    <ElOption label="候选版本" value="candidate" />
-                  </ElSelect>
-                  <ElButton
-                    :icon="Trash2"
-                    aria-label="删除灰度目标"
-                    :disabled="weightedTargets.length <= 1"
-                    @click="removeWeightedTarget(index)"
-                  />
+                  </div>
+                  <label class="weighted-field weighted-field--model">
+                    <span>目标模型</span>
+                    <ElSelect v-model="target.target_model_id" filterable placeholder="选择目标模型">
+                      <ElOption
+                        v-for="model in models"
+                        :key="idOf(model)"
+                        :label="idOf(model)"
+                        :value="idOf(model)"
+                      />
+                    </ElSelect>
+                  </label>
+                  <div class="weighted-target__settings">
+                    <label class="weighted-field">
+                      <span>流量权重</span>
+                      <ElInputNumber
+                        v-model="target.weight"
+                        class="weighted-input"
+                        :min="0"
+                        :max="100000"
+                        controls-position="right"
+                        aria-label="流量权重"
+                      />
+                    </label>
+                    <label class="weighted-field">
+                      <span>版本角色</span>
+                      <ElSelect v-model="target.status" class="weighted-role-select" aria-label="版本角色">
+                        <ElOption label="当前稳定版本" value="active" />
+                        <ElOption label="候选灰度版本" value="candidate" />
+                      </ElSelect>
+                    </label>
+                  </div>
                 </div>
               </div>
               <div class="release-actions">
@@ -698,6 +815,30 @@ onMounted(() => void load());
 .page-tabs {
   padding: 0 14px 14px;
 }
+.gpu-inventory {
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 0 12px;
+  border-bottom: 1px solid var(--line);
+}
+.gpu-inventory strong {
+  margin-right: 4px;
+  font-size: 13px;
+}
+.gpu-inventory__empty {
+  color: var(--muted);
+  font-size: 13px;
+}
+.gpu-assignment-cell {
+  width: 190px;
+  min-width: 190px;
+}
+.gpu-device-select {
+  width: 172px;
+}
 .release-grid,
 .evaluation-grid {
   display: grid;
@@ -723,8 +864,7 @@ onMounted(() => void load());
   margin: 0 0 16px;
   font-size: 16px;
 }
-.section-heading,
-.weighted-row {
+.section-heading {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -737,16 +877,43 @@ onMounted(() => void load());
 }
 .weighted-targets {
   display: grid;
-  gap: 8px;
+  gap: 14px;
   margin-bottom: 14px;
 }
-.weighted-row {
+.weighted-target {
   display: grid;
-  grid-template-columns: 112px minmax(0, 1fr) 36px;
+  gap: 10px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid #d8e0de;
 }
-.weighted-row > :first-child {
-  grid-column: 1 / -1;
+.weighted-target:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+.weighted-target__heading {
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.weighted-target__heading strong {
+  color: #34423f;
+  font-size: 13px;
+}
+.weighted-target__settings {
+  display: grid;
+  grid-template-columns: minmax(150px, 180px) minmax(190px, 230px);
+  gap: 12px;
+  justify-content: start;
+}
+.release-form .weighted-field {
   min-width: 0;
+  margin-bottom: 0;
+}
+.weighted-input,
+.weighted-role-select {
+  width: 100%;
 }
 .rollout-audit {
   padding-top: 18px;
@@ -827,8 +994,12 @@ onMounted(() => void load());
   .evaluation-grid {
     grid-template-columns: 1fr;
   }
-  .weighted-row,
   .model-detail {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 560px) {
+  .weighted-target__settings {
     grid-template-columns: 1fr;
   }
 }

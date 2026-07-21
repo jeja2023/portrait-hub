@@ -53,6 +53,13 @@ class ModelConfig(TypedDict, total=False):
     normalize: str
     embedding_normalize: str
     batch_size: int
+    device_id: int
+
+
+class ModelGpuDeviceRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", protected_namespaces=())
+
+    device_id: int | None = Field(default=None, ge=0)
 
 
 class InferenceRequest(BaseModel):
