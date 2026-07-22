@@ -6,6 +6,46 @@ CREATE TABLE IF NOT EXISTS portrait_tenants (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+CREATE TABLE IF NOT EXISTS portrait_access_state (
+  state_key TEXT PRIMARY KEY,
+  revision BIGINT NOT NULL CHECK (revision > 0),
+  payload JSONB NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS portrait_application_daily_usage (
+  tenant_id TEXT NOT NULL,
+  application_id TEXT NOT NULL,
+  quota_date DATE NOT NULL,
+  daily_quota_used BIGINT NOT NULL DEFAULT 0 CHECK (daily_quota_used >= 0),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (tenant_id, application_id, quota_date)
+);
+
+CREATE TABLE IF NOT EXISTS portrait_call_logs (
+  id BIGSERIAL PRIMARY KEY,
+  request_id TEXT NOT NULL,
+  tenant_id TEXT NOT NULL,
+  project_id TEXT NOT NULL,
+  application_id TEXT NOT NULL,
+  method TEXT NOT NULL,
+  path TEXT NOT NULL,
+  status TEXT NOT NULL,
+  http_status INTEGER NOT NULL,
+  error_code TEXT,
+  latency_ms INTEGER NOT NULL CHECK (latency_ms >= 0),
+  model_version TEXT NOT NULL,
+  worker TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS portrait_call_logs_tenant_project_created_idx
+  ON portrait_call_logs (tenant_id, project_id, created_at DESC, id DESC);
+CREATE INDEX IF NOT EXISTS portrait_call_logs_tenant_application_created_idx
+  ON portrait_call_logs (tenant_id, application_id, created_at DESC, id DESC);
+CREATE INDEX IF NOT EXISTS portrait_call_logs_request_idx
+  ON portrait_call_logs (tenant_id, request_id);
+
+
 CREATE TABLE IF NOT EXISTS portrait_people (
   tenant_id TEXT NOT NULL,
   person_id TEXT NOT NULL,

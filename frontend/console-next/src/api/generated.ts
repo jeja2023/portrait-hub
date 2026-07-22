@@ -294,6 +294,41 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/v1/access/projects": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** V1 Access Projects */
+    get: operations["v1_access_projects_v1_access_projects_get"];
+    put?: never;
+    /** V1 Access Create Project */
+    post: operations["v1_access_create_project_v1_access_projects_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/access/projects/{project_id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /** V1 Access Patch Project */
+    patch: operations["v1_access_patch_project_v1_access_projects__project_id__patch"];
+    trace?: never;
+  };
   "/v1/access/tenants": {
     parameters: {
       query?: never;
@@ -1634,6 +1669,8 @@ export interface components {
        * @default platform
        */
       owner: string;
+      /** Project Id */
+      project_id?: string | null;
       /** Rate Limit Burst */
       rate_limit_burst?: number | null;
       /** Rate Limit Per Minute */
@@ -1658,12 +1695,33 @@ export interface components {
       name?: string | null;
       /** Owner */
       owner?: string | null;
+      /** Project Id */
+      project_id?: string | null;
       /** Rate Limit Burst */
       rate_limit_burst?: number | null;
       /** Rate Limit Per Minute */
       rate_limit_per_minute?: number | null;
       /** Scopes */
       scopes?: string[] | null;
+      /** Status */
+      status?: string | null;
+    };
+    /** AccessProjectCreateRequest */
+    AccessProjectCreateRequest: {
+      /** Name */
+      name: string;
+      /** Project Id */
+      project_id: string;
+      /**
+       * Status
+       * @default active
+       */
+      status: string;
+    };
+    /** AccessProjectPatchRequest */
+    AccessProjectPatchRequest: {
+      /** Name */
+      name?: string | null;
       /** Status */
       status?: string | null;
     };
@@ -1759,6 +1817,116 @@ export interface components {
       expected_current_target?: string | null;
       /** Targets */
       targets: components["schemas"]["AliasRolloutTarget"][];
+    };
+    /** AnalysisArchiveContract */
+    AnalysisArchiveContract: {
+      /** Archive Id */
+      archive_id: string;
+      /** Artifact Count */
+      artifact_count: number;
+      /** Created At */
+      created_at: number;
+      /** Endpoint */
+      endpoint: string;
+      /** Mode */
+      mode: string;
+      payload: components["schemas"]["GenericData"];
+      /** Previews */
+      previews: components["schemas"]["GenericData"][];
+      /** Request Id */
+      request_id: string;
+      /** Result Id */
+      result_id: string;
+      /** Source Artifacts */
+      source_artifacts: components["schemas"]["AnalysisPreviewContract"][];
+      /** Source Ref */
+      source_ref: string;
+      /**
+       * Source Type
+       * @enum {string}
+       */
+      source_type: "image" | "video" | "stream";
+    } & {
+      [key: string]: unknown;
+    };
+    /** AnalysisDetailData */
+    AnalysisDetailData: {
+      result: components["schemas"]["AnalysisArchiveContract"];
+    };
+    /** AnalysisListData */
+    AnalysisListData: {
+      /** Archives */
+      archives: components["schemas"]["AnalysisArchiveContract"][];
+      /** Count */
+      count: number;
+      /** Cursor */
+      cursor?: string | null;
+      /** Has More */
+      has_more: boolean;
+      /** Limit */
+      limit: number;
+      /** Next Cursor */
+      next_cursor?: string | null;
+      /** Next Offset */
+      next_offset?: number | null;
+      /** Offset */
+      offset: number;
+      /** Results */
+      results: components["schemas"]["AnalysisArchiveContract"][];
+      /** Total */
+      total: number;
+    };
+    /** AnalysisPreviewContract */
+    AnalysisPreviewContract: {
+      /** Artifact Id */
+      artifact_id: string;
+      /** Content Url */
+      content_url: string;
+      /** Media Type */
+      media_type: string;
+      /** Role */
+      role: string;
+    } & {
+      [key: string]: unknown;
+    };
+    /** AppearanceContract */
+    AppearanceContract: {
+      attributes: components["schemas"]["GenericData"];
+      dominant_color: components["schemas"]["ColorContract"];
+      /** Embedding */
+      embedding?: number[] | null;
+      /** Embedding Dim */
+      embedding_dim: number;
+      /** Model Status */
+      model_status: string;
+      quality: components["schemas"]["QualityContract"];
+    } & {
+      [key: string]: unknown;
+    };
+    /** AppearanceFrameContract */
+    AppearanceFrameContract: {
+      appearance: components["schemas"]["AppearanceContract"];
+      /** Duplicate Distance */
+      duplicate_distance?: number | null;
+      /** Duplicate Of */
+      duplicate_of?: string | null;
+      /** Frame Index */
+      frame_index: number;
+      /** Height */
+      height: number;
+      /** Image Index */
+      image_index: number;
+      /** Pts Ms */
+      pts_ms: number;
+      quality?: components["schemas"]["QualityContract"] | null;
+      /** Source Id */
+      source_id: string;
+      /** Source Type */
+      source_type: string;
+      /** Width */
+      width: number;
+    } & {
+      [key: string]: unknown;
     };
     /** Body_debug_model_output_debug_model_output_post */
     Body_debug_model_output_debug_model_output_post: {
@@ -2152,6 +2320,22 @@ export interface components {
       /** Traffic Key */
       traffic_key?: string | null;
     };
+    /** ColdLoadedContract */
+    ColdLoadedContract: {
+      /** Detector */
+      detector: boolean;
+      /** Reid */
+      reid: boolean;
+    };
+    /** ColorContract */
+    ColorContract: {
+      /** Name */
+      name: string;
+      /** Rgb */
+      rgb: number[];
+    } & {
+      [key: string]: unknown;
+    };
     /** ConfigurationChange */
     ConfigurationChange: {
       /** Key */
@@ -2185,12 +2369,85 @@ export interface components {
       /** Allowed Hosts */
       allowed_hosts?: string[];
     };
+    /** FaceContract */
+    FaceContract: {
+      /** Box */
+      box: number[];
+      /** Detection Strategy */
+      detection_strategy: string;
+      /** Embedding */
+      embedding?: number[] | null;
+      /** Embedding Dim */
+      embedding_dim: number;
+      /** Face Index */
+      face_index: number;
+      /** Landmarks */
+      landmarks?: number[][];
+      /** Model Id */
+      model_id: string;
+      /** Model Status */
+      model_status: string;
+      /** Model Version */
+      model_version?: string | null;
+      quality: components["schemas"]["QualityContract"];
+      /** Score */
+      score: number;
+    } & {
+      [key: string]: unknown;
+    };
+    /** FaceFrameContract */
+    FaceFrameContract: {
+      /** Duplicate Distance */
+      duplicate_distance?: number | null;
+      /** Duplicate Of */
+      duplicate_of?: string | null;
+      /** Face Count */
+      face_count: number;
+      /** Faces */
+      faces: components["schemas"]["FaceContract"][];
+      /** Frame Index */
+      frame_index: number;
+      /** Height */
+      height: number;
+      /** Image Index */
+      image_index: number;
+      /** Pts Ms */
+      pts_ms: number;
+      quality?: components["schemas"]["QualityContract"] | null;
+      /** Source Id */
+      source_id: string;
+      /** Source Type */
+      source_type: string;
+      /** Width */
+      width: number;
+    } & {
+      [key: string]: unknown;
+    };
+    /** GaitTrackletContract */
+    GaitTrackletContract: {
+      /** Embedding */
+      embedding?: number[] | null;
+      /** Embedding Dim */
+      embedding_dim: number;
+      /** Frame Count */
+      frame_count: number;
+      /** Quality */
+      quality?: number | null;
+      /** Reason */
+      reason?: string | null;
+    } & {
+      [key: string]: unknown;
+    };
     /** GalleryPatchRequest */
     GalleryPatchRequest: {
       /** Display Name */
       display_name?: string | null;
       /** Metadata */
       metadata?: Record<string, never> | null;
+    };
+    /** GenericData */
+    GenericData: {
+      [key: string]: unknown;
     };
     /** HTTPValidationError */
     HTTPValidationError: {
@@ -2228,6 +2485,71 @@ export interface components {
       /** Subject */
       subject?: string | null;
     };
+    /** InferAppearanceData */
+    InferAppearanceData: {
+      /** Frame Count */
+      frame_count: number;
+      /** Frames */
+      frames: components["schemas"]["AppearanceFrameContract"][];
+      model: components["schemas"]["ModelSummaryContract"];
+    };
+    /** InferFacesData */
+    InferFacesData: {
+      /** Face Count */
+      face_count: number;
+      /** Frame Count */
+      frame_count: number;
+      /** Frames */
+      frames: components["schemas"]["FaceFrameContract"][];
+      model: components["schemas"]["ModelSummaryContract"];
+    };
+    /** InferGaitData */
+    InferGaitData: {
+      model: components["schemas"]["ModelSummaryContract"];
+      tracklet: components["schemas"]["GaitTrackletContract"];
+    };
+    /** InferPersonsData */
+    InferPersonsData: {
+      /** Frame Count */
+      frame_count: number;
+      /** Frames */
+      frames: components["schemas"]["PersonFrameContract"][];
+      model: components["schemas"]["ModelSummaryContract"];
+      /** Person Count */
+      person_count: number;
+    };
+    /** InferPoseData */
+    InferPoseData: {
+      /** Frame Count */
+      frame_count: number;
+      /** Frames */
+      frames: components["schemas"]["PoseFrameContract"][];
+      model: components["schemas"]["ModelSummaryContract"];
+    };
+    /** InferTracksData */
+    InferTracksData: {
+      cold_loaded: components["schemas"]["ColdLoadedContract"];
+      detector: components["schemas"]["RuntimeShapeContract"];
+      /** Detector Model */
+      detector_model: string;
+      /** Embedding Count */
+      embedding_count: number;
+      /** Frame Count */
+      frame_count: number;
+      /** Frames */
+      frames: components["schemas"]["TrackFrameContract"][];
+      /** Person Count */
+      person_count: number;
+      reid: components["schemas"]["RuntimeShapeContract"];
+      /** Reid Model */
+      reid_model: string;
+      timing: components["schemas"]["TimingContract"];
+      /** Track Count */
+      track_count: number;
+      tracker: components["schemas"]["GenericData"];
+      /** Tracks */
+      tracks: components["schemas"]["TrackContract"][];
+    };
     /** InferenceRequest */
     InferenceRequest: {
       /** Model Name */
@@ -2236,6 +2558,17 @@ export interface components {
       project_name: string;
       /** Tensor Data */
       tensor_data: unknown[];
+    };
+    /** KeypointContract */
+    KeypointContract: {
+      /** Name */
+      name: string;
+      /** Point */
+      point: number[];
+      /** Score */
+      score: number;
+    } & {
+      [key: string]: unknown;
     };
     /** LocalLoginRequest */
     LocalLoginRequest: {
@@ -2256,6 +2589,21 @@ export interface components {
       /** Project Name */
       project_name: string;
     };
+    /** ModelSummaryContract */
+    ModelSummaryContract: {
+      /** Adapter */
+      adapter?: string | null;
+      /** Embedding Dim */
+      embedding_dim?: number | null;
+      /** Id */
+      id: string;
+      /** Status */
+      status: string;
+      /** Version */
+      version?: string | null;
+    } & {
+      [key: string]: unknown;
+    };
     /** NetworkAccessPolicyUpdateRequest */
     NetworkAccessPolicyUpdateRequest: {
       /** Expected Revision */
@@ -2263,12 +2611,356 @@ export interface components {
       stream: components["schemas"]["EndpointNetworkPolicyRequest"];
       webhook: components["schemas"]["EndpointNetworkPolicyRequest"];
     };
+    /** PersonContract */
+    PersonContract: {
+      /** Box */
+      box: number[];
+      /** Embedding */
+      embedding?: number[] | null;
+      /** Embedding Dim */
+      embedding_dim: number;
+      /** Model Status */
+      model_status: string;
+      quality: components["schemas"]["QualityContract"];
+      /** Score */
+      score: number;
+      /** Selection Strategy */
+      selection_strategy: string;
+    } & {
+      [key: string]: unknown;
+    };
+    /** PersonFrameContract */
+    PersonFrameContract: {
+      /** Duplicate Distance */
+      duplicate_distance?: number | null;
+      /** Duplicate Of */
+      duplicate_of?: string | null;
+      /** Frame Index */
+      frame_index: number;
+      /** Height */
+      height: number;
+      /** Image Index */
+      image_index: number;
+      /** Person Count */
+      person_count: number;
+      /** Persons */
+      persons: components["schemas"]["PersonContract"][];
+      /** Pts Ms */
+      pts_ms: number;
+      quality?: components["schemas"]["QualityContract"] | null;
+      /** Source Id */
+      source_id: string;
+      /** Source Type */
+      source_type: string;
+      /** Width */
+      width: number;
+    } & {
+      [key: string]: unknown;
+    };
+    /** PortraitErrorDetail */
+    PortraitErrorDetail: {
+      /** Code */
+      code: string;
+      /** Details */
+      details?: unknown | null;
+      /** Message */
+      message: string;
+    } & {
+      [key: string]: unknown;
+    };
+    /** PortraitErrorResponse */
+    PortraitErrorResponse: {
+      error: components["schemas"]["PortraitErrorDetail"];
+      /** Request Id */
+      request_id: string;
+      /**
+       * Schema Version
+       * @constant
+       * @enum {string}
+       */
+      schema_version: "1.0";
+      /**
+       * Status
+       * @constant
+       * @enum {string}
+       */
+      status: "error";
+    };
+    /** PortraitSuccess[AnalysisDetailData] */
+    PortraitSuccess_AnalysisDetailData_: {
+      data: components["schemas"]["AnalysisDetailData"];
+      meta?: components["schemas"]["GenericData"] | null;
+      /** Request Id */
+      request_id: string;
+      /**
+       * Schema Version
+       * @constant
+       * @enum {string}
+       */
+      schema_version: "1.0";
+      /**
+       * Status
+       * @constant
+       * @enum {string}
+       */
+      status: "success";
+      /** Warnings */
+      warnings?: string[] | null;
+    };
+    /** PortraitSuccess[AnalysisListData] */
+    PortraitSuccess_AnalysisListData_: {
+      data: components["schemas"]["AnalysisListData"];
+      meta?: components["schemas"]["GenericData"] | null;
+      /** Request Id */
+      request_id: string;
+      /**
+       * Schema Version
+       * @constant
+       * @enum {string}
+       */
+      schema_version: "1.0";
+      /**
+       * Status
+       * @constant
+       * @enum {string}
+       */
+      status: "success";
+      /** Warnings */
+      warnings?: string[] | null;
+    };
+    /** PortraitSuccess[GenericData] */
+    PortraitSuccess_GenericData_: {
+      data: components["schemas"]["GenericData"];
+      meta?: components["schemas"]["GenericData"] | null;
+      /** Request Id */
+      request_id: string;
+      /**
+       * Schema Version
+       * @constant
+       * @enum {string}
+       */
+      schema_version: "1.0";
+      /**
+       * Status
+       * @constant
+       * @enum {string}
+       */
+      status: "success";
+      /** Warnings */
+      warnings?: string[] | null;
+    };
+    /** PortraitSuccess[InferAppearanceData] */
+    PortraitSuccess_InferAppearanceData_: {
+      data: components["schemas"]["InferAppearanceData"];
+      meta?: components["schemas"]["GenericData"] | null;
+      /** Request Id */
+      request_id: string;
+      /**
+       * Schema Version
+       * @constant
+       * @enum {string}
+       */
+      schema_version: "1.0";
+      /**
+       * Status
+       * @constant
+       * @enum {string}
+       */
+      status: "success";
+      /** Warnings */
+      warnings?: string[] | null;
+    };
+    /** PortraitSuccess[InferFacesData] */
+    PortraitSuccess_InferFacesData_: {
+      data: components["schemas"]["InferFacesData"];
+      meta?: components["schemas"]["GenericData"] | null;
+      /** Request Id */
+      request_id: string;
+      /**
+       * Schema Version
+       * @constant
+       * @enum {string}
+       */
+      schema_version: "1.0";
+      /**
+       * Status
+       * @constant
+       * @enum {string}
+       */
+      status: "success";
+      /** Warnings */
+      warnings?: string[] | null;
+    };
+    /** PortraitSuccess[InferGaitData] */
+    PortraitSuccess_InferGaitData_: {
+      data: components["schemas"]["InferGaitData"];
+      meta?: components["schemas"]["GenericData"] | null;
+      /** Request Id */
+      request_id: string;
+      /**
+       * Schema Version
+       * @constant
+       * @enum {string}
+       */
+      schema_version: "1.0";
+      /**
+       * Status
+       * @constant
+       * @enum {string}
+       */
+      status: "success";
+      /** Warnings */
+      warnings?: string[] | null;
+    };
+    /** PortraitSuccess[InferPersonsData] */
+    PortraitSuccess_InferPersonsData_: {
+      data: components["schemas"]["InferPersonsData"];
+      meta?: components["schemas"]["GenericData"] | null;
+      /** Request Id */
+      request_id: string;
+      /**
+       * Schema Version
+       * @constant
+       * @enum {string}
+       */
+      schema_version: "1.0";
+      /**
+       * Status
+       * @constant
+       * @enum {string}
+       */
+      status: "success";
+      /** Warnings */
+      warnings?: string[] | null;
+    };
+    /** PortraitSuccess[InferPoseData] */
+    PortraitSuccess_InferPoseData_: {
+      data: components["schemas"]["InferPoseData"];
+      meta?: components["schemas"]["GenericData"] | null;
+      /** Request Id */
+      request_id: string;
+      /**
+       * Schema Version
+       * @constant
+       * @enum {string}
+       */
+      schema_version: "1.0";
+      /**
+       * Status
+       * @constant
+       * @enum {string}
+       */
+      status: "success";
+      /** Warnings */
+      warnings?: string[] | null;
+    };
+    /** PortraitSuccess[InferTracksData] */
+    PortraitSuccess_InferTracksData_: {
+      data: components["schemas"]["InferTracksData"];
+      meta?: components["schemas"]["GenericData"] | null;
+      /** Request Id */
+      request_id: string;
+      /**
+       * Schema Version
+       * @constant
+       * @enum {string}
+       */
+      schema_version: "1.0";
+      /**
+       * Status
+       * @constant
+       * @enum {string}
+       */
+      status: "success";
+      /** Warnings */
+      warnings?: string[] | null;
+    };
+    /** PortraitSuccess[VisionInferData] */
+    PortraitSuccess_VisionInferData_: {
+      data: components["schemas"]["VisionInferData"];
+      meta?: components["schemas"]["GenericData"] | null;
+      /** Request Id */
+      request_id: string;
+      /**
+       * Schema Version
+       * @constant
+       * @enum {string}
+       */
+      schema_version: "1.0";
+      /**
+       * Status
+       * @constant
+       * @enum {string}
+       */
+      status: "success";
+      /** Warnings */
+      warnings?: string[] | null;
+    };
+    /** PoseContract */
+    PoseContract: {
+      /** Keypoints */
+      keypoints: components["schemas"]["KeypointContract"][];
+      /** Model Status */
+      model_status: string;
+      quality: components["schemas"]["QualityContract"];
+      /** Skeleton */
+      skeleton: string[][];
+    } & {
+      [key: string]: unknown;
+    };
+    /** PoseFrameContract */
+    PoseFrameContract: {
+      /** Duplicate Distance */
+      duplicate_distance?: number | null;
+      /** Duplicate Of */
+      duplicate_of?: string | null;
+      /** Frame Index */
+      frame_index: number;
+      /** Height */
+      height: number;
+      /** Image Index */
+      image_index: number;
+      pose: components["schemas"]["PoseContract"];
+      /** Pts Ms */
+      pts_ms: number;
+      quality?: components["schemas"]["QualityContract"] | null;
+      /** Source Id */
+      source_id: string;
+      /** Source Type */
+      source_type: string;
+      /** Width */
+      width: number;
+    } & {
+      [key: string]: unknown;
+    };
+    /** QualityContract */
+    QualityContract: {
+      /** Score */
+      score?: number | null;
+    } & {
+      [key: string]: unknown;
+    };
     /** RetentionCleanupRequest */
     RetentionCleanupRequest: {
       /** Confirm */
       confirm?: string | null;
       /** Retention Days */
       retention_days: number;
+    };
+    /** RuntimeShapeContract */
+    RuntimeShapeContract: {
+      /** Embedding Count */
+      embedding_count?: number | null;
+      /** Embedding Dim */
+      embedding_dim?: number | null;
+      /** Inference Mode */
+      inference_mode: string;
+      /** Input Shape */
+      input_shape: unknown[];
+      /** Output Shapes */
+      output_shapes: unknown[][];
+    } & {
+      [key: string]: unknown;
     };
     /** StreamCreateRequest */
     StreamCreateRequest: {
@@ -2296,6 +2988,71 @@ export interface components {
       /** Person */
       person?: number | null;
     };
+    /** TimingContract */
+    TimingContract: {
+      /** Decode Seconds */
+      decode_seconds?: number | null;
+      /** Inference Seconds */
+      inference_seconds?: number | null;
+      /** Load Seconds */
+      load_seconds?: number | null;
+      /** Postprocess Seconds */
+      postprocess_seconds?: number | null;
+      /** Preprocess Seconds */
+      preprocess_seconds?: number | null;
+      /** Queue Seconds */
+      queue_seconds?: number | null;
+      /** Total Seconds */
+      total_seconds?: number | null;
+    } & {
+      [key: string]: unknown;
+    };
+    /** TrackContract */
+    TrackContract: {
+      association_quality: components["schemas"]["GenericData"];
+      /** Average Confidence */
+      average_confidence: number;
+      /** Average Quality */
+      average_quality: number;
+      /** First Frame Index */
+      first_frame_index: number;
+      /** Frame Count */
+      frame_count: number;
+      /** Gap Count */
+      gap_count: number;
+      /** Interpolated */
+      interpolated: components["schemas"]["GenericData"][];
+      /** Interpolated Count */
+      interpolated_count: number;
+      /** Last Frame Index */
+      last_frame_index: number;
+      /** Max Gap */
+      max_gap: number;
+      /** Stability Score */
+      stability_score: number;
+      template: components["schemas"]["GenericData"];
+      /** Track Id */
+      track_id: string;
+      /** Tracklet Quality Score */
+      tracklet_quality_score: number;
+    } & {
+      [key: string]: unknown;
+    };
+    /** TrackFrameContract */
+    TrackFrameContract: {
+      /** Frame Index */
+      frame_index: number;
+      /** Height */
+      height: number;
+      /** Person Count */
+      person_count: number;
+      /** Persons */
+      persons: components["schemas"]["TrackedPersonContract"][];
+      /** Width */
+      width: number;
+    } & {
+      [key: string]: unknown;
+    };
     /** TrackReviewAnnotationCreateRequest */
     TrackReviewAnnotationCreateRequest: {
       /** Evidence Ref */
@@ -2313,6 +3070,25 @@ export interface components {
       /** Track Id */
       track_id: string;
     };
+    /** TrackedPersonContract */
+    TrackedPersonContract: {
+      /** Box */
+      box: number[];
+      crop_quality?: components["schemas"]["GenericData"] | null;
+      /** Embedding */
+      embedding?: number[] | null;
+      /** Embedding Dim */
+      embedding_dim?: number | null;
+      /** Embedding Index */
+      embedding_index?: number | null;
+      quality?: components["schemas"]["GenericData"] | null;
+      /** Score */
+      score: number;
+      /** Track Id */
+      track_id?: string | null;
+    } & {
+      [key: string]: unknown;
+    };
     /** ValidationError */
     ValidationError: {
       /** Location */
@@ -2321,6 +3097,81 @@ export interface components {
       msg: string;
       /** Error Type */
       type: string;
+    };
+    /** VisionInferData */
+    VisionInferData: {
+      /** Cold Loaded */
+      cold_loaded: boolean;
+      /** Image Count */
+      image_count: number;
+      /** Inference Mode */
+      inference_mode: string;
+      /** Input Shape */
+      input_shape: unknown[];
+      model: components["schemas"]["VisionModelContract"];
+      /** Output Shapes */
+      output_shapes: unknown[][];
+      parameters: components["schemas"]["GenericData"];
+      /** Result Count */
+      result_count: number;
+      /** Results */
+      results: components["schemas"]["VisionResultContract"][];
+      timing: components["schemas"]["TimingContract"];
+    };
+    /** VisionModelContract */
+    VisionModelContract: {
+      /** Alias */
+      alias?: string | null;
+      /** Hash */
+      hash: string;
+      /** Id */
+      id: string;
+      /** Key */
+      key: string;
+      /** Model Name */
+      model_name: string;
+      /** Precision */
+      precision?: string | null;
+      /** Project Name */
+      project_name: string;
+      /** Runtime */
+      runtime?: string | null;
+      /**
+       * Task
+       * @enum {string}
+       */
+      task: "detection" | "classification" | "reid";
+      /** Traffic Key */
+      traffic_key?: string | null;
+      /** Type */
+      type?: string | null;
+      /** Version */
+      version?: string | null;
+    } & {
+      [key: string]: unknown;
+    };
+    /** VisionResultContract */
+    VisionResultContract: {
+      /** Detection Count */
+      detection_count?: number | null;
+      /** Detections */
+      detections?: components["schemas"]["GenericData"][] | null;
+      /** Embedding */
+      embedding?: number[] | null;
+      /** Embedding Dim */
+      embedding_dim?: number | null;
+      /** Height */
+      height: number;
+      /** Image Index */
+      image_index: number;
+      /** Prediction Count */
+      prediction_count?: number | null;
+      /** Predictions */
+      predictions?: components["schemas"]["GenericData"][] | null;
+      /** Width */
+      width: number;
+    } & {
+      [key: string]: unknown;
     };
     /** WarmupRequest */
     WarmupRequest: {
@@ -2731,16 +3582,97 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": Record<string, never>;
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
         };
       };
-      /** @description Validation Error */
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
       422: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
         };
       };
     };
@@ -2768,16 +3700,97 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": Record<string, never>;
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
         };
       };
-      /** @description Validation Error */
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
       422: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
         };
       };
     };
@@ -2807,16 +3820,97 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": Record<string, never>;
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
         };
       };
-      /** @description Validation Error */
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
       422: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
         };
       };
     };
@@ -2842,16 +3936,97 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": Record<string, never>;
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
         };
       };
-      /** @description Validation Error */
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
       422: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
         };
       };
     };
@@ -2884,16 +4059,97 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": Record<string, never>;
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
         };
       };
-      /** @description Validation Error */
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
       422: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
         };
       };
     };
@@ -2925,16 +4181,97 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": Record<string, never>;
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
         };
       };
-      /** @description Validation Error */
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
       422: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
         };
       };
     };
@@ -2958,16 +4295,449 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": Record<string, never>;
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
         };
       };
-      /** @description Validation Error */
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
       422: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+    };
+  };
+  v1_access_projects_v1_access_projects_get: {
+    parameters: {
+      query?: never;
+      header?: {
+        authorization?: string | null;
+        "x-api-key"?: string | null;
+        "x-tenant-id"?: string | null;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+    };
+  };
+  v1_access_create_project_v1_access_projects_post: {
+    parameters: {
+      query?: never;
+      header?: {
+        authorization?: string | null;
+        "x-api-key"?: string | null;
+        "x-tenant-id"?: string | null;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["AccessProjectCreateRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+    };
+  };
+  v1_access_patch_project_v1_access_projects__project_id__patch: {
+    parameters: {
+      query?: never;
+      header?: {
+        authorization?: string | null;
+        "x-api-key"?: string | null;
+        "x-tenant-id"?: string | null;
+      };
+      path: {
+        project_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["AccessProjectPatchRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
         };
       };
     };
@@ -2991,16 +4761,97 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": Record<string, never>;
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
         };
       };
-      /** @description Validation Error */
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
       422: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
         };
       };
     };
@@ -3028,16 +4879,97 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": Record<string, never>;
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
         };
       };
-      /** @description Validation Error */
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
       422: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
         };
       };
     };
@@ -3067,16 +4999,97 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": Record<string, never>;
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
         };
       };
-      /** @description Validation Error */
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
       422: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
         };
       };
     };
@@ -3100,16 +5113,97 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": Record<string, never>;
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
         };
       };
-      /** @description Validation Error */
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
       422: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
         };
       };
     };
@@ -3137,16 +5231,97 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": Record<string, never>;
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
         };
       };
-      /** @description Validation Error */
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
       422: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
         };
       };
     };
@@ -3176,16 +5351,97 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": Record<string, never>;
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
         };
       };
-      /** @description Validation Error */
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
       422: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
         };
       };
     };
@@ -3211,16 +5467,97 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": Record<string, never>;
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
         };
       };
-      /** @description Validation Error */
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
       422: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
         };
       };
     };
@@ -3246,16 +5583,97 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": Record<string, never>;
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
         };
       };
-      /** @description Validation Error */
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
       422: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
         };
       };
     };
@@ -3287,16 +5705,97 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": Record<string, never>;
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
         };
       };
-      /** @description Validation Error */
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
       422: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
         };
       };
     };
@@ -3320,16 +5819,97 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": Record<string, never>;
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
         };
       };
-      /** @description Validation Error */
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
       422: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
         };
       };
     };
@@ -3357,16 +5937,97 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": Record<string, never>;
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
         };
       };
-      /** @description Validation Error */
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
       422: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
         };
       };
     };
@@ -3392,16 +6053,97 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": Record<string, never>;
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
         };
       };
-      /** @description Validation Error */
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
       422: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
         };
       };
     };
@@ -3425,16 +6167,97 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": Record<string, never>;
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
         };
       };
-      /** @description Validation Error */
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
       422: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
         };
       };
     };
@@ -3462,16 +6285,97 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": Record<string, never>;
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
         };
       };
-      /** @description Validation Error */
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
       422: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
         };
       };
     };
@@ -3509,16 +6413,97 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": Record<string, never>;
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
         };
       };
-      /** @description Validation Error */
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
       422: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
         };
       };
     };
@@ -3542,16 +6527,97 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": Record<string, never>;
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
         };
       };
-      /** @description Validation Error */
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
       422: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
         };
       };
     };
@@ -3578,16 +6644,97 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": Record<string, never>;
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
         };
       };
-      /** @description Validation Error */
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
       422: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
         };
       };
     };
@@ -3615,16 +6762,97 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": Record<string, never>;
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
         };
       };
-      /** @description Validation Error */
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
       422: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
         };
       };
     };
@@ -3650,16 +6878,97 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": Record<string, never>;
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
         };
       };
-      /** @description Validation Error */
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
       422: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
         };
       };
     };
@@ -3689,16 +6998,97 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": Record<string, never>;
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
         };
       };
-      /** @description Validation Error */
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
       422: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
         };
       };
     };
@@ -3722,16 +7112,97 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": Record<string, never>;
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
         };
       };
-      /** @description Validation Error */
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
       422: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
         };
       };
     };
@@ -3759,16 +7230,97 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": Record<string, never>;
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
         };
       };
-      /** @description Validation Error */
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
       422: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
         };
       };
     };
@@ -3792,16 +7344,97 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": Record<string, never>;
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
         };
       };
-      /** @description Validation Error */
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
       422: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
         };
       };
     };
@@ -3825,16 +7458,97 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": Record<string, never>;
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
         };
       };
-      /** @description Validation Error */
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
       422: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
         };
       };
     };
@@ -3861,16 +7575,97 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": Record<string, never>;
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
         };
       };
-      /** @description Validation Error */
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
       422: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
         };
       };
     };
@@ -3898,16 +7693,97 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": Record<string, never>;
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
         };
       };
-      /** @description Validation Error */
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
       422: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
         };
       };
     };
@@ -3935,16 +7811,97 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": Record<string, never>;
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
         };
       };
-      /** @description Validation Error */
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
       422: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
         };
       };
     };
@@ -3972,16 +7929,97 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": Record<string, never>;
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
         };
       };
-      /** @description Validation Error */
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
       422: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
         };
       };
     };
@@ -4007,16 +8045,97 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": Record<string, never>;
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
         };
       };
-      /** @description Validation Error */
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
       422: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
         };
       };
     };
@@ -4044,16 +8163,97 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": Record<string, never>;
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
         };
       };
-      /** @description Validation Error */
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
       422: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
         };
       };
     };
@@ -4083,16 +8283,97 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": Record<string, never>;
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
         };
       };
-      /** @description Validation Error */
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
       422: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
         };
       };
     };
@@ -4116,16 +8397,97 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": Record<string, never>;
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
         };
       };
-      /** @description Validation Error */
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
       422: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
         };
       };
     };
@@ -4153,16 +8515,97 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": Record<string, never>;
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
         };
       };
-      /** @description Validation Error */
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
       422: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
         };
       };
     };
@@ -4190,16 +8633,97 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": Record<string, never>;
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
         };
       };
-      /** @description Validation Error */
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
       422: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
         };
       };
     };
@@ -4223,16 +8747,97 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": Record<string, never>;
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
         };
       };
-      /** @description Validation Error */
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
       422: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
         };
       };
     };
@@ -4298,16 +8903,97 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": Record<string, never>;
+          "application/json": components["schemas"]["PortraitSuccess_AnalysisListData_"];
         };
       };
-      /** @description Validation Error */
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
       422: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
         };
       };
     };
@@ -4333,16 +9019,97 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": Record<string, never>;
+          "application/json": components["schemas"]["PortraitSuccess_AnalysisDetailData_"];
         };
       };
-      /** @description Validation Error */
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
       422: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
         };
       };
     };
@@ -4362,7 +9129,97 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": Record<string, never>;
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
         };
       };
     };
@@ -4386,16 +9243,97 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": unknown;
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
         };
       };
-      /** @description Validation Error */
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
       422: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
         };
       };
     };
@@ -4415,7 +9353,97 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": unknown;
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
         };
       };
     };
@@ -4435,7 +9463,97 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": Record<string, never>;
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
         };
       };
     };
@@ -4463,16 +9581,97 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": Record<string, never>;
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
         };
       };
-      /** @description Validation Error */
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
       422: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
         };
       };
     };
@@ -4500,16 +9699,97 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": Record<string, never>;
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
         };
       };
-      /** @description Validation Error */
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
       422: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
         };
       };
     };
@@ -4537,16 +9817,97 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": Record<string, never>;
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
         };
       };
-      /** @description Validation Error */
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
       422: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
         };
       };
     };
@@ -4574,16 +9935,97 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": Record<string, never>;
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
         };
       };
-      /** @description Validation Error */
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
       422: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
         };
       };
     };
@@ -4607,16 +10049,97 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": Record<string, never>;
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
         };
       };
-      /** @description Validation Error */
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
       422: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
         };
       };
     };
@@ -4644,16 +10167,97 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": Record<string, never>;
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
         };
       };
-      /** @description Validation Error */
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
       422: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
         };
       };
     };
@@ -4679,16 +10283,97 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": Record<string, never>;
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
         };
       };
-      /** @description Validation Error */
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
       422: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
         };
       };
     };
@@ -4712,16 +10397,97 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": Record<string, never>;
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
         };
       };
-      /** @description Validation Error */
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
       422: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
         };
       };
     };
@@ -4750,16 +10516,97 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": Record<string, never>;
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
         };
       };
-      /** @description Validation Error */
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
       422: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
         };
       };
     };
@@ -4787,16 +10634,97 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": Record<string, never>;
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
         };
       };
-      /** @description Validation Error */
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
       422: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
         };
       };
     };
@@ -4825,16 +10753,97 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": Record<string, never>;
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
         };
       };
-      /** @description Validation Error */
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
       422: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
         };
       };
     };
@@ -4862,16 +10871,97 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": Record<string, never>;
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
         };
       };
-      /** @description Validation Error */
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
       422: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
         };
       };
     };
@@ -4901,16 +10991,97 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": Record<string, never>;
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
         };
       };
-      /** @description Validation Error */
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
       422: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
         };
       };
     };
@@ -4938,16 +11109,97 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": Record<string, never>;
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
         };
       };
-      /** @description Validation Error */
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
       422: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
         };
       };
     };
@@ -4975,16 +11227,97 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": Record<string, never>;
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
         };
       };
-      /** @description Validation Error */
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
       422: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
         };
       };
     };
@@ -5012,16 +11345,97 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": Record<string, never>;
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
         };
       };
-      /** @description Validation Error */
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
       422: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
         };
       };
     };
@@ -5049,16 +11463,97 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": Record<string, never>;
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
         };
       };
-      /** @description Validation Error */
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
       422: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
         };
       };
     };
@@ -5084,16 +11579,97 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": Record<string, never>;
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
         };
       };
-      /** @description Validation Error */
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
       422: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
         };
       };
     };
@@ -5119,16 +11695,97 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": Record<string, never>;
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
         };
       };
-      /** @description Validation Error */
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
       422: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
         };
       };
     };
@@ -5158,16 +11815,97 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": Record<string, never>;
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
         };
       };
-      /** @description Validation Error */
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
       422: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
         };
       };
     };
@@ -5195,16 +11933,97 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": Record<string, never>;
+          "application/json": components["schemas"]["PortraitSuccess_InferAppearanceData_"];
         };
       };
-      /** @description Validation Error */
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
       422: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
         };
       };
     };
@@ -5232,16 +12051,97 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": Record<string, never>;
+          "application/json": components["schemas"]["PortraitSuccess_InferFacesData_"];
         };
       };
-      /** @description Validation Error */
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
       422: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
         };
       };
     };
@@ -5269,16 +12169,97 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": Record<string, never>;
+          "application/json": components["schemas"]["PortraitSuccess_InferGaitData_"];
         };
       };
-      /** @description Validation Error */
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
       422: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
         };
       };
     };
@@ -5306,16 +12287,97 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": Record<string, never>;
+          "application/json": components["schemas"]["PortraitSuccess_InferPersonsData_"];
         };
       };
-      /** @description Validation Error */
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
       422: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
         };
       };
     };
@@ -5343,16 +12405,97 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": Record<string, never>;
+          "application/json": components["schemas"]["PortraitSuccess_InferPoseData_"];
         };
       };
-      /** @description Validation Error */
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
       422: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
         };
       };
     };
@@ -5380,16 +12523,97 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": Record<string, never>;
+          "application/json": components["schemas"]["PortraitSuccess_InferTracksData_"];
         };
       };
-      /** @description Validation Error */
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
       422: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
         };
       };
     };
@@ -5421,16 +12645,97 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": Record<string, never>;
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
         };
       };
-      /** @description Validation Error */
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
       422: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
         };
       };
     };
@@ -5458,16 +12763,97 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": Record<string, never>;
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
         };
       };
-      /** @description Validation Error */
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
       422: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
         };
       };
     };
@@ -5493,16 +12879,97 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": Record<string, never>;
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
         };
       };
-      /** @description Validation Error */
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
       422: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
         };
       };
     };
@@ -5528,16 +12995,97 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": Record<string, never>;
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
         };
       };
-      /** @description Validation Error */
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
       422: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
         };
       };
     };
@@ -5563,16 +13111,97 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": Record<string, never>;
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
         };
       };
-      /** @description Validation Error */
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
       422: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
         };
       };
     };
@@ -5596,16 +13225,97 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": Record<string, never>;
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
         };
       };
-      /** @description Validation Error */
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
       422: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
         };
       };
     };
@@ -5633,16 +13343,97 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": Record<string, never>;
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
         };
       };
-      /** @description Validation Error */
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
       422: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
         };
       };
     };
@@ -5668,16 +13459,97 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": Record<string, never>;
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
         };
       };
-      /** @description Validation Error */
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
       422: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
         };
       };
     };
@@ -5703,16 +13575,97 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": Record<string, never>;
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
         };
       };
-      /** @description Validation Error */
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
       422: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
         };
       };
     };
@@ -5740,16 +13693,97 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": Record<string, never>;
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
         };
       };
-      /** @description Validation Error */
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
       422: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
         };
       };
     };
@@ -5777,16 +13811,97 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": Record<string, never>;
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
         };
       };
-      /** @description Validation Error */
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
       422: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
         };
       };
     };
@@ -5812,16 +13927,97 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": Record<string, never>;
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
         };
       };
-      /** @description Validation Error */
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
       422: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
         };
       };
     };
@@ -5851,16 +14047,97 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": Record<string, never>;
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
         };
       };
-      /** @description Validation Error */
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
       422: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
         };
       };
     };
@@ -5886,16 +14163,97 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": Record<string, never>;
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
         };
       };
-      /** @description Validation Error */
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
       422: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
         };
       };
     };
@@ -5921,16 +14279,97 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": Record<string, never>;
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
         };
       };
-      /** @description Validation Error */
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
       422: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
         };
       };
     };
@@ -5956,16 +14395,97 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": Record<string, never>;
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
         };
       };
-      /** @description Validation Error */
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
       422: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
         };
       };
     };
@@ -5989,16 +14509,97 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": Record<string, never>;
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
         };
       };
-      /** @description Validation Error */
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
       422: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
         };
       };
     };
@@ -6028,16 +14629,97 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": Record<string, never>;
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
         };
       };
-      /** @description Validation Error */
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
       422: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
         };
       };
     };
@@ -6065,16 +14747,97 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": Record<string, never>;
+          "application/json": components["schemas"]["PortraitSuccess_VisionInferData_"];
         };
       };
-      /** @description Validation Error */
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
       422: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
         };
       };
     };

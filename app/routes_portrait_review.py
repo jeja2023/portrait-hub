@@ -2,9 +2,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import Depends, Query
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.api_contracts import ContractAPIRouter as APIRouter
 from app.portrait_async import run_blocking_io
 from app.portrait_audit import audit_event
 from app.portrait_auth import permission_dependency
@@ -52,8 +53,8 @@ async def v1_evaluation_threshold_recommendations(
     ctx: PortraitRequestContext = Depends(portrait_request_context),
 ) -> dict[str, Any]:
     thresholds = await run_blocking_io(threshold_snapshot)
-    recommendations = await run_blocking_io(review_threshold_recommendations, ctx.tenant_id, thresholds=thresholds)
-    return portrait_success(ctx.request_id, {"tenant_id": ctx.tenant_id, "threshold_recommendations": recommendations})
+    recommendations = await run_blocking_io(review_threshold_recommendations, ctx.scope_id, thresholds=thresholds)
+    return portrait_success(ctx.request_id, {"tenant_id": ctx.scope_id, "threshold_recommendations": recommendations})
 
 
 @router.get("/v1/evaluation/datasets", dependencies=[Depends(permission_dependency("jobs:read"))])
@@ -61,8 +62,8 @@ async def v1_evaluation_datasets(
     limit: int = Query(default=20, ge=1, le=MAX_REVIEW_DATASET_LIMIT),
     ctx: PortraitRequestContext = Depends(portrait_request_context),
 ) -> dict[str, Any]:
-    datasets = await run_blocking_io(list_review_datasets, ctx.tenant_id, limit=limit)
-    return portrait_success(ctx.request_id, {"tenant_id": ctx.tenant_id, "datasets": datasets, "count": len(datasets)})
+    datasets = await run_blocking_io(list_review_datasets, ctx.scope_id, limit=limit)
+    return portrait_success(ctx.request_id, {"tenant_id": ctx.scope_id, "datasets": datasets, "count": len(datasets)})
 
 
 @router.get("/v1/evaluation/track-reviews/summary", dependencies=[Depends(permission_dependency("jobs:read"))])
@@ -75,13 +76,13 @@ async def v1_track_review_summary(
 ) -> dict[str, Any]:
     summary = await run_blocking_io(
         review_annotation_summary,
-        ctx.tenant_id,
+        ctx.scope_id,
         job_id=job_id,
         track_id=track_id,
         label=label,
         recent_limit=limit,
     )
-    return portrait_success(ctx.request_id, {"tenant_id": ctx.tenant_id, "summary": summary})
+    return portrait_success(ctx.request_id, {"tenant_id": ctx.scope_id, "summary": summary})
 
 
 @router.get("/v1/evaluation/track-reviews", dependencies=[Depends(permission_dependency("jobs:read"))])
@@ -94,7 +95,7 @@ async def v1_track_review_annotations(
 ) -> dict[str, Any]:
     annotations = await run_blocking_io(
         list_review_annotations,
-        ctx.tenant_id,
+        ctx.scope_id,
         job_id=job_id,
         track_id=track_id,
         label=label,
@@ -102,7 +103,7 @@ async def v1_track_review_annotations(
     )
     return portrait_success(
         ctx.request_id,
-        {"tenant_id": ctx.tenant_id, "annotations": annotations, "count": len(annotations)},
+        {"tenant_id": ctx.scope_id, "annotations": annotations, "count": len(annotations)},
     )
 
 
@@ -114,7 +115,7 @@ async def v1_create_track_review_annotation(
     snapshot = await run_blocking_io(review_state_payload)
     annotation = await run_blocking_io(
         create_review_annotation,
-        ctx.tenant_id,
+        ctx.scope_id,
         job_id=payload.job_id,
         track_id=payload.track_id,
         label=payload.label,
@@ -127,7 +128,7 @@ async def v1_create_track_review_annotation(
         "track_review_annotation_created",
         snapshot,
         request_id=ctx.request_id,
-        tenant_id=ctx.tenant_id,
+        tenant_id=ctx.scope_id,
         annotation_id=annotation["annotation_id"],
         job_id=annotation["job_id"],
         track_id=annotation["track_id"],

@@ -1,8 +1,10 @@
 import logging
 from typing import Any
 
-from fastapi import APIRouter, Depends, File, Form, UploadFile
+from fastapi import Depends, File, Form, UploadFile
 
+from app.api_contracts import ContractAPIRouter as APIRouter
+from app.api_contracts import InferTracksResponse
 from app.image_io import load_images
 from app.inference_tracks import infer_tracks_for_images
 from app.metrics import observe
@@ -33,14 +35,14 @@ router = APIRouter()
 
 @router.post(
     "/v1/infer/tracks",
+    response_model=InferTracksResponse,
+    response_model_exclude_none=True,
     dependencies=[Depends(require_api_token), Depends(permission_dependency("infer"))],
 )
 async def infer_person_tracks(
     files: list[UploadFile] = File(...),
     detector_project_name: str = Form(DEFAULT_DETECTOR_PROJECT),
-    detector_artifact_name: str = Form(
-        DEFAULT_DETECTOR_ARTIFACT, alias="detector_model_name"
-    ),
+    detector_artifact_name: str = Form(DEFAULT_DETECTOR_ARTIFACT, alias="detector_model_name"),
     reid_project_name: str = Form(DEFAULT_DETECTOR_PROJECT),
     reid_artifact_name: str = Form(DEFAULT_REID_ARTIFACT, alias="reid_model_name"),
     confidence: float = Form(DEFAULT_CONFIDENCE),
@@ -53,19 +55,15 @@ async def infer_person_tracks(
     observe("tracks_requests_total")
     total_start = now()
 
-    detector_project_name, detector_model_name, reid_project_name, reid_model_name = (
-        validate_model_reference_parts(
-            detector_project_name,
-            detector_artifact_name,
-            reid_project_name,
-            reid_artifact_name,
-        )
+    detector_project_name, detector_model_name, reid_project_name, reid_model_name = validate_model_reference_parts(
+        detector_project_name,
+        detector_artifact_name,
+        reid_project_name,
+        reid_artifact_name,
     )
 
     validate_image_files(files, max_images=MAX_PIPELINE_FRAMES)
-    validate_detection_parameters(
-        confidence=confidence, iou=iou, max_detections=max_detections
-    )
+    validate_detection_parameters(confidence=confidence, iou=iou, max_detections=max_detections)
 
     with inference_error_boundary(
         request_id,
@@ -104,12 +102,8 @@ async def infer_person_tracks(
             detector_mode=detector_meta["inference_mode"],
             reid_mode=embedding_meta["inference_mode"],
             decode_seconds=round(decode_seconds, 6),
-            detector_inference_seconds=round(
-                detector_meta["timing"]["inference_seconds"], 6
-            ),
-            reid_inference_seconds=round(
-                embedding_meta["timing"]["inference_seconds"], 6
-            ),
+            detector_inference_seconds=round(detector_meta["timing"]["inference_seconds"], 6),
+            reid_inference_seconds=round(embedding_meta["timing"]["inference_seconds"], 6),
             total_seconds=round(total_seconds, 6),
         )
 
@@ -150,7 +144,7 @@ async def infer_person_tracks(
     }
     await run_blocking_io(
         create_analysis_archive,
-        tenant_id=ctx.tenant_id,
+        tenant_id=ctx.scope_id,
         request_id=request_id,
         source_type="image",
         source_ref=request_id,

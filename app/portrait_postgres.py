@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import threading
+from typing import Any
 
+from app import postgres_access as _access
 from app import postgres_analysis_archive as _analysis_archive
 from app import postgres_audit as _audit
+from app import postgres_call_logs as _call_logs
 from app import postgres_core as _core
 from app import postgres_gallery as _gallery
 from app import postgres_jobs as _jobs
@@ -69,6 +72,99 @@ def _sync_core_dependencies() -> None:
 def postgres_health() -> dict[str, object]:
     _sync_core_dependencies()
     return _core.postgres_health()
+
+
+def consume_application_daily_quota(
+    tenant_id: str,
+    application_id: str,
+    quota_date: str,
+    daily_quota: int,
+) -> int | None:
+    _sync_core_dependencies()
+    return _access.consume_application_daily_quota(
+        tenant_id,
+        application_id,
+        quota_date,
+        daily_quota,
+    )
+
+
+def insert_call_log(payload: dict[str, Any]) -> None:
+    _sync_core_dependencies()
+    _call_logs.insert_call_log(payload)
+
+
+def query_call_logs(
+    tenant_id: str,
+    *,
+    request_id: str | None = None,
+    project_id: str | None = None,
+    endpoint: str | None = None,
+    status_text: str | None = None,
+    application_id: str | None = None,
+    error_code: str | None = None,
+    created_since: float | None = None,
+    created_until: float | None = None,
+    limit: int = 100,
+) -> list[dict[str, Any]]:
+    _sync_core_dependencies()
+    return _call_logs.query_call_logs(
+        tenant_id,
+        request_id=request_id,
+        project_id=project_id,
+        endpoint=endpoint,
+        status_text=status_text,
+        application_id=application_id,
+        error_code=error_code,
+        created_since=created_since,
+        created_until=created_until,
+        limit=limit,
+    )
+
+
+def summarize_call_logs(
+    tenant_id: str,
+    *,
+    request_id: str | None = None,
+    project_id: str | None = None,
+    endpoint: str | None = None,
+    status_text: str | None = None,
+    application_id: str | None = None,
+    error_code: str | None = None,
+    created_since: float | None = None,
+    created_until: float | None = None,
+) -> dict[str, Any]:
+    _sync_core_dependencies()
+    return _call_logs.summarize_call_logs(
+        tenant_id,
+        request_id=request_id,
+        project_id=project_id,
+        endpoint=endpoint,
+        status_text=status_text,
+        application_id=application_id,
+        error_code=error_code,
+        created_since=created_since,
+        created_until=created_until,
+    )
+
+
+def application_usage_summaries(
+    tenant_id: str,
+    *,
+    project_id: str | None = None,
+) -> dict[str, dict[str, Any]]:
+    _sync_core_dependencies()
+    return _call_logs.application_usage_summaries(tenant_id, project_id=project_id)
+
+
+def load_access_snapshot() -> tuple[dict[str, Any], int]:
+    _sync_core_dependencies()
+    return _access.load_access_snapshot()
+
+
+def save_access_snapshot(payload: dict[str, Any], expected_revision: int) -> int:
+    _sync_core_dependencies()
+    return _access.save_access_snapshot(payload, expected_revision)
 
 
 def load_gallery_snapshot() -> dict[str, object]:
@@ -156,9 +252,7 @@ def query_analysis_archives(
     )
 
 
-def get_analysis_archive(
-    tenant_id: str, archive_id: str
-) -> dict[str, object] | None:
+def get_analysis_archive(tenant_id: str, archive_id: str) -> dict[str, object] | None:
     _sync_core_dependencies()
     return _analysis_archive.get_analysis_archive(tenant_id, archive_id)
 
@@ -211,6 +305,8 @@ __all__ = [
     "POSTGRES_POOL_MIN_SIZE",
     "ConnectionPool",
     "PostgresUnavailable",
+    "application_usage_summaries",
+    "consume_application_daily_quota",
     "delete_gallery_person",
     "delete_stream",
     "delete_video_job",
@@ -219,8 +315,10 @@ __all__ = [
     "get_analysis_archive",
     "get_postgres_pool",
     "insert_audit_event",
+    "insert_call_log",
     "insert_object_record",
     "jsonb",
+    "load_access_snapshot",
     "load_gallery_snapshot",
     "load_streams_snapshot",
     "load_threshold_snapshot",
@@ -233,10 +331,13 @@ __all__ = [
     "postgres_health",
     "postgres_pool_available",
     "query_analysis_archives",
+    "query_call_logs",
     "replace_gallery_snapshot",
     "require_postgres",
+    "save_access_snapshot",
     "save_threshold_snapshot",
     "search_pgvector",
+    "summarize_call_logs",
     "upsert_analysis_archive",
     "upsert_gallery_feature",
     "upsert_gallery_person",

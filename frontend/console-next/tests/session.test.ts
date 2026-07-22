@@ -7,6 +7,7 @@ import {
   markSessionAuthenticated,
   sessionState,
   setSessionExpiry,
+  setSessionProject,
 } from "../src/auth/session";
 
 describe("console session", () => {
@@ -53,6 +54,21 @@ describe("console session", () => {
     });
 
     expect(authHeaders()).toEqual({ "X-API-Key": "tenant-bound-key" });
+  });
+
+  it("sends an explicit non-default project", () => {
+    beginSession({
+      tenantId: "tenant-a",
+      authMode: "api-key",
+      apiKey: "project-bound-key",
+    });
+    setSessionProject("project-a");
+
+    expect(authHeaders()).toEqual({
+      "X-Tenant-ID": "tenant-a",
+      "X-Project-ID": "project-a",
+      "X-API-Key": "project-bound-key",
+    });
   });
 
   it("clears credentials and persisted state", () => {

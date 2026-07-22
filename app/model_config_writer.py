@@ -129,7 +129,7 @@ def aliases_mapping(raw: dict[str, Any]) -> dict[str, Any]:
 def configured_model_device_id(config: dict[str, Any]) -> int | None:
     runtime = config.get("runtime")
     raw_device = runtime.get("device_id") if isinstance(runtime, dict) else config.get("device_id")
-    if isinstance(raw_device, bool):
+    if isinstance(raw_device, bool) or not isinstance(raw_device, (int, str)):
         return None
     try:
         return int(raw_device)

@@ -3,7 +3,7 @@ from __future__ import annotations
 import time
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import Depends, HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.admin_configuration import (
@@ -12,6 +12,7 @@ from app.admin_configuration import (
     restore_configuration_state,
     update_configuration_state,
 )
+from app.api_contracts import ContractAPIRouter as APIRouter
 from app.network_access_policy import (
     network_access_policy_snapshot,
     restore_network_access_policy,

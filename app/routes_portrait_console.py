@@ -1,10 +1,11 @@
 from pathlib import Path
 from typing import Any, Literal
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response, status
+from fastapi import Depends, Header, HTTPException, Request, Response, status
 from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.api_contracts import ContractAPIRouter as APIRouter
 from app.observability import logger
 from app.oidc_auth import oidc_identity_metadata
 from app.portrait_access import (
@@ -121,6 +122,7 @@ async def portrait_console_me(
         ctx.request_id,
         {
             "tenant_id": ctx.tenant_id,
+            "project_id": ctx.project_id,
             "identity": oidc_identity_metadata(),
             **principal,
         },
@@ -244,17 +246,18 @@ async def portrait_console_ws_ticket(
     await require_permission(permission, authorization, ctx.tenant_id, x_api_key, request)
     if payload.resource_type == "job":
         resource_id = validate_job_id(payload.resource_id)
-        if get_video_job(resource_id, tenant_id=ctx.tenant_id) is None:
+        if get_video_job(resource_id, tenant_id=ctx.scope_id) is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="实时资源不存在")
         websocket_path = f"/ws/jobs/{resource_id}"
     else:
         resource_id = validate_stream_id(payload.resource_id)
-        if get_stream(resource_id, tenant_id=ctx.tenant_id) is None:
+        if get_stream(resource_id, tenant_id=ctx.scope_id) is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="实时资源不存在")
         websocket_path = f"/ws/streams/{resource_id}"
 
     raw_ticket, ticket = issue_console_ws_ticket(
         tenant_id=ctx.tenant_id,
+        project_id=ctx.project_id,
         resource_type=payload.resource_type,
         resource_id=resource_id,
         permission=permission,

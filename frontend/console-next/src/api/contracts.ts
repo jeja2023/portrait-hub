@@ -1,5 +1,6 @@
 export interface PortraitEnvelope<T> {
   status: "success";
+  schema_version: string;
   request_id?: string;
   data: T;
 }
@@ -39,6 +40,7 @@ export interface ConsoleRole {
 
 export interface ConsoleCapabilities {
   tenant_id: string;
+  project_id: string;
   auth_kind: string;
   subject: string;
   display_name?: string;

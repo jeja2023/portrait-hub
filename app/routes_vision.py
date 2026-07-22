@@ -2,7 +2,6 @@ import logging
 from typing import Any
 
 from fastapi import (
-    APIRouter,
     Depends,
     File,
     Form,
@@ -12,6 +11,8 @@ from fastapi import (
 )
 from PIL import Image
 
+from app.api_contracts import ContractAPIRouter as APIRouter
+from app.api_contracts import VisionInferResponse
 from app.image_io import load_images
 from app.inference import (
     infer_classification_images,
@@ -75,9 +76,7 @@ async def _run_classification_task(
     *,
     top_k: int | None,
 ) -> tuple[list[dict[str, Any]], dict[str, Any], int]:
-    results, infer_meta = await infer_classification_images(
-        bundle, key, images, filenames, top_k=top_k
-    )
+    results, infer_meta = await infer_classification_images(bundle, key, images, filenames, top_k=top_k)
     return results, infer_meta, sum(item["prediction_count"] for item in results)
 
 
@@ -99,15 +98,15 @@ async def _run_reid_task(
             "embedding_dim": infer_meta["embedding_dim"],
         }
         if include_vectors:
-            item["embedding"] = [
-                round(float(value), 8) for value in embeddings[index].tolist()
-            ]
+            item["embedding"] = [round(float(value), 8) for value in embeddings[index].tolist()]
         results.append(item)
     return results, infer_meta, len(results)
 
 
 @router.post(
     "/v1/vision/infer",
+    response_model=VisionInferResponse,
+    response_model_exclude_none=True,
     dependencies=[Depends(require_api_token), Depends(permission_dependency("infer"))],
 )
 async def vision_infer(
@@ -129,9 +128,7 @@ async def vision_infer(
     total_start = now()
 
     validate_image_files(files, max_images=MAX_VISION_IMAGES)
-    validate_detection_parameters(
-        confidence=confidence, iou=iou, max_detections=max_detections
-    )
+    validate_detection_parameters(confidence=confidence, iou=iou, max_detections=max_detections)
     if top_k is not None:
         validate_int_range("top_k", top_k, minimum=1, maximum=MAX_TOP_K)
 
@@ -247,7 +244,7 @@ async def vision_infer(
     }
     await run_blocking_io(
         create_analysis_archive,
-        tenant_id=ctx.tenant_id,
+        tenant_id=ctx.scope_id,
         request_id=request_id,
         source_type="image",
         source_ref=request_id,

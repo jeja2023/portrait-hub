@@ -22,8 +22,13 @@ def test_job_websocket_sends_snapshot_without_auth_when_disabled(monkeypatch: py
     with client.websocket_connect("/ws/jobs/job_missing?tenant_id=default") as websocket:
         payload = websocket.receive_json()
 
-    assert payload == {"status": "not_found", "job_id": "job_missing", "tenant_id": "default"}
-
+    assert payload == {
+        "schema_version": "1.0",
+        "status": "not_found",
+        "job_id": "job_missing",
+        "tenant_id": "default",
+        "project_id": "default",
+    }
 
 
 def test_job_websocket_includes_completed_result(monkeypatch: pytest.MonkeyPatch) -> None:

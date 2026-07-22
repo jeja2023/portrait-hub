@@ -1,9 +1,10 @@
 from copy import deepcopy
 from typing import Any
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, UploadFile, status
+from fastapi import BackgroundTasks, Depends, File, Form, HTTPException, Query, UploadFile, status
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.api_contracts import ContractAPIRouter as APIRouter
 from app.portrait_async import run_blocking_io
 from app.portrait_audit import audit_event
 from app.portrait_auth import permission_dependency
@@ -45,7 +46,6 @@ from app.security import require_api_token
 router = APIRouter(dependencies=[Depends(require_api_token)])
 
 
-
 class GalleryPatchRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -65,10 +65,12 @@ async def v1_gallery_list_people(
     modality_key = validate_gallery_modality(modality) if modality is not None else None
     normalized_query = query.strip().casefold() if query is not None else ""
     rows: list[dict[str, Any]] = []
-    for person in gallery_people_snapshots(ctx.tenant_id):
-        if normalized_query and normalized_query not in person.person_id.casefold() and normalized_query not in str(
-            person.display_name or ""
-        ).casefold():
+    for person in gallery_people_snapshots(ctx.scope_id):
+        if (
+            normalized_query
+            and normalized_query not in person.person_id.casefold()
+            and normalized_query not in str(person.display_name or "").casefold()
+        ):
             continue
         visible_features = [
             feature for feature in person.features if modality_key is None or feature.modality == modality_key
@@ -110,6 +112,7 @@ async def v1_gallery_list_people(
     public_page = [{key: value for key, value in item.items() if key != "sort_updated_at"} for item in page]
     return portrait_success(ctx.request_id, {"items": public_page, "people": public_page, **pagination})
 
+
 @router.post("/v1/gallery/enroll", dependencies=[Depends(permission_dependency("gallery:write"))])
 async def v1_gallery_enroll(
     files: list[UploadFile] = File(...),
@@ -127,7 +130,7 @@ async def v1_gallery_enroll(
         modality=modality,
         metadata=metadata,
         request_id=request_id,
-        tenant_id=ctx.tenant_id,
+        tenant_id=ctx.scope_id,
         object_store=OBJECT_STORE,
         audit_hook=audit_event,
         add_feature_hook=add_feature,
@@ -136,6 +139,7 @@ async def v1_gallery_enroll(
         persist_feature_hook=persist_feature,
     )
     return portrait_success(request_id, payload)
+
 
 @router.post("/v1/gallery/search", dependencies=[Depends(permission_dependency("gallery:read"))])
 async def v1_gallery_search(
@@ -153,9 +157,10 @@ async def v1_gallery_search(
         top_k=top_k,
         threshold_profile=threshold_profile,
         request_id=request_id,
-        tenant_id=ctx.tenant_id,
+        tenant_id=ctx.scope_id,
     )
     return portrait_success(request_id, payload)
+
 
 @router.post("/v1/gallery/search/batch", dependencies=[Depends(permission_dependency("gallery:read"))])
 async def v1_gallery_search_batch(
@@ -168,7 +173,7 @@ async def v1_gallery_search_batch(
     ctx: PortraitRequestContext = Depends(portrait_request_context),
 ) -> dict[str, Any]:
     request_id = ctx.request_id
-    tenant_id = ctx.tenant_id
+    tenant_id = ctx.scope_id
     top_k = validate_int_range("top_k", top_k, minimum=1, maximum=100)
     if async_mode:
         job = await create_async_gallery_search_batch(
@@ -190,6 +195,7 @@ async def v1_gallery_search_batch(
     )
     return portrait_success(request_id, payload)
 
+
 @router.post("/v1/gallery/reindex", dependencies=[Depends(permission_dependency("gallery:write"))])
 async def v1_gallery_reindex(
     modality: str | None = Query(None),
@@ -198,7 +204,7 @@ async def v1_gallery_reindex(
     ctx: PortraitRequestContext = Depends(portrait_request_context),
 ) -> dict[str, Any]:
     request_id = ctx.request_id
-    tenant_id = ctx.tenant_id
+    tenant_id = ctx.scope_id
     modality_key = validate_gallery_modality(modality) if modality is not None else None
     result = await run_blocking_io(
         reindex_gallery_vectors,
@@ -238,7 +244,7 @@ async def v1_gallery_get_person(
     ctx: PortraitRequestContext = Depends(portrait_request_context),
 ) -> dict[str, Any]:
     request_id = ctx.request_id
-    tenant_id = ctx.tenant_id
+    tenant_id = ctx.scope_id
     person = get_person_or_404(person_id, tenant_id=tenant_id)
     return portrait_success(request_id, {"person": person.public_dict(include_embeddings=False)})
 
@@ -250,7 +256,7 @@ async def v1_gallery_patch_person(
     ctx: PortraitRequestContext = Depends(portrait_request_context),
 ) -> dict[str, Any]:
     request_id = ctx.request_id
-    tenant_id = ctx.tenant_id
+    tenant_id = ctx.scope_id
     update_payload = payload.model_dump(exclude_unset=True)
     if not update_payload:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="补丁请求体不能为空")
@@ -261,7 +267,9 @@ async def v1_gallery_patch_person(
     previous_person = deepcopy(get_person_or_404(person_id, tenant_id=tenant_id))
     person = await run_blocking_io(patch_person, person_id, update_payload, tenant_id=tenant_id)
     try:
-        await run_blocking_io(audit_event, "gallery_patch_person", request_id=request_id, tenant_id=tenant_id, person_id=person_id)
+        await run_blocking_io(
+            audit_event, "gallery_patch_person", request_id=request_id, tenant_id=tenant_id, person_id=person_id
+        )
     except Exception as exc:
         await run_blocking_io(
             rollback_gallery_mutation,
@@ -286,7 +294,7 @@ async def v1_gallery_delete_person(
     ctx: PortraitRequestContext = Depends(portrait_request_context),
 ) -> dict[str, Any]:
     request_id = ctx.request_id
-    tenant_id = ctx.tenant_id
+    tenant_id = ctx.scope_id
     previous_person = deepcopy(get_person_or_404(person_id, tenant_id=tenant_id))
     await run_blocking_io(
         audit_event,
@@ -318,7 +326,9 @@ async def v1_gallery_delete_person(
             persist_feature_hook=persist_feature,
         )
         if rollback_errors:
-            raise_gallery_rollback_failure(HTTPException(status_code=503, detail=OBJECT_CLEANUP_FAILED), rollback_errors)
+            raise_gallery_rollback_failure(
+                HTTPException(status_code=503, detail=OBJECT_CLEANUP_FAILED), rollback_errors
+            )
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=OBJECT_CLEANUP_FAILED)
     return portrait_success(
         request_id,

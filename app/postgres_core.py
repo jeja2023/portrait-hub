@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import math
+import threading
 from collections.abc import Iterator
 from contextlib import contextmanager
 from typing import Any
@@ -10,17 +11,25 @@ from app.observability import logger, trace_span
 from app.portrait_response import HEALTH_CHECK_FAILED, exception_log_summary
 from app.settings import POSTGRES_CONNECT_TIMEOUT_SECONDS, POSTGRES_DSN, POSTGRES_POOL_MAX_SIZE, POSTGRES_POOL_MIN_SIZE
 
-try:  # pragma: no cover - 可选的生产环境依赖
-    import psycopg
-    from psycopg.rows import dict_row
-except Exception:  # pragma: no cover - 当依赖不存在时执行
-    psycopg = None
-    dict_row = None
+psycopg: Any = None
+dict_row: Any = None
+ConnectionPool: Any = None
 
 try:  # pragma: no cover - 可选的生产环境依赖
-    from psycopg_pool import ConnectionPool
+    import psycopg as _psycopg
+    from psycopg.rows import dict_row as _dict_row
+
+    psycopg = _psycopg
+    dict_row = _dict_row
 except Exception:  # pragma: no cover - 当依赖不存在时执行
-    ConnectionPool = None
+    pass
+
+try:  # pragma: no cover - 可选的生产环境依赖
+    from psycopg_pool import ConnectionPool as _ConnectionPool
+
+    ConnectionPool = _ConnectionPool
+except Exception:  # pragma: no cover - 当依赖不存在时执行
+    pass
 
 
 class PostgresUnavailable(RuntimeError):
@@ -28,6 +37,7 @@ class PostgresUnavailable(RuntimeError):
 
 
 POSTGRES_POOL: Any | None = None
+_POSTGRES_POOL_LOCK = threading.RLock()
 
 
 def postgres_configured() -> bool:
@@ -54,14 +64,18 @@ def get_postgres_pool() -> Any | None:
     if not postgres_configured() or psycopg is None or ConnectionPool is None:
         return None
     if POSTGRES_POOL is None:
-        POSTGRES_POOL = ConnectionPool(
-            conninfo=POSTGRES_DSN,
-            min_size=max(0, int(POSTGRES_POOL_MIN_SIZE)),
-            max_size=max(1, int(POSTGRES_POOL_MAX_SIZE)),
-            timeout=POSTGRES_CONNECT_TIMEOUT_SECONDS,
-            kwargs={"connect_timeout": POSTGRES_CONNECT_TIMEOUT_SECONDS},
-            open=False,
-        )
+        with _POSTGRES_POOL_LOCK:
+            if POSTGRES_POOL is None:
+                pool = ConnectionPool(
+                    conninfo=POSTGRES_DSN,
+                    min_size=max(0, int(POSTGRES_POOL_MIN_SIZE)),
+                    max_size=max(1, int(POSTGRES_POOL_MAX_SIZE)),
+                    timeout=POSTGRES_CONNECT_TIMEOUT_SECONDS,
+                    kwargs={"connect_timeout": POSTGRES_CONNECT_TIMEOUT_SECONDS},
+                    open=False,
+                )
+                pool.open()
+                POSTGRES_POOL = pool
     return POSTGRES_POOL
 
 

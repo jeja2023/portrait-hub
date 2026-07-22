@@ -1,13 +1,15 @@
 # 控制台重建行为对照清单
 
 - 冻结日期：2026-07-22
-- 交付版本：0.16.0
+- 交付版本：0.17.0
 - 范围：legacy 模板中全部 27 个 data-view 和其写操作
 - 正式入口：/ 登录，认证成功后进入 /console；/console/next 仅保留直达验收
 - 状态定义：实现完成表示代码与自动化链路已落库；观察中表示必须在生产灰度后收集指标，不能以本地测试代替。
 - 通用状态：所有新路由均有加载骨架、空状态、错误横幅、权限路由和直接深链；列表使用服务端数据，不静默回退本地假数据。
 
 
+> 2026-07-22 / 0.17.0：会话、HTTP、能力上下文和 WebSocket 已接入项目 ID；OpenAPI TypeScript 类型同步强结构化响应；Console Next 9 files / 36 tests、Node SDK、ESLint、Vue TypeScript、Vite build 通过。
+>
 > 2026-07-22 / 0.16.0：侧栏垂直滚动条隐藏、菜单间隔收紧、全站表格序号统一、配置中心边框/分页/分类排序和自动化序号契约测试已完成；Console Next 9 files / 35 tests、ESLint、Vue TypeScript、Vite build 通过。
 >
 > 2026-07-20 / 0.14.0：后端能力与控制台入口全面对齐，完成受管成员/租户、模型灰度、运维导出、轨迹与视频高级参数、比对检索、人员库重建、统一分页和品牌 Logo。
@@ -19,6 +21,15 @@
 > 2026-07-18 / 0.11.2：二次复核补齐流详情深链、meta.nav 导航、aria-live、错误 request_id、值级脱敏、搜索质量分，并同步后端 WS/no-store/CSP 契约和 me/ws-ticket/gallery 回归测试。
 
 > 2026-07-18 / 0.11.1：迁移后补强 deploy_check 与 readiness，确认旧目录、旧灰度变量、旧静态路径、data-view= 属性和 PortraitConsoleModules 不会回归。
+
+## 0.17.0 增量验收
+
+| 范围 | 完成状态 | 关键入口/契约 |
+| --- | --- | --- |
+| 项目会话 | 完成 | `session.projectId` 持久化与默认项目兼容 |
+| API 请求 | 完成 | HTTP 与 WebSocket ticket 使用同一项目上下文，非默认项目发送 `X-Project-ID` |
+| API 类型 | 完成 | 统一响应 `schema_version` 与核心解析专用 OpenAPI 模型已生成 |
+| 自动化门禁 | 完成 | session 回归、Vitest 9 files / 36 tests、ESLint、Vue TypeScript、Vite build |
 
 ## 0.16.0 增量验收
 
@@ -111,27 +122,28 @@
 
 ## 本轮自动化验证
 
-- python -m pytest -q：通过，567 passed / 4 skipped；Python SDK 定向测试 11 passed。
-- OIDC、接入治理与版本一致性定向回归：29 passed。
-- python tools/type_check.py --fallback-ok：fallback 注解门禁通过；当前环境未安装 mypy，未宣称严格 mypy 通过。
-- python -m ruff check app tools tests：通过。
-- npm run check：通过，覆盖 Node SDK、ESLint、Vitest 8 files / 32 tests、Vue TypeScript 和 Vite production build。
-- deploy_check --json --import-app：ok=true，确认应用导入、依赖锁、Compose、旧控制台删除和 Console Next 源码契约。
+- python -m pytest -q：通过，601 passed / 4 skipped；Python SDK 通过。
+- 强结构化契约、项目隔离和版本一致性定向回归：通过。
+- python tools/type_check.py：严格 mypy 187 个源文件通过。
+- python -m ruff check app tests tools sdk/python：通过。
+- npm run check：通过，覆盖 Node SDK、ESLint、Vitest 9 files / 36 tests、Vue TypeScript 和 Vite production build。
+- deploy_check --json：ok=true，确认应用依赖、PostgreSQL 新表、Compose 和 Console Next 源码契约。
 - platform strict readiness：ok=true，strict_failure_count=0。
-- Docker Compose GPU/CPU 配置解析、统一 0.14.0 版本断言和 git diff --check：通过。
-- Java SDK 使用 Maven 3.9.9 / JDK 17 完成 JUnit，5 passed；主源码 UTF-8 编译同时通过。
-- Go SDK 使用 Go 1.22.12 执行 go test ./... 通过；Node SDK 契约已随 npm run check 通过。
-- 本机浏览器完成 admin / 123456 登录、工作台导航、身份与权限页面及退出流程验收。
+- 真实 PostgreSQL/pgvector 容器：schema、访问状态 CAS、日配额、调用日志和核心存储集成通过。
+- Docker Compose GPU/CPU 配置解析、统一 0.17.0 版本断言和 git diff --check：通过。
+- 当前验证机没有 Go 与 Maven 可执行文件，原生 Go/Java 测试未重复执行；静态版本与项目参数契约通过。
+- 完整 strict readiness 仍缺少五类真实模型能力，未达到最终生产切换条件。
 
 ## 生产上线待办
 
 以下事项依赖真实发布环境，不以代码门禁结果代替：
 
-- [ ] 产品、安全、运维负责人完成 0.14.0 上线签字。
+- [ ] 产品、安全、运维负责人完成 0.17.0 上线签字。
 - [ ] 使用上一版镜像或受控静态构件完成回退演练，验证业务数据和解析档案不变。
 - [ ] 记录真实登录、前端异常、API 4xx/5xx、关键流程成功率和 p95/p99 观察结果。
 - [x] WS ticket 在配置 REDIS_URL 时使用共享 Redis TTL 与 Lua 原子单次消费；无 Redis 的本地开发保留进程内实现。
 - [ ] 在可访问镜像仓库的环境完成 GPU/CPU Docker 镜像构建。
+- [ ] 为 appearance、face_detection、face_embedding、gait、pose 配置真实权重和 SHA256，并让完整 strict readiness 通过。
 - [x] frontend/console、/console/legacy、旧静态资产、CONSOLE_DEFAULT_VERSION 和角色域灰度开关已删除。
 - [x] /、/console、/console/next 已统一指向 Console Next。
 - [x] 平台严格 readiness 的 11 个遗留项已全部关闭。

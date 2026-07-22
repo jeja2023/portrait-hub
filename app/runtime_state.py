@@ -27,7 +27,7 @@ def gpu_device_ids() -> list[int]:
         for config in MODEL_CONFIGS.values():
             runtime = config.get("runtime")
             raw_device = runtime.get("device_id") if isinstance(runtime, dict) else config.get("device_id")
-            if isinstance(raw_device, bool):
+            if isinstance(raw_device, bool) or not isinstance(raw_device, (int, str)):
                 continue
             try:
                 device_id = int(raw_device)

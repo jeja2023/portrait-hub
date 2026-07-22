@@ -1,8 +1,9 @@
 import asyncio
 from typing import Any
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Request, UploadFile, status
+from fastapi import BackgroundTasks, Depends, File, Form, HTTPException, Request, UploadFile, status
 
+from app.api_contracts import ContractAPIRouter as APIRouter
 from app.media.image_decode import decode_upload_image, decode_upload_images, duplicate_distance, read_limited_upload
 from app.media.media_schema import DecodedImage
 from app.observability import request_id_from_headers
@@ -359,7 +360,7 @@ async def v1_compare_batch(
     ctx: PortraitRequestContext = Depends(portrait_request_context),
 ) -> dict[str, Any]:
     request_id = request_id_from_headers(request)
-    tenant_id = ctx.tenant_id
+    tenant_id = ctx.scope_id
     threshold_profile = validate_threshold_profile(threshold_profile)
     modality_key = modality.strip().lower()
     if modality_key in {"person", "persons"}:
@@ -380,7 +381,11 @@ async def v1_compare_batch(
             create_batch_job,
             "compare_batch",
             tenant_id,
-            metadata={"pair_count": len(left_payloads), "modality": modality_key, "threshold_profile": threshold_profile},
+            metadata={
+                "pair_count": len(left_payloads),
+                "modality": modality_key,
+                "threshold_profile": threshold_profile,
+            },
         )
 
         async def handler(batch_job: VideoJob) -> dict[str, Any]:
@@ -394,11 +399,19 @@ async def v1_compare_batch(
                 await run_blocking_io(persist_video_job, batch_job)
 
             left_files = [
-                UploadFile(filename=name, file=BytesIO(data), headers=Headers({"content-type": ctype or "application/octet-stream"}))
+                UploadFile(
+                    filename=name,
+                    file=BytesIO(data),
+                    headers=Headers({"content-type": ctype or "application/octet-stream"}),
+                )
                 for name, ctype, data in left_payloads
             ]
             right_files = [
-                UploadFile(filename=name, file=BytesIO(data), headers=Headers({"content-type": ctype or "application/octet-stream"}))
+                UploadFile(
+                    filename=name,
+                    file=BytesIO(data),
+                    headers=Headers({"content-type": ctype or "application/octet-stream"}),
+                )
                 for name, ctype, data in right_payloads
             ]
             results = await compare_batch_results(

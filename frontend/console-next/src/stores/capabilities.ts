@@ -1,7 +1,7 @@
 import { defineStore } from "pinia";
 import { computed, ref } from "vue";
 
-import { setSessionExpiry, setSessionTenant } from "../auth/session";
+import { setSessionExpiry, setSessionProject, setSessionTenant } from "../auth/session";
 import { apiRequest } from "../api/client";
 import type { ConsoleCapabilities } from "../api/contracts";
 
@@ -21,6 +21,7 @@ export const useCapabilitiesStore = defineStore("capabilities", () => {
       capabilities.value = await apiRequest<ConsoleCapabilities>("/v1/console/me");
       setSessionTenant(capabilities.value.tenant_id);
       setSessionExpiry(capabilities.value.expires_at);
+      setSessionProject(capabilities.value.project_id);
       return capabilities.value;
     } finally {
       loading.value = false;

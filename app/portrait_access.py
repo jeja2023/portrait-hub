@@ -9,19 +9,23 @@ import secrets
 import socket
 import threading
 import time
-from typing import Any
+from collections.abc import Iterator
+from contextlib import contextmanager
+from typing import Any, cast
 from urllib.parse import urlparse
 
 from fastapi import HTTPException, status
 
 from app.network_access_policy import host_is_allowed, network_access_policy_snapshot
 from app.portrait_auth import ROLE_PERMISSIONS
+from app.portrait_projects import DEFAULT_PROJECT_ID, validate_project_id
 from app.portrait_state import handle_state_read_error, read_json_state, write_json_state
 from app.settings import (
     ALLOW_PRIVATE_STREAM_HOSTS,
     ALLOW_PRIVATE_WEBHOOK_HOSTS,
     PORTRAIT_ACCESS_KEY_ROTATION_GRACE_SECONDS,
     PORTRAIT_ACCESS_STATE_PATH,
+    PORTRAIT_STORAGE_BACKEND,
     STREAM_ALLOWED_CIDRS,
     STREAM_ALLOWED_HOSTS,
     WEBHOOK_ALLOWED_CIDRS,
@@ -59,12 +63,16 @@ _WEBHOOK_EVENTS = {
 }
 _ACCESS_STATE: dict[str, list[dict[str, Any]]] = {
     "tenants": [],
+    "projects": [],
     "members": [],
     "applications": [],
     "webhooks": [],
 }
 _ACCESS_LOCK = threading.RLock()
+_ACCESS_OPERATION_STATE = threading.local()
 _ACCESS_STATS_DIRTY = False
+
+_ACCESS_STATE_REVISION = 0
 
 
 def now_seconds() -> float:
@@ -205,6 +213,7 @@ def _ensure_tenant_record(tenant_id: str, *, name: str | None = None, status_val
         "updated_at": timestamp,
     }
     _ACCESS_STATE["tenants"].append(record)
+    _ensure_default_project(normalized_id)
     return record
 
 
@@ -229,6 +238,30 @@ def _backfill_tenants_from_resources() -> None:
         )
 
 
+def _backfill_projects_from_resources() -> None:
+    for tenant in _ACCESS_STATE["tenants"]:
+        tenant_id = str(tenant.get("tenant_id") or "").strip()
+        if tenant_id:
+            _ensure_default_project(tenant_id)
+    for collection_name in ("applications", "webhooks"):
+        for item in _ACCESS_STATE[collection_name]:
+            tenant_id = str(item.get("tenant_id") or "").strip()
+            project_id = str(item.get("project_id") or DEFAULT_PROJECT_ID).strip()
+            item["project_id"] = project_id
+            if tenant_id and _project_record(tenant_id, project_id) is None:
+                timestamp = now_seconds()
+                _ACCESS_STATE["projects"].append(
+                    {
+                        "tenant_id": tenant_id,
+                        "project_id": project_id,
+                        "name": "Default project" if project_id == DEFAULT_PROJECT_ID else project_id,
+                        "status": "active",
+                        "created_at": timestamp,
+                        "updated_at": timestamp,
+                    }
+                )
+
+
 def public_tenant(record: dict[str, Any]) -> dict[str, Any]:
     tenant_id = str(record.get("tenant_id") or "")
     return {
@@ -238,33 +271,34 @@ def public_tenant(record: dict[str, Any]) -> dict[str, Any]:
         "created_at": record.get("created_at"),
         "updated_at": record.get("updated_at"),
         "member_count": sum(1 for item in _ACCESS_STATE["members"] if item.get("tenant_id") == tenant_id),
+        "project_count": sum(1 for item in _ACCESS_STATE["projects"] if item.get("tenant_id") == tenant_id),
         "application_count": sum(1 for item in _ACCESS_STATE["applications"] if item.get("tenant_id") == tenant_id),
         "webhook_count": sum(1 for item in _ACCESS_STATE["webhooks"] if item.get("tenant_id") == tenant_id),
     }
 
 
 def list_tenants() -> list[dict[str, Any]]:
-    with _ACCESS_LOCK:
+    with _access_operation():
         _backfill_tenants_from_resources()
         rows = [public_tenant(item) for item in _ACCESS_STATE["tenants"]]
         return sorted(rows, key=lambda item: str(item.get("tenant_id", "")))
 
 
 def find_tenant(tenant_id: str) -> dict[str, Any] | None:
-    with _ACCESS_LOCK:
+    with _access_operation():
         normalized_id = validate_tenant_id(tenant_id)
         record = _tenant_record(normalized_id)
         return public_tenant(record) if record is not None else None
 
 
 def tenant_is_active(tenant_id: str) -> bool:
-    with _ACCESS_LOCK:
+    with _access_operation():
         record = _tenant_record(validate_tenant_id(tenant_id))
         return record is None or record.get("status", "active") == "active"
 
 
 def create_tenant(name: str, *, tenant_id: str | None = None, status_value: str = "active") -> dict[str, Any]:
-    with _ACCESS_LOCK:
+    with _access_operation():
         tenant_name = normalize_tenant_name(name)
         if _tenant_name_exists(tenant_name):
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="租户名称已存在")
@@ -279,14 +313,14 @@ def create_tenant(name: str, *, tenant_id: str | None = None, status_value: str 
 
 
 def ensure_tenant(tenant_id: str, *, name: str | None = None, status_value: str = "active") -> dict[str, Any]:
-    with _ACCESS_LOCK:
+    with _access_operation():
         record = _ensure_tenant_record(tenant_id, name=name, status_value=status_value)
         save_access_state()
         return public_tenant(record)
 
 
 def update_tenant(tenant_id: str, updates: dict[str, Any]) -> dict[str, Any]:
-    with _ACCESS_LOCK:
+    with _access_operation():
         normalized_id = validate_tenant_id(tenant_id)
         record = _tenant_record(normalized_id)
         if record is None:
@@ -306,6 +340,131 @@ def update_tenant(tenant_id: str, updates: dict[str, Any]) -> dict[str, Any]:
         return public_tenant(record)
 
 
+def _project_record(tenant_id: str, project_id: str) -> dict[str, Any] | None:
+    return next(
+        (
+            item
+            for item in _ACCESS_STATE["projects"]
+            if item.get("tenant_id") == tenant_id and item.get("project_id") == project_id
+        ),
+        None,
+    )
+
+
+def _ensure_default_project(tenant_id: str) -> dict[str, Any]:
+    record = _project_record(tenant_id, DEFAULT_PROJECT_ID)
+    if record is not None:
+        return record
+    timestamp = now_seconds()
+    record = {
+        "tenant_id": tenant_id,
+        "project_id": DEFAULT_PROJECT_ID,
+        "name": "Default project",
+        "status": "active",
+        "created_at": timestamp,
+        "updated_at": timestamp,
+    }
+    _ACCESS_STATE["projects"].append(record)
+    return record
+
+
+def public_project(record: dict[str, Any]) -> dict[str, Any]:
+    tenant_id = str(record.get("tenant_id") or "")
+    project_id = str(record.get("project_id") or DEFAULT_PROJECT_ID)
+    return {
+        "tenant_id": tenant_id,
+        "project_id": project_id,
+        "name": str(record.get("name") or project_id),
+        "status": str(record.get("status") or "active"),
+        "created_at": record.get("created_at"),
+        "updated_at": record.get("updated_at"),
+        "application_count": sum(
+            1
+            for item in _ACCESS_STATE["applications"]
+            if item.get("tenant_id") == tenant_id and str(item.get("project_id") or DEFAULT_PROJECT_ID) == project_id
+        ),
+        "webhook_count": sum(
+            1
+            for item in _ACCESS_STATE["webhooks"]
+            if item.get("tenant_id") == tenant_id and str(item.get("project_id") or DEFAULT_PROJECT_ID) == project_id
+        ),
+    }
+
+
+def list_projects(tenant_id: str) -> list[dict[str, Any]]:
+    with _access_operation():
+        normalized_tenant = validate_tenant_id(tenant_id)
+        _ensure_default_project(normalized_tenant)
+        rows = [
+            public_project(item) for item in _ACCESS_STATE["projects"] if item.get("tenant_id") == normalized_tenant
+        ]
+        return sorted(rows, key=lambda item: str(item.get("project_id") or ""))
+
+
+def find_project(tenant_id: str, project_id: str) -> dict[str, Any] | None:
+    with _access_operation():
+        normalized_tenant = validate_tenant_id(tenant_id)
+        normalized_project = validate_project_id(project_id)
+        if normalized_project == DEFAULT_PROJECT_ID:
+            _ensure_default_project(normalized_tenant)
+        record = _project_record(normalized_tenant, normalized_project)
+        return public_project(record) if record is not None else None
+
+
+def project_is_active(tenant_id: str, project_id: str) -> bool:
+    with _access_operation():
+        normalized_tenant = validate_tenant_id(tenant_id)
+        normalized_project = validate_project_id(project_id)
+        if normalized_project == DEFAULT_PROJECT_ID:
+            _ensure_default_project(normalized_tenant)
+        record = _project_record(normalized_tenant, normalized_project)
+        return record is not None and record.get("status", "active") == "active"
+
+
+def create_project(
+    tenant_id: str,
+    *,
+    project_id: str,
+    name: str,
+    status_value: str = "active",
+) -> dict[str, Any]:
+    with _access_operation():
+        normalized_tenant = validate_tenant_id(tenant_id)
+        if _tenant_record(normalized_tenant) is None:
+            _ensure_tenant_record(normalized_tenant)
+        normalized_project = validate_project_id(project_id)
+        if _project_record(normalized_tenant, normalized_project) is not None:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="project already exists")
+        timestamp = now_seconds()
+        record = {
+            "tenant_id": normalized_tenant,
+            "project_id": normalized_project,
+            "name": normalize_tenant_name(name, fallback=normalized_project),
+            "status": normalize_status(status_value),
+            "created_at": timestamp,
+            "updated_at": timestamp,
+        }
+        _ACCESS_STATE["projects"].append(record)
+        save_access_state()
+        return public_project(record)
+
+
+def update_project(tenant_id: str, project_id: str, updates: dict[str, Any]) -> dict[str, Any]:
+    with _access_operation():
+        normalized_tenant = validate_tenant_id(tenant_id)
+        normalized_project = validate_project_id(project_id)
+        record = _project_record(normalized_tenant, normalized_project)
+        if record is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="project does not exist")
+        if "name" in updates and updates["name"] is not None:
+            record["name"] = normalize_tenant_name(updates["name"], fallback=normalized_project)
+        if "status" in updates and updates["status"] is not None:
+            record["status"] = normalize_status(updates["status"])
+        record["updated_at"] = now_seconds()
+        save_access_state()
+        return public_project(record)
+
+
 def public_member(record: dict[str, Any]) -> dict[str, Any]:
     return {
         "member_id": str(record.get("member_id") or ""),
@@ -321,7 +480,7 @@ def public_member(record: dict[str, Any]) -> dict[str, Any]:
 
 
 def list_members(tenant_id: str | None = None) -> list[dict[str, Any]]:
-    with _ACCESS_LOCK:
+    with _access_operation():
         normalized_tenant = validate_tenant_id(tenant_id) if tenant_id else None
         rows = [
             public_member(item)
@@ -332,7 +491,7 @@ def list_members(tenant_id: str | None = None) -> list[dict[str, Any]]:
 
 
 def find_member(member_id: str) -> dict[str, Any] | None:
-    with _ACCESS_LOCK:
+    with _access_operation():
         normalized_id = validate_access_id(member_id, field_name="member_id")
         record = next((item for item in _ACCESS_STATE["members"] if item.get("member_id") == normalized_id), None)
         return public_member(record) if record is not None else None
@@ -345,7 +504,7 @@ def resolve_member(
     phone: str | None = None,
     bind_subject: bool = False,
 ) -> dict[str, Any] | None:
-    with _ACCESS_LOCK:
+    with _access_operation():
         normalized_tenant = validate_tenant_id(tenant_id)
         normalized_subject = normalize_member_subject(subject)
         try:
@@ -384,7 +543,7 @@ def create_member(
     subject: str | None = None,
     status_value: str = "active",
 ) -> dict[str, Any]:
-    with _ACCESS_LOCK:
+    with _access_operation():
         normalized_tenant = validate_tenant_id(tenant_id)
         if _tenant_record(normalized_tenant) is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="租户不存在")
@@ -418,7 +577,7 @@ def create_member(
 
 
 def update_member(member_id: str, updates: dict[str, Any]) -> dict[str, Any]:
-    with _ACCESS_LOCK:
+    with _access_operation():
         normalized_id = validate_access_id(member_id, field_name="member_id")
         record = next((item for item in _ACCESS_STATE["members"] if item.get("member_id") == normalized_id), None)
         if record is None:
@@ -458,7 +617,7 @@ def update_member(member_id: str, updates: dict[str, Any]) -> dict[str, Any]:
 
 
 def delete_member(member_id: str) -> dict[str, Any]:
-    with _ACCESS_LOCK:
+    with _access_operation():
         normalized_id = validate_access_id(member_id, field_name="member_id")
         for index, item in enumerate(_ACCESS_STATE["members"]):
             if item.get("member_id") == normalized_id:
@@ -522,7 +681,7 @@ def _current_webhook_network_policy() -> dict[str, Any]:
             "allowed_cidrs": WEBHOOK_ALLOWED_CIDRS,
         },
     )
-    return policy["webhook"]
+    return cast(dict[str, Any], policy["webhook"])
 
 
 def _webhook_address_is_blocked(address: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
@@ -628,70 +787,150 @@ def validate_webhook_url(value: str | None, *, required: bool) -> str:
     return url
 
 
-def access_state_payload() -> dict[str, list[dict[str, Any]]]:
+def postgres_access_state_enabled() -> bool:
+    return PORTRAIT_STORAGE_BACKEND == "postgres"
+
+
+def _empty_access_state_payload() -> dict[str, list[dict[str, Any]]]:
+    return {
+        "tenants": [],
+        "projects": [],
+        "members": [],
+        "applications": [],
+        "webhooks": [],
+    }
+
+
+def _apply_access_state_payload(payload: Any, *, revision: int) -> None:
+    global _ACCESS_STATE_REVISION
+    if not isinstance(payload, dict):
+        handle_state_read_error("access state root must be an object")
+        return
+    collections = {
+        name: payload.get(name, []) for name in ("tenants", "projects", "members", "applications", "webhooks")
+    }
+    if any(not isinstance(items, list) for items in collections.values()):
+        handle_state_read_error("access state collections must be arrays")
+        return
+    for name, items in collections.items():
+        _ACCESS_STATE[name] = [item for item in items if isinstance(item, dict)]
+    _ACCESS_STATE_REVISION = max(0, int(revision))
+    _backfill_tenants_from_resources()
+    _backfill_projects_from_resources()
+
+
+def refresh_access_state() -> bool:
+    if not postgres_access_state_enabled():
+        return False
+    from app.portrait_postgres import load_access_snapshot
+
+    try:
+        payload, revision = load_access_snapshot()
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="access state is unavailable",
+        ) from exc
     with _ACCESS_LOCK:
+        if revision <= _ACCESS_STATE_REVISION:
+            return False
+        _apply_access_state_payload(payload, revision=revision)
+        return True
+
+
+@contextmanager
+def _access_operation(*, refresh: bool = True) -> Iterator[None]:
+    with _ACCESS_LOCK:
+        depth = int(getattr(_ACCESS_OPERATION_STATE, "depth", 0))
+        if refresh and depth == 0:
+            refresh_access_state()
+        _ACCESS_OPERATION_STATE.depth = depth + 1
+        try:
+            yield
+        finally:
+            _ACCESS_OPERATION_STATE.depth = depth
+
+
+def access_state_payload() -> dict[str, list[dict[str, Any]]]:
+    refresh_access_state()
+    with _access_operation():
         return copy.deepcopy(_ACCESS_STATE)
 
 
 def restore_access_state(snapshot: dict[str, list[dict[str, Any]]]) -> None:
-    with _ACCESS_LOCK:
-        _ACCESS_STATE["tenants"] = copy.deepcopy(snapshot.get("tenants", []))
-        _ACCESS_STATE["members"] = copy.deepcopy(snapshot.get("members", []))
-        _ACCESS_STATE["applications"] = copy.deepcopy(snapshot.get("applications", []))
-        _ACCESS_STATE["webhooks"] = copy.deepcopy(snapshot.get("webhooks", []))
-        _backfill_tenants_from_resources()
+    with _access_operation():
+        _apply_access_state_payload(copy.deepcopy(snapshot), revision=_ACCESS_STATE_REVISION)
         save_access_state()
+
+
+def _persist_access_state_payload(payload: dict[str, list[dict[str, Any]]]) -> None:
+    global _ACCESS_STATE_REVISION
+    if not postgres_access_state_enabled():
+        write_json_state(PORTRAIT_ACCESS_STATE_PATH, payload)
+        return
+
+    from app.portrait_postgres import load_access_snapshot, save_access_snapshot
+    from app.postgres_access import AccessStateConflict
+
+    try:
+        _ACCESS_STATE_REVISION = save_access_snapshot(payload, _ACCESS_STATE_REVISION)
+    except AccessStateConflict as exc:
+        latest_payload, latest_revision = load_access_snapshot()
+        _apply_access_state_payload(latest_payload, revision=latest_revision)
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "conflict",
+                "message": "access state changed concurrently; retry the request",
+            },
+        ) from exc
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="access state persistence is unavailable",
+        ) from exc
 
 
 def save_access_state() -> None:
     global _ACCESS_STATS_DIRTY
-    with _ACCESS_LOCK:
-        write_json_state(PORTRAIT_ACCESS_STATE_PATH, access_state_payload())
+    with _access_operation():
+        _persist_access_state_payload(copy.deepcopy(_ACCESS_STATE))
         _ACCESS_STATS_DIRTY = False
 
 
 def flush_access_call_stats() -> bool:
     global _ACCESS_STATS_DIRTY
-    with _ACCESS_LOCK:
+    with _access_operation(refresh=False):
         if not _ACCESS_STATS_DIRTY:
             return False
-        payload = access_state_payload()
-        _ACCESS_STATS_DIRTY = False
-    try:
-        write_json_state(PORTRAIT_ACCESS_STATE_PATH, payload)
-    except Exception:
-        with _ACCESS_LOCK:
+        payload = copy.deepcopy(_ACCESS_STATE)
+        try:
+            _persist_access_state_payload(payload)
+        except Exception:
             _ACCESS_STATS_DIRTY = True
-        raise
-    return True
+            raise
+        _ACCESS_STATS_DIRTY = False
+        return True
 
 
 def load_access_state() -> None:
-    with _ACCESS_LOCK:
-        payload = read_json_state(
-            PORTRAIT_ACCESS_STATE_PATH,
-            {"tenants": [], "members": [], "applications": [], "webhooks": []},
-        )
-        if not isinstance(payload, dict):
-            handle_state_read_error("access state 根节点必须是映射")
-            return
-        tenants = payload.get("tenants", [])
-        members = payload.get("members", [])
-        applications = payload.get("applications", [])
-        webhooks = payload.get("webhooks", [])
-        if (
-            not isinstance(tenants, list)
-            or not isinstance(members, list)
-            or not isinstance(applications, list)
-            or not isinstance(webhooks, list)
-        ):
-            handle_state_read_error("access state lists must be arrays")
-            return
-        _ACCESS_STATE["tenants"] = [item for item in tenants if isinstance(item, dict)]
-        _ACCESS_STATE["members"] = [item for item in members if isinstance(item, dict)]
-        _ACCESS_STATE["applications"] = [item for item in applications if isinstance(item, dict)]
-        _ACCESS_STATE["webhooks"] = [item for item in webhooks if isinstance(item, dict)]
-        _backfill_tenants_from_resources()
+    with _access_operation(refresh=False):
+        if postgres_access_state_enabled():
+            from app.portrait_postgres import load_access_snapshot
+
+            try:
+                payload, revision = load_access_snapshot()
+            except Exception as exc:
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail="access state is unavailable",
+                ) from exc
+        else:
+            payload = read_json_state(PORTRAIT_ACCESS_STATE_PATH, _empty_access_state_payload())
+            revision = 0
+        _apply_access_state_payload(payload, revision=revision)
 
 
 def public_application(record: dict[str, Any]) -> dict[str, Any]:
@@ -703,11 +942,12 @@ def public_application(record: dict[str, Any]) -> dict[str, Any]:
 def public_webhook(record: dict[str, Any]) -> dict[str, Any]:
     output = {key: value for key, value in record.items() if key != "signing_secret_hash"}
     output.setdefault("signing_secret_preview", None)
+    output.setdefault("project_id", DEFAULT_PROJECT_ID)
     return output
 
 
 def find_application(tenant_id: str, app_id: str) -> dict[str, Any] | None:
-    with _ACCESS_LOCK:
+    with _access_operation():
         normalized_id = validate_access_id(app_id, field_name="app_id")
         return next(
             (
@@ -719,24 +959,43 @@ def find_application(tenant_id: str, app_id: str) -> dict[str, Any] | None:
         )
 
 
-def require_application(tenant_id: str, app_id: str) -> dict[str, Any]:
+def require_application(tenant_id: str, app_id: str, project_id: str | None = None) -> dict[str, Any]:
     app = find_application(tenant_id, app_id)
-    if app is None:
+    if app is None or (
+        project_id is not None and str(app.get("project_id") or DEFAULT_PROJECT_ID) != validate_project_id(project_id)
+    ):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="接入应用不存在")
     return app
 
 
-def list_applications(tenant_id: str) -> list[dict[str, Any]]:
-    with _ACCESS_LOCK:
+def list_applications(tenant_id: str, project_id: str | None = None) -> list[dict[str, Any]]:
+    with _access_operation():
+        normalized_project = validate_project_id(project_id) if project_id else None
         rows = [
-            public_application(item) for item in _ACCESS_STATE["applications"] if item.get("tenant_id") == tenant_id
+            public_application(item)
+            for item in _ACCESS_STATE["applications"]
+            if item.get("tenant_id") == tenant_id
+            and (normalized_project is None or str(item.get("project_id") or DEFAULT_PROJECT_ID) == normalized_project)
         ]
-        return sorted(rows, key=lambda item: str(item.get("app_id", "")))
+    if postgres_access_state_enabled() and rows:
+        from app.portrait_postgres import application_usage_summaries
+
+        try:
+            usage = application_usage_summaries(tenant_id, project_id=normalized_project)
+        except Exception as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="application usage storage is unavailable",
+            ) from exc
+        for row in rows:
+            row.update(usage.get(str(row.get("app_id") or ""), {}))
+    return sorted(rows, key=lambda item: str(item.get("app_id", "")))
 
 
 def create_application(
     tenant_id: str,
     *,
+    project_id: str = DEFAULT_PROJECT_ID,
     app_id: str,
     name: str,
     owner: str,
@@ -748,15 +1007,22 @@ def create_application(
     rate_limit_burst: int | None = None,
     daily_quota: int | None = None,
 ) -> tuple[dict[str, Any], str]:
-    with _ACCESS_LOCK:
+    with _access_operation():
         normalized_id = validate_access_id(app_id, field_name="app_id")
         if find_application(tenant_id, normalized_id) is not None:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="接入应用已存在")
         _ensure_tenant_record(tenant_id)
+        normalized_project = validate_project_id(project_id)
+        project = _project_record(tenant_id, normalized_project)
+        if project is None or project.get("status", "active") != "active":
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="application project is missing or disabled"
+            )
         secret = new_secret("phk")
         timestamp = now_seconds()
         record = {
             "tenant_id": tenant_id,
+            "project_id": normalized_project,
             "app_id": normalized_id,
             "name": (name or normalized_id).strip()[:256] or normalized_id,
             "owner": (owner or "platform").strip()[:256] or "platform",
@@ -788,9 +1054,24 @@ def create_application(
         return public_application(record), secret
 
 
-def update_application(tenant_id: str, app_id: str, updates: dict[str, Any]) -> dict[str, Any]:
-    with _ACCESS_LOCK:
-        record = require_application(tenant_id, app_id)
+def update_application(
+    tenant_id: str,
+    app_id: str,
+    updates: dict[str, Any],
+    *,
+    project_id: str | None = None,
+) -> dict[str, Any]:
+    with _access_operation():
+        record = require_application(tenant_id, app_id, project_id)
+        if "project_id" in updates and updates["project_id"] is not None:
+            normalized_project = validate_project_id(updates["project_id"])
+            project = _project_record(tenant_id, normalized_project)
+            if project is None or project.get("status", "active") != "active":
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail="application project is missing or disabled",
+                )
+            record["project_id"] = normalized_project
         if "name" in updates and updates["name"] is not None:
             record["name"] = str(updates["name"]).strip()[:256] or record["app_id"]
         if "owner" in updates and updates["owner"] is not None:
@@ -835,9 +1116,14 @@ def active_previous_api_key_hashes(record: dict[str, Any], timestamp: float) -> 
     return active
 
 
-def rotate_application_secret(tenant_id: str, app_id: str) -> tuple[dict[str, Any], str]:
-    with _ACCESS_LOCK:
-        record = require_application(tenant_id, app_id)
+def rotate_application_secret(
+    tenant_id: str,
+    app_id: str,
+    *,
+    project_id: str | None = None,
+) -> tuple[dict[str, Any], str]:
+    with _access_operation():
+        record = require_application(tenant_id, app_id, project_id)
         _ensure_tenant_record(tenant_id)
         secret = new_secret("phk")
         timestamp = now_seconds()
@@ -856,7 +1142,7 @@ def rotate_application_secret(tenant_id: str, app_id: str) -> tuple[dict[str, An
 
 
 def application_record_for_key(tenant_id: str, api_key: str, timestamp: float | None = None) -> dict[str, Any] | None:
-    with _ACCESS_LOCK:
+    with _access_operation():
         if not api_key:
             return None
         if not tenant_is_active(tenant_id):
@@ -880,7 +1166,7 @@ def application_key_matches(tenant_id: str, api_key: str) -> dict[str, Any] | No
 
 
 def application_record_for_key_any_tenant(api_key: str, timestamp: float | None = None) -> dict[str, Any] | None:
-    with _ACCESS_LOCK:
+    with _access_operation():
         if not api_key:
             return None
         digest = secret_hash(api_key)
@@ -909,36 +1195,62 @@ def application_key_matches_any_tenant(api_key: str) -> dict[str, Any] | None:
 
 
 def application_request_policy(tenant_id: str, api_key: str, timestamp: float | None = None) -> dict[str, Any] | None:
-    with _ACCESS_LOCK:
-        current_time = now_seconds() if timestamp is None else timestamp
+    current_time = now_seconds() if timestamp is None else timestamp
+    postgres_quota: tuple[str, str, int] | None = None
+    with _access_operation():
         record = application_record_for_key(tenant_id, api_key, current_time)
         if record is None:
             return None
         daily_quota = configured_positive_limit(record.get("daily_quota"))
         if daily_quota is not None:
             current_date = quota_date(current_time)
-            if record.get("quota_date") != current_date:
-                record["quota_date"] = current_date
-                record["daily_quota_used"] = 0
-            used = configured_positive_limit(record.get("daily_quota_used")) or 0
-            if used >= daily_quota:
+            if postgres_access_state_enabled():
+                postgres_quota = (str(record.get("app_id") or ""), current_date, daily_quota)
+            else:
+                if record.get("quota_date") != current_date:
+                    record["quota_date"] = current_date
+                    record["daily_quota_used"] = 0
+                used = configured_positive_limit(record.get("daily_quota_used")) or 0
+                if used >= daily_quota:
+                    save_access_state()
+                    raise HTTPException(
+                        status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                        detail="每日配额已耗尽",
+                        headers={"Retry-After": str(seconds_until_next_quota_day(current_time))},
+                    )
+                record["daily_quota_used"] = used + 1
                 save_access_state()
-                raise HTTPException(
-                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                    detail="每日配额已耗尽",
-                    headers={"Retry-After": str(seconds_until_next_quota_day(current_time))},
-                )
-            record["daily_quota_used"] = used + 1
-        if daily_quota is not None:
-            save_access_state()
-        return public_application(record)
+        application = public_application(record)
+
+    if postgres_quota is None:
+        return application
+
+    from app.portrait_postgres import consume_application_daily_quota
+
+    app_id, current_date, daily_quota = postgres_quota
+    try:
+        postgres_used = consume_application_daily_quota(tenant_id, app_id, current_date, daily_quota)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="application quota storage is unavailable",
+        ) from exc
+    if postgres_used is None:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="daily quota exhausted",
+            headers={"Retry-After": str(seconds_until_next_quota_day(current_time))},
+        )
+    application["quota_date"] = current_date
+    application["daily_quota_used"] = postgres_used
+    return application
 
 
 def record_application_call(tenant_id: str | None, app_id: str | None, status_code: int, timestamp: float) -> None:
     global _ACCESS_STATS_DIRTY
-    if not tenant_id or not app_id or app_id == "--":
+    if not tenant_id or not app_id or app_id == "--" or postgres_access_state_enabled():
         return
-    with _ACCESS_LOCK:
+    with _access_operation():
         record = next(
             (
                 item
@@ -975,29 +1287,36 @@ def application_scopes_allow_permission(scopes: Any, permission: str) -> bool:
     return "*" in normalized or permission in normalized or root_permission in normalized
 
 
-def find_webhook(tenant_id: str, webhook_id: str) -> dict[str, Any] | None:
-    with _ACCESS_LOCK:
+def find_webhook(tenant_id: str, webhook_id: str, project_id: str | None = None) -> dict[str, Any] | None:
+    with _access_operation():
         normalized_id = validate_access_id(webhook_id, field_name="webhook_id")
         return next(
             (
                 item
                 for item in _ACCESS_STATE["webhooks"]
-                if item.get("tenant_id") == tenant_id and item.get("webhook_id") == normalized_id
+                if item.get("tenant_id") == tenant_id
+                and item.get("webhook_id") == normalized_id
+                and (project_id is None or str(item.get("project_id") or DEFAULT_PROJECT_ID) == project_id)
             ),
             None,
         )
 
 
-def require_webhook(tenant_id: str, webhook_id: str) -> dict[str, Any]:
-    webhook = find_webhook(tenant_id, webhook_id)
+def require_webhook(tenant_id: str, webhook_id: str, project_id: str | None = None) -> dict[str, Any]:
+    webhook = find_webhook(tenant_id, webhook_id, project_id)
     if webhook is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="事件回调不存在")
     return webhook
 
 
-def list_webhooks(tenant_id: str) -> list[dict[str, Any]]:
-    with _ACCESS_LOCK:
-        rows = [public_webhook(item) for item in _ACCESS_STATE["webhooks"] if item.get("tenant_id") == tenant_id]
+def list_webhooks(tenant_id: str, project_id: str | None = None) -> list[dict[str, Any]]:
+    with _access_operation():
+        rows = [
+            public_webhook(item)
+            for item in _ACCESS_STATE["webhooks"]
+            if item.get("tenant_id") == tenant_id
+            and (project_id is None or str(item.get("project_id") or DEFAULT_PROJECT_ID) == project_id)
+        ]
         return sorted(rows, key=lambda item: str(item.get("webhook_id", "")))
 
 
@@ -1012,19 +1331,28 @@ def create_webhook(
     events: list[str],
     retry_limit: int,
     timeout_seconds: int,
+    project_id: str | None = None,
 ) -> tuple[dict[str, Any], str]:
-    with _ACCESS_LOCK:
+    with _access_operation():
         normalized_id = validate_access_id(webhook_id, field_name="webhook_id")
         if find_webhook(tenant_id, normalized_id) is not None:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="事件回调已存在")
-        if find_application(tenant_id, application_id) is None:
+        application = find_application(tenant_id, application_id)
+        if application is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="接入应用不存在")
         status_text = normalize_status(status_value)
+        application_project = str(application.get("project_id") or DEFAULT_PROJECT_ID)
+        if project_id is not None and application_project != validate_project_id(project_id):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="application does not exist in the requested project",
+            )
         secret = new_secret("whsec")
         timestamp = now_seconds()
         record = {
             "tenant_id": tenant_id,
             "webhook_id": normalized_id,
+            "project_id": application_project,
             "name": (name or normalized_id).strip()[:256] or normalized_id,
             "application_id": validate_access_id(application_id, field_name="app_id"),
             "url": validate_webhook_url(url, required=status_text == "active"),
@@ -1045,17 +1373,30 @@ def create_webhook(
         return public_webhook(record), secret
 
 
-def update_webhook(tenant_id: str, webhook_id: str, updates: dict[str, Any]) -> dict[str, Any]:
-    with _ACCESS_LOCK:
-        record = require_webhook(tenant_id, webhook_id)
+def update_webhook(
+    tenant_id: str,
+    webhook_id: str,
+    updates: dict[str, Any],
+    *,
+    project_id: str | None = None,
+) -> dict[str, Any]:
+    with _access_operation():
+        record = require_webhook(tenant_id, webhook_id, project_id)
         next_status = (
             normalize_status(updates["status"])
             if "status" in updates and updates["status"] is not None
             else str(record.get("status") or "disabled")
         )
         if "application_id" in updates and updates["application_id"] is not None:
-            if find_application(tenant_id, updates["application_id"]) is None:
+            application = find_application(tenant_id, updates["application_id"])
+            if application is None:
                 raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="接入应用不存在")
+            application_project = str(application.get("project_id") or DEFAULT_PROJECT_ID)
+            if application_project != str(record.get("project_id") or DEFAULT_PROJECT_ID):
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="application does not exist in the webhook project",
+                )
             record["application_id"] = validate_access_id(updates["application_id"], field_name="app_id")
         if "name" in updates and updates["name"] is not None:
             record["name"] = str(updates["name"]).strip()[:256] or record["webhook_id"]
@@ -1075,9 +1416,14 @@ def update_webhook(tenant_id: str, webhook_id: str, updates: dict[str, Any]) -> 
         return public_webhook(record)
 
 
-def rotate_webhook_secret(tenant_id: str, webhook_id: str) -> tuple[dict[str, Any], str]:
-    with _ACCESS_LOCK:
-        record = require_webhook(tenant_id, webhook_id)
+def rotate_webhook_secret(
+    tenant_id: str,
+    webhook_id: str,
+    *,
+    project_id: str | None = None,
+) -> tuple[dict[str, Any], str]:
+    with _access_operation():
+        record = require_webhook(tenant_id, webhook_id, project_id)
         secret = new_secret("whsec")
         timestamp = now_seconds()
         record["signing_secret_hash"] = secret_hash(secret)
@@ -1088,12 +1434,18 @@ def rotate_webhook_secret(tenant_id: str, webhook_id: str) -> tuple[dict[str, An
         return public_webhook(record), secret
 
 
-def webhook_sample_delivery(tenant_id: str, webhook_id: str) -> dict[str, Any]:
-    with _ACCESS_LOCK:
-        record = require_webhook(tenant_id, webhook_id)
+def webhook_sample_delivery(
+    tenant_id: str,
+    webhook_id: str,
+    *,
+    project_id: str | None = None,
+) -> dict[str, Any]:
+    with _access_operation():
+        record = require_webhook(tenant_id, webhook_id, project_id)
         event = (record.get("events") or ["job.completed"])[0]
         event_id = f"evt_{secrets.token_hex(12)}"
         body = {
+            "project_id": str(record.get("project_id") or DEFAULT_PROJECT_ID),
             "id": event_id,
             "event": event,
             "tenant_id": tenant_id,
@@ -1122,12 +1474,14 @@ def webhook_sample_delivery(tenant_id: str, webhook_id: str) -> dict[str, Any]:
 
 
 def clear_access_state() -> None:
-    global _ACCESS_STATS_DIRTY
-    with _ACCESS_LOCK:
+    global _ACCESS_STATE_REVISION, _ACCESS_STATS_DIRTY
+    with _access_operation():
         _ACCESS_STATE["tenants"] = []
         _ACCESS_STATE["members"] = []
         _ACCESS_STATE["applications"] = []
         _ACCESS_STATE["webhooks"] = []
+        _ACCESS_STATE["projects"] = []
+        _ACCESS_STATE_REVISION = 0
         _ACCESS_STATS_DIRTY = False
 
 
@@ -1140,18 +1494,22 @@ __all__ = [
     "clear_access_state",
     "create_application",
     "create_member",
+    "create_project",
     "create_tenant",
     "create_webhook",
     "delete_member",
     "ensure_tenant",
     "find_member",
+    "find_project",
     "find_tenant",
     "flush_access_call_stats",
     "list_applications",
     "list_members",
+    "list_projects",
     "list_tenants",
     "list_webhooks",
     "load_access_state",
+    "project_is_active",
     "record_application_call",
     "resolve_member",
     "restore_access_state",
@@ -1161,6 +1519,7 @@ __all__ = [
     "tenant_is_active",
     "update_application",
     "update_member",
+    "update_project",
     "update_tenant",
     "update_webhook",
     "webhook_sample_delivery",

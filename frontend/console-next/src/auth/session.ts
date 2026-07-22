@@ -5,6 +5,7 @@ export type AuthMode = "api-key" | "jwt" | "oidc" | "local" | "anonymous";
 interface StoredSession {
   tenantId: string;
   authMode: AuthMode;
+  projectId: string;
   apiKey: string;
   bearer: string;
   authenticated: boolean;
@@ -18,6 +19,7 @@ function emptySession(): StoredSession {
   return {
     tenantId: "",
     authMode: "api-key",
+    projectId: "default",
     apiKey: "",
     bearer: "",
     authenticated: false,
@@ -35,6 +37,7 @@ function readStoredSession(): StoredSession {
     return {
       tenantId: typeof parsed.tenantId === "string" ? parsed.tenantId.trim() : "",
       authMode: parsed.authMode === "jwt" || parsed.authMode === "oidc" || parsed.authMode === "local" || parsed.authMode === "anonymous" ? parsed.authMode : "api-key",
+      projectId: typeof parsed.projectId === "string" && parsed.projectId.trim() ? parsed.projectId.trim() : "default",
       apiKey: typeof parsed.apiKey === "string" ? parsed.apiKey : "",
       bearer: typeof parsed.bearer === "string" ? parsed.bearer : "",
       authenticated: parsed.authenticated === true,
@@ -69,10 +72,12 @@ function armExpiryTimer(): void {
 export function beginSession(input: {
   tenantId: string;
   authMode: AuthMode;
+  projectId?: string;
   apiKey?: string;
   bearer?: string;
 }): void {
   sessionState.tenantId = input.tenantId.trim();
+  sessionState.projectId = input.projectId?.trim() || "default";
   sessionState.authMode = input.authMode;
   sessionState.apiKey = input.authMode === "api-key" ? (input.apiKey ?? "").trim() : "";
   sessionState.bearer = input.authMode === "jwt" ? (input.bearer ?? "").trim() : "";
@@ -84,6 +89,11 @@ export function beginSession(input: {
 
 export function setSessionTenant(tenantId: string): void {
   sessionState.tenantId = tenantId.trim();
+  persistSession();
+}
+
+export function setSessionProject(projectId: string): void {
+  sessionState.projectId = projectId.trim() || "default";
   persistSession();
 }
 
@@ -109,6 +119,9 @@ function cookieValue(name: string): string {
 export function authHeaders(): HeadersInit {
   const headers: Record<string, string> = {};
   if (sessionState.tenantId) headers["X-Tenant-ID"] = sessionState.tenantId;
+  if (sessionState.projectId && sessionState.projectId !== "default") {
+    headers["X-Project-ID"] = sessionState.projectId;
+  }
   if (sessionState.authMode === "api-key" && sessionState.apiKey) {
     headers["X-API-Key"] = sessionState.apiKey;
   }

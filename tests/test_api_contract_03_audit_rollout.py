@@ -26,9 +26,7 @@ def v1_validation_issues(response) -> list[dict[str, object]]:
     return response.json()["error"]["details"]["issues"]
 
 
-def test_v1_vision_results_are_persisted_and_tenant_scoped(
-    monkeypatch, workspace_tmp_path
-) -> None:
+def test_v1_vision_results_are_persisted_and_tenant_scoped(monkeypatch, workspace_tmp_path) -> None:
     monkeypatch.setattr(security, "RBAC_ENABLED", False)
     monkeypatch.setattr(security, "AUTH_REQUIRED", False)
     monkeypatch.setattr(portrait_auth, "RBAC_ENABLED", False)
@@ -39,9 +37,7 @@ def test_v1_vision_results_are_persisted_and_tenant_scoped(
     )
     monkeypatch.setattr(portrait_analysis_archive, "PORTRAIT_STORAGE_BACKEND", "local")
     monkeypatch.setattr(portrait_analysis_archive, "ANALYSIS_ARCHIVE_ENABLED", True)
-    monkeypatch.setattr(
-        portrait_object_storage, "OBJECT_STORAGE_DIR", workspace_tmp_path / "objects"
-    )
+    monkeypatch.setattr(portrait_object_storage, "OBJECT_STORAGE_DIR", workspace_tmp_path / "objects")
     client = TestClient(app, raise_server_exceptions=False)
 
     async def fake_get_or_load_model(*args, **kwargs):
@@ -89,18 +85,12 @@ def test_v1_vision_results_are_persisted_and_tenant_scoped(
     async def fake_touch_model(*args, **kwargs):
         return None
 
-    monkeypatch.setattr(
-        routes_vision, "get_model_path", lambda project, model: "unused.onnx"
-    )
+    monkeypatch.setattr(routes_vision, "get_model_path", lambda project, model: "unused.onnx")
     monkeypatch.setattr(routes_vision, "get_or_load_model", fake_get_or_load_model)
     monkeypatch.setattr(routes_vision, "load_images", fake_load_images)
-    monkeypatch.setattr(
-        routes_vision, "infer_detection_images", fake_infer_detection_images
-    )
+    monkeypatch.setattr(routes_vision, "infer_detection_images", fake_infer_detection_images)
     monkeypatch.setattr(routes_vision, "touch_model", fake_touch_model)
-    monkeypatch.setattr(
-        routes_vision, "model_package_info", lambda *args: {"type": "detection"}
-    )
+    monkeypatch.setattr(routes_vision, "model_package_info", lambda *args: {"type": "detection"})
 
     try:
         response = client.post(
@@ -149,9 +139,7 @@ def test_v1_vision_results_are_persisted_and_tenant_scoped(
         (workspace_tmp_path / "analysis-archive.sqlite3").unlink(missing_ok=True)
 
 
-def test_v1_track_results_restore_persisted_previews_across_requests(
-    monkeypatch, workspace_tmp_path
-) -> None:
+def test_v1_track_results_restore_persisted_previews_across_requests(monkeypatch, workspace_tmp_path) -> None:
     state_path = workspace_tmp_path / "track-analysis-archive.sqlite3"
     monkeypatch.setattr(security, "RBAC_ENABLED", False)
     monkeypatch.setattr(security, "AUTH_REQUIRED", False)
@@ -211,7 +199,7 @@ def test_v1_track_results_restore_persisted_previews_across_requests(
             },
             "frames": [
                 {
-                    "image_index": index,
+                    "frame_index": index,
                     "width": 20,
                     "height": 16,
                     "persons": [],
@@ -219,7 +207,24 @@ def test_v1_track_results_restore_persisted_previews_across_requests(
                 }
                 for index in range(2)
             ],
-            "tracks": [{"track_id": "track-1", "observations": []}],
+            "tracks": [
+                {
+                    "track_id": "track-1",
+                    "frame_count": 1,
+                    "first_frame_index": 0,
+                    "last_frame_index": 0,
+                    "average_confidence": 0.9,
+                    "average_quality": 0.9,
+                    "gap_count": 0,
+                    "max_gap": 0,
+                    "interpolated_count": 0,
+                    "stability_score": 1.0,
+                    "tracklet_quality_score": 0.9,
+                    "association_quality": {},
+                    "template": {},
+                    "interpolated": [],
+                }
+            ],
             "track_count": 1,
             "tracker": {"algorithm": "test"},
             "person_count": 0,
@@ -263,18 +268,13 @@ def test_v1_track_results_restore_persisted_previews_across_requests(
         assert record["endpoint"] == "/v1/infer/tracks"
         assert record["payload"]["track_count"] == 1
         assert len(record["previews"]) == 2
-        assert all(
-            preview["src"].startswith("data:image/jpeg;base64,")
-            for preview in record["previews"]
-        )
+        assert all(preview["src"].startswith("data:image/jpeg;base64,") for preview in record["previews"])
         assert "private-frame" not in listed.text
     finally:
         state_path.unlink(missing_ok=True)
 
 
-def test_all_portrait_image_modes_write_unified_archives(
-    monkeypatch, workspace_tmp_path
-) -> None:
+def test_all_portrait_image_modes_write_unified_archives(monkeypatch, workspace_tmp_path) -> None:
     monkeypatch.setattr(security, "RBAC_ENABLED", False)
     monkeypatch.setattr(security, "AUTH_REQUIRED", False)
     monkeypatch.setattr(portrait_auth, "RBAC_ENABLED", False)
@@ -316,25 +316,44 @@ def test_all_portrait_image_modes_write_unified_archives(
         return []
 
     async def fake_body(*args, **kwargs):
-        return {"box": [0, 0, 18, 14], "model_status": "test"}
+        return {
+            "box": [0, 0, 18, 14],
+            "score": 0.9,
+            "quality": {"score": 0.9},
+            "embedding_dim": 0,
+            "selection_strategy": "test",
+            "model_status": "test",
+        }
 
     async def fake_pose(*args, **kwargs):
-        return {"keypoints": []}
+        return {
+            "quality": {"score": 0.9},
+            "keypoints": [],
+            "skeleton": [],
+            "model_status": "test",
+        }
 
     async def fake_appearance(*args, **kwargs):
-        return {"box": [0, 0, 18, 14], "model_status": "test"}
+        return {
+            "box": [0, 0, 18, 14],
+            "quality": {"score": 0.9},
+            "dominant_color": {"name": "white", "rgb": [255, 255, 255]},
+            "attributes": {},
+            "embedding_dim": 0,
+            "model_status": "test",
+        }
 
     async def fake_gait(*args, **kwargs):
         return None, {"model_status": "test", "embedding_dim": 0}
 
     monkeypatch.setattr(routes_portrait_infer, "decode_upload_images", fake_decode)
     monkeypatch.setattr(routes_portrait_infer, "infer_face_records_for_image", fake_faces)
-    monkeypatch.setattr(routes_portrait_infer, "face_model_summary", lambda *args, **kwargs: {"status": "test"})
+    monkeypatch.setattr(
+        routes_portrait_infer, "face_model_summary", lambda *args, **kwargs: {"id": "test-face", "status": "test"}
+    )
     monkeypatch.setattr(routes_portrait_infer, "infer_body_record_for_image", fake_body)
     monkeypatch.setattr(routes_portrait_infer, "infer_pose_record_for_image", fake_pose)
-    monkeypatch.setattr(
-        routes_portrait_infer, "infer_appearance_record_for_image", fake_appearance
-    )
+    monkeypatch.setattr(routes_portrait_infer, "infer_appearance_record_for_image", fake_appearance)
     monkeypatch.setattr(routes_portrait_infer, "infer_gait_embedding_for_images", fake_gait)
     client = TestClient(app, raise_server_exceptions=False)
 
@@ -365,9 +384,7 @@ def test_all_portrait_image_modes_write_unified_archives(
         (workspace_tmp_path / "all-image-modes.sqlite3").unlink(missing_ok=True)
 
 
-def test_admin_audit_verify_endpoint_redacts_path_and_reports_chain(
-    monkeypatch, workspace_tmp_path
-) -> None:
+def test_admin_audit_verify_endpoint_redacts_path_and_reports_chain(monkeypatch, workspace_tmp_path) -> None:
     monkeypatch.setattr(security, "RBAC_ENABLED", False)
     monkeypatch.setattr(security, "AUTH_REQUIRED", False)
     monkeypatch.setattr(portrait_auth, "RBAC_ENABLED", False)
@@ -419,9 +436,7 @@ def test_admin_audit_verify_endpoint_redacts_path_and_reports_chain(
     assert audit_path.name not in response.text
 
 
-def test_admin_audit_events_endpoint_is_tenant_scoped_and_redacted(
-    monkeypatch, workspace_tmp_path
-) -> None:
+def test_admin_audit_events_endpoint_is_tenant_scoped_and_redacted(monkeypatch, workspace_tmp_path) -> None:
     monkeypatch.setattr(security, "RBAC_ENABLED", False)
     monkeypatch.setattr(security, "AUTH_REQUIRED", False)
     monkeypatch.setattr(portrait_auth, "RBAC_ENABLED", False)
@@ -541,9 +556,7 @@ def test_admin_audit_events_endpoint_is_tenant_scoped_and_redacted(
     assert v1_error_message(invalid_category) == "不支持的审计事件类别"
 
 
-def test_admin_backups_endpoint_returns_recent_redacted_snapshots(
-    monkeypatch, workspace_tmp_path
-) -> None:
+def test_admin_backups_endpoint_returns_recent_redacted_snapshots(monkeypatch, workspace_tmp_path) -> None:
     monkeypatch.setattr(security, "RBAC_ENABLED", False)
     monkeypatch.setattr(security, "AUTH_REQUIRED", False)
     monkeypatch.setattr(portrait_auth, "RBAC_ENABLED", False)
@@ -614,9 +627,7 @@ def test_admin_backups_endpoint_returns_recent_redacted_snapshots(
         ),
     ]
     previous_hash = None
-    for record, created_at in zip(
-        records, [1000.0, 1001.0, 1002.0, 1003.0], strict=True
-    ):
+    for record, created_at in zip(records, [1000.0, 1001.0, 1002.0, 1003.0], strict=True):
         record["created_at"] = created_at
         record["audit_prev_hash"] = previous_hash
         record["audit_hash"] = portrait_audit.audit_payload_hash(record)
@@ -637,9 +648,7 @@ def test_admin_backups_endpoint_returns_recent_redacted_snapshots(
     monkeypatch.setattr(portrait_audit, "PORTRAIT_AUDIT_PATH", audit_path)
     client = TestClient(app, raise_server_exceptions=False)
 
-    response = client.get(
-        "/v1/admin/backups", params={"limit": 10}, headers={"X-Tenant-ID": "tenant-a"}
-    )
+    response = client.get("/v1/admin/backups", params={"limit": 10}, headers={"X-Tenant-ID": "tenant-a"})
 
     assert response.status_code == 200
     payload = response.json()["data"]
@@ -665,9 +674,7 @@ def test_admin_backups_endpoint_returns_recent_redacted_snapshots(
     assert str(audit_path) not in response.text
 
 
-def test_rollout_audit_endpoint_returns_recent_public_records(
-    monkeypatch, workspace_tmp_path
-) -> None:
+def test_rollout_audit_endpoint_returns_recent_public_records(monkeypatch, workspace_tmp_path) -> None:
     monkeypatch.setattr(security, "RBAC_ENABLED", False)
     monkeypatch.setattr(security, "AUTH_REQUIRED", False)
     monkeypatch.setattr(portrait_auth, "RBAC_ENABLED", False)
@@ -752,5 +759,3 @@ def test_rollout_alias_preview_missing_alias_does_not_echo_alias(monkeypatch) ->
     assert response.status_code == 404
     assert v1_error_message(response) == "别名不存在"
     assert "secret_alias" not in response.text
-
-

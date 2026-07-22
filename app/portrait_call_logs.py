@@ -4,9 +4,19 @@ import threading
 from collections import deque
 from typing import Any
 
+from fastapi import HTTPException, status
+
+from app.observability import logger
+from app.portrait_response import exception_log_summary
+from app.settings import PORTRAIT_STORAGE_BACKEND
+
 _CALL_LOG_LIMIT = 2_000
 _CALL_LOGS: deque[dict[str, Any]] = deque(maxlen=_CALL_LOG_LIMIT)
 _CALL_LOGS_LOCK = threading.RLock()
+
+
+def postgres_call_logs_enabled() -> bool:
+    return PORTRAIT_STORAGE_BACKEND == "postgres"
 
 
 def clear_call_logs() -> None:
@@ -19,7 +29,9 @@ def application_id_from_api_key(tenant_id: str | None, api_key: str | None) -> s
         return None
     from app.portrait_access import application_key_matches, application_key_matches_any_tenant
 
-    application = application_key_matches(tenant_id, api_key) if tenant_id else application_key_matches_any_tenant(api_key)
+    application = (
+        application_key_matches(tenant_id, api_key) if tenant_id else application_key_matches_any_tenant(api_key)
+    )
     if application is None:
         return None
     return str(application.get("app_id") or application.get("id") or "") or None
@@ -29,6 +41,7 @@ def record_call_log(
     *,
     request_id: str,
     tenant_id: str | None,
+    project_id: str | None = None,
     method: str,
     path: str,
     status_code: int,
@@ -42,6 +55,7 @@ def record_call_log(
     status_text = "success" if status_code < 400 else "error"
     normalized_error_code = (error_code or "").strip() or f"http_{status_code}"
     row = {
+        "project_id": project_id or "default",
         "request_id": request_id,
         "tenant_id": tenant_id or "default",
         "application_id": application_id or "--",
@@ -58,6 +72,13 @@ def record_call_log(
     }
     with _CALL_LOGS_LOCK:
         _CALL_LOGS.append(row)
+    if postgres_call_logs_enabled():
+        try:
+            from app.portrait_postgres import insert_call_log
+
+            insert_call_log(row)
+        except Exception as exc:
+            logger.warning("PostgreSQL call log insert failed: %s", exception_log_summary(exc))
     try:
         from app.portrait_access import record_application_call
 
@@ -71,6 +92,7 @@ def list_call_logs(
     tenant_id: str,
     *,
     request_id: str | None = None,
+    project_id: str | None = None,
     endpoint: str | None = None,
     status_text: str | None = None,
     application_id: str | None = None,
@@ -79,10 +101,32 @@ def list_call_logs(
     created_until: float | None = None,
     limit: int = 100,
 ) -> list[dict[str, Any]]:
+    if postgres_call_logs_enabled():
+        from app.portrait_postgres import query_call_logs
+
+        try:
+            return query_call_logs(
+                tenant_id,
+                request_id=request_id,
+                project_id=project_id,
+                endpoint=endpoint,
+                status_text=status_text,
+                application_id=application_id,
+                error_code=error_code,
+                created_since=created_since,
+                created_until=created_until,
+                limit=limit,
+            )
+        except Exception as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="call log storage is unavailable",
+            ) from exc
     filtered = _filter_call_logs(
         tenant_id,
         request_id=request_id,
         endpoint=endpoint,
+        project_id=project_id,
         status_text=status_text,
         application_id=application_id,
         error_code=error_code,
@@ -96,6 +140,7 @@ def summarize_call_logs(
     tenant_id: str,
     *,
     request_id: str | None = None,
+    project_id: str | None = None,
     endpoint: str | None = None,
     status_text: str | None = None,
     application_id: str | None = None,
@@ -103,11 +148,32 @@ def summarize_call_logs(
     created_since: float | None = None,
     created_until: float | None = None,
 ) -> dict[str, Any]:
+    if postgres_call_logs_enabled():
+        from app.portrait_postgres import summarize_call_logs as summarize_postgres_call_logs
+
+        try:
+            return summarize_postgres_call_logs(
+                tenant_id,
+                request_id=request_id,
+                project_id=project_id,
+                endpoint=endpoint,
+                status_text=status_text,
+                application_id=application_id,
+                error_code=error_code,
+                created_since=created_since,
+                created_until=created_until,
+            )
+        except Exception as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="call log storage is unavailable",
+            ) from exc
     rows = _filter_call_logs(
         tenant_id,
         request_id=request_id,
         endpoint=endpoint,
         status_text=status_text,
+        project_id=project_id,
         application_id=application_id,
         error_code=error_code,
         created_since=created_since,
@@ -136,6 +202,7 @@ def _filter_call_logs(
     tenant_id: str,
     *,
     request_id: str | None = None,
+    project_id: str | None = None,
     endpoint: str | None = None,
     status_text: str | None = None,
     application_id: str | None = None,
@@ -153,6 +220,8 @@ def _filter_call_logs(
     filtered: list[dict[str, Any]] = []
     for row in reversed(rows):
         if row.get("tenant_id") != tenant_id:
+            continue
+        if project_id is not None and row.get("project_id", "default") != project_id:
             continue
         if normalized_request and normalized_request not in str(row.get("request_id") or "").lower():
             continue
@@ -178,6 +247,7 @@ __all__ = [
     "application_id_from_api_key",
     "clear_call_logs",
     "list_call_logs",
+    "postgres_call_logs_enabled",
     "record_call_log",
     "summarize_call_logs",
 ]

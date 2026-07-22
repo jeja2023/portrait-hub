@@ -1,8 +1,9 @@
 from collections import OrderedDict
 from typing import Any
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import Depends, Request
 
+from app.api_contracts import ContractAPIRouter as APIRouter
 from app.model_package import get_model_path
 from app.model_refs import cache_key
 from app.observability import request_id_from_headers
