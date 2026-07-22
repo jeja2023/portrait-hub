@@ -1,6 +1,6 @@
 import ipaddress
 import socket
-from typing import Any
+from typing import Any, cast
 from urllib.parse import urlsplit, urlunsplit
 
 from fastapi import HTTPException, status
@@ -31,7 +31,7 @@ def current_stream_network_policy() -> dict[str, Any]:
             "allowed_cidrs": WEBHOOK_ALLOWED_CIDRS,
         },
     )
-    return policy["stream"]
+    return cast(dict[str, Any], policy["stream"])
 
 
 def host_matches_allowlist(hostname: str) -> bool:

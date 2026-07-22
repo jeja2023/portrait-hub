@@ -5,11 +5,11 @@ import mimetypes
 import uuid
 from pathlib import Path
 from typing import Any
+from urllib import request as urllib_request
 from urllib.error import HTTPError
 from urllib.parse import quote, urlencode
-from urllib import request as urllib_request
 
-SDK_VERSION = "0.16.0"
+SDK_VERSION = "0.17.0"
 USER_AGENT = f"portrait-hub-sdk-python/{SDK_VERSION}"
 
 
@@ -29,12 +29,14 @@ class PortraitHubClient:
         auth_scheme: str = "bearer",
         timeout: float = 30.0,
         tenant_id: str | None = None,
+        project_id: str | None = None,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.api_token = api_token
         self.auth_scheme = self._normalize_auth_scheme(auth_scheme)
         self.timeout = timeout
         self.tenant_id = tenant_id
+        self.project_id = project_id
 
     def _normalize_auth_scheme(self, value: str) -> str:
         normalized = value.strip().lower().replace("-", "_")
@@ -52,6 +54,8 @@ class PortraitHubClient:
         headers = {"User-Agent": USER_AGENT, **(extra or {})}
         if self.tenant_id:
             headers["X-Tenant-ID"] = self.tenant_id
+        if self.project_id:
+            headers["X-Project-ID"] = self.project_id
         if self.api_token:
             if self.auth_scheme == "api_key":
                 headers["X-API-Key"] = self.api_token
@@ -117,8 +121,8 @@ class PortraitHubClient:
         chunks: list[bytes] = []
         for key, value in (fields or {}).items():
             field_name = self._multipart_header_value(key)
-            chunks.append(f"--{boundary}\r\n".encode("utf-8"))
-            chunks.append(f'Content-Disposition: form-data; name="{field_name}"\r\n\r\n'.encode("utf-8"))
+            chunks.append(f"--{boundary}\r\n".encode())
+            chunks.append(f'Content-Disposition: form-data; name="{field_name}"\r\n\r\n'.encode())
             chunks.append(str(value).encode("utf-8"))
             chunks.append(b"\r\n")
         for field_name, path_value in files or []:
@@ -126,17 +130,17 @@ class PortraitHubClient:
             content_type = mimetypes.guess_type(path_obj.name)[0] or "application/octet-stream"
             safe_field_name = self._multipart_header_value(field_name)
             safe_filename = self._multipart_header_value(path_obj.name)
-            chunks.append(f"--{boundary}\r\n".encode("utf-8"))
+            chunks.append(f"--{boundary}\r\n".encode())
             chunks.append(
                 (
                     f'Content-Disposition: form-data; name="{safe_field_name}"; '
                     f'filename="{safe_filename}"\r\n'
                     f"Content-Type: {content_type}\r\n\r\n"
-                ).encode("utf-8")
+                ).encode()
             )
             chunks.append(path_obj.read_bytes())
             chunks.append(b"\r\n")
-        chunks.append(f"--{boundary}--\r\n".encode("utf-8"))
+        chunks.append(f"--{boundary}--\r\n".encode())
         body = b"".join(chunks)
         req = urllib_request.Request(
             f"{self.base_url}{path}",

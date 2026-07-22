@@ -1,6 +1,6 @@
 # PortraitHub Ubuntu 部署教程
 
-本文档面向当前 PortraitHub 项目，说明如何在 Ubuntu 服务器上通过 Docker Compose 部署 GPU 推理服务。文档按仓库版本 0.16.0、当前 Dockerfile、docker-compose.yml、.env.example 和生产门禁实现编写。
+本文档面向当前 PortraitHub 项目，说明如何在 Ubuntu 服务器上通过 Docker Compose 部署 GPU 推理服务。文档按仓库版本 0.17.0、当前 Dockerfile、docker-compose.yml、.env.example 和生产门禁实现编写。
 
 > 项目名称、仓库目录和 Compose 项目名统一为 portrait-hub。
 
@@ -347,10 +347,12 @@ psql "$POSTGRES_DSN" -v ON_ERROR_STOP=1 \
 
 ## 9. 准备模型
 
-当前 models.yml 使用以下模型 ID：
+仓库默认 `models.yml` 提供 ReID-only 基线，使用以下模型 ID：
 
 - portrait_hub/yolov8n.onnx；
 - portrait_hub/osnet_ibn_x1_0.onnx。
+
+完整多模态生产配置参考 `examples/production-models.example.yml`，其中覆盖 YOLO 人体检测、OSNet 人体 ReID、Attribute ReID 外观、SCRFD 人脸检测、ArcFace 人脸特征、RTMPose 姿态和 OpenGait 步态。示例中的 `replace-with-real-sha256` 必须替换为实际权重摘要；未替换前不得作为生产配置，也不能通过完整严格生产门禁。
 
 模型 ID 中包含项目命名空间，但当前 artifact.path 是模型目录根部文件名，因此宿主机实际结构为：
 
@@ -811,6 +813,45 @@ docker compose -p portrait-hub ps
 - Redis 中尚未完成的任务；
 - 当前可用镜像的离线归档。
 
+### 17.1 从 0.16.0 升级到 0.17.0
+
+0.17.0 新增项目目录、PostgreSQL 访问状态、应用日配额和持久化调用日志。升级期间应暂停租户、项目、应用、Webhook 和模型配置写入，并先完成上面的全量备份。
+
+拉取代码后，在启动新服务前应用幂等数据库结构：
+
+```bash
+cd /opt/portrait-hub
+git fetch origin
+git pull --ff-only origin main
+grep -F 'version = "0.17.0"' pyproject.toml
+
+export POSTGRES_DSN='替换为真实 PostgreSQL DSN'
+psql "$POSTGRES_DSN" -v ON_ERROR_STOP=1 \
+  -f tools/portrait_postgres_schema.sql
+```
+
+确认生产 `.env` 至少包含：
+
+```dotenv
+PORTRAIT_RUNTIME_PROFILE=production
+PORTRAIT_STORAGE_BACKEND=postgres
+POSTGRES_DSN=替换为真实 PostgreSQL DSN
+INSTALL_PROD_OPTIONAL=true
+```
+
+随后构建并滚动启动：
+
+```bash
+docker compose -p portrait-hub config --quiet
+docker compose -p portrait-hub build --pull
+docker compose -p portrait-hub up -d --remove-orphans
+python tools/portrait_production_readiness.py --scope platform --strict
+```
+
+新版本会为既有租户补齐 `default` 项目，未发送 `X-Project-ID` 的旧客户端继续访问该项目。上线验收必须再创建一个非默认项目及其独立应用，确认 API Key 不能通过修改 `X-Project-ID` 跨项目访问人员库、任务、流、档案或调用日志。
+
+回退到 0.16.0 时保留新增数据库表，不要执行删表。只要非默认项目已经产生数据，就不能让 0.16.0 恢复写流量；应回到 0.17.0，或在明确接受升级后数据丢失的前提下恢复升级前快照。完整边界见 `docs/releases/0.17.0.md`。
+
 本地文件备份示例：
 
 ```bash
@@ -846,6 +887,7 @@ docker compose -p portrait-hub up -d --no-build --force-recreate --remove-orphan
 - docs/releases/0.14.2.md；
 - docs/releases/0.15.0.md；
 - docs/releases/0.16.0.md。
+- docs/releases/0.17.0.md。
 
 ## 18. 离线部署
 
@@ -858,7 +900,7 @@ cd /opt/portrait-hub
 docker compose -p portrait-hub build
 docker compose -p portrait-hub config --images
 
-docker save -o portrait-hub-0.16.0-images.tar \
+docker save -o portrait-hub-0.17.0-images.tar \
   portrait-hub-gpu-worker-0 \
   portrait-hub-gpu-worker-1 \
   portrait-hub-portrait-video-job-worker \
@@ -876,7 +918,7 @@ docker save -o portrait-hub-0.16.0-images.tar \
 离线服务器：
 
 ```bash
-docker load -i portrait-hub-0.16.0-images.tar
+docker load -i portrait-hub-0.17.0-images.tar
 cd /opt/portrait-hub
 test -f runtime-state/models.yml
 docker compose -p portrait-hub up -d --no-build gpu-worker-0 gpu-worker-1
@@ -1025,6 +1067,7 @@ docker exec gpu-worker-0 python -c \
 - [ ] 流 worker 的 STREAM_WORKER_FORCE_CPU 与 STREAM_WORKER_GPU_DEVICES 配置一致。
 - [ ] 视频/API 混合负载经过显存和延迟压测。
 - [ ] 生产外部服务和 PostgreSQL schema 已配置。
+- [ ] 0.17.0 新增访问状态、日配额和调用日志表存在，默认项目兼容与跨项目拒绝已验证。
 - [ ] 严格生产 readiness 没有失败项。
 - [ ] 正式入口使用 HTTPS，9001/9002 未直接暴露公网。
 - [ ] 已验证登录、退出、模型中心、GPU 清单和灰度发布界面。

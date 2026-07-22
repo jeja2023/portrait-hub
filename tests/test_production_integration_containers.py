@@ -54,7 +54,9 @@ def _read_url(url: str, *, timeout: float = 5.0) -> tuple[int, bytes]:
 def _exec_ok(container: Any, command: list[str], *, timeout: float = 60.0) -> str:
     def probe() -> str:
         result = container.exec(command)
-        output = result.output.decode("utf-8", errors="replace") if isinstance(result.output, bytes) else str(result.output)
+        output = (
+            result.output.decode("utf-8", errors="replace") if isinstance(result.output, bytes) else str(result.output)
+        )
         if result.exit_code != 0:
             raise AssertionError(output.strip())
         return output
@@ -100,9 +102,7 @@ def _s3_request(
     canonical_uri = urllib.parse.quote(path, safe="/")
     canonical_headers = f"host:{host}\nx-amz-content-sha256:{payload_hash}\nx-amz-date:{amz_date}\n"
     signed_headers = "host;x-amz-content-sha256;x-amz-date"
-    canonical_request = "\n".join(
-        [method, canonical_uri, "", canonical_headers, signed_headers, payload_hash]
-    )
+    canonical_request = "\n".join([method, canonical_uri, "", canonical_headers, signed_headers, payload_hash])
     scope = f"{date_stamp}/{region}/s3/aws4_request"
     string_to_sign = "\n".join(
         [
@@ -119,8 +119,7 @@ def _s3_request(
     ).hexdigest()
     headers = {
         "Authorization": (
-            "AWS4-HMAC-SHA256 "
-            f"Credential={access_key}/{scope}, SignedHeaders={signed_headers}, Signature={signature}"
+            f"AWS4-HMAC-SHA256 Credential={access_key}/{scope}, SignedHeaders={signed_headers}, Signature={signature}"
         ),
         "Host": host,
         "X-Amz-Content-Sha256": payload_hash,
@@ -173,6 +172,113 @@ def test_postgres_container_gallery_round_trip() -> None:
             timeout=90,
         )
         assert "portrait-a" in output
+
+        from app import postgres_access, postgres_call_logs, postgres_core
+
+        host = container.get_container_host_ip()
+        port = container.get_exposed_port(5432)
+        previous_dsn = postgres_core.POSTGRES_DSN
+        previous_pool = postgres_core.POSTGRES_POOL
+        postgres_core.POSTGRES_DSN = f"postgresql://portrait:portrait-secret@{host}:{port}/portrait"
+        postgres_core.POSTGRES_POOL = None
+        try:
+            with postgres_core.postgres_connection() as connection:
+                with connection.cursor() as cursor:
+                    cursor.execute(
+                        """
+                        CREATE TABLE IF NOT EXISTS portrait_access_state (
+                          state_key TEXT PRIMARY KEY,
+                          revision BIGINT NOT NULL CHECK (revision > 0),
+                          payload JSONB NOT NULL,
+                          updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+                        )
+                        """
+                    )
+
+            with postgres_core.postgres_connection() as connection:
+                with connection.cursor() as cursor:
+                    cursor.execute(
+                        """
+                        CREATE TABLE IF NOT EXISTS portrait_application_daily_usage (
+                          tenant_id TEXT NOT NULL,
+                          application_id TEXT NOT NULL,
+                          quota_date DATE NOT NULL,
+                          daily_quota_used BIGINT NOT NULL DEFAULT 0 CHECK (daily_quota_used >= 0),
+                          updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                          PRIMARY KEY (tenant_id, application_id, quota_date)
+                        );
+                        CREATE TABLE IF NOT EXISTS portrait_call_logs (
+                          id BIGSERIAL PRIMARY KEY,
+                          request_id TEXT NOT NULL,
+                          tenant_id TEXT NOT NULL,
+                          project_id TEXT NOT NULL,
+                          application_id TEXT NOT NULL,
+                          method TEXT NOT NULL,
+                          path TEXT NOT NULL,
+                          status TEXT NOT NULL,
+                          http_status INTEGER NOT NULL,
+                          error_code TEXT,
+                          latency_ms INTEGER NOT NULL CHECK (latency_ms >= 0),
+                          model_version TEXT NOT NULL,
+                          worker TEXT NOT NULL,
+                          created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+                        )
+                        """
+                    )
+
+            payload = {
+                "tenants": [{"tenant_id": "tenant-a", "status": "active"}],
+                "projects": [{"tenant_id": "tenant-a", "project_id": "project-a"}],
+                "members": [],
+                "applications": [],
+                "webhooks": [],
+            }
+            assert postgres_access.save_access_snapshot(payload, 0) == 1
+            loaded, revision = postgres_access.load_access_snapshot()
+            assert loaded == payload
+            assert revision == 1
+            with pytest.raises(postgres_access.AccessStateConflict):
+                postgres_access.save_access_snapshot(payload, 0)
+            assert postgres_access.save_access_snapshot(payload, 1) == 2
+
+            assert postgres_access.consume_application_daily_quota("tenant-a", "app-a", "2026-07-22", 2) == 1
+            assert postgres_access.consume_application_daily_quota("tenant-a", "app-a", "2026-07-22", 2) == 2
+            assert postgres_access.consume_application_daily_quota("tenant-a", "app-a", "2026-07-22", 2) is None
+
+            postgres_call_logs.insert_call_log(
+                {
+                    "request_id": "req-postgres",
+                    "tenant_id": "tenant-a",
+                    "project_id": "project-a",
+                    "application_id": "app-a",
+                    "method": "POST",
+                    "path": "/v1/infer/faces",
+                    "status": "error",
+                    "http_status": 503,
+                    "error_code": "model_unavailable",
+                    "latency_ms": 25,
+                    "model_version": "face-v1",
+                    "worker": "worker-a",
+                    "created_at": 1_784_684_800.0,
+                }
+            )
+            call_rows = postgres_call_logs.query_call_logs(
+                "tenant-a",
+                project_id="project-a",
+                error_code="model_unavailable",
+            )
+            assert [row["request_id"] for row in call_rows] == ["req-postgres"]
+            assert postgres_call_logs.query_call_logs("tenant-a", project_id="project-b") == []
+            call_summary = postgres_call_logs.summarize_call_logs("tenant-a", project_id="project-a")
+            assert call_summary["request_count"] == 1
+            assert call_summary["error_count"] == 1
+            assert call_summary["complete"] is True
+        finally:
+            pool = postgres_core.POSTGRES_POOL
+            if pool is not None:
+                pool.close()
+            postgres_core.POSTGRES_POOL = previous_pool
+            postgres_core.POSTGRES_DSN = previous_dsn
 
 
 def test_qdrant_container_health_round_trip() -> None:

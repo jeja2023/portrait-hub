@@ -1,7 +1,15 @@
 from typing import Any
 
-from fastapi import APIRouter, Depends, File, Form, UploadFile
+from fastapi import Depends, File, Form, UploadFile
 
+from app.api_contracts import ContractAPIRouter as APIRouter
+from app.api_contracts import (
+    InferAppearanceResponse,
+    InferFacesResponse,
+    InferGaitResponse,
+    InferPersonsResponse,
+    InferPoseResponse,
+)
 from app.media.image_decode import decode_upload_images
 from app.portrait_analysis_archive import create_analysis_archive
 from app.portrait_async import run_blocking_io
@@ -36,7 +44,7 @@ async def archive_image_response(
 ) -> dict[str, Any]:
     await run_blocking_io(
         create_analysis_archive,
-        tenant_id=ctx.tenant_id,
+        tenant_id=ctx.scope_id,
         request_id=ctx.request_id,
         source_type="image",
         source_ref=ctx.request_id,
@@ -60,7 +68,12 @@ def validate_file_count(files: list[UploadFile], limit: int) -> None:
         )
 
 
-@router.post("/v1/infer/faces", dependencies=[Depends(permission_dependency("infer"))])
+@router.post(
+    "/v1/infer/faces",
+    response_model=InferFacesResponse,
+    response_model_exclude_none=True,
+    dependencies=[Depends(permission_dependency("infer"))],
+)
 async def v1_infer_faces(
     files: list[UploadFile] = File(...),
     include_embeddings: bool = Form(False),
@@ -115,7 +128,12 @@ async def v1_infer_faces(
     )
 
 
-@router.post("/v1/infer/persons", dependencies=[Depends(permission_dependency("infer"))])
+@router.post(
+    "/v1/infer/persons",
+    response_model=InferPersonsResponse,
+    response_model_exclude_none=True,
+    dependencies=[Depends(permission_dependency("infer"))],
+)
 async def v1_infer_persons(
     files: list[UploadFile] = File(...),
     include_embeddings: bool = Form(False),
@@ -173,7 +191,12 @@ async def v1_infer_persons(
     )
 
 
-@router.post("/v1/infer/pose", dependencies=[Depends(permission_dependency("infer"))])
+@router.post(
+    "/v1/infer/pose",
+    response_model=InferPoseResponse,
+    response_model_exclude_none=True,
+    dependencies=[Depends(permission_dependency("infer"))],
+)
 async def v1_infer_pose(
     files: list[UploadFile] = File(...),
     ctx: PortraitRequestContext = Depends(portrait_request_context),
@@ -203,7 +226,12 @@ async def v1_infer_pose(
     )
 
 
-@router.post("/v1/infer/appearance", dependencies=[Depends(permission_dependency("infer"))])
+@router.post(
+    "/v1/infer/appearance",
+    response_model=InferAppearanceResponse,
+    response_model_exclude_none=True,
+    dependencies=[Depends(permission_dependency("infer"))],
+)
 async def v1_infer_appearance(
     files: list[UploadFile] = File(...),
     include_embeddings: bool = Form(False),
@@ -247,7 +275,12 @@ async def v1_infer_appearance(
     )
 
 
-@router.post("/v1/infer/gait", dependencies=[Depends(permission_dependency("infer"))])
+@router.post(
+    "/v1/infer/gait",
+    response_model=InferGaitResponse,
+    response_model_exclude_none=True,
+    dependencies=[Depends(permission_dependency("infer"))],
+)
 async def v1_infer_gait(
     files: list[UploadFile] = File(...),
     include_embedding: bool = Form(False),

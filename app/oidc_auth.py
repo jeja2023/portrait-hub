@@ -14,12 +14,15 @@ import httpx
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import ec, padding, rsa
 from cryptography.hazmat.primitives.asymmetric.utils import encode_dss_signature
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import HTTPException, Request, status
 from fastapi.responses import JSONResponse, RedirectResponse
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.observability import logger
+from app.api_contracts import ContractAPIRouter as APIRouter
+from app.api_contracts import PortraitSuccessResponse
+from app.observability import logger, request_id_from_headers
 from app.portrait_auth import ROLE_PERMISSIONS
+from app.portrait_response import portrait_success
 from app.settings import (
     LOCAL_AUTH_ALLOW_REMOTE,
     LOCAL_AUTH_COOKIE_SECURE,
@@ -460,6 +463,8 @@ def _oidc_session_access(claims: dict[str, Any], tenant_id: str) -> tuple[list[s
 
 
 def _set_oidc_session(response: RedirectResponse, claims: dict[str, Any]) -> None:
+    from app.portrait_projects import project_ids_from_claims
+
     response.delete_cookie(_LOCAL_SESSION_COOKIE, path="/", secure=LOCAL_AUTH_COOKIE_SECURE, samesite="lax")
     now = int(time.time())
     token_expiry = int(float(claims["exp"]))
@@ -481,6 +486,9 @@ def _set_oidc_session(response: RedirectResponse, claims: dict[str, Any]) -> Non
         "iat": now,
         "exp": expires_at,
     }
+    claimed_projects = project_ids_from_claims(claims)
+    if claimed_projects is not None:
+        session["projects"] = sorted(claimed_projects)
     if managed_member_id is not None:
         session["managed_member_id"] = managed_member_id
     response.set_cookie(
@@ -554,15 +562,18 @@ def clear_browser_session_cookies(response: JSONResponse | RedirectResponse) -> 
 @router.get("/v1/auth/config")
 async def auth_public_config(request: Request) -> dict[str, Any]:
     local_enabled = local_auth_is_configured() and (LOCAL_AUTH_ALLOW_REMOTE or _request_is_loopback(request))
-    return {
-        "local_enabled": local_enabled,
-        "oidc_enabled": oidc_is_configured(),
-        "provider_name": OIDC_PROVIDER_NAME,
-        "credential_login_available": True,
-    }
+    return portrait_success(
+        request_id_from_headers(request),
+        {
+            "local_enabled": local_enabled,
+            "oidc_enabled": oidc_is_configured(),
+            "provider_name": OIDC_PROVIDER_NAME,
+            "credential_login_available": True,
+        },
+    )
 
 
-@router.post("/v1/auth/local/login")
+@router.post("/v1/auth/local/login", response_model=PortraitSuccessResponse)
 async def local_login(payload: LocalLoginRequest, request: Request) -> JSONResponse:
     if not local_auth_is_configured():
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="本地账号登录未配置")
@@ -572,18 +583,21 @@ async def local_login(payload: LocalLoginRequest, request: Request) -> JSONRespo
     password_matches = hmac.compare_digest(payload.password, LOCAL_AUTH_PASSWORD)
     if not username_matches or not password_matches:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="用户名或密码错误")
-    response = JSONResponse({"status": "success"})
+    response = JSONResponse(portrait_success(request_id_from_headers(request), {"authenticated": True}))
     _set_local_session(response, payload.username)
     return response
 
 
 @router.get("/v1/auth/oidc/config")
-async def oidc_public_config() -> dict[str, Any]:
-    return {
-        "enabled": oidc_is_configured(),
-        "provider_name": OIDC_PROVIDER_NAME,
-        "credential_login_available": True,
-    }
+async def oidc_public_config(request: Request) -> dict[str, Any]:
+    return portrait_success(
+        request_id_from_headers(request),
+        {
+            "enabled": oidc_is_configured(),
+            "provider_name": OIDC_PROVIDER_NAME,
+            "credential_login_available": True,
+        },
+    )
 
 
 @router.get("/auth/oidc/login")
@@ -673,12 +687,12 @@ async def oidc_callback(
         return response
 
 
-@router.post("/v1/auth/logout")
+@router.post("/v1/auth/logout", response_model=PortraitSuccessResponse)
 async def browser_logout(request: Request) -> JSONResponse:
     claims = browser_session_claims(request)
     if claims is not None:
         require_browser_session_csrf(request, claims)
-    response = JSONResponse({"status": "success"})
+    response = JSONResponse(portrait_success(request_id_from_headers(request), {"logged_out": True}))
     clear_browser_session_cookies(response)
     return response
 

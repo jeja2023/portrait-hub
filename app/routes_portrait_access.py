@@ -3,23 +3,27 @@ from __future__ import annotations
 import secrets
 from typing import Any
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.api_contracts import ContractAPIRouter as APIRouter
 from app.observability import request_id_from_headers
 from app.portrait_access import (
     access_state_payload,
     create_application,
+    create_project,
     create_tenant,
     create_webhook,
     find_tenant,
     list_applications,
+    list_projects,
     list_tenants,
     list_webhooks,
     restore_access_state,
     rotate_application_secret,
     rotate_webhook_secret,
     update_application,
+    update_project,
     update_tenant,
     update_webhook,
     webhook_sample_delivery,
@@ -29,12 +33,20 @@ from app.portrait_audit import audit_event
 from app.portrait_auth import permission_dependency
 from app.portrait_call_logs import list_call_logs, summarize_call_logs
 from app.portrait_errors import error_code_catalog
+from app.portrait_projects import request_grants_project
 from app.portrait_request_context import PortraitRequestContext, portrait_request_context
 from app.portrait_response import portrait_success
 from app.security import require_api_token
 
 router = APIRouter(dependencies=[Depends(require_api_token)])
 
+
+def require_project_grant(request: Request, ctx: PortraitRequestContext, project_id: str) -> None:
+    if not request_grants_project(request, ctx.tenant_id, project_id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="credentials do not grant access to the requested project",
+        )
 
 
 class AccessTenantCreateRequest(BaseModel):
@@ -71,10 +83,26 @@ class AccessTenantPatchRequest(BaseModel):
     status: str | None = Field(default=None, max_length=32)
 
 
+class AccessProjectCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    project_id: str = Field(..., min_length=1, max_length=96)
+    name: str = Field(..., min_length=1, max_length=256)
+    status: str = Field(default="active", max_length=32)
+
+
+class AccessProjectPatchRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str | None = Field(default=None, min_length=1, max_length=256)
+    status: str | None = Field(default=None, max_length=32)
+
+
 class AccessApplicationCreateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     app_id: str | None = Field(default=None, max_length=96)
+    project_id: str | None = Field(default=None, max_length=96)
     name: str = Field(..., min_length=1, max_length=256)
     owner: str = Field(default="platform", max_length=256)
     status: str = Field(default="active", max_length=32)
@@ -89,6 +117,7 @@ class AccessApplicationCreateRequest(BaseModel):
 class AccessApplicationPatchRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    project_id: str | None = Field(default=None, max_length=96)
     name: str | None = Field(default=None, max_length=256)
     owner: str | None = Field(default=None, max_length=256)
     status: str | None = Field(default=None, max_length=32)
@@ -135,7 +164,6 @@ async def audit_or_restore(event: str, snapshot: dict[str, list[dict[str, Any]]]
     except Exception:
         await run_blocking_io(restore_access_state, snapshot)
         raise
-
 
 
 @router.get("/v1/access/tenants", dependencies=[Depends(permission_dependency("tenants:read"))])
@@ -212,25 +240,110 @@ async def v1_access_patch_tenant(
     return portrait_success(request_id, {"tenant": tenant})
 
 
+@router.get("/v1/access/projects", dependencies=[Depends(permission_dependency("access:read"))])
+async def v1_access_projects(
+    request: Request,
+    ctx: PortraitRequestContext = Depends(portrait_request_context),
+) -> dict[str, Any]:
+    projects = await run_blocking_io(list_projects, ctx.tenant_id)
+    projects = [
+        project
+        for project in projects
+        if request_grants_project(
+            request,
+            ctx.tenant_id,
+            str(project.get("project_id") or "default"),
+        )
+    ]
+    return portrait_success(
+        ctx.request_id,
+        {"tenant_id": ctx.tenant_id, "projects": projects, "count": len(projects)},
+    )
+
+
+@router.post("/v1/access/projects", dependencies=[Depends(permission_dependency("access:write"))])
+async def v1_access_create_project(
+    payload: AccessProjectCreateRequest,
+    request: Request,
+    ctx: PortraitRequestContext = Depends(portrait_request_context),
+) -> dict[str, Any]:
+    require_project_grant(request, ctx, payload.project_id)
+    snapshot = await run_blocking_io(access_state_payload)
+    project = await run_blocking_io(
+        create_project,
+        ctx.tenant_id,
+        project_id=payload.project_id,
+        name=payload.name,
+        status_value=payload.status,
+    )
+    await audit_or_restore(
+        "access_project_created",
+        snapshot,
+        request_id=ctx.request_id,
+        tenant_id=ctx.tenant_id,
+        project_id=project["project_id"],
+    )
+    return portrait_success(ctx.request_id, {"project": project})
+
+
+@router.patch("/v1/access/projects/{project_id}", dependencies=[Depends(permission_dependency("access:write"))])
+async def v1_access_patch_project(
+    project_id: str,
+    payload: AccessProjectPatchRequest,
+    request: Request,
+    ctx: PortraitRequestContext = Depends(portrait_request_context),
+) -> dict[str, Any]:
+    require_project_grant(request, ctx, project_id)
+    snapshot = await run_blocking_io(access_state_payload)
+    project = await run_blocking_io(
+        update_project,
+        ctx.tenant_id,
+        project_id,
+        payload.model_dump(exclude_unset=True),
+    )
+    await audit_or_restore(
+        "access_project_updated",
+        snapshot,
+        request_id=ctx.request_id,
+        tenant_id=ctx.tenant_id,
+        project_id=project_id,
+        changed_fields=sorted(payload.model_fields_set),
+    )
+    return portrait_success(ctx.request_id, {"project": project})
+
+
 @router.get("/v1/access/applications", dependencies=[Depends(permission_dependency("access:read"))])
-async def v1_access_applications(ctx: PortraitRequestContext = Depends(portrait_request_context)) -> dict[str, Any]:
-    request_id = ctx.request_id
-    applications = await run_blocking_io(list_applications, ctx.tenant_id)
-    return portrait_success(request_id, {"tenant_id": ctx.tenant_id, "applications": applications, "count": len(applications)})
+async def v1_access_applications(
+    ctx: PortraitRequestContext = Depends(portrait_request_context),
+) -> dict[str, Any]:
+    applications = await run_blocking_io(list_applications, ctx.tenant_id, ctx.project_id)
+    return portrait_success(
+        ctx.request_id,
+        {
+            "tenant_id": ctx.tenant_id,
+            "project_id": ctx.project_id,
+            "applications": applications,
+            "count": len(applications),
+        },
+    )
 
 
 @router.post("/v1/access/applications", dependencies=[Depends(permission_dependency("access:write"))])
 async def v1_access_create_application(
     payload: AccessApplicationCreateRequest,
+    request: Request,
     ctx: PortraitRequestContext = Depends(portrait_request_context),
 ) -> dict[str, Any]:
     request_id = ctx.request_id
     tenant_id = ctx.tenant_id
+    target_project = payload.project_id or ctx.project_id
+    require_project_grant(request, ctx, target_project)
     snapshot = await run_blocking_io(access_state_payload)
     app, secret = await run_blocking_io(
         create_application,
         tenant_id,
         app_id=payload.app_id or generated_id("app"),
+        project_id=target_project,
         name=payload.name,
         owner=payload.owner,
         status_value=payload.status,
@@ -247,6 +360,7 @@ async def v1_access_create_application(
         request_id=request_id,
         tenant_id=tenant_id,
         app_id=app["app_id"],
+        project_id=app["project_id"],
         scope_count=len(app.get("scopes", [])),
         status=app.get("status"),
         rate_limit_per_minute=app.get("rate_limit_per_minute"),
@@ -259,19 +373,29 @@ async def v1_access_create_application(
 async def v1_access_patch_application(
     app_id: str,
     payload: AccessApplicationPatchRequest,
+    request: Request,
     ctx: PortraitRequestContext = Depends(portrait_request_context),
 ) -> dict[str, Any]:
     request_id = ctx.request_id
     tenant_id = ctx.tenant_id
     updates = payload.model_dump(exclude_unset=True)
+    target_project = str(updates.get("project_id") or ctx.project_id)
+    require_project_grant(request, ctx, target_project)
     snapshot = await run_blocking_io(access_state_payload)
-    app = await run_blocking_io(update_application, tenant_id, app_id, updates)
+    app = await run_blocking_io(
+        update_application,
+        tenant_id,
+        app_id,
+        updates,
+        project_id=ctx.project_id,
+    )
     await audit_or_restore(
         "access_application_updated",
         snapshot,
         request_id=request_id,
         tenant_id=tenant_id,
         app_id=app["app_id"],
+        project_id=app["project_id"],
         updated_fields=sorted(updates),
         status=app.get("status"),
     )
@@ -286,13 +410,19 @@ async def v1_access_rotate_application(
     request_id = ctx.request_id
     tenant_id = ctx.tenant_id
     snapshot = await run_blocking_io(access_state_payload)
-    app, secret = await run_blocking_io(rotate_application_secret, tenant_id, app_id)
+    app, secret = await run_blocking_io(
+        rotate_application_secret,
+        tenant_id,
+        app_id,
+        project_id=ctx.project_id,
+    )
     await audit_or_restore(
         "access_application_secret_rotated",
         snapshot,
         request_id=request_id,
         tenant_id=tenant_id,
         app_id=app["app_id"],
+        project_id=app["project_id"],
         status=app.get("status"),
     )
     return portrait_success(request_id, {"application": app, "one_time_secret": secret})
@@ -305,6 +435,7 @@ async def v1_access_error_codes(ctx: PortraitRequestContext = Depends(portrait_r
         ctx.request_id,
         {"tenant_id": ctx.tenant_id, "error_codes": error_codes, "count": len(error_codes)},
     )
+
 
 @router.get("/v1/access/call-logs/summary", dependencies=[Depends(permission_dependency("access:read"))])
 async def v1_access_call_logs_summary(
@@ -321,6 +452,7 @@ async def v1_access_call_logs_summary(
         summarize_call_logs,
         ctx.tenant_id,
         request_id=request_id,
+        project_id=ctx.project_id,
         endpoint=endpoint,
         status_text=status_text,
         application_id=application_id,
@@ -328,7 +460,11 @@ async def v1_access_call_logs_summary(
         created_since=created_since,
         created_until=created_until,
     )
-    return portrait_success(ctx.request_id, {"tenant_id": ctx.tenant_id, **summary})
+    return portrait_success(
+        ctx.request_id,
+        {"tenant_id": ctx.tenant_id, "project_id": ctx.project_id, **summary},
+    )
+
 
 @router.get("/v1/access/call-logs", dependencies=[Depends(permission_dependency("access:read"))])
 async def v1_access_call_logs(
@@ -346,6 +482,7 @@ async def v1_access_call_logs(
         list_call_logs,
         ctx.tenant_id,
         request_id=request_id,
+        project_id=ctx.project_id,
         endpoint=endpoint,
         status_text=status_text,
         application_id=application_id,
@@ -354,14 +491,30 @@ async def v1_access_call_logs(
         created_until=created_until,
         limit=limit,
     )
-    return portrait_success(ctx.request_id, {"tenant_id": ctx.tenant_id, "logs": logs, "count": len(logs)})
+    return portrait_success(
+        ctx.request_id,
+        {
+            "tenant_id": ctx.tenant_id,
+            "project_id": ctx.project_id,
+            "logs": logs,
+            "count": len(logs),
+        },
+    )
 
 
 @router.get("/v1/access/webhooks", dependencies=[Depends(permission_dependency("access:read"))])
 async def v1_access_webhooks(ctx: PortraitRequestContext = Depends(portrait_request_context)) -> dict[str, Any]:
     request_id = ctx.request_id
-    webhooks = await run_blocking_io(list_webhooks, ctx.tenant_id)
-    return portrait_success(request_id, {"tenant_id": ctx.tenant_id, "webhooks": webhooks, "count": len(webhooks)})
+    webhooks = await run_blocking_io(list_webhooks, ctx.tenant_id, ctx.project_id)
+    return portrait_success(
+        request_id,
+        {
+            "tenant_id": ctx.tenant_id,
+            "project_id": ctx.project_id,
+            "webhooks": webhooks,
+            "count": len(webhooks),
+        },
+    )
 
 
 @router.post("/v1/access/webhooks", dependencies=[Depends(permission_dependency("access:write"))])
@@ -376,6 +529,7 @@ async def v1_access_create_webhook(
         create_webhook,
         tenant_id,
         webhook_id=payload.webhook_id or generated_id("wh"),
+        project_id=ctx.project_id,
         name=payload.name,
         application_id=payload.application_id,
         url=payload.url,
@@ -407,7 +561,13 @@ async def v1_access_patch_webhook(
     tenant_id = ctx.tenant_id
     updates = payload.model_dump(exclude_unset=True)
     snapshot = await run_blocking_io(access_state_payload)
-    webhook = await run_blocking_io(update_webhook, tenant_id, webhook_id, updates)
+    webhook = await run_blocking_io(
+        update_webhook,
+        tenant_id,
+        webhook_id,
+        updates,
+        project_id=ctx.project_id,
+    )
     await audit_or_restore(
         "access_webhook_updated",
         snapshot,
@@ -428,7 +588,12 @@ async def v1_access_rotate_webhook(
     request_id = ctx.request_id
     tenant_id = ctx.tenant_id
     snapshot = await run_blocking_io(access_state_payload)
-    webhook, secret = await run_blocking_io(rotate_webhook_secret, tenant_id, webhook_id)
+    webhook, secret = await run_blocking_io(
+        rotate_webhook_secret,
+        tenant_id,
+        webhook_id,
+        project_id=ctx.project_id,
+    )
     await audit_or_restore(
         "access_webhook_secret_rotated",
         snapshot,
@@ -446,5 +611,10 @@ async def v1_access_webhook_sample(
     ctx: PortraitRequestContext = Depends(portrait_request_context),
 ) -> dict[str, Any]:
     request_id = ctx.request_id
-    sample = await run_blocking_io(webhook_sample_delivery, ctx.tenant_id, webhook_id)
+    sample = await run_blocking_io(
+        webhook_sample_delivery,
+        ctx.tenant_id,
+        webhook_id,
+        project_id=ctx.project_id,
+    )
     return portrait_success(request_id, {"sample_delivery": sample})

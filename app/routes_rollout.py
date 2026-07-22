@@ -1,7 +1,8 @@
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import Depends, HTTPException, Query, Request, status
 
+from app.api_contracts import ContractAPIRouter as APIRouter
 from app.model_config import MODEL_ALIASES, alias_resolution, reload_model_config_state
 from app.model_config_writer import (
     configure_weighted_alias_rollout,
@@ -34,9 +35,7 @@ def alias_view(alias_name: str, alias_config: Any) -> dict[str, Any]:
         ok = True
         error = None
     except Exception as exc:
-        logger.warning(
-            "别名解析失败 for %s: %s", alias_name, exception_log_summary(exc)
-        )
+        logger.warning("别名解析失败 for %s: %s", alias_name, exception_log_summary(exc))
         resolution = None
         target = None
         ok = False
@@ -44,9 +43,7 @@ def alias_view(alias_name: str, alias_config: Any) -> dict[str, Any]:
     return {
         "alias": alias_name,
         "target": target,
-        "previous_target": alias_config.get("previous_target")
-        if isinstance(alias_config, dict)
-        else None,
+        "previous_target": alias_config.get("previous_target") if isinstance(alias_config, dict) else None,
         "resolution": resolution,
         "config": alias_config,
         "ok": ok,
@@ -141,9 +138,7 @@ async def rollout_alias_preview(
         Depends(permission_dependency("models:write")),
     ],
 )
-async def rollout_alias_switch(
-    req: AliasSwitchRequest, request: Request
-) -> dict[str, Any]:
+async def rollout_alias_switch(req: AliasSwitchRequest, request: Request) -> dict[str, Any]:
     project, model = split_cache_key(req.target_model_id)
     get_model_path(project, model)
     result = switch_alias_target(
@@ -154,9 +149,7 @@ async def rollout_alias_switch(
     )
     if not req.dry_run:
         reload_model_config_state()
-    return portrait_success(
-        request_id_from_headers(request), {**result, "aliases": aliases_payload()}
-    )
+    return portrait_success(request_id_from_headers(request), {**result, "aliases": aliases_payload()})
 
 
 @router.post(
@@ -166,9 +159,7 @@ async def rollout_alias_switch(
         Depends(permission_dependency("models:write")),
     ],
 )
-async def rollout_alias_weighted(
-    req: AliasWeightedRolloutRequest, request: Request
-) -> dict[str, Any]:
+async def rollout_alias_weighted(req: AliasWeightedRolloutRequest, request: Request) -> dict[str, Any]:
     for item in req.targets:
         project, model = split_cache_key(item.target_model_id)
         get_model_path(project, model)
@@ -180,9 +171,7 @@ async def rollout_alias_weighted(
     )
     if not req.dry_run:
         reload_model_config_state()
-    return portrait_success(
-        request_id_from_headers(request), {**result, "aliases": aliases_payload()}
-    )
+    return portrait_success(request_id_from_headers(request), {**result, "aliases": aliases_payload()})
 
 
 @router.post(
@@ -192,19 +181,11 @@ async def rollout_alias_weighted(
         Depends(permission_dependency("models:write")),
     ],
 )
-async def rollout_alias_rollback(
-    req: AliasRollbackRequest, request: Request
-) -> dict[str, Any]:
+async def rollout_alias_rollback(req: AliasRollbackRequest, request: Request) -> dict[str, Any]:
     dry_result = rollback_alias_target(alias_name=req.alias_name, dry_run=True)
     project, model = split_cache_key(dry_result["new_target"])
     get_model_path(project, model)
-    result = (
-        dry_result
-        if req.dry_run
-        else rollback_alias_target(alias_name=req.alias_name, dry_run=False)
-    )
+    result = dry_result if req.dry_run else rollback_alias_target(alias_name=req.alias_name, dry_run=False)
     if not req.dry_run:
         reload_model_config_state()
-    return portrait_success(
-        request_id_from_headers(request), {**result, "aliases": aliases_payload()}
-    )
+    return portrait_success(request_id_from_headers(request), {**result, "aliases": aliases_payload()})

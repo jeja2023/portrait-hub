@@ -1,4 +1,62 @@
 models:
+  portrait_hub/yolov8n.onnx:
+    task: detection
+    type: yolo
+    runtime: onnxruntime
+    version: 1.0.0
+    input:
+      size: [640, 640]
+      layout: nchw
+      color: rgb
+      resize: letterbox
+      normalize: none
+    output:
+      format: yolo
+      classes: coco
+      class_filter: [person]
+      confidence: 0.25
+      iou: 0.45
+      max_detections: 100
+    artifact:
+      path: yolov8n.onnx
+      sha256: replace-with-real-sha256
+
+  portrait_hub/osnet_ibn_x1_0.onnx:
+    task: body_embedding
+    type: reid
+    runtime: onnxruntime
+    version: 1.0.0
+    input:
+      size: [256, 128]
+      layout: nchw
+      color: rgb
+      normalize: imagenet
+    output:
+      format: embedding
+      embedding_normalize: l2
+      embedding_dim: 512
+    artifact:
+      path: osnet_ibn_x1_0.onnx
+      sha256: replace-with-real-sha256
+
+  portrait_hub/attribute_reid.onnx:
+    task: appearance
+    type: attribute_reid
+    runtime: onnxruntime
+    version: 1.0.0
+    input:
+      size: [256, 128]
+      layout: nchw
+      color: rgb
+      normalize: imagenet
+    output:
+      format: embedding
+      embedding_normalize: l2
+      embedding_dim: 256
+    artifact:
+      path: attribute_reid.onnx
+      sha256: replace-with-real-sha256
+
   portrait_hub/scrfd_10g.onnx:
     task: face_detection
     type: scrfd

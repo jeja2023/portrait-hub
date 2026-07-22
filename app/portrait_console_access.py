@@ -10,6 +10,7 @@ from typing import Any
 
 from app.portrait_access import application_key_matches
 from app.portrait_auth import ROLE_PERMISSIONS, optional_header_value, roles_from_claims, unauthorized, verify_hs256_jwt
+from app.portrait_projects import DEFAULT_PROJECT_ID
 from app.security import global_api_token_matches
 from app.settings import (
     API_TOKEN,
@@ -34,6 +35,7 @@ class ConsoleWebSocketTicket:
     permission: str
     expires_at: float
     fingerprint: str
+    project_id: str = DEFAULT_PROJECT_ID
 
 
 _TICKETS: dict[str, ConsoleWebSocketTicket] = {}
@@ -61,6 +63,7 @@ def _ticket_payload(record: ConsoleWebSocketTicket) -> str:
             "resource_type": record.resource_type,
             "resource_id": record.resource_id,
             "permission": record.permission,
+            "project_id": record.project_id,
             "expires_at": record.expires_at,
             "fingerprint": record.fingerprint,
         },
@@ -75,6 +78,7 @@ def _ticket_from_payload(payload: str) -> ConsoleWebSocketTicket:
         resource_type=str(data["resource_type"]),
         resource_id=str(data["resource_id"]),
         permission=str(data["permission"]),
+        project_id=str(data.get("project_id") or DEFAULT_PROJECT_ID),
         expires_at=float(data["expires_at"]),
         fingerprint=str(data["fingerprint"]),
     )
@@ -96,6 +100,7 @@ def issue_console_ws_ticket(
     resource_type: str,
     resource_id: str,
     permission: str,
+    project_id: str = DEFAULT_PROJECT_ID,
     now: float | None = None,
 ) -> tuple[str, ConsoleWebSocketTicket]:
     issued_at = time.time() if now is None else float(now)
@@ -108,6 +113,7 @@ def issue_console_ws_ticket(
             resource_type=resource_type,
             resource_id=resource_id,
             permission=permission,
+            project_id=project_id,
             expires_at=issued_at + CONSOLE_WS_TICKET_TTL_SECONDS,
             fingerprint=digest[:16],
         )
@@ -133,6 +139,7 @@ def issue_console_ws_ticket(
             resource_type=resource_type,
             resource_id=resource_id,
             permission=permission,
+            project_id=project_id,
             expires_at=issued_at + CONSOLE_WS_TICKET_TTL_SECONDS,
             fingerprint=digest[:16],
         )
@@ -147,6 +154,7 @@ def consume_console_ws_ticket(
     resource_type: str,
     resource_id: str,
     permission: str,
+    project_id: str = DEFAULT_PROJECT_ID,
     now: float | None = None,
 ) -> bool:
     current_time = time.time() if now is None else float(now)
@@ -171,6 +179,7 @@ def consume_console_ws_ticket(
         and record.resource_type == resource_type
         and record.resource_id == resource_id
         and record.permission == permission
+        and record.project_id == project_id
     )
 
 

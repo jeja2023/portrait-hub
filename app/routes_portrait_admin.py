@@ -1,9 +1,10 @@
 from copy import deepcopy
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import Depends, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.api_contracts import ContractAPIRouter as APIRouter
 from app.observability import logger
 from app.portrait_async import run_blocking_io
 from app.portrait_audit import (
@@ -194,7 +195,9 @@ def retention_cleanup_transaction(
             retention_days=retention_days,
             candidate_gallery_people=len(gallery_candidates),
             candidate_gallery_feature_count=sum(len(person.features) for person in gallery_candidates),
-            candidate_gallery_object_reference_count=sum(len(feature_object_infos(person)) for person in gallery_candidates),
+            candidate_gallery_object_reference_count=sum(
+                len(feature_object_infos(person)) for person in gallery_candidates
+            ),
         )
 
         for job in video_jobs_snapshots(tenant_id):
@@ -226,7 +229,9 @@ def retention_cleanup_transaction(
                 deleted_gallery_objects += deleted_object_count
                 removed_gallery_people += 1
     except Exception as exc:
-        rollback_errors = rollback_retention_cleanup(removed_job_snapshots, trimmed_stream_snapshots, removed_gallery_snapshots)
+        rollback_errors = rollback_retention_cleanup(
+            removed_job_snapshots, trimmed_stream_snapshots, removed_gallery_snapshots
+        )
         if rollback_errors:
             raise_retention_cleanup_rollback_failure(exc, rollback_errors)
         raise
@@ -244,7 +249,7 @@ def retention_cleanup_transaction(
 @router.get("/v1/admin/status", dependencies=[Depends(permission_dependency("admin:status"))])
 async def v1_admin_status(ctx: PortraitRequestContext = Depends(portrait_request_context)) -> dict[str, Any]:
     request_id = ctx.request_id
-    tenant_id = ctx.tenant_id
+    tenant_id = ctx.scope_id
     health = await run_blocking_io(admin_health_snapshot)
     return portrait_success(
         request_id,
@@ -283,7 +288,7 @@ async def v1_admin_status(ctx: PortraitRequestContext = Depends(portrait_request
 @router.get("/v1/admin/audit/verify", dependencies=[Depends(permission_dependency("admin:status"))])
 async def v1_admin_audit_verify(ctx: PortraitRequestContext = Depends(portrait_request_context)) -> dict[str, Any]:
     request_id = ctx.request_id
-    tenant_id = ctx.tenant_id
+    tenant_id = ctx.scope_id
     try:
         audit_chain = await run_blocking_io(public_audit_chain_verification)
     except Exception as exc:
@@ -304,7 +309,7 @@ async def v1_admin_audit_events(
     ctx: PortraitRequestContext = Depends(portrait_request_context),
 ) -> dict[str, Any]:
     request_id_header = ctx.request_id
-    tenant_id = ctx.tenant_id
+    tenant_id = ctx.scope_id
     if category is not None and category not in {"delete_requests", "exports", "model_versions", "retention", "other"}:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="不支持的审计事件类别")
     if created_since is not None and created_until is not None and created_until < created_since:
@@ -326,6 +331,7 @@ async def v1_admin_audit_events(
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="审计事件不可用") from exc
     return portrait_success(request_id_header, {"tenant_id": tenant_id, **audit_events})
 
+
 @router.get("/v1/admin/export", dependencies=[Depends(permission_dependency("admin:export"))])
 async def v1_admin_export(
     people_limit: int | None = Query(None),
@@ -344,7 +350,7 @@ async def v1_admin_export(
     ctx: PortraitRequestContext = Depends(portrait_request_context),
 ) -> dict[str, Any]:
     request_id = ctx.request_id
-    tenant_id = ctx.tenant_id
+    tenant_id = ctx.scope_id
     people_request = normalize_list_pagination(people_limit, people_offset, people_cursor)
     jobs_request = normalize_list_pagination(jobs_limit, jobs_offset, jobs_cursor)
     streams_request = normalize_list_pagination(streams_limit, streams_offset, streams_cursor)
@@ -358,12 +364,14 @@ async def v1_admin_export(
     all_jobs = [
         job
         for job in video_jobs_snapshots(tenant_id)
-        if job.tenant_id == tenant_id and (updated_since is None or float(job.updated_at or job.created_at) >= updated_since)
+        if job.tenant_id == tenant_id
+        and (updated_since is None or float(job.updated_at or job.created_at) >= updated_since)
     ]
     all_streams = [
         stream
         for stream in stream_records_snapshot()
-        if stream.tenant_id == tenant_id and (updated_since is None or float(stream.updated_at or stream.created_at) >= updated_since)
+        if stream.tenant_id == tenant_id
+        and (updated_since is None or float(stream.updated_at or stream.created_at) >= updated_since)
     ]
     people, people_page = page_items_keyset(
         sorted(all_people, key=lambda item: item["person_id"]),
@@ -454,7 +462,7 @@ async def v1_admin_backups(
     ctx: PortraitRequestContext = Depends(portrait_request_context),
 ) -> dict[str, Any]:
     request_id = ctx.request_id
-    tenant_id = ctx.tenant_id
+    tenant_id = ctx.scope_id
     try:
         backups = await run_blocking_io(read_public_backup_snapshots, limit, tenant_id)
     except Exception as exc:
@@ -462,13 +470,14 @@ async def v1_admin_backups(
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="备份快照不可用") from exc
     return portrait_success(request_id, {"tenant_id": tenant_id, **backups})
 
+
 @router.post("/v1/admin/backup", dependencies=[Depends(permission_dependency("admin:export"))])
 async def v1_admin_backup(
     payload: AdminBackupRequest,
     ctx: PortraitRequestContext = Depends(portrait_request_context),
 ) -> dict[str, Any]:
     request_id = ctx.request_id
-    tenant_id = ctx.tenant_id
+    tenant_id = ctx.scope_id
     if payload.confirm is not None and payload.confirm != "backup":
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='请在 confirm 中输入 "backup" 后执行备份')
     export_response = await v1_admin_export(
@@ -522,7 +531,7 @@ async def v1_admin_retention_cleanup(
     ctx: PortraitRequestContext = Depends(portrait_request_context),
 ) -> dict[str, Any]:
     request_id = ctx.request_id
-    tenant_id = ctx.tenant_id
+    tenant_id = ctx.scope_id
     if payload.confirm is not None and payload.confirm != "cleanup":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

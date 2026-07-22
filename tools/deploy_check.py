@@ -111,6 +111,8 @@ def check_required_files(root: Path, report: DeployReport) -> None:
         "app/inference.py",
         "app/vision.py",
         "app/portrait_postgres.py",
+        "app/postgres_access.py",
+        "app/postgres_call_logs.py",
         "app/portrait_tracking.py",
         "app/runtime_face.py",
         "app/runtime_body.py",
@@ -580,6 +582,9 @@ def check_production_integrations(root: Path, report: DeployReport) -> None:
     schema = read_text(root / "tools" / "portrait_postgres_schema.sql")
     schema_required = [
         "CREATE EXTENSION IF NOT EXISTS vector",
+        "portrait_access_state",
+        "portrait_application_daily_usage",
+        "portrait_call_logs",
         "embedding_vector vector",
         "portrait_thresholds",
         "portrait_objects",

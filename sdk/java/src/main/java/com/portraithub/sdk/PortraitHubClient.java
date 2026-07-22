@@ -30,7 +30,7 @@ import java.util.StringJoiner;
 public final class PortraitHubClient {
 
     /** 与仓库版本保持一致。 */
-    public static final String SDK_VERSION = "0.16.0";
+    public static final String SDK_VERSION = "0.17.0";
 
     private static final String USER_AGENT = "portrait-hub-sdk-java/" + SDK_VERSION;
 
@@ -71,6 +71,7 @@ public final class PortraitHubClient {
         private final String baseUrl;
         private String apiToken;
         private String tenantId;
+        private String projectId;
         private String authScheme = "bearer";
         private Duration timeout = Duration.ofSeconds(30);
 
@@ -85,6 +86,11 @@ public final class PortraitHubClient {
 
         public Builder tenantId(String value) {
             this.tenantId = value;
+            return this;
+        }
+
+        public Builder projectId(String value) {
+            this.projectId = value;
             return this;
         }
 
@@ -107,6 +113,7 @@ public final class PortraitHubClient {
     private final String apiToken;
     private final String tenantId;
     private final String authScheme;
+    private final String projectId;
     private final Duration timeout;
     private final HttpClient httpClient;
 
@@ -115,6 +122,7 @@ public final class PortraitHubClient {
         this.apiToken = builder.apiToken;
         this.tenantId = builder.tenantId;
         String normalized = builder.authScheme.trim().toLowerCase(Locale.ROOT).replace('-', '_');
+        this.projectId = builder.projectId;
         if (!normalized.equals("bearer") && !normalized.equals("api_key")) {
             throw new IllegalArgumentException("authScheme 必须是 'bearer' 或 'api_key'");
         }
@@ -133,6 +141,9 @@ public final class PortraitHubClient {
                 .header("User-Agent", USER_AGENT);
         if (tenantId != null && !tenantId.isEmpty()) {
             request.header("X-Tenant-ID", tenantId);
+        }
+        if (projectId != null && !projectId.isEmpty()) {
+            request.header("X-Project-ID", projectId);
         }
         if (apiToken != null && !apiToken.isEmpty()) {
             if (authScheme.equals("api_key")) {

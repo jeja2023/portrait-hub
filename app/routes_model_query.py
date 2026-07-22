@@ -1,8 +1,9 @@
 from copy import deepcopy
 from typing import Any
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import Depends, Request
 
+from app.api_contracts import ContractAPIRouter as APIRouter
 from app.metrics import gpu_memory_metrics
 from app.model_config import MODEL_ALIASES, MODEL_CONFIGS, reload_model_config_state
 from app.model_config_writer import configure_model_gpu_device, load_raw_model_config, write_raw_model_config
@@ -75,11 +76,7 @@ async def update_model_gpu_device(
     model_id = validate_model_target(model_id)
     previous_raw = await run_blocking_io(load_raw_model_config)
     inventory = await run_blocking_io(gpu_device_inventory)
-    allowed_device_ids = [
-        int(item["device_id"])
-        for item in inventory["devices"]
-        if item["assignable"]
-    ]
+    allowed_device_ids = [int(item["device_id"]) for item in inventory["devices"] if item["assignable"]]
 
     try:
         result = await run_blocking_io(

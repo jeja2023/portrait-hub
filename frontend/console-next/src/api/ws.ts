@@ -59,7 +59,11 @@ export async function openTicketWebSocket(input: {
         body: jsonBody({ resource_type: input.resourceType, resource_id: input.resourceId }),
       });
       const scheme = window.location.protocol === "https:" ? "wss:" : "ws:";
-      const query = new URLSearchParams({ tenant_id: sessionState.tenantId, ticket: issued.ticket });
+      const query = new URLSearchParams({
+        tenant_id: sessionState.tenantId,
+        project_id: sessionState.projectId,
+        ticket: issued.ticket,
+      });
       socket = new WebSocket(`${scheme}//${window.location.host}${issued.websocket_path}?${query}`);
       socket.onopen = () => {
         retry = 0;

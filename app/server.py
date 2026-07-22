@@ -25,9 +25,9 @@ from app.core import (
     set_log_context,
     split_cache_key,
     traceparent_from_headers,
-    wall_time,
 )
 from app.metrics import observe_request_status
+from app.observability import wall_time
 from app.portrait_access import flush_access_call_stats
 from app.portrait_async import run_blocking_io
 from app.portrait_bootstrap import ensure_portrait_runtime_state_loaded
@@ -172,15 +172,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     await warmup_models()
     if CONFIG_HOT_RELOAD_ENABLED:
         install_config_reload_signal_handler()
-    reload_task = (
-        asyncio.create_task(config_hot_reload_loop())
-        if CONFIG_HOT_RELOAD_ENABLED
-        else None
-    )
+    reload_task = asyncio.create_task(config_hot_reload_loop()) if CONFIG_HOT_RELOAD_ENABLED else None
     access_stats_task = (
-        asyncio.create_task(access_stats_flush_loop())
-        if ACCESS_STATS_FLUSH_INTERVAL_SECONDS > 0
-        else None
+        asyncio.create_task(access_stats_flush_loop()) if ACCESS_STATS_FLUSH_INTERVAL_SECONDS > 0 else None
     )
     video_job_worker_task = start_in_process_worker()
     try:
@@ -192,9 +186,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         try:
             await run_blocking_io(flush_access_call_stats)
         except Exception as exc:
-            logger.warning(
-                "关闭服务时刷盘接入调用统计失败: %s", exception_log_summary(exc)
-            )
+            logger.warning("关闭服务时刷盘接入调用统计失败: %s", exception_log_summary(exc))
 
 
 def limit_request_body(request: Request) -> Request:
@@ -206,9 +198,7 @@ def limit_request_body(request: Request) -> Request:
         try:
             content_length = int(raw_content_length)
         except ValueError as exc:
-            raise HTTPException(
-                status_code=400, detail="content-length 请求头无效"
-            ) from exc
+            raise HTTPException(status_code=400, detail="content-length 请求头无效") from exc
         if content_length > MAX_REQUEST_BODY_BYTES:
             raise HTTPException(status_code=413, detail=request_body_too_large_detail())
 
@@ -221,17 +211,13 @@ def limit_request_body(request: Request) -> Request:
         if message.get("type") == "http.request":
             received += len(message.get("body", b""))
             if received > MAX_REQUEST_BODY_BYTES:
-                raise HTTPException(
-                    status_code=413, detail=request_body_too_large_detail()
-                )
+                raise HTTPException(status_code=413, detail=request_body_too_large_detail())
         return message
 
     return Request(request.scope, limited_receive)
 
 
-def validation_error_payload(
-    exc: RequestValidationError, request_id: str | None = None
-) -> dict[str, Any]:
+def validation_error_payload(exc: RequestValidationError, request_id: str | None = None) -> dict[str, Any]:
     errors = []
     for error in exc.errors():
         errors.append(
@@ -269,22 +255,21 @@ def api_error_payload(
     error: dict[str, Any] = {"code": code, "message": message}
     if details not in (None, {}, []):
         error["details"] = details
-    return {"status": "error", "request_id": request_id, "error": error}
+    return {
+        "status": "error",
+        "schema_version": "1.0",
+        "request_id": request_id,
+        "error": error,
+    }
 
 
-def error_payload_from_http_detail(
-    detail: Any, status_code: int, request_id: str
-) -> dict[str, Any]:
+def error_payload_from_http_detail(detail: Any, status_code: int, request_id: str) -> dict[str, Any]:
     code = error_code_from_http_detail(detail, status_code) or f"http_{status_code}"
     details: Any | None = None
     if isinstance(detail, dict):
         raw_message = detail.get("message")
         message = str(raw_message) if raw_message else "请求失败"
-        details = {
-            key: value
-            for key, value in detail.items()
-            if key not in {"code", "message", "request_id"}
-        }
+        details = {key: value for key, value in detail.items() if key not in {"code", "message", "request_id"}}
     elif isinstance(detail, str):
         message = detail
     else:
@@ -293,9 +278,7 @@ def error_payload_from_http_detail(
     return api_error_payload(request_id, code, message, details=details)
 
 
-def internal_error_payload(
-    request_id: str, *, v1_contract: bool = False
-) -> dict[str, Any]:
+def internal_error_payload(request_id: str, *, v1_contract: bool = False) -> dict[str, Any]:
     if v1_contract:
         return api_error_payload(request_id, "internal_error", "内部服务器错误")
     return {"detail": "内部服务器错误", "request_id": request_id}
@@ -315,7 +298,18 @@ def error_code_from_http_detail(detail: Any, status_code: int) -> str | None:
             nested_code = nested.get("code")
             if isinstance(nested_code, str) and nested_code.strip():
                 return nested_code.strip()
-    return f"http_{status_code}" if status_code >= 400 else None
+    status_codes = {
+        400: "client_error",
+        401: "unauthorized",
+        403: "forbidden",
+        404: "not_found",
+        409: "conflict",
+        413: "too_large",
+        422: "validation_error",
+        429: "rate_limited",
+        500: "internal_error",
+    }
+    return status_codes.get(status_code, f"http_{status_code}") if status_code >= 400 else None
 
 
 def create_app() -> FastAPI:
@@ -335,9 +329,7 @@ def create_app() -> FastAPI:
     configure_opentelemetry(app)
 
     @app.exception_handler(RequestValidationError)
-    async def request_validation_exception_handler(
-        request: Request, exc: RequestValidationError
-    ) -> JSONResponse:
+    async def request_validation_exception_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
         request.state.portrait_error_code = "validation_error"
         request_id = request_id_from_headers(request)
         if uses_v1_contract(request):
@@ -348,9 +340,7 @@ def create_app() -> FastAPI:
         return JSONResponse(status_code=422, content=content)
 
     @app.exception_handler(PortraitError)
-    async def portrait_error_exception_handler(
-        request: Request, exc: PortraitError
-    ) -> JSONResponse:
+    async def portrait_error_exception_handler(request: Request, exc: PortraitError) -> JSONResponse:
         request.state.portrait_error_code = exc.code
         request_id = request_id_from_headers(request)
         content = (
@@ -358,14 +348,10 @@ def create_app() -> FastAPI:
             if uses_v1_contract(request)
             else {"detail": exc.public_detail(), "request_id": request_id}
         )
-        return JSONResponse(
-            status_code=exc.status_code, content=content, headers=exc.headers
-        )
+        return JSONResponse(status_code=exc.status_code, content=content, headers=exc.headers)
 
     @app.exception_handler(HTTPException)
-    async def http_exception_handler(
-        request: Request, exc: HTTPException
-    ) -> JSONResponse:
+    async def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
         request_id = request_id_from_headers(request)
         code = error_code_from_http_detail(exc.detail, exc.status_code)
         request.state.portrait_error_code = code
@@ -374,22 +360,14 @@ def create_app() -> FastAPI:
             if uses_v1_contract(request)
             else {"detail": exc.detail}
         )
-        return JSONResponse(
-            status_code=exc.status_code, content=content, headers=exc.headers
-        )
+        return JSONResponse(status_code=exc.status_code, content=content, headers=exc.headers)
 
     @app.middleware("http")
     async def request_logging_middleware(request: Request, call_next: Any) -> Response:
         request_id = request_id_from_headers(request)
         traceparent = traceparent_from_headers(request)
-        tenant_id = (
-            request.headers.get("x-tenant-id")
-            or inferred_tenant_id_from_request(request)
-            or None
-        )
-        context_tokens = set_log_context(
-            request_id=request_id, tenant_id=tenant_id, traceparent=traceparent
-        )
+        tenant_id = request.headers.get("x-tenant-id") or inferred_tenant_id_from_request(request) or None
+        context_tokens = set_log_context(request_id=request_id, tenant_id=tenant_id, traceparent=traceparent)
         start_time = wall_time()
         start_perf = now()
         logged_error_code: str | None = None
@@ -400,14 +378,10 @@ def create_app() -> FastAPI:
                 check_rate_limit(request)
                 response = await call_next(request)
             except HTTPException as exc:
-                logged_error_code = error_code_from_http_detail(
-                    exc.detail, exc.status_code
-                )
+                logged_error_code = error_code_from_http_detail(exc.detail, exc.status_code)
                 response = JSONResponse(
                     status_code=exc.status_code,
-                    content=error_payload_from_http_detail(
-                        exc.detail, exc.status_code, request_id
-                    )
+                    content=error_payload_from_http_detail(exc.detail, exc.status_code, request_id)
                     if uses_v1_contract(request)
                     else {"detail": exc.detail},
                     headers=exc.headers,
@@ -426,25 +400,26 @@ def create_app() -> FastAPI:
                 )
                 response = JSONResponse(
                     status_code=500,
-                    content=internal_error_payload(
-                        request_id, v1_contract=uses_v1_contract(request)
-                    ),
+                    content=internal_error_payload(request_id, v1_contract=uses_v1_contract(request)),
                 )
             duration = now() - start_perf
             observe_request_status(response.status_code)
             request_state = getattr(request, "state", None)
             tenant_id = getattr(request_state, "portrait_tenant_id", None) or tenant_id
-            logged_error_code = logged_error_code or getattr(
-                request_state, "portrait_error_code", None
-            )
-            application_id = getattr(
-                request_state, "portrait_application_id", None
-            ) or application_id_from_api_key(
-                tenant_id, request.headers.get("x-api-key")
-            )
-            record_call_log(
+            project_id = getattr(request_state, "portrait_project_id", None) or "default"
+            logged_error_code = logged_error_code or getattr(request_state, "portrait_error_code", None)
+            application_id = getattr(request_state, "portrait_application_id", None)
+            if application_id is None:
+                application_id = await run_blocking_io(
+                    application_id_from_api_key,
+                    tenant_id,
+                    request.headers.get("x-api-key"),
+                )
+            await run_blocking_io(
+                record_call_log,
                 request_id=request_id,
                 tenant_id=tenant_id,
+                project_id=project_id,
                 application_id=application_id,
                 method=request.method,
                 path=request.url.path,
@@ -496,13 +471,9 @@ def configure_opentelemetry(app: FastAPI) -> None:
         from opentelemetry.sdk.trace import TracerProvider
         from opentelemetry.sdk.trace.export import BatchSpanProcessor
     except Exception as exc:  # pragma: no cover - 可选依赖缺失
-        logger.warning(
-            "opentelemetry is enabled but dependencies are unavailable: %s", exc
-        )
+        logger.warning("opentelemetry is enabled but dependencies are unavailable: %s", exc)
         return
-    provider = TracerProvider(
-        resource=Resource.create({"service.name": OTEL_SERVICE_NAME})
-    )
+    provider = TracerProvider(resource=Resource.create({"service.name": OTEL_SERVICE_NAME}))
     provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter()))
     trace.set_tracer_provider(provider)
     FastAPIInstrumentor.instrument_app(app, tracer_provider=provider)

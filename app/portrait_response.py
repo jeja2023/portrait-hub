@@ -3,6 +3,7 @@ from typing import Any
 from fastapi import HTTPException, status
 
 from app.observability import logger
+from app.portrait_projects import publicize_project_scope
 
 HEALTH_CHECK_FAILED = "健康检查失败"
 MODEL_READINESS_CHECK_FAILED = "模型就绪检查失败"
@@ -19,8 +20,9 @@ def portrait_success(
 ) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "status": "success",
+        "schema_version": "1.0",
         "request_id": request_id,
-        "data": data or {},
+        "data": publicize_project_scope(data or {}),
     }
     if warnings:
         payload["warnings"] = warnings

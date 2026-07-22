@@ -5,7 +5,7 @@
 ## 接入前提
 
 - 服务端已完成平台门禁：`python tools\portrait_production_readiness.py --scope platform --strict`。
-- 生产环境必须启用鉴权、租户头、限流、请求体大小限制和安全响应头。
+- 生产环境必须启用鉴权、租户/项目上下文、限流、请求体大小限制和安全响应头。
 - 阶段一 ReID-only 场景至少需要 `person_detector_default` 与 `person_reid_default` 指向已校验的 ONNX 模型。
 - 完整多模态生产切换必须额外通过 `python tools\portrait_production_readiness.py --strict`，其中 face、pose、gait、appearance 不能仍是 fallback 或 placeholder。
 
@@ -28,9 +28,18 @@
 | 阈值 | `GET /v1/thresholds` |
 | 多模态融合 | `POST /v1/fusion/compare` |
 | 租户目录 | `GET /v1/access/tenants`、`POST /v1/access/tenants` |
+| 项目目录 | `GET /v1/access/projects`、`POST /v1/access/projects`、`PATCH /v1/access/projects/{project_id}` |
 | 接入应用 | `GET /v1/access/applications`、`POST /v1/access/applications`、`PATCH /v1/access/applications/{app_id}`、`POST /v1/access/applications/{app_id}/rotate` |
 | 调用统计 | `GET /v1/access/call-logs`、`GET /v1/access/call-logs/summary` |
 | Webhook | `GET /v1/access/webhooks`、`POST /v1/access/webhooks`、`PATCH /v1/access/webhooks/{webhook_id}`、`POST /v1/access/webhooks/{webhook_id}/rotate`、`POST /v1/access/webhooks/{webhook_id}/sample` |
+
+## 0.17.0 统一契约与项目上下文
+
+所有 `/v1` 成功响应都使用 `status`、`schema_version: "1.0"`、`request_id`、`data`、可选 `warnings`/`meta`；错误响应使用 `status`、`schema_version`、`request_id` 和 `error.code/message/details`。业务代码只应读取 `data`，日志和链路追踪保留顶层 `request_id`，重试策略同时参考 HTTP 状态和稳定 `error.code`。
+
+一个租户可以包含多个项目。请求范围由 `tenant_id + project_id` 共同决定，人员库、推理、比对、任务、流、档案、复核、WebSocket、Webhook 和调用日志不能跨项目访问。未提供项目的旧客户端继续使用 `default` 项目；新业务项目应创建独立项目和接入应用，并显式使用 `X-Project-ID` 或由项目绑定的 API Key 自动推导。
+
+接入方应从本版本 OpenAPI 重新生成客户端。核心解析响应现在具有严格字段类型和范围；向量未请求时字段为 `null`，不要用“字段是否存在”判断模型是否支持向量。
 
 ## 解析档案
 
@@ -56,7 +65,7 @@ curl "https://portrait.internal.example/v1/analysis/artifacts/${ARCHIVE_ID}/${AR
   --output result.bin
 ```
 
-解析档案按租户隔离且不设数量上限。接入方应使用游标分页，不应一次拉取全部记录；生产运维必须同时备份数据库索引和对象存储，缺少任一部分都不能完整恢复档案。
+解析档案按租户与项目组合隔离且不设数量上限。接入方应使用游标分页，不应一次拉取全部记录；生产运维必须同时备份数据库索引和对象存储，缺少任一部分都不能完整恢复档案。
 
 ### 0.14.0 成员治理、管理操作与高级参数
 
@@ -116,9 +125,9 @@ curl "https://portrait.internal.example/v1/analysis/artifacts/${ARCHIVE_ID}/${AR
 - 控制台对图片、离线视频和实时视频流使用统一归档卡片。图片序号单位为“张”，视频和视频流为“帧”；卡片显示检测框及标注计数，无法绘制时显示“无可绘制标注”，完整标签信息在大图预览中保留。
 - 控制台 HTML 和静态资源响应使用 `Cache-Control: no-cache`。升级后普通刷新即可重新验证资源；若前置 CDN 覆盖源站缓存头，应同步清理 CDN 缓存。
 
-## 鉴权与租户
+## 鉴权、租户与项目
 
-生产对接推荐使用“单凭证优先”模式。管理员在控制台“接入中心”或 `POST /v1/access/tenants` 中只填写租户名称，后台自动生成稳定 `tenant_id`、默认接入应用和一次性 API Key；业务系统调用时只需要携带：
+生产对接推荐使用“单凭证优先”模式。管理员创建租户后会得到 `default` 项目；通过 `POST /v1/access/projects` 可增加业务项目，再为每个项目创建独立接入应用和一次性 API Key。使用项目绑定 API Key 时，业务系统只需要携带：
 
 ```text
 X-API-Key: <application-api-key>
@@ -127,7 +136,7 @@ X-API-Key: <application-api-key>
 服务端会自动完成：
 
 ```text
-API Key -> 接入应用 -> 租户 -> scope 权限 -> 应用级限流/配额 -> 审计与调用日志归属
+API Key -> 接入应用 -> 租户/项目 -> scope 权限 -> 应用级限流/配额 -> 审计与调用日志归属
 ```
 
 最小租户开通请求示例：
@@ -145,6 +154,13 @@ JWT 对接同样支持单凭证：当 JWT 中只有一个 `tenant_id`、`tenant`
 Authorization: Bearer <jwt>
 ```
 
+JWT 还可使用 `project_id`、`project` 或 `projects` claim 限制项目。凭证只授权一个项目时服务端可自动推导；授权多个项目时必须显式选择：
+
+```text
+X-Project-ID: <project-id>
+Authorization: Bearer <jwt>
+```
+
 如果一个 JWT 或系统凭证允许访问多个租户，调用方仍需显式选择本次请求租户：
 
 ```text
@@ -159,15 +175,25 @@ X-Tenant-ID: <tenant-id>
 X-API-Key: <application-api-key>
 ```
 
+只有在凭证确实授权目标项目时才可显式携带：
+
+```text
+X-Tenant-ID: <tenant-id>
+X-Project-ID: <project-id>
+X-API-Key: <application-api-key>
+```
+
+API Key 已绑定项目时，`X-Project-ID` 与绑定值不一致会返回 `403`，不会回退到默认项目。
+
 生产建议：
-- 管理员只维护租户名称、用户/角色和接入应用；`/v1/access/tenants` 会生成 `tenant_id`，并可一键创建默认接入应用、scope、限流、配额和审计归属。
-- 接入应用使用单租户 API Key；不要让多个业务系统共享同一个高权限密钥。
+- 管理员维护租户、项目、用户/角色和接入应用；`/v1/access/tenants` 生成 `tenant_id` 和默认项目，`/v1/access/projects` 管理项目生命周期。
+- 接入应用使用单租户、单项目 API Key；不要让多个业务项目共享同一个高权限密钥。
 - 不要把全局 `API_TOKEN` 当作普通多租户应用密钥。v1 使用该令牌时必须配置 `API_TOKEN_TENANT_ID`；只有受控平台运维才可显式开启 `API_TOKEN_ALLOW_TENANT_OVERRIDE=true`。
-- JWT 模式需要校验 issuer、audience、exp 和租户 claim；多租户 JWT 必须显式选择租户。
-- 控制台“接入中心”通过 `/v1/access/tenants` 开通租户，通过 `/v1/access/applications` 管理租户级应用密钥；密钥只在创建或轮换响应中显示一次，服务端仅保存哈希与短宽限期内的旧密钥哈希。
+- JWT 模式需要校验 issuer、audience、exp、租户和项目 claim；多租户或多项目 JWT 必须显式选择获授权的范围。
+- 控制台“接入中心”通过 `/v1/access/tenants` 和 `/v1/access/projects` 开通范围，通过 `/v1/access/applications` 管理项目级应用密钥；密钥只在创建或轮换响应中显示一次，服务端仅保存哈希与短宽限期内的旧密钥哈希。
 - 默认租户接入应用只包含业务调用所需 scope，不包含 `tenants:read` / `tenants:write`；租户目录读写应由管理员 JWT 或显式授权的高权限接入应用完成。
 - 接入应用可配置 `rate_limit_per_minute`、`rate_limit_burst` 和 `daily_quota`；留空或 `0` 表示沿用平台默认/不限额，正整数会在入口限流中生效。
-- 调用日志可通过 `/v1/access/call-logs` 按 `request_id`、接口、状态、接入应用、`error_code`、`created_since` 和 `created_until` 筛选；日志只保存脱敏元数据，不记录请求体或响应体，并会回写接入应用的 `call_count`、`error_count`、`error_rate`、`last_called_at` 和 `last_error_at`。高频计数先在内存聚合，再按 `ACCESS_STATS_FLUSH_INTERVAL_SECONDS` 批量落盘；服务关闭和接入配置变更会强制刷新。
+- 调用日志可通过 `/v1/access/call-logs` 按 `project_id`、`request_id`、接口、状态、接入应用、`error_code`、`created_since` 和 `created_until` 筛选；生产 PostgreSQL 后端会持久化脱敏元数据、摘要和应用统计，不记录请求体或响应体。
 - 错误码目录可通过 `/v1/access/error-codes` 读取，返回 `code`、`http_status`、`retryable`、`category`、`description` 和 `operator_action`。接入方应把 `retryable=true` 视为可预算内退避重试，而不是无限重放。
 
 ## 接口调试台 受控调试
@@ -187,6 +213,7 @@ from sdk.python.portrait_hub_client import PortraitHubClient
 client = PortraitHubClient(
     base_url="https://portrait.internal.example",
     api_token=os.getenv("PORTRAIT_HUB_API_TOKEN"),
+    project_id="project-a",
     auth_scheme="api_key",
     timeout=30,
 )
@@ -206,6 +233,7 @@ const { PortraitHubClient } = require("./sdk/node/portraitHubClient");
 const client = new PortraitHubClient({
   baseUrl: "https://portrait.internal.example",
   apiToken: process.env.PORTRAIT_HUB_API_TOKEN,
+  projectId: "project-a",
   authScheme: "api_key",
 });
 

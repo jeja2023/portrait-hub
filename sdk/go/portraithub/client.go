@@ -20,7 +20,7 @@ import (
 )
 
 // SDKVersion 与仓库版本保持一致。
-const SDKVersion = "0.16.0"
+const SDKVersion = "0.17.0"
 
 const userAgent = "portrait-hub-sdk-go/" + SDKVersion
 
@@ -48,6 +48,11 @@ func WithTenantID(tenantID string) Option {
 	return func(c *Client) { c.tenantID = tenantID }
 }
 
+// WithProjectID sets the X-Project-ID request header.
+func WithProjectID(projectID string) Option {
+	return func(c *Client) { c.projectID = projectID }
+}
+
 // WithAuthScheme 设置认证方式："bearer"（默认）或 "api_key"。
 func WithAuthScheme(scheme string) Option {
 	return func(c *Client) { c.authScheme = scheme }
@@ -68,6 +73,7 @@ type Client struct {
 	baseURL    string
 	apiToken   string
 	tenantID   string
+	projectID  string
 	authScheme string
 	httpClient *http.Client
 }
@@ -97,6 +103,9 @@ func (c *Client) headers(req *http.Request, contentType string) {
 	}
 	if c.tenantID != "" {
 		req.Header.Set("X-Tenant-ID", c.tenantID)
+	}
+	if c.projectID != "" {
+		req.Header.Set("X-Project-ID", c.projectID)
 	}
 	if c.apiToken != "" {
 		if c.authScheme == "api_key" {

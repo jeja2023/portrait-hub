@@ -1,11 +1,13 @@
 # Console Next 验收报告
 
 - 验收日期：2026-07-22
-- 发布版本：0.16.0
-- 验收对象：frontend/console-next 左侧导航、全站数据表序号、配置中心边框/分页/分类排序、生产静态入口与版本元数据
-- 结论：0.16.0 导航与数据表体验优化已完成；Console Next 继续作为唯一生产入口。生产上线仍需执行组织审批、镜像回退演练，并验证共享 Redis、外部服务与生产 OIDC 目录。
+- 发布版本：0.17.0
+- 验收对象：frontend/console-next 项目会话上下文、统一响应/OpenAPI 类型、既有控制台功能、生产静态入口与版本元数据
+- 结论：0.17.0 项目上下文和强结构化契约接入已完成；Console Next 继续作为唯一生产入口。生产上线仍需执行组织审批、镜像回退演练，并验证共享外部服务、生产 OIDC 项目 claim 和真实模型目录。
 
 
+> 2026-07-22 / 0.17.0 验收：会话保存当前项目并在非默认项目请求中发送 `X-Project-ID`；能力上下文、WebSocket 和统一响应契约同步项目语义；OpenAPI TypeScript 类型重新生成；Vitest 9 files / 36 tests、Node SDK、ESLint、Vue TypeScript 与 Vite production build 通过。
+>
 > 2026-07-22 / 0.16.0 验收：侧栏隐藏垂直滚动条且桌面菜单间隔收紧；全项目 19 个原生表和 4 个 Element Plus 表统一显示序号；配置中心全部配置表格具备边框、分页和分类排序；Vitest 9 files / 35 tests、ESLint、Vue TypeScript 与 Vite production build 通过。
 >
 > 2026-07-20 / 0.14.0 验收：受管成员与租户治理、OIDC 成员绑定、模型灰度、数据导出、轨迹/视频/流高级参数、比对检索、统一分页和新 Logo 通过；Python 全量 567 passed / 4 skipped、Vitest 8 files / 32 tests、Playwright 五项目 15 passed、四种 SDK 和真实浏览器桌面/390px 验收通过。
@@ -18,6 +20,15 @@
 > 2026-07-18 / 0.11.2 补充验收：二次复核修复 WS query 主凭证回退、`/v1/*` no-store、默认 CSP、流详情深链、meta.nav 导航、aria-live、错误横幅 request_id、值级脱敏与搜索质量分；新增 me auth_kind×3、403、ws-ticket 401/stream/TTL、空库契约测试，并完成 typecheck、ruff、pytest、npm check、Playwright E2E 与 diff check。
 
 > 2026-07-18 / 0.11.1 补充验收：deploy_check --import-app 已新增旧源码目录缺失断言，duplicate /v1 检查改为扫描 frontend/console-next/src；平台 strict readiness 同步阻断旧灰度变量、旧静态路径和旧 DOM 标记回归。
+
+## 0.17.0 增量验收
+
+| 范围 | 完成状态 | 关键检查 |
+| --- | --- | --- |
+| 项目会话 | 完成 | 会话持久化 `projectId`；空值回落 `default`；切换后请求头一致 |
+| HTTP 与 WebSocket | 完成 | 非默认项目发送 `X-Project-ID`；WebSocket ticket 沿用相同项目上下文 |
+| 强结构化契约 | 完成 | 统一 `schema_version: "1.0"` 外层；核心解析 OpenAPI 类型已生成 |
+| 回归门禁 | 完成 | Node SDK + Vitest 9 files / 36 tests、ESLint、Vue TypeScript、Vite build |
 
 ## 0.16.0 增量验收
 
@@ -65,20 +76,21 @@
 
 | 检查 | 结果 |
 |---|---|
+| 0.17.0 发布验证 | Pytest 601 passed / 4 skipped；严格 mypy 187 sources；Vitest 9 files / 36 tests；Node SDK、Ruff、ESLint、Vue TypeScript、Vite build、deploy_check、平台 strict readiness 与 diff check 通过 |
 | 0.14.0 发布验证 | Pytest 567 passed / 4 skipped；Vitest 8 files / 32 tests；Playwright 五项目 15 passed；四种 SDK、GPU/CPU Compose、Vue TypeScript、ESLint、Vite production build、浏览器响应式/Logo 验收和 diff check 通过 |
 | 0.13.0 发布验证 | Pytest 563 passed / 4 skipped；OIDC/本地登录专项 23 passed；Vitest 6 files / 19 tests；Vue TypeScript、ESLint、Vite production build、Compose config、diff check、本机浏览器登录验收和 /ready/deep version=0.13.0 通过 |
 | 0.12.1 发布验证 | Python strict typecheck 177 sources、Ruff、Pytest 549 passed / 4 skipped、npm check、Vitest 6 files / 18 tests、Playwright 15 passed / 0 skipped、deploy_check、平台 strict readiness 与 diff check 均通过 |
-| Python 全量回归 | 567 passed / 4 skipped；Python SDK 11 passed |
+| Python 全量回归 | 601 passed / 4 skipped；Python SDK 通过 |
 | Node SDK | 通过 |
 | npm test | 通过，Node SDK + console:check 标准入口 |
-| Go SDK | Go 1.22.12 执行 `go test ./...` 通过 |
-| Java SDK | Maven 3.9.9 / JDK 17 执行 JUnit，5 passed |
+| Go SDK | 当前验证机无 Go 可执行文件，未重复运行；版本和项目参数静态契约通过 |
+| Java SDK | 当前验证机无 Maven 可执行文件，未重复运行；Maven 版本和项目参数静态契约通过 |
 | ESLint | 通过，0 warning |
-| Python 类型门禁 | 当前环境未安装 mypy；--fallback-ok 注解门禁通过 |
+| Python 类型门禁 | 严格 mypy 187 个源文件通过 |
 | Vue TypeScript | 通过 |
-| Vitest | 8 files，32 passed |
+| Vitest | 9 files，36 passed |
 | Vite production build | 通过，随 npm run check 完成 |
-| Playwright | 通过，15 passed / 0 skipped |
+| Playwright | 0.17.0 未重复运行；0.14.0 历史验收为 15 passed / 0 skipped |
 | 平台严格 readiness | 通过，strict_failure_count=0 |
 | deploy_check | 通过，--json --import-app ok=true |
 
@@ -88,9 +100,9 @@
 - 本地账号/OIDC 使用 HttpOnly、SameSite Cookie 和 CSRF 双重校验；用户名、密码、会话签名不进入 localStorage、sessionStorage 或 URL。
 - API Key/JWT 仅存 sessionStorage；localStorage 和 URL 不保存凭证，显式非法凭证不会回退到浏览器 Cookie。
 - 默认 admin / 123456 只允许 loopback；生产或远程登录必须替换默认密码和会话密钥。
-- /v1/console/me 对任何有效主体可读，只返回主体、租户、角色、权限、scope 和过期时间；它不要求 admin:status，也不再返回已删除的 feature flag。
+- /v1/console/me 对任何有效主体可读，只返回主体、租户、项目、角色、权限、scope 和过期时间；它不要求 admin:status，也不再返回已删除的 feature flag。
 - 静态资源路由拒绝目录穿越、点目录、index.html 和 source map；script-src 仅 self，无 unsafe-inline 与 unsafe-eval。
-- WebSocket ticket 短期、单次、租户/资源/权限绑定，日志只记录指纹；多副本通过 REDIS_URL 使用 Redis TTL 与 Lua 原子消费。
+- WebSocket ticket 短期、单次、租户/项目/资源/权限绑定，日志只记录指纹；多副本通过 REDIS_URL 使用 Redis TTL 与 Lua 原子消费。
 - 调试响应、调用日志、审计事件和备份快照均使用公开脱敏字段；服务端路径、对象 key、bucket、摘要和凭证不返回。
 - 图片扩展名与受支持内容不一致时只写脱敏告警；未知签名、实际解码格式冲突、损坏、过大和像素超限仍拒绝。视频容器不匹配继续拒绝。
 

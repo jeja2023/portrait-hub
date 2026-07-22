@@ -2,9 +2,10 @@ from collections import OrderedDict
 from copy import deepcopy
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from app.api_contracts import ContractAPIRouter as APIRouter
 from app.core import (
     MODEL_ALIASES,
     MODEL_CONFIGS,
@@ -53,9 +54,7 @@ class ThresholdUpdateRequest(BaseModel):
     appearance: float | None = Field(default=None, ge=0.0, le=1.0)
     fusion: float | None = Field(default=None, ge=0.0, le=1.0)
 
-    @field_validator(
-        "face", "body", "person", "gait", "appearance", "fusion", mode="before"
-    )
+    @field_validator("face", "body", "person", "gait", "appearance", "fusion", mode="before")
     @classmethod
     def reject_boolean_thresholds(cls, value: Any) -> Any:
         if isinstance(value, bool):
@@ -92,12 +91,8 @@ def restore_threshold_snapshot(previous_thresholds: dict[str, Any]) -> list[str]
     return []
 
 
-def raise_model_management_rollback_failure(
-    original_error: Exception, rollback_errors: list[str]
-) -> None:
-    raise_rollback_failure(
-        "模型管理变更失败，且回滚持久化失败", original_error, rollback_errors
-    )
+def raise_model_management_rollback_failure(original_error: Exception, rollback_errors: list[str]) -> None:
+    raise_rollback_failure("模型管理变更失败，且回滚持久化失败", original_error, rollback_errors)
 
 
 @router.get("/v1/models", dependencies=[Depends(permission_dependency("models:read"))])
@@ -113,9 +108,7 @@ async def v1_models(request: Request) -> dict[str, Any]:
             "config_loaded": True,
             "models": models,
             "aliases": MODEL_ALIASES,
-            "loaded_models": [
-                bundle_info(key, bundle) for key, bundle in MODEL_REGISTRY.items()
-            ],
+            "loaded_models": [bundle_info(key, bundle) for key, bundle in MODEL_REGISTRY.items()],
             "count": len(models),
             "alias_count": len(MODEL_ALIASES),
             "max_loaded_models": MAX_LOADED_MODELS,
@@ -183,9 +176,7 @@ async def v1_model_unload(request: Request, model_id: str) -> dict[str, Any]:
     except Exception:
         restore_model_registry_snapshot(previous_registry, previous_locks)
         raise
-    return portrait_success(
-        request_id, {"model_id": key, "alias": alias_name, "unloaded": unloaded}
-    )
+    return portrait_success(request_id, {"model_id": key, "alias": alias_name, "unloaded": unloaded})
 
 
 @router.get(
@@ -198,17 +189,11 @@ async def v1_model_detail(
     traffic_key: str | None = Query(None, min_length=1, max_length=256),
 ) -> dict[str, Any]:
     request_id = request_id_from_headers(request)
-    project, model, key, alias_name = resolve_model_reference(
-        model_id, None, None, traffic_key=traffic_key
-    )
+    project, model, key, alias_name = resolve_model_reference(model_id, None, None, traffic_key=traffic_key)
     config = model_config(key)
     model_path = get_model_path(project, model)
     bundle = MODEL_REGISTRY.get(key)
-    digest = (
-        bundle["model_hash"]
-        if bundle is not None
-        else await run_blocking_io(model_hash, model_path)
-    )
+    digest = bundle["model_hash"] if bundle is not None else await run_blocking_io(model_hash, model_path)
     payload: dict[str, Any] = {
         "model_id": key,
         "alias": alias_name,
@@ -221,9 +206,7 @@ async def v1_model_detail(
     return portrait_success(request_id, payload)
 
 
-@router.get(
-    "/v1/thresholds", dependencies=[Depends(permission_dependency("models:read"))]
-)
+@router.get("/v1/thresholds", dependencies=[Depends(permission_dependency("models:read"))])
 async def v1_thresholds(request: Request) -> dict[str, Any]:
     request_id = request_id_from_headers(request)
     return portrait_success(request_id, {"thresholds": threshold_snapshot()})
@@ -233,16 +216,12 @@ async def v1_thresholds(request: Request) -> dict[str, Any]:
     "/v1/thresholds/{profile}",
     dependencies=[Depends(permission_dependency("thresholds:write"))],
 )
-async def v1_update_thresholds(
-    request: Request, profile: str, payload: ThresholdUpdateRequest
-) -> dict[str, Any]:
+async def v1_update_thresholds(request: Request, profile: str, payload: ThresholdUpdateRequest) -> dict[str, Any]:
     request_id = request_id_from_headers(request)
     tenant_id = tenant_id_from_request(request)
     update_payload = payload.model_dump(exclude_none=True)
     if not update_payload:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="阈值请求体不能为空"
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="阈值请求体不能为空")
     previous_thresholds = threshold_snapshot()
     result = update_threshold_profile(profile, update_payload)
     try:

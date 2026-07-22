@@ -1,9 +1,10 @@
 from copy import deepcopy
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import Depends, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.api_contracts import ContractAPIRouter as APIRouter
 from app.observability import logger
 from app.portrait_async import run_blocking_io
 from app.portrait_audit import audit_event
@@ -77,19 +78,19 @@ async def v1_create_stream(
     ctx: PortraitRequestContext = Depends(portrait_request_context),
 ) -> dict[str, Any]:
     request_id = ctx.request_id
-    tenant_id = ctx.tenant_id
+    tenant_id = ctx.scope_id
     stream = await run_blocking_io(
         create_stream,
         payload.stream_url,
         tenant_id=tenant_id,
         name=payload.name,
-        settings=normalize_stream_analysis_settings(
-            normalize_public_metadata(payload.settings, field_name="settings")
-        ),
+        settings=normalize_stream_analysis_settings(normalize_public_metadata(payload.settings, field_name="settings")),
         metadata=normalize_public_metadata(payload.metadata, field_name="metadata"),
     )
     try:
-        await run_blocking_io(audit_event, "stream_created", request_id=request_id, tenant_id=tenant_id, stream_id=stream.stream_id)
+        await run_blocking_io(
+            audit_event, "stream_created", request_id=request_id, tenant_id=tenant_id, stream_id=stream.stream_id
+        )
     except Exception:
         await run_blocking_io(remove_stream, stream.stream_id, tenant_id)
         raise
@@ -104,10 +105,14 @@ async def v1_list_streams(
     ctx: PortraitRequestContext = Depends(portrait_request_context),
 ) -> dict[str, Any]:
     request_id = ctx.request_id
-    tenant_id = ctx.tenant_id
+    tenant_id = ctx.scope_id
     await run_blocking_io(refresh_streams_state)
     pagination_request = normalize_list_pagination(limit, offset, cursor)
-    tenant_streams = [stream for stream in sorted(stream_records_snapshot(), key=lambda item: item.stream_id) if stream.tenant_id == tenant_id]
+    tenant_streams = [
+        stream
+        for stream in sorted(stream_records_snapshot(), key=lambda item: item.stream_id)
+        if stream.tenant_id == tenant_id
+    ]
     streams, pagination = page_items_keyset(
         tenant_streams,
         limit=pagination_request.limit,
@@ -130,7 +135,7 @@ async def v1_get_stream(
     ctx: PortraitRequestContext = Depends(portrait_request_context),
 ) -> dict[str, Any]:
     request_id = ctx.request_id
-    tenant_id = ctx.tenant_id
+    tenant_id = ctx.scope_id
     await run_blocking_io(refresh_streams_state)
     stream = stream_or_404(stream_id, tenant_id)
     return portrait_success(request_id, {"stream": stream.public_dict(include_events=True)})
@@ -142,14 +147,16 @@ async def v1_start_stream(
     ctx: PortraitRequestContext = Depends(portrait_request_context),
 ) -> dict[str, Any]:
     request_id = ctx.request_id
-    tenant_id = ctx.tenant_id
+    tenant_id = ctx.scope_id
     await run_blocking_io(refresh_streams_state)
     stream = stream_or_404(stream_id, tenant_id)
     previous_stream = deepcopy(stream)
     previous_worker_sessions = stream_worker_sessions_snapshot()
     try:
         stream = await run_blocking_io(start_stream, stream)
-        emit_stream_event(stream, "stream_worker_start_requested", "stream worker start requested", {"status": stream.status})
+        emit_stream_event(
+            stream, "stream_worker_start_requested", "stream worker start requested", {"status": stream.status}
+        )
         if stream.status == "running":
             start_stream_worker_session(stream)
         await run_blocking_io(
@@ -175,7 +182,7 @@ async def v1_stop_stream(
     ctx: PortraitRequestContext = Depends(portrait_request_context),
 ) -> dict[str, Any]:
     request_id = ctx.request_id
-    tenant_id = ctx.tenant_id
+    tenant_id = ctx.scope_id
     await run_blocking_io(refresh_streams_state)
     stream = stream_or_404(stream_id, tenant_id)
     previous_stream = deepcopy(stream)
@@ -185,7 +192,9 @@ async def v1_stop_stream(
         emit_stream_event(stream, "stream_worker_stop_requested", "stream worker stop requested")
         if stream_session_key(stream) in previous_worker_sessions:
             stop_stream_worker_session(stream)
-        await run_blocking_io(audit_event, "stream_stopped", request_id=request_id, tenant_id=tenant_id, stream_id=stream.stream_id)
+        await run_blocking_io(
+            audit_event, "stream_stopped", request_id=request_id, tenant_id=tenant_id, stream_id=stream.stream_id
+        )
     except Exception as exc:
         restore_stream_worker_sessions(previous_worker_sessions)
         rollback_errors = await run_blocking_io(rollback_stream_snapshot, stream, previous_stream)
@@ -201,7 +210,7 @@ async def v1_stream_status(
     ctx: PortraitRequestContext = Depends(portrait_request_context),
 ) -> dict[str, Any]:
     request_id = ctx.request_id
-    tenant_id = ctx.tenant_id
+    tenant_id = ctx.scope_id
     await run_blocking_io(refresh_streams_state)
     stream = stream_or_404(stream_id, tenant_id)
     return portrait_success(
@@ -225,7 +234,7 @@ async def v1_stream_events(
 ) -> dict[str, Any]:
     request_id = ctx.request_id
     pagination_request = normalize_stream_event_pagination(limit, offset, cursor)
-    tenant_id = ctx.tenant_id
+    tenant_id = ctx.scope_id
     await run_blocking_io(refresh_streams_state)
     stream = stream_or_404(stream_id, tenant_id)
     events, pagination = page_items_keyset(

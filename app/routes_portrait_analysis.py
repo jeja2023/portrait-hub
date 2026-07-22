@@ -1,7 +1,9 @@
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi import Depends, HTTPException, Query, Response, status
 
+from app.api_contracts import AnalysisDetailResponse, AnalysisListResponse
+from app.api_contracts import ContractAPIRouter as APIRouter
 from app.portrait_analysis_archive import (
     ARCHIVE_SOURCE_TYPES,
     get_analysis_archive_record,
@@ -22,6 +24,7 @@ router = APIRouter(dependencies=[Depends(require_api_token)])
 
 @router.get(
     "/v1/analysis/results",
+    response_model=AnalysisListResponse,
     dependencies=[Depends(permission_dependency("infer"))],
 )
 async def v1_list_analysis_results(
@@ -40,16 +43,14 @@ async def v1_list_analysis_results(
     pagination_request = normalize_list_pagination(limit, offset, cursor)
     records, pagination = await run_blocking_io(
         list_analysis_archives,
-        ctx.tenant_id,
+        ctx.scope_id,
         source_type=source_type,
         mode=mode,
         limit=pagination_request.limit,
         offset=pagination_request.offset,
         cursor=pagination_request.cursor,
     )
-    results = await run_blocking_io(
-        lambda: [public_analysis_archive(record) for record in records]
-    )
+    results = await run_blocking_io(lambda: [public_analysis_archive(record) for record in records])
     return portrait_success(
         ctx.request_id,
         {"results": results, "archives": results, **pagination},
@@ -58,6 +59,7 @@ async def v1_list_analysis_results(
 
 @router.get(
     "/v1/analysis/results/{archive_id}",
+    response_model=AnalysisDetailResponse,
     dependencies=[Depends(permission_dependency("infer"))],
 )
 async def v1_get_analysis_result(
@@ -66,7 +68,7 @@ async def v1_get_analysis_result(
 ) -> dict[str, Any]:
     if len(archive_id) > 80:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="解析结果不存在")
-    record = await run_blocking_io(get_analysis_archive_record, ctx.tenant_id, archive_id)
+    record = await run_blocking_io(get_analysis_archive_record, ctx.scope_id, archive_id)
     if record is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="解析结果不存在")
     return portrait_success(ctx.request_id, {"result": public_analysis_archive(record)})
@@ -83,9 +85,7 @@ async def v1_get_analysis_artifact(
 ) -> Response:
     if len(archive_id) > 80 or len(artifact_id) > 80:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="解析结果图片不存在")
-    artifact = await run_blocking_io(
-        get_analysis_artifact, ctx.tenant_id, archive_id, artifact_id
-    )
+    artifact = await run_blocking_io(get_analysis_artifact, ctx.scope_id, archive_id, artifact_id)
     if artifact is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="解析结果图片不存在")
     content = await run_blocking_io(OBJECT_STORE.get_bytes, artifact.object_info)

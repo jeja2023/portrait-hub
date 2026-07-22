@@ -1,6 +1,6 @@
 const fs = require("fs");
 
-const SDK_VERSION = "0.16.0";
+const SDK_VERSION = "0.17.0";
 const USER_AGENT = `portrait-hub-sdk-node/${SDK_VERSION}`;
 
 class PortraitHubHTTPError extends Error {
@@ -14,10 +14,11 @@ class PortraitHubHTTPError extends Error {
 }
 
 class PortraitHubClient {
-  constructor({ baseUrl, apiToken = null, tenantId = null, authScheme = "bearer", timeoutMs = 30000 }) {
+  constructor({ baseUrl, apiToken = null, tenantId = null, projectId = null, authScheme = "bearer", timeoutMs = 30000 }) {
     this.baseUrl = baseUrl.replace(/\/$/, "");
     this.apiToken = apiToken;
     this.tenantId = tenantId;
+    this.projectId = projectId;
     this.authScheme = this.normalizeAuthScheme(authScheme);
     this.timeoutMs = Math.max(1, Number(timeoutMs) || 30000);
   }
@@ -33,6 +34,7 @@ class PortraitHubClient {
   headers(extra = {}) {
     const headers = { "User-Agent": USER_AGENT, ...extra };
     if (this.tenantId) headers["X-Tenant-ID"] = this.tenantId;
+    if (this.projectId) headers["X-Project-ID"] = this.projectId;
     if (this.apiToken) {
       if (this.authScheme === "api_key") headers["X-API-Key"] = this.apiToken;
       else headers.Authorization = `Bearer ${this.apiToken}`;

@@ -174,7 +174,11 @@ def test_oidc_public_config_is_safe_when_disabled() -> None:
     response = TestClient(app).get("/v1/auth/oidc/config")
 
     assert response.status_code == 200
-    assert response.json() == {
+    payload = response.json()
+    assert payload["status"] == "success"
+    assert payload["schema_version"] == "1.0"
+    assert payload["request_id"]
+    assert payload["data"] == {
         "enabled": False,
         "provider_name": oidc_auth.OIDC_PROVIDER_NAME,
         "credential_login_available": True,
@@ -318,6 +322,7 @@ async def test_oidc_callback_validates_rsa_token_and_sets_session(
         "email": "enterprise@example.com",
         "tenant_id": "tenant-a",
         "groups": ["portrait-admin"],
+        "projects": ["default", "alpha"],
         "nonce": "nonce-value",
         "iat": int(time.time()),
         "exp": int(time.time()) + 300,
@@ -383,6 +388,9 @@ async def test_oidc_callback_validates_rsa_token_and_sets_session(
     )
     assert "HttpOnly" in session_header
     assert "SameSite=lax" in session_header
+    signed_session = oidc_auth._read_signed_payload(response.cookies.get("portrait_oidc_session"), purpose="session")
+    assert signed_session is not None
+    assert signed_session["projects"] == ["alpha", "default"]
     claims_response = client.get("/v1/console/me")
     assert claims_response.status_code == 200
     assert claims_response.json()["data"]["subject"] == "enterprise-user"
