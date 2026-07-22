@@ -67,7 +67,11 @@ def test_readiness_templates_include_cutover_and_worker_artifacts() -> None:
 
     for item in [
         "frontend/console-next/package.json",
+        "frontend/console-next/src/views/admin/ConfigurationView.vue",
         "package.json",
+        "app/admin_configuration.py",
+        "app/network_access_policy.py",
+        "tools/apply_admin_configuration.py",
         "tools/portrait_cutover_check.py",
         "tools/portrait_model_regression.py",
         "tools/portrait_stream_worker_health.py",
@@ -101,6 +105,8 @@ def test_readiness_strict_console_and_governance_contracts_hold() -> None:
         "security:audit_chain_console_verification",
         "security:audit_event_readback",
         "security:backup_snapshot_readback",
+        "security:stream_url_ssrf_and_secret_protection",
+        "security:admin_configuration_state_protection",
     ]
 
     assert {name: checks[name]["ok"] for name in expected} == dict.fromkeys(expected, True)

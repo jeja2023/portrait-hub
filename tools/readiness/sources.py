@@ -378,6 +378,26 @@ def load_sources(root: Path) -> dict[str, Any]:
         if (root / "app" / "media" / "stream_decode.py").is_file()
         else ""
     )
+    network_access_policy = (
+        (root / "app" / "network_access_policy.py").read_text(encoding="utf-8")
+        if (root / "app" / "network_access_policy.py").is_file()
+        else ""
+    )
+    admin_configuration = (
+        (root / "app" / "admin_configuration.py").read_text(encoding="utf-8")
+        if (root / "app" / "admin_configuration.py").is_file()
+        else ""
+    )
+    config_overrides = (
+        (root / "app" / "config_overrides.py").read_text(encoding="utf-8")
+        if (root / "app" / "config_overrides.py").is_file()
+        else ""
+    )
+    admin_configuration_routes = (
+        (root / "app" / "routes_admin_configuration.py").read_text(encoding="utf-8")
+        if (root / "app" / "routes_admin_configuration.py").is_file()
+        else ""
+    )
     portrait_job_routes = (
         (root / "app" / "routes_portrait_jobs.py").read_text(encoding="utf-8")
         if (root / "app" / "routes_portrait_jobs.py").is_file()

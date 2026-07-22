@@ -1,6 +1,6 @@
 [project]
 name = "portrait-hub"
-version = "0.14.3"
+version = "0.15.0"
 requires-python = ">=3.12"
 description = "PortraitHub GPU 推理与人像智能服务"
 

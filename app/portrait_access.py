@@ -14,12 +14,17 @@ from urllib.parse import urlparse
 
 from fastapi import HTTPException, status
 
+from app.network_access_policy import host_is_allowed, network_access_policy_snapshot
 from app.portrait_auth import ROLE_PERMISSIONS
 from app.portrait_state import handle_state_read_error, read_json_state, write_json_state
 from app.settings import (
+    ALLOW_PRIVATE_STREAM_HOSTS,
     ALLOW_PRIVATE_WEBHOOK_HOSTS,
     PORTRAIT_ACCESS_KEY_ROTATION_GRACE_SECONDS,
     PORTRAIT_ACCESS_STATE_PATH,
+    STREAM_ALLOWED_CIDRS,
+    STREAM_ALLOWED_HOSTS,
+    WEBHOOK_ALLOWED_CIDRS,
     WEBHOOK_ALLOWED_HOSTS,
 )
 
@@ -502,15 +507,20 @@ def normalize_events(events: list[str] | None) -> list[str]:
     return values
 
 
-def _webhook_host_matches_allowlist(hostname: str) -> bool:
-    if not WEBHOOK_ALLOWED_HOSTS:
-        return True
-    normalized = hostname.lower().rstrip(".")
-    for allowed in WEBHOOK_ALLOWED_HOSTS:
-        allowed_host = allowed.lower().rstrip(".")
-        if normalized == allowed_host or normalized.endswith(f".{allowed_host}"):
-            return True
-    return False
+def _current_webhook_network_policy() -> dict[str, Any]:
+    policy = network_access_policy_snapshot(
+        stream_default={
+            "allow_private_hosts": ALLOW_PRIVATE_STREAM_HOSTS,
+            "allowed_hosts": STREAM_ALLOWED_HOSTS,
+            "allowed_cidrs": STREAM_ALLOWED_CIDRS,
+        },
+        webhook_default={
+            "allow_private_hosts": ALLOW_PRIVATE_WEBHOOK_HOSTS,
+            "allowed_hosts": WEBHOOK_ALLOWED_HOSTS,
+            "allowed_cidrs": WEBHOOK_ALLOWED_CIDRS,
+        },
+    )
+    return policy["webhook"]
 
 
 def _webhook_address_is_blocked(address: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
@@ -524,10 +534,38 @@ def _webhook_address_is_blocked(address: ipaddress.IPv4Address | ipaddress.IPv6A
     )
 
 
-def _reject_blocked_webhook_host(hostname: str) -> None:
+def _resolve_webhook_host_addresses(hostname: str) -> list[ipaddress.IPv4Address | ipaddress.IPv6Address]:
+    try:
+        infos = socket.getaddrinfo(hostname, None, type=socket.SOCK_STREAM)
+    except OSError:
+        return []
+    addresses: list[ipaddress.IPv4Address | ipaddress.IPv6Address] = []
+    seen: set[str] = set()
+    for info in infos:
+        sockaddr = info[4]
+        if not sockaddr:
+            continue
+        raw_address = str(sockaddr[0])
+        if raw_address in seen:
+            continue
+        try:
+            address = ipaddress.ip_address(raw_address)
+        except ValueError:
+            continue
+        seen.add(raw_address)
+        addresses.append(address)
+    return addresses
+
+
+def _reject_blocked_webhook_host(
+    hostname: str,
+    addresses: list[ipaddress.IPv4Address | ipaddress.IPv6Address],
+    *,
+    allow_private_hosts: bool,
+) -> None:
     # 防 SSRF：拒绝解析到内网/回环/链路本地等地址的回调主机。DNS 名称按其解析结果全部校验，
     # 以缩小 DNS-rebinding 窗口；ALLOW_PRIVATE_WEBHOOK_HOSTS 可在受控环境放行内网目标。
-    if ALLOW_PRIVATE_WEBHOOK_HOSTS:
+    if allow_private_hosts:
         return
     try:
         literal = ipaddress.ip_address(hostname)
@@ -540,18 +578,7 @@ def _reject_blocked_webhook_host(hostname: str) -> None:
                 detail="事件回调 URL 主机被 SSRF 防护策略拒绝",
             )
         return
-    try:
-        infos = socket.getaddrinfo(hostname, None, type=socket.SOCK_STREAM)
-    except OSError:
-        return
-    for info in infos:
-        sockaddr = info[4]
-        if not sockaddr:
-            continue
-        try:
-            address = ipaddress.ip_address(str(sockaddr[0]))
-        except ValueError:
-            continue
+    for address in addresses:
         if _webhook_address_is_blocked(address):
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -572,12 +599,30 @@ def validate_webhook_url(value: str | None, *, required: bool) -> str:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="事件回调 URL 不能包含凭证")
     if len(url) > 2048:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="事件回调 URL 过长")
-    if not _webhook_host_matches_allowlist(parsed.hostname):
+    policy = _current_webhook_network_policy()
+    allow_private_hosts = bool(policy["allow_private_hosts"])
+    allowed_hosts = list(policy["allowed_hosts"])
+    allowed_cidrs = list(policy["allowed_cidrs"])
+    try:
+        ipaddress.ip_address(parsed.hostname)
+        resolved_addresses: list[ipaddress.IPv4Address | ipaddress.IPv6Address] = []
+    except ValueError:
+        resolved_addresses = _resolve_webhook_host_addresses(parsed.hostname)
+    if not host_is_allowed(
+        parsed.hostname,
+        allowed_hosts=allowed_hosts,
+        allowed_cidrs=allowed_cidrs,
+        resolved_addresses=resolved_addresses,
+    ):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="事件回调 URL 主机不在 WEBHOOK_ALLOWED_HOSTS 允许列表中",
+            detail="事件回调 URL 主机不在 WEBHOOK_ALLOWED_HOSTS/WEBHOOK_ALLOWED_CIDRS 网络访问策略允许范围内",
         )
-    _reject_blocked_webhook_host(parsed.hostname)
+    _reject_blocked_webhook_host(
+        parsed.hostname,
+        resolved_addresses,
+        allow_private_hosts=allow_private_hosts,
+    )
     return url
 
 

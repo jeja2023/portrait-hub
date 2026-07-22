@@ -30,7 +30,7 @@ import java.util.StringJoiner;
 public final class PortraitHubClient {
 
     /** 与仓库版本保持一致。 */
-    public static final String SDK_VERSION = "0.14.3";
+    public static final String SDK_VERSION = "0.15.0";
 
     private static final String USER_AGENT = "portrait-hub-sdk-java/" + SDK_VERSION;
 

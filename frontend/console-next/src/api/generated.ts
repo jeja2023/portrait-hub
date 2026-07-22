@@ -466,6 +466,24 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/v1/admin/configuration": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Admin Configuration Get */
+    get: operations["admin_configuration_get_v1_admin_configuration_get"];
+    /** Admin Configuration Update */
+    put: operations["admin_configuration_update_v1_admin_configuration_put"];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/v1/admin/export": {
     parameters: {
       query?: never;
@@ -721,6 +739,24 @@ export interface paths {
     head?: never;
     /** Update Model Gpu Device */
     patch: operations["update_model_gpu_device_v1_admin_models__model_id__gpu_device_patch"];
+    trace?: never;
+  };
+  "/v1/admin/network-access-policy": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Admin Network Access Policy Get */
+    get: operations["admin_network_access_policy_get_v1_admin_network_access_policy_get"];
+    /** Admin Network Access Policy Update */
+    put: operations["admin_network_access_policy_update_v1_admin_network_access_policy_put"];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
     trace?: never;
   };
   "/v1/admin/retention/cleanup": {
@@ -2116,6 +2152,20 @@ export interface components {
       /** Traffic Key */
       traffic_key?: string | null;
     };
+    /** ConfigurationChange */
+    ConfigurationChange: {
+      /** Key */
+      key: string;
+      /** Value */
+      value?: string | null;
+    };
+    /** ConfigurationUpdateRequest */
+    ConfigurationUpdateRequest: {
+      /** Changes */
+      changes: components["schemas"]["ConfigurationChange"][];
+      /** Expected Revision */
+      expected_revision: number;
+    };
     /** ConsoleWebSocketTicketRequest */
     ConsoleWebSocketTicketRequest: {
       /** Resource Id */
@@ -2125,6 +2175,15 @@ export interface components {
        * @enum {string}
        */
       resource_type: "job" | "stream";
+    };
+    /** EndpointNetworkPolicyRequest */
+    EndpointNetworkPolicyRequest: {
+      /** Allow Private Hosts */
+      allow_private_hosts: boolean;
+      /** Allowed Cidrs */
+      allowed_cidrs?: string[];
+      /** Allowed Hosts */
+      allowed_hosts?: string[];
     };
     /** GalleryPatchRequest */
     GalleryPatchRequest: {
@@ -2196,6 +2255,13 @@ export interface components {
       model_name: string;
       /** Project Name */
       project_name: string;
+    };
+    /** NetworkAccessPolicyUpdateRequest */
+    NetworkAccessPolicyUpdateRequest: {
+      /** Expected Revision */
+      expected_revision: number;
+      stream: components["schemas"]["EndpointNetworkPolicyRequest"];
+      webhook: components["schemas"]["EndpointNetworkPolicyRequest"];
     };
     /** RetentionCleanupRequest */
     RetentionCleanupRequest: {
@@ -3340,6 +3406,76 @@ export interface operations {
       };
     };
   };
+  admin_configuration_get_v1_admin_configuration_get: {
+    parameters: {
+      query?: never;
+      header?: {
+        authorization?: string | null;
+        "x-api-key"?: string | null;
+        "x-tenant-id"?: string | null;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": Record<string, never>;
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  admin_configuration_update_v1_admin_configuration_put: {
+    parameters: {
+      query?: never;
+      header?: {
+        authorization?: string | null;
+        "x-api-key"?: string | null;
+        "x-tenant-id"?: string | null;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ConfigurationUpdateRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": Record<string, never>;
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
   v1_admin_export_v1_admin_export_get: {
     parameters: {
       query?: {
@@ -3938,6 +4074,76 @@ export interface operations {
     requestBody: {
       content: {
         "application/json": components["schemas"]["ModelGpuDeviceRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": Record<string, never>;
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  admin_network_access_policy_get_v1_admin_network_access_policy_get: {
+    parameters: {
+      query?: never;
+      header?: {
+        authorization?: string | null;
+        "x-api-key"?: string | null;
+        "x-tenant-id"?: string | null;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": Record<string, never>;
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  admin_network_access_policy_update_v1_admin_network_access_policy_put: {
+    parameters: {
+      query?: never;
+      header?: {
+        authorization?: string | null;
+        "x-api-key"?: string | null;
+        "x-tenant-id"?: string | null;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["NetworkAccessPolicyUpdateRequest"];
       };
     };
     responses: {

@@ -1,6 +1,6 @@
 # PortraitHub Ubuntu 部署教程
 
-本文档面向当前 PortraitHub 项目，说明如何在 Ubuntu 服务器上通过 Docker Compose 部署 GPU 推理服务。文档按仓库版本 0.14.3、当前 Dockerfile、docker-compose.yml、.env.example 和生产门禁实现编写。
+本文档面向当前 PortraitHub 项目，说明如何在 Ubuntu 服务器上通过 Docker Compose 部署 GPU 推理服务。文档按仓库版本 0.15.0、当前 Dockerfile、docker-compose.yml、.env.example 和生产门禁实现编写。
 
 > 项目名称、仓库目录和 Compose 项目名统一为 portrait-hub。
 
@@ -680,14 +680,55 @@ docker exec portrait-stream-worker nvidia-smi -L
 ```dotenv
 ALLOW_STREAM_URLS=true
 ALLOW_PRIVATE_STREAM_HOSTS=true
-STREAM_ALLOWED_HOSTS=camera.internal.example
+STREAM_ALLOWED_HOSTS=
+STREAM_ALLOWED_CIDRS=10.30.0.0/16
 ```
 
-生产环境应优先使用域名白名单，不要无条件允许任意私网地址。
+只有 IP 的局域网应将摄像头规划到独立网段，并使用 CIDR 白名单。不要无条件允许任意私网地址。
 
 ## 16. 配置变更与日常运维
 
-### 16.1 修改环境变量
+### 16.1 管理员配置中心
+
+管理员登录后进入“系统管理 -> 配置中心”。配置分为三种生效方式：
+
+- 网络访问策略：写入 `runtime-state/network-access-policy.json`，API 与 Worker 动态读取，立即生效；
+- 应用运行配置：写入 `runtime-state/admin-configuration.json`，重启四个服务后生效；
+- Docker 编排配置：页面保存目标值后，必须在宿主机同步到 `.env` 并重建容器。
+
+网络策略支持单 IP、域名和 CIDR。无域名的大规模摄像头环境建议只填写摄像头 VLAN，例如：
+
+```text
+10.30.0.0/16
+```
+
+允许私网时，后端强制要求至少填写一个主机或 CIDR。保存操作会写入审计链，敏感配置不会通过页面或 API 回显。
+
+应用运行配置保存后执行：
+
+```bash
+docker compose -p portrait-hub restart \
+  gpu-worker-0 gpu-worker-1 portrait-video-job-worker portrait-stream-worker
+```
+
+Docker 编排配置先预览并同步到宿主机 `.env`：
+
+```bash
+python tools/apply_admin_configuration.py --check
+python tools/apply_admin_configuration.py
+docker compose -p portrait-hub up -d --force-recreate
+```
+
+同步工具只处理 GPU 编号、worker 模式、构建参数和宿主机挂载等编排项，不会把 API Token、密码或数据库凭据导出到命令输出；写入前会创建 `.env.before-admin-config-*` 备份。
+
+升级或备份时必须同时保留：
+
+```text
+runtime-state/admin-configuration.json
+runtime-state/network-access-policy.json
+```
+
+### 16.2 修改环境变量
 
 docker compose restart 不会重新读取新的环境变量。修改 .env 后应重建容器：
 
@@ -701,7 +742,7 @@ docker compose -p portrait-hub up -d --force-recreate
 docker compose -p portrait-hub up -d --build
 ```
 
-### 16.2 常用命令
+### 16.3 常用命令
 
 ```bash
 docker compose -p portrait-hub ps
@@ -715,7 +756,7 @@ watch -n 1 nvidia-smi
 
 docker compose down 不会删除 bind mount 中的 runtime-state/models.yml、模型文件和其它运行状态，但执行前仍应备份。
 
-### 16.3 从旧的可写 models.yml 迁移
+### 16.4 从旧的可写 models.yml 迁移
 
 旧部署如果仍设置 MODEL_CONFIG_HOST_FILE=./models.yml，控制台写回后会把 Git 工作区变脏，进而阻塞 git pull 或回退。首次升级到新方案时，在维护窗口禁止模型中心配置写入，并执行：
 
@@ -803,7 +844,7 @@ docker compose -p portrait-hub up -d --no-build --force-recreate --remove-orphan
 - docs/releases/0.14.0.md；
 - docs/releases/0.14.1.md；
 - docs/releases/0.14.2.md；
-- docs/releases/0.14.3.md。
+- docs/releases/0.15.0.md。
 
 ## 18. 离线部署
 
@@ -816,7 +857,7 @@ cd /opt/portrait-hub
 docker compose -p portrait-hub build
 docker compose -p portrait-hub config --images
 
-docker save -o portrait-hub-0.14.3-images.tar \
+docker save -o portrait-hub-0.15.0-images.tar \
   portrait-hub-gpu-worker-0 \
   portrait-hub-gpu-worker-1 \
   portrait-hub-portrait-video-job-worker \
@@ -834,7 +875,7 @@ docker save -o portrait-hub-0.14.3-images.tar \
 离线服务器：
 
 ```bash
-docker load -i portrait-hub-0.14.3-images.tar
+docker load -i portrait-hub-0.15.0-images.tar
 cd /opt/portrait-hub
 test -f runtime-state/models.yml
 docker compose -p portrait-hub up -d --no-build gpu-worker-0 gpu-worker-1

@@ -289,6 +289,8 @@ def test_openapi_keeps_core_routes() -> None:
         "/v1/access/webhooks/{webhook_id}/rotate",
         "/v1/access/webhooks/{webhook_id}/sample",
         "/v1/admin/status",
+        "/v1/admin/configuration",
+        "/v1/admin/network-access-policy",
         "/v1/admin/export",
         "/v1/admin/audit/verify",
         "/v1/admin/audit/events",

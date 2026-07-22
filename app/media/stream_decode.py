@@ -1,27 +1,53 @@
 import ipaddress
 import socket
+from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
 from fastapi import HTTPException, status
 
-from app.settings import ALLOW_PRIVATE_STREAM_HOSTS, STREAM_ALLOWED_HOSTS
+from app.network_access_policy import host_is_allowed, network_access_policy_snapshot
+from app.settings import (
+    ALLOW_PRIVATE_STREAM_HOSTS,
+    ALLOW_PRIVATE_WEBHOOK_HOSTS,
+    STREAM_ALLOWED_CIDRS,
+    STREAM_ALLOWED_HOSTS,
+    WEBHOOK_ALLOWED_CIDRS,
+    WEBHOOK_ALLOWED_HOSTS,
+)
 
 SUPPORTED_STREAM_SCHEMES = {"rtsp", "rtmp", "http", "https"}
 
 
+def current_stream_network_policy() -> dict[str, Any]:
+    policy = network_access_policy_snapshot(
+        stream_default={
+            "allow_private_hosts": ALLOW_PRIVATE_STREAM_HOSTS,
+            "allowed_hosts": STREAM_ALLOWED_HOSTS,
+            "allowed_cidrs": STREAM_ALLOWED_CIDRS,
+        },
+        webhook_default={
+            "allow_private_hosts": ALLOW_PRIVATE_WEBHOOK_HOSTS,
+            "allowed_hosts": WEBHOOK_ALLOWED_HOSTS,
+            "allowed_cidrs": WEBHOOK_ALLOWED_CIDRS,
+        },
+    )
+    return policy["stream"]
+
+
 def host_matches_allowlist(hostname: str) -> bool:
-    if not STREAM_ALLOWED_HOSTS:
-        return True
-    normalized = hostname.lower().rstrip(".")
-    for allowed in STREAM_ALLOWED_HOSTS:
-        allowed_host = allowed.lower().rstrip(".")
-        if normalized == allowed_host or normalized.endswith(f".{allowed_host}"):
-            return True
-    return False
+    return host_is_allowed(
+        hostname,
+        allowed_hosts=STREAM_ALLOWED_HOSTS,
+        allowed_cidrs=STREAM_ALLOWED_CIDRS,
+    )
 
 
-def is_blocked_stream_address(address: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
-    if ALLOW_PRIVATE_STREAM_HOSTS:
+def is_blocked_stream_address(
+    address: ipaddress.IPv4Address | ipaddress.IPv6Address,
+    *,
+    allow_private_hosts: bool,
+) -> bool:
+    if allow_private_hosts:
         return False
     return (
         address.is_private
@@ -33,20 +59,24 @@ def is_blocked_stream_address(address: ipaddress.IPv4Address | ipaddress.IPv6Add
     )
 
 
-def reject_blocked_stream_address(address: ipaddress.IPv4Address | ipaddress.IPv6Address) -> None:
-    if is_blocked_stream_address(address):
+def reject_blocked_stream_address(
+    address: ipaddress.IPv4Address | ipaddress.IPv6Address,
+    *,
+    allow_private_hosts: bool,
+) -> None:
+    if is_blocked_stream_address(address, allow_private_hosts=allow_private_hosts):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="stream_url 主机被 SSRF 防护策略拒绝",
         )
 
 
-def reject_private_ip_literal(hostname: str) -> None:
+def reject_private_ip_literal(hostname: str, *, allow_private_hosts: bool) -> None:
     try:
         address = ipaddress.ip_address(hostname)
     except ValueError:
         return
-    reject_blocked_stream_address(address)
+    reject_blocked_stream_address(address, allow_private_hosts=allow_private_hosts)
 
 
 def resolve_stream_host_addresses(hostname: str) -> list[ipaddress.IPv4Address | ipaddress.IPv6Address]:
@@ -73,16 +103,21 @@ def resolve_stream_host_addresses(hostname: str) -> list[ipaddress.IPv4Address |
     return addresses
 
 
-def reject_private_resolved_addresses(hostname: str) -> None:
-    if ALLOW_PRIVATE_STREAM_HOSTS:
+def reject_private_resolved_addresses(
+    hostname: str,
+    addresses: list[ipaddress.IPv4Address | ipaddress.IPv6Address],
+    *,
+    allow_private_hosts: bool,
+) -> None:
+    if allow_private_hosts:
         return
     try:
         ipaddress.ip_address(hostname)
         return
     except ValueError:
         pass
-    for address in resolve_stream_host_addresses(hostname):
-        reject_blocked_stream_address(address)
+    for address in addresses:
+        reject_blocked_stream_address(address, allow_private_hosts=allow_private_hosts)
 
 
 def validate_media_stream_url(stream_url: str) -> str:
@@ -94,13 +129,31 @@ def validate_media_stream_url(stream_url: str) -> str:
         )
     if not parsed.hostname:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="stream_url 必须包含主机")
-    reject_private_ip_literal(parsed.hostname)
-    if not host_matches_allowlist(parsed.hostname):
+    policy = current_stream_network_policy()
+    allow_private_hosts = bool(policy["allow_private_hosts"])
+    allowed_hosts = list(policy["allowed_hosts"])
+    allowed_cidrs = list(policy["allowed_cidrs"])
+    reject_private_ip_literal(parsed.hostname, allow_private_hosts=allow_private_hosts)
+    try:
+        ipaddress.ip_address(parsed.hostname)
+        resolved_addresses: list[ipaddress.IPv4Address | ipaddress.IPv6Address] = []
+    except ValueError:
+        resolved_addresses = resolve_stream_host_addresses(parsed.hostname)
+    if not host_is_allowed(
+        parsed.hostname,
+        allowed_hosts=allowed_hosts,
+        allowed_cidrs=allowed_cidrs,
+        resolved_addresses=resolved_addresses,
+    ):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="stream_url 主机不在 STREAM_ALLOWED_HOSTS 允许列表中",
+            detail="stream_url 主机不在 STREAM_ALLOWED_HOSTS/STREAM_ALLOWED_CIDRS 网络访问策略允许范围内",
         )
-    reject_private_resolved_addresses(parsed.hostname)
+    reject_private_resolved_addresses(
+        parsed.hostname,
+        resolved_addresses,
+        allow_private_hosts=allow_private_hosts,
+    )
     return stream_url
 
 
@@ -132,6 +185,7 @@ def mask_stream_url(stream_url: str) -> str:
 
 __all__ = [
     "SUPPORTED_STREAM_SCHEMES",
+    "current_stream_network_policy",
     "host_matches_allowlist",
     "is_blocked_stream_address",
     "mask_stream_url",

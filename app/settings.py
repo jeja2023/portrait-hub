@@ -2,6 +2,7 @@ import os
 from pathlib import Path
 from typing import Any
 
+from app.config_overrides import apply_configuration_overrides
 from app.runtime_defaults import (
     DEFAULT_CONTENT_SECURITY_POLICY,
     DEFAULT_HSTS_ENABLED,
@@ -15,6 +16,8 @@ from app.runtime_defaults import (
     DEFAULT_RATE_LIMIT_PER_MINUTE,
     DEFAULT_TRUSTED_HOSTS,
 )
+
+apply_configuration_overrides()
 
 
 def parse_int_env(name: str, default: int) -> int:
@@ -48,7 +51,7 @@ def parse_csv_env(name: str, default: str = "") -> list[str]:
     return [item.strip() for item in os.getenv(name, default).split(",") if item.strip()]
 
 
-APP_VERSION = "0.14.3"
+APP_VERSION = "0.15.0"
 PORTRAIT_RUNTIME_PROFILE = (
     os.getenv("PORTRAIT_RUNTIME_PROFILE", os.getenv("APP_ENV", "development")).strip().lower() or "development"
 )
@@ -126,6 +129,9 @@ TENSORRT_ENGINE_CACHE_ENABLE = parse_bool_env("TENSORRT_ENGINE_CACHE_ENABLE", Tr
 TENSORRT_ENGINE_CACHE_PATH = os.getenv("TENSORRT_ENGINE_CACHE_PATH", "/tmp/tensorrt-engine-cache")
 ROLLOUT_AUDIT_PATH = Path(os.getenv("ROLLOUT_AUDIT_PATH", "rollout-audit.jsonl"))
 RUNTIME_STATE_DIR = Path(os.getenv("RUNTIME_STATE_DIR", "runtime-state"))
+ADMIN_CONFIG_STATE_PATH = Path(
+    os.getenv("ADMIN_CONFIG_STATE_PATH", str(RUNTIME_STATE_DIR / "admin-configuration.json"))
+)
 PORTRAIT_GALLERY_STATE_PATH = Path(
     os.getenv("PORTRAIT_GALLERY_STATE_PATH", str(RUNTIME_STATE_DIR / "portrait-gallery.json"))
 )
@@ -160,8 +166,10 @@ STREAM_WORKER_LOCK_DIR = Path(
 )
 ALLOW_PRIVATE_STREAM_HOSTS = parse_bool_env("ALLOW_PRIVATE_STREAM_HOSTS", False)
 STREAM_ALLOWED_HOSTS = [item.lower() for item in parse_csv_env("STREAM_ALLOWED_HOSTS")]
+STREAM_ALLOWED_CIDRS = parse_csv_env("STREAM_ALLOWED_CIDRS")
 ALLOW_PRIVATE_WEBHOOK_HOSTS = parse_bool_env("ALLOW_PRIVATE_WEBHOOK_HOSTS", False)
 WEBHOOK_ALLOWED_HOSTS = [item.lower() for item in parse_csv_env("WEBHOOK_ALLOWED_HOSTS")]
+WEBHOOK_ALLOWED_CIDRS = parse_csv_env("WEBHOOK_ALLOWED_CIDRS")
 WARMUP_MODELS = [item.strip() for item in os.getenv("WARMUP_MODELS", "").split(",") if item.strip()]
 # 启动预热失败时是否让整个进程启动失败。默认 false：预热是尽力而为，单个模型加载失败只记录
 # 并继续预热其余模型，避免一个坏模型拖垮整个服务启动（其余可用模型仍能对外提供推理）。

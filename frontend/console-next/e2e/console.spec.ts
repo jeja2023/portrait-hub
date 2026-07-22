@@ -181,6 +181,76 @@ test("[E2E-MODELS-01] shows GPU assignment and clear weighted rollout roles", as
   await expect(rolloutRoles.nth(1)).toContainText("候选灰度版本");
 });
 
+test("[E2E-CONFIG-01] manages network CIDRs and exposes the complete configuration catalog", async ({
+  page,
+}, testInfo) => {
+  await page.route("**/v1/admin/network-access-policy", async (route) => {
+    const request = route.request();
+    if (request.method() === "PUT") {
+      const body = request.postDataJSON() as {
+        stream: { allow_private_hosts: boolean; allowed_hosts: string[]; allowed_cidrs: string[] };
+        webhook: { allow_private_hosts: boolean; allowed_hosts: string[]; allowed_cidrs: string[] };
+      };
+      await route.fulfill({
+        json: {
+          status: "success",
+          request_id: "e2e-config-save",
+          data: { revision: 2, updated_at: Date.now() / 1000, stream: body.stream, webhook: body.webhook },
+        },
+      });
+      return;
+    }
+    await route.fulfill({
+      json: {
+        status: "success",
+        request_id: "e2e-config-load",
+        data: {
+          revision: 1,
+          updated_at: null,
+          stream: { allow_private_hosts: false, allowed_hosts: [], allowed_cidrs: [] },
+          webhook: { allow_private_hosts: false, allowed_hosts: [], allowed_cidrs: [] },
+        },
+      },
+    });
+  });
+
+  await page.goto("/");
+  await loginAsDefaultAdmin(page);
+  await expect(page).toHaveURL(/\/console#\/$/);
+  await page.goto("/console#/admin/configuration");
+
+  await expect(page.getByRole("heading", { name: "配置中心", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "视频流访问", exact: true })).toBeVisible();
+  await page.getByLabel("视频流允许的 IP 网段").fill("10.30.0.0/16");
+  await page.locator(".policy-panel").first().locator(".el-switch").click();
+  await expect(page.getByText("允许私网访问时必须填写主机或 CIDR 网段")).toHaveCount(0);
+  await page.getByRole("button", { name: "保存策略" }).click();
+  await expect(page.getByText("网络访问策略已生效")).toBeVisible();
+
+  await page.getByRole("tab", { name: "全部配置" }).click();
+  await page.getByLabel("搜索配置").fill("GPU_WORKER_0_DEVICE");
+  const configurationEntry = testInfo.project.name.includes("mobile")
+    ? page.locator(".mobile-config-item").filter({ hasText: "GPU_WORKER_0_DEVICE" })
+    : page.getByRole("row").filter({ hasText: "GPU_WORKER_0_DEVICE" });
+  await expect(configurationEntry).toBeVisible();
+  await expect(configurationEntry).toContainText("重建容器");
+  await configurationEntry.getByRole("button", { name: "修改配置" }).click();
+  await expect(page.getByRole("dialog", { name: "GPU_WORKER_0_DEVICE" })).toBeVisible();
+  await expect(page.getByText("需要在宿主机同步 .env 后重建容器")).toBeVisible();
+  await page.getByRole("button", { name: "取消" }).click();
+
+  await expect(page.locator("body")).not.toHaveCSS("overflow-x", "scroll");
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  const accessibility = await new AxeBuilder({ page }).analyze();
+  expect(
+    accessibility.violations.filter((violation) => ["serious", "critical"].includes(violation.impact ?? "")),
+  ).toEqual([]);
+  await page.screenshot({
+    path: testInfo.outputPath("configuration-" + testInfo.project.name + ".png"),
+    fullPage: true,
+  });
+});
+
 test("[E2E-ROUTES-02] loads every product route and opens guarded dialogs without CSP violations", async ({
   page,
 }) => {
@@ -204,6 +274,7 @@ test("[E2E-ROUTES-02] loads every product route and opens guarded dialogs withou
     ["/admin/identity", "身份与权限"],
     ["/admin/models", "模型中心"],
     ["/admin/calibration", "阈值与标注"],
+    ["/admin/configuration", "配置中心"],
     ["/admin/ops", "运维与合规"],
   ] as const;
 

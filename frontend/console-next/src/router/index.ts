@@ -11,6 +11,7 @@ import {
   IdCard,
   Radio,
   ScanSearch,
+  Settings,
   Settings2,
   ShieldCheck,
   SlidersHorizontal,
@@ -199,13 +200,23 @@ const router = createRouter({
           },
         },
         {
+          path: "admin/configuration",
+          name: "admin-configuration",
+          component: () => import("../views/admin/ConfigurationView.vue"),
+          meta: {
+            title: "配置中心",
+            permission: "admin:configuration",
+            nav: { section: "系统管理", order: 4, icon: Settings },
+          },
+        },
+        {
           path: "admin/ops",
           name: "admin-ops",
           component: () => import("../views/admin/OpsView.vue"),
           meta: {
             title: "运维与合规",
             permission: "admin:status",
-            nav: { section: "系统管理", order: 4, icon: ShieldCheck },
+            nav: { section: "系统管理", order: 5, icon: ShieldCheck },
           },
         },
         {

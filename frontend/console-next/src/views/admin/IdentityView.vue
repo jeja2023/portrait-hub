@@ -156,6 +156,7 @@ const permissionLabels: Record<string, string> = {
   "admin:export": "导出与备份",
   "admin:retention": "执行数据清理",
   "admin:identity": "管理身份与权限",
+  "admin:configuration": "管理系统配置",
   "metrics:read": "读取指标",
   "access:read": "读取接入配置",
   "access:write": "维护接入配置",

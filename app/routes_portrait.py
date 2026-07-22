@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 
 from app.oidc_auth import router as oidc_router
+from app.routes_admin_configuration import router as admin_configuration_router
 from app.routes_portrait_access import router as access_router
 from app.routes_portrait_admin import router as admin_router
 from app.routes_portrait_analysis import router as analysis_router
@@ -27,4 +28,5 @@ router.include_router(ws_router)
 router.include_router(models_router)
 router.include_router(review_router)
 router.include_router(admin_router)
+router.include_router(admin_configuration_router)
 router.include_router(console_router)

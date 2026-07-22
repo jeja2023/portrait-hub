@@ -13,7 +13,6 @@ htmlcov/
 .gitignore
 .dockerignore
 .env
-.env.example
 .venv/
 .claude/
 .codex-tmp/

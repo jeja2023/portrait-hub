@@ -33,6 +33,8 @@ def check_api_limits_and_tenant(root: Path) -> list[dict[str, Any]]:
     vision_routes = src["vision_routes"]
     portrait_object_storage = src["portrait_object_storage"]
     stream_decode = src["stream_decode"]
+    network_access_policy = src["network_access_policy"]
+    portrait_access = src["portrait_access"]
     portrait_gallery_route_orchestration = src["portrait_gallery_route_orchestration"]
     portrait_thresholds = src["portrait_thresholds"]
     portrait_compare_routes = src["portrait_compare_routes"]
@@ -208,10 +210,25 @@ def check_api_limits_and_tenant(root: Path) -> list[dict[str, Any]]:
                 and "def resolve_stream_host_addresses" in stream_decode
                 and "socket.getaddrinfo" in stream_decode
                 and "def reject_private_resolved_addresses" in stream_decode
-                and "reject_private_resolved_addresses(parsed.hostname)"
-                in stream_decode
+                and "network_access_policy_snapshot(" in stream_decode
+                and "host_is_allowed(" in stream_decode
+                and "resolved_addresses=resolved_addresses" in stream_decode
+                and "reject_private_resolved_addresses(" in stream_decode
+                and "allow_private_hosts=allow_private_hosts" in stream_decode
+                and "def revalidate_stream_url" in stream_decode
+                and video_io.count("revalidate_stream_url(source)") >= 2
                 and "parsed.query" in stream_decode
                 and "parsed.fragment" in stream_decode
+                and 'query = "<redacted>" if parsed.query else ""' in stream_decode
+                and 'fragment = "<redacted>" if parsed.fragment else ""' in stream_decode
+                and "def normalize_cidr_rule" in network_access_policy
+                and "require_private_allowlist=True" in network_access_policy
+                and "all(address_matches_cidrs(address, allowed_cidrs) for address in addresses)"
+                in network_access_policy
+                and "network_access_policy_snapshot(" in portrait_access
+                and "_resolve_webhook_host_addresses" in portrait_access
+                and "host_is_allowed(" in portrait_access
+                and "_reject_blocked_webhook_host(" in portrait_access
                 and "stream_url_protected" in portrait_streams
                 and "def protect_stream_url" in portrait_streams
                 and "def reveal_stream_url" in portrait_streams

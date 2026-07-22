@@ -79,6 +79,7 @@ COPY --from=console-builder /build/frontend/console-next/dist /workspace/fronten
 COPY main.py /workspace/main.py
 COPY models.yml /workspace/models.yml
 COPY model-capabilities.yml /workspace/model-capabilities.yml
+COPY .env.example /workspace/.env.example
 
 EXPOSE 8000
 

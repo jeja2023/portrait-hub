@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, nextTick, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { ChevronLeft, Code2, LogOut, Menu } from "@lucide/vue";
 import { ElButton, ElMenu, ElMenuItem, ElSwitch, ElTooltip } from "element-plus";
@@ -16,6 +16,7 @@ const router = useRouter();
 const capabilities = useCapabilitiesStore();
 const prefs = usePrefsStore();
 const logoutPending = ref(false);
+const sidebarNav = ref<HTMLElement>();
 const activeMenuPath = computed(() => {
   if (route.path.startsWith("/analysis/video/")) return "/analysis/video";
   if (route.path.startsWith("/analysis/stream/")) return "/analysis/stream";
@@ -56,11 +57,23 @@ const PAGE_DESCRIPTIONS: Record<string, string> = {
     "\u7ba1\u7406\u6a21\u578b\u8fd0\u884c\u72b6\u6001\u3001\u522b\u540d\u53d1\u5e03\u4e0e\u8bc4\u4f30\u57fa\u7ebf\u3002",
   "admin-calibration":
     "\u7ef4\u62a4\u5404\u6a21\u6001\u9608\u503c\uff0c\u8bb0\u5f55\u4eba\u5de5\u590d\u6838\uff0c\u5e76\u5c06\u590d\u6838\u6c60\u8f6c\u5316\u4e3a\u8bc4\u4f30\u6570\u636e\u548c\u9608\u503c\u5efa\u8bae\u3002",
+  "admin-configuration": "集中管理运行配置、敏感参数和局域网访问策略。",
   "admin-ops":
     "\u67e5\u770b\u8fd0\u884c\u540e\u7aef\u3001\u5ba1\u8ba1\u94fe\u548c\u5907\u4efd\uff0c\u5e76\u6267\u884c\u53d7\u63a7\u4fdd\u7559\u7b56\u7565\u3002",
   forbidden: "\u5f53\u524d\u51ed\u8bc1\u4e0d\u5177\u5907\u6b64\u9875\u9762\u6240\u9700\u6743\u9650\u3002",
 };
 const pageDescription = computed(() => PAGE_DESCRIPTIONS[String(route.name)] ?? "");
+
+async function revealActiveMobileNavigation(): Promise<void> {
+  if (!window.matchMedia("(max-width: 700px)").matches) return;
+  await nextTick();
+  sidebarNav.value
+    ?.querySelector<HTMLElement>(".el-menu-item.is-active")
+    ?.scrollIntoView({ block: "nearest", inline: "center" });
+}
+
+watch(activeMenuPath, revealActiveMobileNavigation);
+onMounted(revealActiveMobileNavigation);
 
 // 单一导航数据源（方案 §6）：由路由表 meta.nav 派生侧栏，标题/权限/图标只在路由声明一次。
 const SECTION_ORDER = ["工作台", "开发者中心", "系统管理"];
@@ -112,7 +125,7 @@ async function logout(): Promise<void> {
           <strong>影鉴</strong><span>业务控制台</span>
         </div>
       </div>
-      <nav aria-label="主导航" class="sidebar-nav" tabindex="0">
+      <nav ref="sidebarNav" aria-label="主导航" class="sidebar-nav" tabindex="0">
         <section v-for="section in visibleSections" :key="section.label" class="nav-section">
           <div v-if="!prefs.sidebarCollapsed" class="nav-section__title">{{ section.label }}</div>
           <ElMenu :default-active="activeMenuPath" router :collapse="prefs.sidebarCollapsed">

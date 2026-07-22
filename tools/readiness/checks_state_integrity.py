@@ -34,6 +34,9 @@ def check_state_integrity(root: Path) -> list[dict[str, Any]]:
     portrait_gallery_records = src["portrait_gallery_records"]
     portrait_gallery_route_orchestration = src["portrait_gallery_route_orchestration"]
     portrait_postgres_schema = src["portrait_postgres_schema"]
+    admin_configuration = src["admin_configuration"]
+    config_overrides = src["config_overrides"]
+    admin_configuration_routes = src["admin_configuration_routes"]
     return [
         {
             "name": "security:state_write_fail_closed",
@@ -45,6 +48,27 @@ def check_state_integrity(root: Path) -> list[dict[str, Any]]:
                 and "STATE_WRITE_FAIL_CLOSED: ${STATE_WRITE_FAIL_CLOSED:-true}"
                 in compose
                 and "STATE_WRITE_FAIL_CLOSED=true" in env_example
+            ),
+        },
+        {
+            "name": "security:admin_configuration_state_protection",
+            "ok": (
+                '"value": None if sensitive else effective' in admin_configuration
+                and "not overridden and not removed_loaded_override" in admin_configuration
+                and "removed_loaded_override and desired_after_restart != effective" in admin_configuration
+                and "HTTP_409_CONFLICT" in admin_configuration
+                and "write_json_state(ADMIN_CONFIG_STATE_PATH, payload)" in admin_configuration
+                and "ADMIN_CONFIG_STATE_PATH.chmod(0o600)" in admin_configuration
+                and "STATE_READ_FAIL_CLOSED" in config_overrides
+                and "BASE_CONFIGURATION_ENVIRONMENT.setdefault" in config_overrides
+                and "APPLIED_CONFIGURATION_OVERRIDES[key] = value" in config_overrides
+                and "os.environ[key] = value" in config_overrides
+                and "apply_configuration_overrides()" in settings
+                and 'permission_dependency("admin:configuration")' in admin_configuration_routes
+                and '"admin_configuration_update"' in admin_configuration_routes
+                and "restore_configuration_state" in admin_configuration_routes
+                and '"admin_network_access_policy_update"' in admin_configuration_routes
+                and "restore_network_access_policy" in admin_configuration_routes
             ),
         },
         {

@@ -2,11 +2,21 @@
 
 面向 Ubuntu + Docker + NVIDIA GPU 的 ONNX 推理服务。服务通过 FastAPI 暴露接口，按 GPU 拆成多个 worker，适合给人像识别、人像检索、ReID 等业务项目提供共享推理能力。
 
-当前版本：0.14.3。本补丁版本完善 Docker 本地管理员登录配置、登录页提示和服务器排障流程，并包含 0.14.2 的容器与更新部署修复；公开 PortraitHub v1 API 保持兼容。
+当前版本：0.15.0。本功能版本新增管理员配置中心、动态网络访问策略和局域网 CIDR 白名单；公开 PortraitHub v1 API 保持兼容。
 
 > `0.9.0` 是破坏性升级。旧的 `/v1/vision/results`、`/v1/jobs/video/results` 及有限图片历史实现已删除，不提供兼容回退或旧记录自动迁移；接入方必须切换到统一档案接口。
 
 拆分后的模块映射、维护边界和验证命令见 [大型文件拆分维护指南](docs/maintenance/LARGE_FILE_SPLIT.md)，完整发布记录见 [更新日志](更新日志.md)。
+
+## 0.15.0 配置中心与局域网访问策略
+
+- 系统管理新增“配置中心”，自动展示 `.env.example` 中的全部支持项，并提供分类、搜索、有效值来源、生效方式、覆盖和重置。
+- 敏感配置只显示是否已配置，API、页面和审计日志均不回显真实值；覆盖状态保存到权限收紧的 `runtime-state/admin-configuration.json`。
+- 视频流和 Webhook 网络策略支持单 IP、域名及 IPv4/IPv6 CIDR，保存后由 API 和 Worker 动态读取，无需重建容器。
+- 允许私网访问时必须同时配置主机或 CIDR，避免 `ALLOW_PRIVATE_*=true` 配合空白名单形成任意内网访问能力。
+- 应用配置在服务重启后读取共享覆盖；GPU 编号、宿主机挂载和构建参数等 Docker 编排项通过宿主机应用工具同步到 `.env` 后重建。
+- 配置中心在移动端使用紧凑列表，全局底部导航支持横向访问全部分组并自动定位当前入口，不再发生菜单文字叠压。
+- 完整升级、配置生效边界与回退步骤见 [0.15.0 发布说明](docs/releases/0.15.0.md) 和 [更新日志](更新日志.md)。
 
 ## 0.14.3 服务器本地登录与部署诊断
 
@@ -180,7 +190,7 @@ v1 已加入的生产加固：
 - 流注册会阻止私网、回环、链路本地、多播、保留和未指定的 IP 字面量，以及解析到这些地址段的主机名，除非显式设置 `ALLOW_PRIVATE_STREAM_HOSTS=true`。
 - 旧版流推理现在复用同样的 SSRF 防护，并在响应元数据中隐藏凭据以及查询串/fragment 中的秘密。
 - 流状态会保护流 URL 以及敏感 `settings`/`metadata` 字段在静态存储中的安全，而公开流响应会保持这些字段脱敏。
-- `STREAM_ALLOWED_HOSTS` 可以把流 URL 限制到显式的主机/域名白名单。
+- `STREAM_ALLOWED_HOSTS` 可以把流 URL 限制到显式的主机/域名白名单；仅使用 IP 的局域网可通过配置中心维护 `STREAM_ALLOWED_CIDRS` 网段白名单。
 - `RBAC_ENABLED`、`JWT_ALGORITHM`、`JWT_SECRET`、`JWT_SECRET_ID`、`JWT_SECRET_KEYRING`、`JWT_PUBLIC_KEY`、`JWT_PUBLIC_KEY_PATH`、`JWT_PUBLIC_KEYRING`、`JWT_ISSUER`、`JWT_AUDIENCE`、`JWT_REQUIRE_EXP`、`JWT_REQUIRE_ISS` 和 `JWT_REQUIRE_AUD` 用于开启可选 JWT 角色校验；默认兼容 HS256，生产可切换 RS256/ES256 并使用公钥验签。
 - RBAC 角色采用最小权限：`viewer` 只能读底库/任务/流/模型元数据；`operator` 可以推理/比对、读取管理状态和指标；`auditor` 可以读取管理状态、导出和指标，但没有修改权限；生物特征推理/比对要求 `operator`、`algorithm` 或 `admin`；调试模型输出需要模型写权限；管理导出/保留使用独立的管理权限。
 - `AUTH_REQUIRED` 会在既没有 `API_TOKEN` 也没有 RBAC 凭证时让受保护接口失败关闭；Docker Compose 默认设为 `true`。
