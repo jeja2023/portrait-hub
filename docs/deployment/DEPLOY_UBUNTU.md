@@ -1,6 +1,6 @@
 # PortraitHub Ubuntu 部署教程
 
-本文档面向当前 PortraitHub 项目，说明如何在 Ubuntu 服务器上通过 Docker Compose 部署 GPU 推理服务。文档按仓库版本 0.15.0、当前 Dockerfile、docker-compose.yml、.env.example 和生产门禁实现编写。
+本文档面向当前 PortraitHub 项目，说明如何在 Ubuntu 服务器上通过 Docker Compose 部署 GPU 推理服务。文档按仓库版本 0.16.0、当前 Dockerfile、docker-compose.yml、.env.example 和生产门禁实现编写。
 
 > 项目名称、仓库目录和 Compose 项目名统一为 portrait-hub。
 
@@ -844,7 +844,8 @@ docker compose -p portrait-hub up -d --no-build --force-recreate --remove-orphan
 - docs/releases/0.14.0.md；
 - docs/releases/0.14.1.md；
 - docs/releases/0.14.2.md；
-- docs/releases/0.15.0.md。
+- docs/releases/0.15.0.md；
+- docs/releases/0.16.0.md。
 
 ## 18. 离线部署
 
@@ -857,7 +858,7 @@ cd /opt/portrait-hub
 docker compose -p portrait-hub build
 docker compose -p portrait-hub config --images
 
-docker save -o portrait-hub-0.15.0-images.tar \
+docker save -o portrait-hub-0.16.0-images.tar \
   portrait-hub-gpu-worker-0 \
   portrait-hub-gpu-worker-1 \
   portrait-hub-portrait-video-job-worker \
@@ -875,7 +876,7 @@ docker save -o portrait-hub-0.15.0-images.tar \
 离线服务器：
 
 ```bash
-docker load -i portrait-hub-0.15.0-images.tar
+docker load -i portrait-hub-0.16.0-images.tar
 cd /opt/portrait-hub
 test -f runtime-state/models.yml
 docker compose -p portrait-hub up -d --no-build gpu-worker-0 gpu-worker-1

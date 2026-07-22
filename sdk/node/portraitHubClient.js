@@ -1,6 +1,6 @@
 const fs = require("fs");
 
-const SDK_VERSION = "0.15.0";
+const SDK_VERSION = "0.16.0";
 const USER_AGENT = `portrait-hub-sdk-node/${SDK_VERSION}`;
 
 class PortraitHubHTTPError extends Error {

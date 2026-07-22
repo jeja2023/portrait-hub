@@ -1,11 +1,13 @@
 # Console Next 验收报告
 
-- 验收日期：2026-07-20
-- 发布版本：0.14.0
-- 验收对象：frontend/console-next、受管成员与租户、模型灰度、导出备份、推理高级参数、共享分页、品牌资产、生产静态入口与 SDK 版本
-- 结论：0.14.0 后端能力对齐、身份治理、业务操作补全、响应式优化和品牌升级已完成；Console Next 继续作为唯一生产入口。生产上线仍需执行组织审批、镜像回退演练，并验证共享 Redis、外部服务与生产 OIDC 目录。
+- 验收日期：2026-07-22
+- 发布版本：0.16.0
+- 验收对象：frontend/console-next 左侧导航、全站数据表序号、配置中心边框/分页/分类排序、生产静态入口与版本元数据
+- 结论：0.16.0 导航与数据表体验优化已完成；Console Next 继续作为唯一生产入口。生产上线仍需执行组织审批、镜像回退演练，并验证共享 Redis、外部服务与生产 OIDC 目录。
 
 
+> 2026-07-22 / 0.16.0 验收：侧栏隐藏垂直滚动条且桌面菜单间隔收紧；全项目 19 个原生表和 4 个 Element Plus 表统一显示序号；配置中心全部配置表格具备边框、分页和分类排序；Vitest 9 files / 35 tests、ESLint、Vue TypeScript 与 Vite production build 通过。
+>
 > 2026-07-20 / 0.14.0 验收：受管成员与租户治理、OIDC 成员绑定、模型灰度、数据导出、轨迹/视频/流高级参数、比对检索、统一分页和新 Logo 通过；Python 全量 567 passed / 4 skipped、Vitest 8 files / 32 tests、Playwright 五项目 15 passed、四种 SDK 和真实浏览器桌面/390px 验收通过。
 >
 > 2026-07-19 / 0.13.0 验收：工作台八个入口和 /analysis 删除通过；登录页默认 admin 用户名/密码并将 API Key/JWT 收进高级入口；本地账号与 OIDC 会话的 RBAC、租户隔离、CSRF、退出清理和显式凭证优先级通过；身份页显示认证来源和五级角色权限矩阵；本机 admin / 123456 登录与退出浏览器流程通过。
@@ -16,6 +18,15 @@
 > 2026-07-18 / 0.11.2 补充验收：二次复核修复 WS query 主凭证回退、`/v1/*` no-store、默认 CSP、流详情深链、meta.nav 导航、aria-live、错误横幅 request_id、值级脱敏与搜索质量分；新增 me auth_kind×3、403、ws-ticket 401/stream/TTL、空库契约测试，并完成 typecheck、ruff、pytest、npm check、Playwright E2E 与 diff check。
 
 > 2026-07-18 / 0.11.1 补充验收：deploy_check --import-app 已新增旧源码目录缺失断言，duplicate /v1 检查改为扫描 frontend/console-next/src；平台 strict readiness 同步阻断旧灰度变量、旧静态路径和旧 DOM 标记回归。
+
+## 0.16.0 增量验收
+
+| 范围 | 完成状态 | 关键检查 |
+| --- | --- | --- |
+| 左侧导航 | 完成 | 隐藏桌面垂直滚动条；1px 菜单间隔；底部选中态完整 |
+| 全站数据表 | 完成 | 19 个原生表、4 个 Element Plus 表均有序号列；分页序号连续 |
+| 配置中心 | 完成 | `ElTable border`、10/20/50 分页、分类稳定排序、移动/桌面共用页数据 |
+| 回归门禁 | 完成 | `tableSequence.test.ts` 扫描表格和配置中心关键模板契约 |
 
 ## 功能闭环
 

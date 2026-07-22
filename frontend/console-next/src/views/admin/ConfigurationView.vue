@@ -22,6 +22,8 @@ import {
 
 import { ApiError, apiRequest, jsonBody } from "../../api/client";
 import { useRouteTab } from "../../utils/routeState";
+import DataTablePagination from "../../components/DataTablePagination.vue";
+import { useTablePagination } from "../../utils/tablePagination";
 
 interface ConfigurationItem {
   key: string;
@@ -100,6 +102,20 @@ const filteredItems = computed(() => {
     return matchesKeyword && matchesCategory && matchesApplyMode;
   });
 });
+
+const sortedItems = computed(() => {
+  const categoryOrder = new Map(
+    (configuration.value?.categories ?? []).map((value, index) => [value, index]),
+  );
+  return [...filteredItems.value].sort((left, right) => {
+    const categoryDelta =
+      (categoryOrder.get(left.category) ?? Number.MAX_SAFE_INTEGER) -
+      (categoryOrder.get(right.category) ?? Number.MAX_SAFE_INTEGER);
+    if (categoryDelta !== 0) return categoryDelta;
+    return left.category.localeCompare(right.category, "zh-CN") || left.key.localeCompare(right.key);
+  });
+});
+const configurationPager = useTablePagination(sortedItems, 20);
 
 const editSaveDisabled = computed(() => {
   const item = editingItem.value;
@@ -374,7 +390,10 @@ onMounted(load);
         </div>
 
         <div class="tool-surface configuration-table">
-          <ElTable :data="filteredItems" row-key="key" empty-text="没有匹配的配置">
+          <ElTable border :data="configurationPager.items" row-key="key" empty-text="没有匹配的配置">
+            <ElTableColumn label="序号" width="72" fixed="left">
+              <template #default="{ $index }">{{ configurationPager.startIndex + $index + 1 }}</template>
+            </ElTableColumn>
             <ElTableColumn label="配置项" min-width="230" fixed="left">
               <template #default="scope">
                 <div class="config-key">
@@ -420,8 +439,14 @@ onMounted(load);
             </ElTableColumn>
           </ElTable>
         </div>
+        <DataTablePagination
+          v-if="sortedItems.length"
+          v-model:page="configurationPager.page"
+          v-model:page-size="configurationPager.pageSize"
+          :total="configurationPager.total"
+        />
         <div class="configuration-mobile-list">
-          <article v-for="item in filteredItems" :key="item.key" class="tool-surface mobile-config-item">
+          <article v-for="item in configurationPager.items" :key="item.key" class="tool-surface mobile-config-item">
             <div class="mobile-config-item__header">
               <code>{{ item.key }}</code>
               <ElButton

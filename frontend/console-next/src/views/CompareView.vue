@@ -332,7 +332,6 @@ onBeforeUnmount(() => {
         <table class="data-table">
           <thead>
             <tr>
-              <th>序号</th>
               <th class="sequence-column">序号</th>
               <th>模态</th>
               <th>结论</th>
