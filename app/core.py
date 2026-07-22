@@ -29,6 +29,7 @@ from app.observability import (
     reset_log_context,
     set_log_context,
     traceparent_from_headers,
+    wall_time,
 )
 from app.runtime import (
     MODEL_LOAD_LOCKS,

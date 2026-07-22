@@ -25,6 +25,7 @@ from app.core import (
     set_log_context,
     split_cache_key,
     traceparent_from_headers,
+    wall_time,
 )
 from app.metrics import observe_request_status
 from app.portrait_access import flush_access_call_stats
@@ -389,7 +390,8 @@ def create_app() -> FastAPI:
         context_tokens = set_log_context(
             request_id=request_id, tenant_id=tenant_id, traceparent=traceparent
         )
-        start = now()
+        start_time = wall_time()
+        start_perf = now()
         logged_error_code: str | None = None
         try:
             observe("requests_total")
@@ -412,7 +414,7 @@ def create_app() -> FastAPI:
                 )
             except Exception:
                 logged_error_code = "internal_error"
-                duration = now() - start
+                duration = now() - start_perf
                 log_json(
                     logging.ERROR,
                     "http_request_failed",
@@ -428,7 +430,7 @@ def create_app() -> FastAPI:
                         request_id, v1_contract=uses_v1_contract(request)
                     ),
                 )
-            duration = now() - start
+            duration = now() - start_perf
             observe_request_status(response.status_code)
             request_state = getattr(request, "state", None)
             tenant_id = getattr(request_state, "portrait_tenant_id", None) or tenant_id
@@ -448,7 +450,7 @@ def create_app() -> FastAPI:
                 path=request.url.path,
                 status_code=response.status_code,
                 latency_ms=max(0, int(duration * 1000)),
-                created_at=start,
+                created_at=start_time,
                 error_code=logged_error_code,
             )
             response.headers["X-Request-ID"] = request_id

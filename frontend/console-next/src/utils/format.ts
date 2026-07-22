@@ -6,6 +6,7 @@ const dateTimeFormatter = new Intl.DateTimeFormat("zh-CN", {
   minute: "2-digit",
   second: "2-digit",
   hour12: false,
+  timeZone: "Asia/Shanghai",
 });
 
 export function formatTimestamp(value: number | string | null | undefined): string {

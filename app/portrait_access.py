@@ -489,11 +489,13 @@ def configured_positive_limit(value: Any) -> int | None:
 
 
 def quota_date(timestamp: float) -> str:
-    return time.strftime("%Y-%m-%d", time.gmtime(timestamp))
+    # 东八区 (UTC+8) 偏移量 28800 秒 (8小时)
+    return time.strftime("%Y-%m-%d", time.gmtime(timestamp + 28800))
 
 
 def seconds_until_next_quota_day(timestamp: float) -> int:
-    next_midnight = (int(timestamp) // 86400 + 1) * 86400
+    # 东八区 (UTC+8) 每日重置点计算
+    next_midnight = (int(timestamp + 28800) // 86400 + 1) * 86400 - 28800
     return max(1, next_midnight - int(timestamp))
 
 
