@@ -21,10 +21,13 @@ from app.settings import (
     REDIS_URL,
 )
 
+redis: Any
 try:
-    import redis
+    import redis as _redis
 except ImportError:  # pragma: no cover - optional production dependency
     redis = None
+else:
+    redis = _redis
 
 
 @dataclass(frozen=True)

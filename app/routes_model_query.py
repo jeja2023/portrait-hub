@@ -2,11 +2,19 @@ from copy import deepcopy
 from typing import Any
 
 from fastapi import Depends, Request
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.api_contracts import ContractAPIRouter as APIRouter
 from app.metrics import gpu_memory_metrics
 from app.model_config import MODEL_ALIASES, MODEL_CONFIGS, reload_model_config_state
-from app.model_config_writer import configure_model_gpu_device, load_raw_model_config, write_raw_model_config
+from app.model_config_writer import (
+    apply_model_config_document,
+    configure_model_gpu_device,
+    load_model_config_snapshot,
+    load_raw_model_config,
+    preview_model_config_change,
+    write_raw_model_config,
+)
 from app.model_package import public_model_config
 from app.model_refs import validate_model_target
 from app.observability import request_id_from_headers
@@ -21,6 +29,28 @@ from app.schemas import ModelGpuDeviceRequest
 from app.security import require_api_token
 
 router = APIRouter()
+
+
+class ModelConfigChangeRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    document: dict[str, Any]
+    expected_current_fingerprint: str = Field(..., min_length=64, max_length=64)
+    reason: str = Field(..., min_length=1, max_length=2000)
+
+
+class ModelConfigPreviewRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    document: dict[str, Any]
+
+
+class ModelConfigRollbackRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    target_fingerprint: str = Field(..., min_length=64, max_length=64)
+    expected_current_fingerprint: str = Field(..., min_length=64, max_length=64)
+    reason: str = Field(..., min_length=1, max_length=2000)
 
 
 def gpu_device_inventory() -> dict[str, Any]:
@@ -155,4 +185,86 @@ async def reload_config(request: Request) -> dict[str, Any]:
             "count": len(model_configs),
             "alias_count": len(model_aliases),
         },
+    )
+
+
+@router.post(
+    "/v1/admin/models/config/preview",
+    dependencies=[Depends(require_api_token), Depends(permission_dependency("models:read"))],
+)
+async def preview_model_config(
+    payload: ModelConfigPreviewRequest,
+    request: Request,
+) -> dict[str, Any]:
+    result = await run_blocking_io(preview_model_config_change, payload.document)
+    return portrait_success(request_id_from_headers(request), result)
+
+
+async def apply_model_config_change(
+    document: dict[str, Any],
+    expected_current_fingerprint: str,
+    reason: str,
+    request: Request,
+    *,
+    event: str,
+) -> dict[str, Any]:
+    request_id = request_id_from_headers(request)
+    tenant_id = tenant_id_from_request(request)
+    previous_raw = await run_blocking_io(load_raw_model_config)
+    try:
+        result = await run_blocking_io(
+            apply_model_config_document,
+            document,
+            expected_current_fingerprint=expected_current_fingerprint,
+        )
+        reload_model_config_state()
+        await run_blocking_io(
+            audit_event,
+            event,
+            request_id=request_id,
+            tenant_id=tenant_id,
+            previous_fingerprint=result["previous_fingerprint"],
+            applied_fingerprint=result["applied_fingerprint"],
+            change_count=len(result["changes"]),
+            reason=reason,
+        )
+    except Exception:
+        await run_blocking_io(write_raw_model_config, previous_raw)
+        reload_model_config_state()
+        raise
+    return portrait_success(request_id, result)
+
+
+@router.post(
+    "/v1/admin/models/config/apply",
+    dependencies=[Depends(require_api_token), Depends(permission_dependency("models:write"))],
+)
+async def apply_model_config(
+    payload: ModelConfigChangeRequest,
+    request: Request,
+) -> dict[str, Any]:
+    return await apply_model_config_change(
+        payload.document,
+        payload.expected_current_fingerprint,
+        payload.reason,
+        request,
+        event="model_config_applied",
+    )
+
+
+@router.post(
+    "/v1/admin/models/config/rollback",
+    dependencies=[Depends(require_api_token), Depends(permission_dependency("models:write"))],
+)
+async def rollback_model_config(
+    payload: ModelConfigRollbackRequest,
+    request: Request,
+) -> dict[str, Any]:
+    document = await run_blocking_io(load_model_config_snapshot, payload.target_fingerprint)
+    return await apply_model_config_change(
+        document,
+        payload.expected_current_fingerprint,
+        payload.reason,
+        request,
+        event="model_config_rolled_back",
     )

@@ -27,6 +27,7 @@ from app.settings import (
     JWT_SECRET_ID,
     JWT_SECRET_KEYRING,
     RBAC_ENABLED,
+    STEP_UP_AUTH_MAX_AGE_SECONDS,
 )
 
 try:  # pragma: no cover - 可选的生产环境依赖
@@ -37,10 +38,24 @@ except Exception:  # pragma: no cover - 当依赖不存在时执行
 
 ROLE_PERMISSIONS = {
     "admin": {"*"},
-    "operator": {"infer", "compare", "gallery:read", "gallery:write", "jobs", "streams", "models:read", "admin:status", "metrics:read", "access:read"},
-    "algorithm": {"infer", "compare", "models:read", "models:write", "thresholds:write"},
-    "auditor": {"gallery:read", "jobs:read", "streams:read", "models:read", "admin:status", "admin:export", "metrics:read", "access:read"},
-    "viewer": {"gallery:read", "jobs:read", "streams:read", "models:read"},
+    "operator": {
+        "infer", "compare", "gallery:read", "gallery:write", "jobs", "streams", "models:read",
+        "admin:status", "metrics:read", "access:read", "commercial:read", "operations:read",
+        "operations:write", "support:read", "support:write",
+    },
+    "algorithm": {
+        "infer", "compare", "models:read", "models:write", "models:approve", "thresholds:write",
+        "datasets:read", "datasets:write",
+    },
+    "auditor": {
+        "gallery:read", "jobs:read", "streams:read", "models:read", "admin:status", "admin:export",
+        "metrics:read", "access:read", "commercial:read", "operations:read", "compliance:read",
+        "evidence:read",
+    },
+    "viewer": {
+        "gallery:read", "jobs:read", "streams:read", "models:read", "commercial:read",
+        "operations:read", "support:read",
+    },
 }
 DEFAULT_JWT_SECRET_ID = "primary"
 MAX_JWT_SECRET_ID_LENGTH = 64
@@ -347,6 +362,64 @@ def has_permission(roles: set[str], permission: str) -> bool:
     return False
 
 
+def step_up_seconds_remaining(claims: dict[str, Any], *, allow_session_iat: bool = False) -> int:
+    raw_auth_time = claims.get("auth_time")
+    if raw_auth_time is None and allow_session_iat:
+        raw_auth_time = claims.get("iat")
+    if isinstance(raw_auth_time, bool) or not isinstance(raw_auth_time, (int, float)):
+        return 0
+    authentication_time = float(raw_auth_time)
+    if not math.isfinite(authentication_time):
+        return 0
+    now = time.time()
+    if authentication_time > now + 60:
+        return 0
+    age = max(0.0, now - authentication_time)
+    return max(0, int(STEP_UP_AUTH_MAX_AGE_SECONDS - age))
+
+
+def step_up_required() -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail={
+            "code": "step_up_authentication_required",
+            "message": "recent interactive authentication is required for this high-risk operation",
+            "max_age_seconds": STEP_UP_AUTH_MAX_AGE_SECONDS,
+        },
+        headers={"X-PortraitHub-Step-Up": "required"},
+    )
+
+
+async def require_step_up_authentication(
+    request: Request,
+    authorization: str | None = Header(default=None),
+    x_api_key: str | None = Header(default=None),
+) -> None:
+    """Require a recent human authentication for destructive or sensitive operations."""
+    if not AUTH_REQUIRED and not RBAC_ENABLED and not API_TOKEN:
+        return
+    authorization = optional_header_value(authorization)
+    api_key = optional_header_value(x_api_key)
+    if not authorization and not api_key:
+        from app.oidc_auth import browser_session_claims, require_browser_session_csrf
+
+        session_claims = browser_session_claims(request)
+        if session_claims is not None and step_up_seconds_remaining(session_claims, allow_session_iat=True) > 0:
+            require_browser_session_csrf(request, session_claims)
+            return
+        raise step_up_required()
+    if api_key or not authorization or not authorization.startswith("Bearer "):
+        raise step_up_required()
+    token = authorization.removeprefix("Bearer ").strip()
+    if API_TOKEN and hmac.compare_digest(token, API_TOKEN):
+        raise step_up_required()
+    if not RBAC_ENABLED:
+        raise step_up_required()
+    claims = verify_hs256_jwt(token)
+    if step_up_seconds_remaining(claims) <= 0:
+        raise step_up_required()
+
+
 async def require_permission(
     permission: str,
     authorization: str | None = Header(default=None),
@@ -410,13 +483,62 @@ async def require_permission(
     if not has_permission(roles_from_claims(claims), permission):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=f"缺少权限：{permission}")
 
+def commercial_capability_for_request(permission: str, path: str) -> str | None:
+    mappings = (
+        ("/v1/infer/faces", "face_detection"),
+        ("/v1/infer/persons", "person_detection"),
+        ("/v1/infer/pose", "pose"),
+        ("/v1/infer/appearance", "appearance"),
+        ("/v1/infer/gait", "gait"),
+        ("/v1/compare/faces", "face_embedding"),
+        ("/v1/compare/persons", "appearance"),
+        ("/v1/compare/gait", "gait"),
+        ("/v1/compare/multimodal", "multimodal_compare"),
+        ("/v1/uploads/video", "video_processing"),
+        ("/v1/jobs/video", "video_processing"),
+        ("/v1/streams", "stream_processing"),
+    )
+    if permission not in {"infer", "compare", "jobs", "streams"}:
+        return None
+    return next((capability for prefix, capability in mappings if path.startswith(prefix)), None)
+
+
 def permission_dependency(permission: str) -> Callable[..., Any]:
     async def dependency(
         request: Request,
         authorization: str | None = Header(default=None),
         x_tenant_id: str | None = Header(default=None),
         x_api_key: str | None = Header(default=None),
-    ) -> None:
+    ) -> Any:
         await require_permission(permission, authorization, x_tenant_id, x_api_key, request)
+        from app import settings
+
+        if not settings.COMMERCIAL_ENTITLEMENT_ENFORCEMENT_ENABLED:
+            yield
+            return
+        capability = commercial_capability_for_request(permission, request.url.path)
+        if capability is None:
+            yield
+            return
+        from app.commercial_concurrency import acquire_commercial_slot, release_commercial_slot
+        from app.portrait_async import run_blocking_io
+        from app.portrait_commercial import require_entitlement_capability
+        from app.portrait_projects import project_id_from_request
+        from app.portrait_security import tenant_id_from_request
+
+        tenant_id = tenant_id_from_request(request)
+        project_id = project_id_from_request(request, tenant_id)
+        entitlement = await run_blocking_io(
+            require_entitlement_capability,
+            tenant_id,
+            project_id,
+            capability,
+        )
+        limit = int((entitlement or {}).get("effective_concurrency_limit") or 1)
+        slot_token = await run_blocking_io(acquire_commercial_slot, tenant_id, project_id, limit)
+        try:
+            yield
+        finally:
+            await run_blocking_io(release_commercial_slot, tenant_id, project_id, slot_token)
 
     return dependency

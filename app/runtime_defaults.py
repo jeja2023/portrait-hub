@@ -36,13 +36,23 @@ LOCAL_DEV_PATH_KEYS = {
 
 LOCAL_DEV_STATE_PATH_KEYS = {
     "ROLLOUT_AUDIT_PATH": "rollout-audit.jsonl",
+    "VIDEO_UPLOAD_SESSION_STATE_PATH": "video-upload-sessions.json",
+    "VIDEO_UPLOAD_PART_DIR": "video-upload-parts",
+    "MODEL_CONFIG_HISTORY_DIR": "model-config-history",
+    "ADMIN_CONFIG_STATE_PATH": "admin-configuration.json",
     "PORTRAIT_GALLERY_STATE_PATH": "portrait-gallery.json",
     "PORTRAIT_THRESHOLDS_STATE_PATH": "portrait-thresholds.json",
     "PORTRAIT_AUDIT_PATH": "portrait-audit.jsonl",
     "PORTRAIT_JOBS_STATE_PATH": "portrait-jobs.json",
     "PORTRAIT_ANALYSIS_ARCHIVE_DB_PATH": "portrait-analysis-archive.sqlite3",
     "PORTRAIT_ACCESS_STATE_PATH": "portrait-access.json",
+    "WEBHOOK_DELIVERY_STATE_PATH": "webhook-deliveries.json",
     "PORTRAIT_REVIEW_STATE_PATH": "portrait-review-annotations.json",
+    "PORTRAIT_COMMERCIAL_STATE_PATH": "portrait-commercial.json",
+    "PORTRAIT_MODEL_REGISTRY_STATE_PATH": "portrait-model-registry.json",
+    "PORTRAIT_FEEDBACK_STATE_PATH": "portrait-feedback.json",
+    "COMMERCIAL_LICENSE_PUBLIC_KEY_PATH": "license-public-key.pem",
+    "COMMERCIAL_LICENSE_PATH": "commercial-license.json",
     "PORTRAIT_STREAMS_STATE_PATH": "portrait-streams.json",
     "TASK_QUEUE_STATE_PATH": "portrait-task-queue.jsonl",
     "STREAM_EVENT_STATE_PATH": "portrait-stream-events.jsonl",
@@ -95,6 +105,7 @@ def local_dev_env_overrides(root_dir: Path) -> dict[str, str]:
             "VIDEO_JOB_INPUT_DIR": str(runtime_state_dir / "video-job-inputs"),
             "TASK_QUEUE_DIR": str(runtime_state_dir / "task-queue"),
             "STREAM_WORKER_LOCK_DIR": str(runtime_state_dir / "stream-worker-locks"),
+            "COMMERCIAL_EVIDENCE_DIR": str(runtime_state_dir / "delivery-evidence"),
         }
     )
     overrides.update(

@@ -4,6 +4,7 @@ import base64
 import hashlib
 import hmac
 import json
+import math
 import re
 import secrets
 import time
@@ -52,6 +53,7 @@ from app.settings import (
     OIDC_SESSION_MAX_AGE_SECONDS,
     OIDC_SESSION_SECRET,
     OIDC_TENANT_CLAIM,
+    STEP_UP_AUTH_MAX_AGE_SECONDS,
 )
 
 router = APIRouter()
@@ -68,6 +70,12 @@ class LocalLoginRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     username: str = Field(min_length=1, max_length=128)
+    password: str = Field(min_length=1, max_length=1024)
+
+
+class LocalStepUpRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     password: str = Field(min_length=1, max_length=1024)
 
 
@@ -303,6 +311,32 @@ def _safe_return_to(value: str | None) -> str:
     return candidate if candidate.startswith("/") and not candidate.startswith("//") else "/"
 
 
+def _numeric_date_claim(claims: dict[str, Any], name: str, *, required: bool = False) -> float | None:
+    value = claims.get(name)
+    if value is None and not required:
+        return None
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(float(value)):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=f"Invalid OIDC {name} claim")
+    return float(value)
+
+
+def _oidc_authentication_time(claims: dict[str, Any], *, require_explicit: bool = False) -> int:
+    claim_name = "auth_time" if claims.get("auth_time") is not None else "iat"
+    if require_explicit and claim_name != "auth_time":
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="OIDC step-up is missing auth_time")
+    value = _numeric_date_claim(claims, claim_name, required=True)
+    assert value is not None
+    if value > time.time() + 60:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid OIDC authentication time")
+    return int(value)
+
+
+def _require_recent_oidc_authentication(claims: dict[str, Any]) -> None:
+    authentication_time = _oidc_authentication_time(claims, require_explicit=True)
+    if time.time() - authentication_time > STEP_UP_AUTH_MAX_AGE_SECONDS:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="OIDC step-up authentication is too old")
+
+
 async def _discovery() -> dict[str, Any]:
     global _DISCOVERY_CACHE
     _require_oidc_config()
@@ -422,15 +456,18 @@ async def _validate_id_token(token: str, *, nonce: str) -> dict[str, Any]:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid OIDC authorized party")
     if claims.get("nonce") != nonce:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="OIDC nonce validation failed")
-    expires_at = claims.get("exp")
-    if not isinstance(expires_at, (int, float)) or float(expires_at) <= now:
+    expires_at = _numeric_date_claim(claims, "exp", required=True)
+    if expires_at is None or expires_at <= now:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="OIDC ID token expired")
-    not_before = claims.get("nbf")
-    issued_at = claims.get("iat")
-    if isinstance(not_before, (int, float)) and float(not_before) > now + 60:
+    not_before = _numeric_date_claim(claims, "nbf")
+    issued_at = _numeric_date_claim(claims, "iat", required=True)
+    authentication_time = _numeric_date_claim(claims, "auth_time")
+    if not_before is not None and not_before > now + 60:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid OIDC ID token validation")
-    if isinstance(issued_at, (int, float)) and float(issued_at) > now + 60:
+    if issued_at is None or issued_at > now + 60:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid OIDC ID token issue time")
+    if authentication_time is not None and authentication_time > now + 60:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid OIDC authentication time")
     if not isinstance(claims.get("sub"), str) or not str(claims["sub"]).strip():
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="OIDC subject is missing")
     return claims
@@ -483,6 +520,9 @@ def _set_oidc_session(response: RedirectResponse, claims: dict[str, Any]) -> Non
         "tenant_id": tenant_id,
         "roles": roles,
         "csrf": csrf,
+        "auth_time": _oidc_authentication_time(claims),
+        "amr": [str(item) for item in claims.get("amr", []) if isinstance(item, str)],
+        "acr": str(claims.get("acr") or ""),
         "iat": now,
         "exp": expires_at,
     }
@@ -531,6 +571,8 @@ def _set_local_session(response: JSONResponse, username: str) -> None:
         "tenant_id": LOCAL_AUTH_TENANT_ID,
         "roles": ["admin"],
         "csrf": csrf,
+        "auth_time": now,
+        "amr": ["pwd"],
         "iat": now,
         "exp": expires_at,
     }
@@ -588,6 +630,59 @@ async def local_login(payload: LocalLoginRequest, request: Request) -> JSONRespo
     return response
 
 
+@router.get("/v1/auth/step-up/status")
+async def step_up_status(request: Request) -> dict[str, Any]:
+    from app import settings
+    from app.portrait_auth import step_up_seconds_remaining
+
+    claims = browser_session_claims(request)
+    enforcement_enabled = settings.AUTH_REQUIRED or settings.RBAC_ENABLED or bool(settings.API_TOKEN)
+    remaining = (
+        step_up_seconds_remaining(claims or {}, allow_session_iat=True)
+        if enforcement_enabled
+        else STEP_UP_AUTH_MAX_AGE_SECONDS
+    )
+    return portrait_success(
+        request_id_from_headers(request),
+        {
+            "authenticated": claims is not None,
+            "auth_kind": str((claims or {}).get("auth_kind") or ("development" if not enforcement_enabled else "")),
+            "recent": remaining > 0,
+            "seconds_remaining": remaining,
+            "max_age_seconds": STEP_UP_AUTH_MAX_AGE_SECONDS,
+        },
+    )
+
+
+@router.post("/v1/auth/local/step-up", response_model=PortraitSuccessResponse)
+async def local_step_up(payload: LocalStepUpRequest, request: Request) -> JSONResponse:
+    claims = browser_session_claims(request)
+    if claims is None or claims.get("auth_kind") != "local":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="local browser session is required")
+    require_browser_session_csrf(request, claims)
+    if not local_auth_is_configured():
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="本地账号登录未配置")
+    if not LOCAL_AUTH_ALLOW_REMOTE and not _request_is_loopback(request):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="本地账号仅允许从本机登录")
+    username = str(claims.get("sub") or "")
+    username_matches = hmac.compare_digest(username, LOCAL_AUTH_USERNAME)
+    password_matches = hmac.compare_digest(payload.password, LOCAL_AUTH_PASSWORD)
+    if not username_matches or not password_matches:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="用户名或密码错误")
+    now = int(time.time())
+    response = JSONResponse(
+        portrait_success(
+            request_id_from_headers(request),
+            {
+                "authenticated": True,
+                "step_up_expires_at": now + min(LOCAL_AUTH_SESSION_MAX_AGE_SECONDS, STEP_UP_AUTH_MAX_AGE_SECONDS),
+            },
+        )
+    )
+    _set_local_session(response, username)
+    return response
+
+
 @router.get("/v1/auth/oidc/config")
 async def oidc_public_config(request: Request) -> dict[str, Any]:
     return portrait_success(
@@ -600,8 +695,7 @@ async def oidc_public_config(request: Request) -> dict[str, Any]:
     )
 
 
-@router.get("/auth/oidc/login")
-async def oidc_login(request: Request, return_to: str = "/") -> RedirectResponse:
+async def _start_oidc_flow(request: Request, return_to: str, *, step_up: bool) -> RedirectResponse:
     discovery = await _discovery()
     state = secrets.token_urlsafe(32)
     nonce = secrets.token_urlsafe(32)
@@ -613,20 +707,22 @@ async def oidc_login(request: Request, return_to: str = "/") -> RedirectResponse
         "nonce": nonce,
         "verifier": verifier,
         "return_to": _safe_return_to(return_to),
+        "step_up": step_up,
         "exp": int(time.time()) + 600,
     }
-    query = urlencode(
-        {
-            "client_id": OIDC_CLIENT_ID,
-            "response_type": "code",
-            "scope": OIDC_SCOPES,
-            "redirect_uri": _redirect_uri(request),
-            "state": state,
-            "nonce": nonce,
-            "code_challenge": challenge,
-            "code_challenge_method": "S256",
-        }
-    )
+    authorization_parameters = {
+        "client_id": OIDC_CLIENT_ID,
+        "response_type": "code",
+        "scope": OIDC_SCOPES,
+        "redirect_uri": _redirect_uri(request),
+        "state": state,
+        "nonce": nonce,
+        "code_challenge": challenge,
+        "code_challenge_method": "S256",
+    }
+    if step_up:
+        authorization_parameters.update({"prompt": "login", "max_age": "0"})
+    query = urlencode(authorization_parameters)
     response = RedirectResponse(str(discovery["authorization_endpoint"]) + "?" + query, status_code=302)
     response.set_cookie(
         _FLOW_COOKIE,
@@ -640,6 +736,19 @@ async def oidc_login(request: Request, return_to: str = "/") -> RedirectResponse
     return response
 
 
+@router.get("/auth/oidc/login")
+async def oidc_login(request: Request, return_to: str = "/") -> RedirectResponse:
+    return await _start_oidc_flow(request, return_to, step_up=False)
+
+
+@router.get("/auth/oidc/step-up")
+async def oidc_step_up(request: Request, return_to: str = "/") -> RedirectResponse:
+    claims = browser_session_claims(request)
+    if claims is None or claims.get("auth_kind") != "oidc":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="OIDC browser session is required")
+    return await _start_oidc_flow(request, return_to, step_up=True)
+
+
 @router.get("/auth/oidc/callback", name="oidc_callback")
 async def oidc_callback(
     request: Request,
@@ -648,8 +757,10 @@ async def oidc_callback(
     error: str | None = None,
 ) -> RedirectResponse:
     flow = _read_signed_payload(request.cookies.get(_FLOW_COOKIE), purpose="flow")
+    step_up_flow = bool(flow and flow.get("step_up") is True)
     if error or flow is None or not code or not state or not hmac.compare_digest(str(flow.get("state") or ""), state):
-        response = RedirectResponse("/?oidc_error=login_failed", status_code=302)
+        error_code = "step_up_failed" if step_up_flow else "login_failed"
+        response = RedirectResponse(f"/?oidc_error={error_code}", status_code=302)
         clear_oidc_cookies(response)
         return response
     try:
@@ -675,6 +786,8 @@ async def oidc_callback(
         if not isinstance(id_token, str):
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="OIDC response is missing an ID token")
         claims = await _validate_id_token(id_token, nonce=str(flow["nonce"]))
+        if step_up_flow:
+            _require_recent_oidc_authentication(claims)
         target = "/?oidc=success&" + urlencode({"redirect": _safe_return_to(str(flow.get("return_to") or "/"))})
         response = RedirectResponse(target, status_code=302)
         _set_oidc_session(response, claims)
@@ -682,7 +795,8 @@ async def oidc_callback(
         return response
     except Exception as exc:
         logger.warning("OIDC callback failed: error_type=%s", type(exc).__name__)
-        response = RedirectResponse("/?oidc_error=login_failed", status_code=302)
+        error_code = "step_up_failed" if step_up_flow else "login_failed"
+        response = RedirectResponse(f"/?oidc_error={error_code}", status_code=302)
         clear_oidc_cookies(response)
         return response
 

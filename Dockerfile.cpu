@@ -54,11 +54,20 @@ RUN apt-get update \
 
 COPY --from=builder /opt/portrait-hub-venv /opt/portrait-hub-venv
 COPY app /workspace/app
+COPY tools /workspace/tools
+COPY sdk /workspace/sdk
 COPY --from=console-builder /build/frontend/console-next/dist /workspace/frontend/console-next/dist
 COPY main.py /workspace/main.py
 COPY models.yml /workspace/models.yml
 COPY model-capabilities.yml /workspace/model-capabilities.yml
 COPY .env.example /workspace/.env.example
+
+RUN groupadd --gid 10001 portrait \
+    && useradd --uid 10001 --gid 10001 --no-create-home --shell /usr/sbin/nologin portrait \
+    && mkdir -p /workspace/runtime-state \
+    && chown -R 10001:10001 /workspace/runtime-state
+
+USER 10001:10001
 
 EXPOSE 8000
 

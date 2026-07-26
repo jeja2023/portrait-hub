@@ -4,6 +4,7 @@ import copy
 import hashlib
 import hmac
 import ipaddress
+import json
 import re
 import secrets
 import socket
@@ -18,6 +19,7 @@ from fastapi import HTTPException, status
 
 from app.network_access_policy import host_is_allowed, network_access_policy_snapshot
 from app.portrait_auth import ROLE_PERMISSIONS
+from app.portrait_crypto import decrypt_bytes, encrypt_bytes
 from app.portrait_projects import DEFAULT_PROJECT_ID, validate_project_id
 from app.portrait_state import handle_state_read_error, read_json_state, write_json_state
 from app.settings import (
@@ -52,6 +54,10 @@ _APPLICATION_SCOPES = {
     "access:write",
     "tenants:read",
     "tenants:write",
+    "commercial:read",
+    "operations:read",
+    "support:read",
+    "support:write",
 }
 _WEBHOOK_EVENTS = {
     "gallery.enrolled",
@@ -940,10 +946,24 @@ def public_application(record: dict[str, Any]) -> dict[str, Any]:
 
 
 def public_webhook(record: dict[str, Any]) -> dict[str, Any]:
-    output = {key: value for key, value in record.items() if key != "signing_secret_hash"}
+    output = {
+        key: value
+        for key, value in record.items()
+        if key not in {"signing_secret_hash", "signing_secret_protected"}
+    }
     output.setdefault("signing_secret_preview", None)
     output.setdefault("project_id", DEFAULT_PROJECT_ID)
     return output
+
+
+def webhook_signing_secret(record: dict[str, Any]) -> str:
+    protected = record.get("signing_secret_protected")
+    if not isinstance(protected, dict):
+        raise RuntimeError("webhook signing secret is unavailable; rotate the webhook secret")
+    secret = decrypt_bytes(protected).decode("utf-8")
+    if not hmac.compare_digest(secret_hash(secret), str(record.get("signing_secret_hash") or "")):
+        raise RuntimeError("webhook signing secret integrity check failed")
+    return secret
 
 
 def find_application(tenant_id: str, app_id: str) -> dict[str, Any] | None:
@@ -1361,6 +1381,7 @@ def create_webhook(
             "retry_limit": max(0, min(int(retry_limit), 10)),
             "timeout_seconds": max(1, min(int(timeout_seconds), 60)),
             "signing_secret_hash": secret_hash(secret),
+            "signing_secret_protected": encrypt_bytes(secret.encode("utf-8")),
             "signing_secret_preview": secret_preview(secret),
             "created_at": timestamp,
             "updated_at": timestamp,
@@ -1427,6 +1448,7 @@ def rotate_webhook_secret(
         secret = new_secret("whsec")
         timestamp = now_seconds()
         record["signing_secret_hash"] = secret_hash(secret)
+        record["signing_secret_protected"] = encrypt_bytes(secret.encode("utf-8"))
         record["signing_secret_preview"] = secret_preview(secret)
         record["last_rotated_at"] = timestamp
         record["updated_at"] = timestamp
@@ -1457,6 +1479,13 @@ def webhook_sample_delivery(
                 "resource_id": f"demo_{secrets.token_hex(6)}",
             },
         }
+        timestamp = int(now_seconds())
+        serialized = json.dumps(body, ensure_ascii=False, separators=(",", ":"), sort_keys=True).encode("utf-8")
+        signature = hmac.new(
+            webhook_signing_secret(record).encode("utf-8"),
+            str(timestamp).encode("ascii") + b"." + serialized,
+            hashlib.sha256,
+        ).hexdigest()
         return {
             "delivery_status": "dry_run",
             "endpoint": record.get("url") or "",
@@ -1465,7 +1494,8 @@ def webhook_sample_delivery(
                 "Content-Type": "application/json",
                 "X-PortraitHub-Event": event,
                 "X-PortraitHub-Delivery": event_id,
-                "X-PortraitHub-Signature": f"sha256={secrets.token_hex(32)}",
+                "X-PortraitHub-Signature": f"sha256={signature}",
+                "X-PortraitHub-Timestamp": str(timestamp),
             },
             "body": body,
             "retry_limit": record.get("retry_limit", 3),
@@ -1523,4 +1553,5 @@ __all__ = [
     "update_tenant",
     "update_webhook",
     "webhook_sample_delivery",
+    "webhook_signing_secret",
 ]

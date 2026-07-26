@@ -1,6 +1,6 @@
 # PortraitHub Ubuntu 部署教程
 
-本文档面向当前 PortraitHub 项目，说明如何在 Ubuntu 服务器上通过 Docker Compose 部署 GPU 推理服务。文档按仓库版本 0.17.0、当前 Dockerfile、docker-compose.yml、.env.example 和生产门禁实现编写。
+本文档面向当前 PortraitHub 项目，说明如何在 Ubuntu 服务器上通过 Docker Compose 部署 GPU 推理服务。文档按仓库版本 0.18.0、当前 Dockerfile、docker-compose.yml、.env.example、商业数据迁移和生产门禁实现编写。
 
 > 项目名称、仓库目录和 Compose 项目名统一为 portrait-hub。
 
@@ -813,7 +813,44 @@ docker compose -p portrait-hub ps
 - Redis 中尚未完成的任务；
 - 当前可用镜像的离线归档。
 
-### 17.1 从 0.16.0 升级到 0.17.0
+### 17.1 从 0.17.0 升级到 0.18.0
+
+0.18.0 新增商业控制状态、不可变计量、许可证、反馈、模型注册、视频续传和 Webhook 投递状态。升级期间应暂停客户/授权、模型别名、反馈导入、Webhook 配置和行业模板应用写入，并先完成本章列出的 PostgreSQL、Redis、对象存储、运行状态和镜像全量备份。
+
+拉取代码后先验证版本、支持矩阵和 API 兼容性，再应用幂等迁移：
+
+```bash
+cd /opt/portrait-hub
+git fetch origin
+git pull --ff-only origin main
+grep -F 'version = "0.18.0"' pyproject.toml
+
+python tools/portrait_support_matrix.py --json
+python tools/openapi_compatibility_check.py
+
+export POSTGRES_DSN='替换为真实 PostgreSQL DSN'
+python tools/portrait_postgres_migrate.py --dsn "$POSTGRES_DSN" --apply
+python tools/portrait_release_preflight.py --check-migrations
+```
+
+生产配置应使用共享后端，并为商业状态、计量、许可证、反馈、模型注册和 Webhook 投递配置受保护的持久化位置。文件后端仅适合本地开发和单进程验证；多副本并发分配、幂等和状态 CAS 必须使用已验收的 PostgreSQL/Redis 拓扑。配置项及默认值以 `.env.example` 和 `ops/production.env.example` 为准。
+
+随后构建、滚动启动并执行平台门禁：
+
+```bash
+docker compose -p portrait-hub config --quiet
+docker compose -p portrait-hub build --pull
+docker compose -p portrait-hub up -d --remove-orphans
+python tools/portrait_production_readiness.py --scope platform --strict
+python tools/portrait_sdk_clean_smoke.py
+python tools/portrait_upgrade_traceability.py
+```
+
+升级验收至少覆盖客户状态定时激活/取消/回滚、授权升级/降级/临时扩容、幂等计量与冲正、成本和配额预测、模型别名切换/回滚、反馈分析、视频断点续传、Webhook 死信重投、近期交互认证以及跨项目拒绝。Kubernetes 部署还必须按 `docs/deployment/KUBERNETES_RELEASE.md` 使用不同稳定/灰度 SHA256 镜像物化并在目标集群演练。
+
+回退 0.17.0 时保留所有 0.18.0 新表、索引和字段，不执行破坏性迁移。只要 0.18.0 已产生商业、计量、反馈、模型或投递记录，就不能让 0.17.0 对这些域恢复写入；可用旧镜像只读排障，恢复写入应重新部署 0.18.0，或在负责人明确接受数据丢失后恢复升级前完整快照。完整边界见 `docs/releases/0.18.0.md`。
+
+### 17.2 从 0.16.0 升级到 0.17.0
 
 0.17.0 新增项目目录、PostgreSQL 访问状态、应用日配额和持久化调用日志。升级期间应暂停租户、项目、应用、Webhook 和模型配置写入，并先完成上面的全量备份。
 
@@ -886,8 +923,9 @@ docker compose -p portrait-hub up -d --no-build --force-recreate --remove-orphan
 - docs/releases/0.14.1.md；
 - docs/releases/0.14.2.md；
 - docs/releases/0.15.0.md；
-- docs/releases/0.16.0.md。
-- docs/releases/0.17.0.md。
+- docs/releases/0.16.0.md；
+- docs/releases/0.17.0.md；
+- docs/releases/0.18.0.md。
 
 ## 18. 离线部署
 
@@ -1068,6 +1106,11 @@ docker exec gpu-worker-0 python -c \
 - [ ] 视频/API 混合负载经过显存和延迟压测。
 - [ ] 生产外部服务和 PostgreSQL schema 已配置。
 - [ ] 0.17.0 新增访问状态、日配额和调用日志表存在，默认项目兼容与跨项目拒绝已验证。
+- [ ] 0.18.0 商业控制、计量、许可证、反馈、模型注册、视频续传和 Webhook 投递迁移已完成。
+- [ ] 支持矩阵、OpenAPI 兼容、发布前检查、SDK 干净环境烟测和升级追踪结构校验通过。
+- [ ] 商业状态/授权回滚、计量冲正、模型别名回滚、视频续传、Webhook 死信重投和近期认证已验证。
+- [ ] 目标拓扑完成容量、N-1、故障、恢复、备份、升级、回滚和告警演练，并保存真实证据。
+- [ ] 法律、隐私、安全、产品、运维和交付审批已由责任人签署，未使用占位记录。
 - [ ] 严格生产 readiness 没有失败项。
 - [ ] 正式入口使用 HTTPS，9001/9002 未直接暴露公网。
 - [ ] 已验证登录、退出、模型中心、GPU 清单和灰度发布界面。

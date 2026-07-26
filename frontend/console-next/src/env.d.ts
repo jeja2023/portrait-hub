@@ -10,7 +10,15 @@ declare module "vue-router" {
     public?: boolean;
     permission?: string;
     nav?: {
-      section: "工作台" | "开发者中心" | "系统管理";
+      section:
+        | "总览"
+        | "智能分析"
+        | "人员库"
+        | "模型与评估"
+        | "接入中心"
+        | "运维合规"
+        | "商业运营"
+        | "平台管理";
       order: number;
       icon: FunctionalComponent;
       label?: string;

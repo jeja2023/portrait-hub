@@ -69,6 +69,20 @@ def test_dev_start_local_env_clears_api_token_for_browser_console(
     assert values["PORTRAIT_REVIEW_STATE_PATH"] == str(
         workspace_tmp_path / "runtime-state" / "portrait-review-annotations.json"
     )
+    for key, relative_path in {
+        "VIDEO_UPLOAD_SESSION_STATE_PATH": "video-upload-sessions.json",
+        "VIDEO_UPLOAD_PART_DIR": "video-upload-parts",
+        "MODEL_CONFIG_HISTORY_DIR": "model-config-history",
+        "ADMIN_CONFIG_STATE_PATH": "admin-configuration.json",
+        "WEBHOOK_DELIVERY_STATE_PATH": "webhook-deliveries.json",
+        "PORTRAIT_COMMERCIAL_STATE_PATH": "portrait-commercial.json",
+        "PORTRAIT_MODEL_REGISTRY_STATE_PATH": "portrait-model-registry.json",
+        "PORTRAIT_FEEDBACK_STATE_PATH": "portrait-feedback.json",
+        "COMMERCIAL_LICENSE_PUBLIC_KEY_PATH": "license-public-key.pem",
+        "COMMERCIAL_LICENSE_PATH": "commercial-license.json",
+    }.items():
+        assert values[key] == str(workspace_tmp_path / "runtime-state" / relative_path)
+    assert values["COMMERCIAL_EVIDENCE_DIR"] == str(workspace_tmp_path / "runtime-state" / "delivery-evidence")
 
 
 def test_env_example_documents_supported_runtime_and_compose_configuration() -> None:

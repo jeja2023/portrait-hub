@@ -6,7 +6,12 @@ import { ElButton, ElMenu, ElMenuItem, ElSwitch, ElTooltip } from "element-plus"
 
 import { apiRequest } from "../api/client";
 import brandMarkUrl from "../assets/portrait-hub-mark.svg";
-import { clearSession, sessionState } from "../auth/session";
+import {
+  clearSession,
+  clearSessionLogoutPending,
+  markSessionLogoutPending,
+  sessionState,
+} from "../auth/session";
 import { useCapabilitiesStore } from "../stores/capabilities";
 import { usePrefsStore } from "../stores/prefs";
 import { formatTimestamp } from "../utils/format";
@@ -55,11 +60,15 @@ const PAGE_DESCRIPTIONS: Record<string, string> = {
   "admin-identity": "管理企业身份来源、当前用户、租户角色与权限映射。",
   "admin-models":
     "\u7ba1\u7406\u6a21\u578b\u8fd0\u884c\u72b6\u6001\u3001\u522b\u540d\u53d1\u5e03\u4e0e\u8bc4\u4f30\u57fa\u7ebf\u3002",
+  "admin-model-registry": "登记模型来源与评估证据，经过审批、发布预演和确认后执行灰度、激活或回滚。",
   "admin-calibration":
     "\u7ef4\u62a4\u5404\u6a21\u6001\u9608\u503c\uff0c\u8bb0\u5f55\u4eba\u5de5\u590d\u6838\uff0c\u5e76\u5c06\u590d\u6838\u6c60\u8f6c\u5316\u4e3a\u8bc4\u4f30\u6570\u636e\u548c\u9608\u503c\u5efa\u8bae\u3002",
   "admin-configuration": "集中管理运行配置、敏感参数和局域网访问策略。",
   "admin-ops":
     "\u67e5\u770b\u8fd0\u884c\u540e\u7aef\u3001\u5ba1\u8ba1\u94fe\u548c\u5907\u4efd\uff0c\u5e76\u6267\u884c\u53d7\u63a7\u4fdd\u7559\u7b56\u7565\u3002",
+  "admin-service-quality": "按项目维护 SLA 定义与报告，跟踪事故状态、影响范围、根因和处置时间线。",
+  "admin-compliance": "检查 COM-001 至 COM-012 控制项，维护主体权利请求与可追溯证据包。",
+  "business-commercial": "管理当前项目的商业状态、版本化权益、用量与配额，并预览受控行业模板。",
   forbidden: "\u5f53\u524d\u51ed\u8bc1\u4e0d\u5177\u5907\u6b64\u9875\u9762\u6240\u9700\u6743\u9650\u3002",
 };
 const pageDescription = computed(() => PAGE_DESCRIPTIONS[String(route.name)] ?? "");
@@ -76,7 +85,7 @@ watch(activeMenuPath, revealActiveMobileNavigation);
 onMounted(revealActiveMobileNavigation);
 
 // 单一导航数据源（方案 §6）：由路由表 meta.nav 派生侧栏，标题/权限/图标只在路由声明一次。
-const SECTION_ORDER = ["工作台", "开发者中心", "系统管理"];
+const SECTION_ORDER = ["总览", "智能分析", "人员库", "模型与评估", "接入中心", "运维合规", "商业运营", "平台管理"];
 
 const visibleSections = computed(() => {
   const items = router
@@ -101,6 +110,7 @@ const visibleSections = computed(() => {
 async function logout(): Promise<void> {
   if (logoutPending.value) return;
   logoutPending.value = true;
+  markSessionLogoutPending();
 
   const browserSession = sessionState.authMode === "oidc" || sessionState.authMode === "local";
   const serverLogout = browserSession
@@ -109,7 +119,11 @@ async function logout(): Promise<void> {
 
   clearSession();
   capabilities.clear();
-  await serverLogout;
+  try {
+    await serverLogout;
+  } finally {
+    clearSessionLogoutPending();
+  }
   window.location.replace("/?logged_out=1");
 }
 </script>

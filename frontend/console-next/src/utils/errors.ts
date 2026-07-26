@@ -7,6 +7,7 @@ export const errorCodeLabels: Record<string, string> = {
   client_error: "请求参数无效",
   unauthorized: "登录凭证缺失或已失效",
   forbidden: "当前凭证没有执行该操作的权限",
+  step_up_authentication_required: "该操作风险较高，请重新验证登录身份后再试",
   not_found: "请求的资源不存在或不属于当前租户",
   conflict: "操作与当前状态冲突，请刷新后重试",
   too_large: "上传内容超过大小限制",

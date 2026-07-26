@@ -55,6 +55,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/auth/oidc/step-up": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Oidc Step Up */
+    get: operations["oidc_step_up_auth_oidc_step_up_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/console": {
     parameters: {
       query?: never;
@@ -277,6 +294,59 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/v1/access/cost-models": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** V1 Cost Models */
+    get: operations["v1_cost_models_v1_access_cost_models_get"];
+    put?: never;
+    /** V1 Create Cost Model */
+    post: operations["v1_create_cost_model_v1_access_cost_models_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/access/entitlements": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** V1 Entitlements */
+    get: operations["v1_entitlements_v1_access_entitlements_get"];
+    put?: never;
+    /** V1 Create Entitlement */
+    post: operations["v1_create_entitlement_v1_access_entitlements_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/access/entitlements/{entitlement_id}/actions": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** V1 Change Entitlement Status */
+    post: operations["v1_change_entitlement_status_v1_access_entitlements__entitlement_id__actions_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/v1/access/error-codes": {
     parameters: {
       query?: never;
@@ -286,6 +356,23 @@ export interface paths {
     };
     /** V1 Access Error Codes */
     get: operations["v1_access_error_codes_v1_access_error_codes_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/access/license/status": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** V1 Commercial License Status */
+    get: operations["v1_commercial_license_status_v1_access_license_status_get"];
     put?: never;
     post?: never;
     delete?: never;
@@ -329,6 +416,76 @@ export interface paths {
     patch: operations["v1_access_patch_project_v1_access_projects__project_id__patch"];
     trace?: never;
   };
+  "/v1/access/projects/{project_id}/commercial-profile": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** V1 Commercial Profile */
+    get: operations["v1_commercial_profile_v1_access_projects__project_id__commercial_profile_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /** V1 Update Commercial Profile */
+    patch: operations["v1_update_commercial_profile_v1_access_projects__project_id__commercial_profile_patch"];
+    trace?: never;
+  };
+  "/v1/access/quota/forecast": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** V1 Quota Forecast */
+    get: operations["v1_quota_forecast_v1_access_quota_forecast_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/access/support/cases": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** V1 Support Cases */
+    get: operations["v1_support_cases_v1_access_support_cases_get"];
+    put?: never;
+    /** V1 Create Support Case */
+    post: operations["v1_create_support_case_v1_access_support_cases_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/access/support/cases/{support_case_id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /** V1 Update Support Case */
+    patch: operations["v1_update_support_case_v1_access_support_cases__support_case_id__patch"];
+    trace?: never;
+  };
   "/v1/access/tenants": {
     parameters: {
       query?: never;
@@ -362,6 +519,108 @@ export interface paths {
     head?: never;
     /** V1 Access Patch Tenant */
     patch: operations["v1_access_patch_tenant_v1_access_tenants__tenant_id__patch"];
+    trace?: never;
+  };
+  "/v1/access/usage/events": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** V1 Usage Events */
+    get: operations["v1_usage_events_v1_access_usage_events_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/access/usage/events/{usage_event_id}/reversal": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** V1 Reverse Usage Event */
+    post: operations["v1_reverse_usage_event_v1_access_usage_events__usage_event_id__reversal_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/access/usage/summary": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** V1 Usage Summary */
+    get: operations["v1_usage_summary_v1_access_usage_summary_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/access/usage/timeseries": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** V1 Usage Timeseries */
+    get: operations["v1_usage_timeseries_v1_access_usage_timeseries_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/access/webhook-deliveries": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** V1 Access Webhook Deliveries */
+    get: operations["v1_access_webhook_deliveries_v1_access_webhook_deliveries_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/access/webhook-deliveries/{delivery_id}/retry": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** V1 Access Retry Webhook Delivery */
+    post: operations["v1_access_retry_webhook_delivery_v1_access_webhook_deliveries__delivery_id__retry_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
     trace?: never;
   };
   "/v1/access/webhooks": {
@@ -501,6 +760,75 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/v1/admin/compliance/records/{control_id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    /** V1 Upsert Compliance Record */
+    put: operations["v1_upsert_compliance_record_v1_admin_compliance_records__control_id__put"];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/admin/compliance/rights-requests": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** V1 Rights Requests */
+    get: operations["v1_rights_requests_v1_admin_compliance_rights_requests_get"];
+    put?: never;
+    /** V1 Create Rights Request */
+    post: operations["v1_create_rights_request_v1_admin_compliance_rights_requests_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/admin/compliance/rights-requests/{rights_request_id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /** V1 Update Rights Request */
+    patch: operations["v1_update_rights_request_v1_admin_compliance_rights_requests__rights_request_id__patch"];
+    trace?: never;
+  };
+  "/v1/admin/compliance/status": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** V1 Compliance Status */
+    get: operations["v1_compliance_status_v1_admin_compliance_status_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/v1/admin/configuration": {
     parameters: {
       query?: never;
@@ -512,6 +840,23 @@ export interface paths {
     get: operations["admin_configuration_get_v1_admin_configuration_get"];
     /** Admin Configuration Update */
     put: operations["admin_configuration_update_v1_admin_configuration_put"];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/admin/evidence": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** V1 Evidence Packages */
+    get: operations["v1_evidence_packages_v1_admin_evidence_get"];
+    put?: never;
     post?: never;
     delete?: never;
     options?: never;
@@ -545,6 +890,91 @@ export interface paths {
     };
     /** Portrait Identity Admin */
     get: operations["portrait_identity_admin_v1_admin_identity_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/admin/industry-template-applications": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** V1 Industry Template Applications */
+    get: operations["v1_industry_template_applications_v1_admin_industry_template_applications_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/admin/industry-template-applications/{template_application_id}/rollback": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** V1 Rollback Industry Template */
+    post: operations["v1_rollback_industry_template_v1_admin_industry_template_applications__template_application_id__rollback_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/admin/industry-templates": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** V1 Industry Templates */
+    get: operations["v1_industry_templates_v1_admin_industry_templates_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/admin/industry-templates/{template_id}/apply": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** V1 Apply Industry Template */
+    post: operations["v1_apply_industry_template_v1_admin_industry_templates__template_id__apply_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/admin/industry-templates/{template_id}/preview": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** V1 Preview Industry Template */
+    get: operations["v1_preview_industry_template_v1_admin_industry_templates__template_id__preview_get"];
     put?: never;
     post?: never;
     delete?: never;
@@ -589,6 +1019,57 @@ export interface paths {
     patch: operations["portrait_identity_update_member_v1_admin_members__member_id__patch"];
     trace?: never;
   };
+  "/v1/admin/models/config/apply": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Apply Model Config */
+    post: operations["apply_model_config_v1_admin_models_config_apply_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/admin/models/config/preview": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Preview Model Config */
+    post: operations["preview_model_config_v1_admin_models_config_preview_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/admin/models/config/rollback": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Rollback Model Config */
+    post: operations["rollback_model_config_v1_admin_models_config_rollback_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/v1/admin/models/gpu-devices": {
     parameters: {
       query?: never;
@@ -598,6 +1079,160 @@ export interface paths {
     };
     /** Model Gpu Devices */
     get: operations["model_gpu_devices_v1_admin_models_gpu_devices_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/admin/models/registry": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** V1 Model Registry */
+    get: operations["v1_model_registry_v1_admin_models_registry_get"];
+    put?: never;
+    /** V1 Register Model */
+    post: operations["v1_register_model_v1_admin_models_registry_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/admin/models/registry/versions/{model_version_id}/approvals": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** V1 Create Model Approval */
+    post: operations["v1_create_model_approval_v1_admin_models_registry_versions__model_version_id__approvals_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/admin/models/registry/versions/{model_version_id}/evaluations": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** V1 Create Model Evaluation */
+    post: operations["v1_create_model_evaluation_v1_admin_models_registry_versions__model_version_id__evaluations_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/admin/models/registry/{model_id}/versions": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** V1 Model Versions */
+    get: operations["v1_model_versions_v1_admin_models_registry__model_id__versions_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/admin/models/releases/apply": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** V1 Model Release Apply */
+    post: operations["v1_model_release_apply_v1_admin_models_releases_apply_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/admin/models/releases/audit": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** V1 Model Release Audit */
+    get: operations["v1_model_release_audit_v1_admin_models_releases_audit_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/admin/models/releases/dry-run": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** V1 Model Release Dry Run */
+    post: operations["v1_model_release_dry_run_v1_admin_models_releases_dry_run_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/admin/models/releases/rollback": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** V1 Model Release Rollback */
+    post: operations["v1_model_release_rollback_v1_admin_models_releases_rollback_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/admin/models/releases/shadow-results": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** V1 Model Shadow Results */
+    get: operations["v1_model_shadow_results_v1_admin_models_releases_shadow_results_get"];
     put?: never;
     post?: never;
     delete?: never;
@@ -794,6 +1429,94 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/v1/admin/operations/health-timeline": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** V1 Health Timeline */
+    get: operations["v1_health_timeline_v1_admin_operations_health_timeline_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/admin/operations/incidents": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** V1 Incidents */
+    get: operations["v1_incidents_v1_admin_operations_incidents_get"];
+    put?: never;
+    /** V1 Create Incident */
+    post: operations["v1_create_incident_v1_admin_operations_incidents_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/admin/operations/incidents/{incident_id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /** V1 Update Incident */
+    patch: operations["v1_update_incident_v1_admin_operations_incidents__incident_id__patch"];
+    trace?: never;
+  };
+  "/v1/admin/operations/sla": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** V1 Sla Definitions */
+    get: operations["v1_sla_definitions_v1_admin_operations_sla_get"];
+    put?: never;
+    /** V1 Create Sla Definition */
+    post: operations["v1_create_sla_definition_v1_admin_operations_sla_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/admin/operations/sla/reports": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** V1 Sla Reports */
+    get: operations["v1_sla_reports_v1_admin_operations_sla_reports_get"];
+    put?: never;
+    /** V1 Create Sla Report */
+    post: operations["v1_create_sla_report_v1_admin_operations_sla_reports_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/v1/admin/retention/cleanup": {
     parameters: {
       query?: never;
@@ -913,6 +1636,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/v1/auth/local/step-up": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Local Step Up */
+    post: operations["local_step_up_v1_auth_local_step_up_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/v1/auth/logout": {
     parameters: {
       query?: never;
@@ -939,6 +1679,23 @@ export interface paths {
     };
     /** Oidc Public Config */
     get: operations["oidc_public_config_v1_auth_oidc_config_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/auth/step-up/status": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Step Up Status */
+    get: operations["step_up_status_v1_auth_step_up_status_get"];
     put?: never;
     post?: never;
     delete?: never;
@@ -1059,7 +1816,112 @@ export interface paths {
     /** V1 Evaluation Datasets */
     get: operations["v1_evaluation_datasets_v1_evaluation_datasets_get"];
     put?: never;
+    /** V1 Create Dataset Manifest */
+    post: operations["v1_create_dataset_manifest_v1_evaluation_datasets_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/evaluation/datasets/{dataset_id}/manifest": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** V1 Dataset Manifest */
+    get: operations["v1_dataset_manifest_v1_evaluation_datasets__dataset_id__manifest_get"];
+    put?: never;
     post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/evaluation/feedback-analysis-reports": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** V1 Feedback Analysis Reports */
+    get: operations["v1_feedback_analysis_reports_v1_evaluation_feedback_analysis_reports_get"];
+    put?: never;
+    /** V1 Create Feedback Analysis Report */
+    post: operations["v1_create_feedback_analysis_report_v1_evaluation_feedback_analysis_reports_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/evaluation/feedback-analysis-reports/{analysis_report_id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** V1 Feedback Analysis Report */
+    get: operations["v1_feedback_analysis_report_v1_evaluation_feedback_analysis_reports__analysis_report_id__get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/evaluation/review-samples": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** V1 Review Samples */
+    get: operations["v1_review_samples_v1_evaluation_review_samples_get"];
+    put?: never;
+    /** V1 Create Review Sample */
+    post: operations["v1_create_review_sample_v1_evaluation_review_samples_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/evaluation/review-samples/export": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** V1 Export Review Samples */
+    post: operations["v1_export_review_samples_v1_evaluation_review_samples_export_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/evaluation/review-samples/import": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** V1 Import Review Annotations */
+    post: operations["v1_import_review_annotations_v1_evaluation_review_samples_import_post"];
     delete?: never;
     options?: never;
     head?: never;
@@ -1077,6 +1939,24 @@ export interface paths {
     get: operations["v1_evaluation_threshold_recommendations_v1_evaluation_threshold_recommendations_get"];
     put?: never;
     post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/evaluation/track-corrections": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** V1 Track Corrections */
+    get: operations["v1_track_corrections_v1_evaluation_track_corrections_get"];
+    put?: never;
+    /** V1 Create Track Correction */
+    post: operations["v1_create_track_correction_v1_evaluation_track_corrections_post"];
     delete?: never;
     options?: never;
     head?: never;
@@ -1409,6 +2289,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/v1/jobs/{job_id}/pause": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** V1 Pause Video Job */
+    post: operations["v1_pause_video_job_v1_jobs__job_id__pause_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/v1/jobs/{job_id}/result": {
     parameters: {
       query?: never;
@@ -1418,6 +2315,40 @@ export interface paths {
     };
     /** V1 Get Video Job Result */
     get: operations["v1_get_video_job_result_v1_jobs__job_id__result_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/jobs/{job_id}/resume": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** V1 Resume Video Job */
+    post: operations["v1_resume_video_job_v1_jobs__job_id__resume_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/meta": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Api Metadata */
+    get: operations["api_metadata_v1_meta_get"];
     put?: never;
     post?: never;
     delete?: never;
@@ -1624,6 +2555,75 @@ export interface paths {
     get?: never;
     /** V1 Update Thresholds */
     put: operations["v1_update_thresholds_v1_thresholds__profile__put"];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/uploads/video": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** V1 Create Video Upload */
+    post: operations["v1_create_video_upload_v1_uploads_video_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/uploads/video/{upload_id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** V1 Get Video Upload */
+    get: operations["v1_get_video_upload_v1_uploads_video__upload_id__get"];
+    put?: never;
+    post?: never;
+    /** V1 Abort Video Upload */
+    delete: operations["v1_abort_video_upload_v1_uploads_video__upload_id__delete"];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/uploads/video/{upload_id}/complete": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** V1 Complete Video Upload */
+    post: operations["v1_complete_video_upload_v1_uploads_video__upload_id__complete_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/uploads/video/{upload_id}/parts/{part_number}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    /** V1 Put Video Upload Part */
+    put: operations["v1_put_video_upload_part_v1_uploads_video__upload_id__parts__part_number__put"];
     post?: never;
     delete?: never;
     options?: never;
@@ -1889,6 +2889,32 @@ export interface components {
     } & {
       [key: string]: unknown;
     };
+    /** AnnotationImportRequest */
+    AnnotationImportRequest: {
+      /** Annotation Export Id */
+      annotation_export_id: string;
+      /** Annotations */
+      annotations: components["schemas"]["AnnotationItem"][];
+      /**
+       * Conflict Policy
+       * @default reject
+       */
+      conflict_policy: string;
+      /**
+       * Schema Version
+       * @default 1.0
+       */
+      schema_version: string;
+    };
+    /** AnnotationItem */
+    AnnotationItem: {
+      /** Labels */
+      labels: {
+        [key: string]: unknown;
+      };
+      /** Review Sample Id */
+      review_sample_id: string;
+    };
     /** AppearanceContract */
     AppearanceContract: {
       attributes: components["schemas"]["GenericData"];
@@ -1930,18 +2956,15 @@ export interface components {
     };
     /** Body_debug_model_output_debug_model_output_post */
     Body_debug_model_output_debug_model_output_post: {
-      /** Artifact Name */
-      artifact_name: string;
+      /** File */
+      file: string;
+      /** Model Name */
+      model_name: string;
       /**
-       * Debug Model Type
+       * Model Type
        * @default yolo
        */
-      debug_model_type: string;
-      /**
-       * File
-       * Format: binary
-       */
-      file: string;
+      model_type: string;
       /** Project Name */
       project_name: string;
       /**
@@ -1958,10 +2981,10 @@ export interface components {
        */
       confidence: number;
       /**
-       * Detector Artifact Name
+       * Detector Model Name
        * @default yolov8n.onnx
        */
-      detector_artifact_name: string;
+      detector_model_name: string;
       /**
        * Detector Project Name
        * @default portrait_hub
@@ -1985,10 +3008,10 @@ export interface components {
        */
       max_detections: number;
       /**
-       * Reid Artifact Name
+       * Reid Model Name
        * @default osnet_ibn_x1_0.onnx
        */
-      reid_artifact_name: string;
+      reid_model_name: string;
       /**
        * Reid Project Name
        * @default portrait_hub
@@ -2024,15 +3047,9 @@ export interface components {
     };
     /** Body_v1_compare_faces_v1_compare_faces_post */
     Body_v1_compare_faces_v1_compare_faces_post: {
-      /**
-       * Image A
-       * Format: binary
-       */
+      /** Image A */
       image_a: string;
-      /**
-       * Image B
-       * Format: binary
-       */
+      /** Image B */
       image_b: string;
       /**
        * Include Vectors
@@ -2064,15 +3081,9 @@ export interface components {
     };
     /** Body_v1_compare_persons_v1_compare_persons_post */
     Body_v1_compare_persons_v1_compare_persons_post: {
-      /**
-       * Image A
-       * Format: binary
-       */
+      /** Image A */
       image_a: string;
-      /**
-       * Image B
-       * Format: binary
-       */
+      /** Image B */
       image_b: string;
       /**
        * Include Vectors
@@ -2098,19 +3109,16 @@ export interface components {
        */
       confidence: number;
       /**
-       * Detector Artifact Name
+       * Detector Model Name
        * @default yolov8n.onnx
        */
-      detector_artifact_name: string;
+      detector_model_name: string;
       /**
        * Detector Project Name
        * @default portrait_hub
        */
       detector_project_name: string;
-      /**
-       * File
-       * Format: binary
-       */
+      /** File */
       file: string;
       /**
        * Include Embeddings
@@ -2128,10 +3136,15 @@ export interface components {
        */
       max_detections: number;
       /**
-       * Reid Artifact Name
+       * Priority
+       * @default 0
+       */
+      priority: number;
+      /**
+       * Reid Model Name
        * @default osnet_ibn_x1_0.onnx
        */
-      reid_artifact_name: string;
+      reid_model_name: string;
       /**
        * Reid Project Name
        * @default portrait_hub
@@ -2145,15 +3158,9 @@ export interface components {
     };
     /** Body_v1_fusion_compare_v1_fusion_compare_post */
     Body_v1_fusion_compare_v1_fusion_compare_post: {
-      /**
-       * Image A
-       * Format: binary
-       */
+      /** Image A */
       image_a: string;
-      /**
-       * Image B
-       * Format: binary
-       */
+      /** Image B */
       image_b: string;
       /**
        * Modalities
@@ -2209,10 +3216,7 @@ export interface components {
     };
     /** Body_v1_gallery_search_v1_gallery_search_post */
     Body_v1_gallery_search_v1_gallery_search_post: {
-      /**
-       * File
-       * Format: binary
-       */
+      /** File */
       file: string;
       /**
        * Modality
@@ -2307,12 +3311,12 @@ export interface components {
       iou?: number | null;
       /** Max Detections */
       max_detections?: number | null;
+      /** Model Id */
+      model_id?: string | null;
+      /** Model Name */
+      model_name?: string | null;
       /** Project Name */
       project_name?: string | null;
-      /** Requested Model Id */
-      requested_model_id?: string | null;
-      /** Requested Model Name */
-      requested_model_name?: string | null;
       /** Task */
       task?: string | null;
       /** Top K */
@@ -2335,6 +3339,98 @@ export interface components {
       rgb: number[];
     } & {
       [key: string]: unknown;
+    };
+    /** CommercialProfilePatchRequest */
+    CommercialProfilePatchRequest: {
+      /** Approved By */
+      approved_by?: string | null;
+      /** Budget Currency */
+      budget_currency?: string | null;
+      /** Budget Limit */
+      budget_limit?: number | null;
+      /**
+       * Cancel Scheduled Transition
+       * @default false
+       */
+      cancel_scheduled_transition: boolean;
+      /** Commercial Status */
+      commercial_status?: string | null;
+      /** Delivery Tier */
+      delivery_tier?: string | null;
+      /** Effective At */
+      effective_at?: number | null;
+      /** Environment */
+      environment?: string | null;
+      /** Expected Version */
+      expected_version?: number | null;
+      /** Expires At */
+      expires_at?: number | null;
+      /** Notification Channels */
+      notification_channels?: string[] | null;
+      /**
+       * Reason
+       * @default profile update
+       */
+      reason: string;
+      /** Retention Policy Id */
+      retention_policy_id?: string | null;
+      /** Timezone */
+      timezone?: string | null;
+    };
+    /** ComplianceRecordRequest */
+    ComplianceRecordRequest: {
+      /**
+       * Applicability
+       * @default pending
+       */
+      applicability: string;
+      /** Approved By */
+      approved_by?: string | null;
+      /** Control Data */
+      control_data?: {
+        [key: string]: unknown;
+      };
+      /** Data Categories */
+      data_categories?: string[];
+      /** Data Subjects */
+      data_subjects?: string[];
+      /**
+       * Definition Version
+       * @default 1.0
+       */
+      definition_version: string;
+      /** Evidence Refs */
+      evidence_refs?: string[];
+      /** Expires At */
+      expires_at?: number | null;
+      /**
+       * Legal Basis
+       * @default
+       */
+      legal_basis: string;
+      /** Mitigations */
+      mitigations?: string[];
+      /**
+       * Processing Purpose
+       * @default
+       */
+      processing_purpose: string;
+      /** Retention */
+      retention?: {
+        [key: string]: unknown;
+      };
+      /**
+       * Risk Summary
+       * @default
+       */
+      risk_summary: string;
+      /**
+       * Status
+       * @default draft
+       */
+      status: string;
+      /** Storage Regions */
+      storage_regions?: string[];
     };
     /** ConfigurationChange */
     ConfigurationChange: {
@@ -2360,6 +3456,80 @@ export interface components {
        */
       resource_type: "job" | "stream";
     };
+    /** CostModelCreateRequest */
+    CostModelCreateRequest: {
+      /** Approved By */
+      approved_by: string;
+      /**
+       * Currency
+       * @default CNY
+       */
+      currency: string;
+      /** Effective At */
+      effective_at?: number | null;
+      /**
+       * Gpu Second Cost
+       * @default 0
+       */
+      gpu_second_cost: number;
+      /**
+       * Image Unit Cost
+       * @default 0
+       */
+      image_unit_cost: number;
+      /**
+       * Network Gb Cost
+       * @default 0
+       */
+      network_gb_cost: number;
+      /** Reason */
+      reason: string;
+      /**
+       * Request Unit Cost
+       * @default 0
+       */
+      request_unit_cost: number;
+      /**
+       * Storage Gb Month Cost
+       * @default 0
+       */
+      storage_gb_month_cost: number;
+      /**
+       * Third Party Unit Cost
+       * @default 0
+       */
+      third_party_unit_cost: number;
+      /** Version */
+      version: string;
+      /**
+       * Video Second Cost
+       * @default 0
+       */
+      video_second_cost: number;
+    };
+    /** DatasetManifestCreateRequest */
+    DatasetManifestCreateRequest: {
+      /**
+       * Definition Version
+       * @default 1.0
+       */
+      definition_version: string;
+      /**
+       * Label Schema Version
+       * @default 1.0
+       */
+      label_schema_version: string;
+      /** Lineage */
+      lineage?: string[];
+      /** Name */
+      name: string;
+      /** Splits */
+      splits: {
+        [key: string]: string[];
+      };
+      /** Version */
+      version: string;
+    };
     /** EndpointNetworkPolicyRequest */
     EndpointNetworkPolicyRequest: {
       /** Allow Private Hosts */
@@ -2368,6 +3538,83 @@ export interface components {
       allowed_cidrs?: string[];
       /** Allowed Hosts */
       allowed_hosts?: string[];
+    };
+    /** EntitlementActionRequest */
+    EntitlementActionRequest: {
+      /** Action */
+      action: string;
+      /** Approved By */
+      approved_by: string;
+      /** Expected Current Entitlement Id */
+      expected_current_entitlement_id?: string | null;
+      /** Expected Version */
+      expected_version?: number | null;
+      /** Reason */
+      reason: string;
+    };
+    /** EntitlementCreateRequest */
+    EntitlementCreateRequest: {
+      /** Allowed Capabilities */
+      allowed_capabilities: string[];
+      /** Allowed Models */
+      allowed_models?: string[];
+      /** Approved By */
+      approved_by: string;
+      /** Change Type */
+      change_type?: string | null;
+      /**
+       * Concurrency Limit
+       * @default 1
+       */
+      concurrency_limit: number;
+      /**
+       * Definition Version
+       * @default 1.0
+       */
+      definition_version: string;
+      /**
+       * Delivery Tier
+       * @default platform_api
+       */
+      delivery_tier: string;
+      /** Expected Current Entitlement Id */
+      expected_current_entitlement_id?: string | null;
+      /** Expires At */
+      expires_at?: number | null;
+      /**
+       * Grace Period Seconds
+       * @default 0
+       */
+      grace_period_seconds: number;
+      /**
+       * Product Version
+       * @default 1.0
+       */
+      product_version: string;
+      /**
+       * Project Limit
+       * @default 1
+       */
+      project_limit: number;
+      /**
+       * Reason
+       * @default entitlement version change
+       */
+      reason: string;
+      /** Rollback Target Id */
+      rollback_target_id?: string | null;
+      /** Starts At */
+      starts_at?: number | null;
+      /**
+       * Stream Limit
+       * @default 0
+       */
+      stream_limit: number;
+      /**
+       * Support Level
+       * @default standard
+       */
+      support_level: string;
     };
     /** FaceContract */
     FaceContract: {
@@ -2423,6 +3670,63 @@ export interface components {
     } & {
       [key: string]: unknown;
     };
+    /** FeedbackAnalysisReportCreateRequest */
+    FeedbackAnalysisReportCreateRequest: {
+      /** Baseline Model Version Id */
+      baseline_model_version_id: string;
+      /** Candidate Model Version Id */
+      candidate_model_version_id: string;
+      /**
+       * Current Threshold
+       * @default 0.5
+       */
+      current_threshold: number;
+      /** Dataset Ids */
+      dataset_ids: string[];
+      /**
+       * Definition Version
+       * @default feedback-analysis-v1
+       */
+      definition_version: string;
+      /** Label Key */
+      label_key: string;
+      /**
+       * Maximum Accuracy Regression
+       * @default 0.02
+       */
+      maximum_accuracy_regression: number;
+      /**
+       * Maximum F1 Regression
+       * @default 0.02
+       */
+      maximum_f1_regression: number;
+      /**
+       * Minimum Accuracy
+       * @default 0.8
+       */
+      minimum_accuracy: number;
+      /**
+       * Minimum F1
+       * @default 0.8
+       */
+      minimum_f1: number;
+      /**
+       * Minimum Sample Count
+       * @default 20
+       */
+      minimum_sample_count: number;
+      /** Name */
+      name: string;
+      /**
+       * Positive Value
+       * @default true
+       */
+      positive_value: unknown;
+      /** Threshold Candidates */
+      threshold_candidates?: number[];
+      /** Version */
+      version: string;
+    };
     /** GaitTrackletContract */
     GaitTrackletContract: {
       /** Embedding */
@@ -2443,7 +3747,9 @@ export interface components {
       /** Display Name */
       display_name?: string | null;
       /** Metadata */
-      metadata?: Record<string, never> | null;
+      metadata?: {
+        [key: string]: unknown;
+      } | null;
     };
     /** GenericData */
     GenericData: {
@@ -2484,6 +3790,78 @@ export interface components {
       status?: string | null;
       /** Subject */
       subject?: string | null;
+    };
+    /** IncidentCreateRequest */
+    IncidentCreateRequest: {
+      /**
+       * Customer Visible Summary
+       * @default
+       */
+      customer_visible_summary: string;
+      /** Impact Scope */
+      impact_scope: string;
+      /**
+       * Internal Summary
+       * @default
+       */
+      internal_summary: string;
+      /** Owner */
+      owner?: string | null;
+      /** Related Model Versions */
+      related_model_versions?: string[];
+      /** Related Request Ids */
+      related_request_ids?: string[];
+      /**
+       * Severity
+       * @default sev3
+       */
+      severity: string;
+      /** Started At */
+      started_at?: number | null;
+      /** Title */
+      title: string;
+    };
+    /** IncidentPatchRequest */
+    IncidentPatchRequest: {
+      /** Action Items */
+      action_items?:
+        | {
+            [key: string]: unknown;
+          }[]
+        | null;
+      /** Customer Visible Summary */
+      customer_visible_summary?: string | null;
+      /** Expected Version */
+      expected_version?: number | null;
+      /** Impact Scope */
+      impact_scope?: string | null;
+      /** Internal Summary */
+      internal_summary?: string | null;
+      /** Owner */
+      owner?: string | null;
+      /** Root Cause */
+      root_cause?: string | null;
+      /** Severity */
+      severity?: string | null;
+      /** Status */
+      status?: string | null;
+      /** Timeline Message */
+      timeline_message?: string | null;
+    };
+    /** IndustryTemplateApplyRequest */
+    IndustryTemplateApplyRequest: {
+      /**
+       * Dry Run
+       * @default true
+       */
+      dry_run: boolean;
+      /** Expected Fingerprint */
+      expected_fingerprint: string;
+    };
+    /** IndustryTemplateRollbackRequest */
+    IndustryTemplateRollbackRequest: {
+      /** Reason */
+      reason: string;
     };
     /** InferAppearanceData */
     InferAppearanceData: {
@@ -2577,10 +3955,205 @@ export interface components {
       /** Username */
       username: string;
     };
+    /** LocalStepUpRequest */
+    LocalStepUpRequest: {
+      /** Password */
+      password: string;
+    };
+    /** ModelApprovalCreateRequest */
+    ModelApprovalCreateRequest: {
+      /**
+       * Comment
+       * @default
+       */
+      comment: string;
+      /**
+       * Decision
+       * @default approve
+       */
+      decision: string;
+      /**
+       * Policy
+       * @default model_release
+       */
+      policy: string;
+    };
+    /** ModelConfigChangeRequest */
+    ModelConfigChangeRequest: {
+      /** Document */
+      document: {
+        [key: string]: unknown;
+      };
+      /** Expected Current Fingerprint */
+      expected_current_fingerprint: string;
+      /** Reason */
+      reason: string;
+    };
+    /** ModelConfigPreviewRequest */
+    ModelConfigPreviewRequest: {
+      /** Document */
+      document: {
+        [key: string]: unknown;
+      };
+    };
+    /** ModelConfigRollbackRequest */
+    ModelConfigRollbackRequest: {
+      /** Expected Current Fingerprint */
+      expected_current_fingerprint: string;
+      /** Reason */
+      reason: string;
+      /** Target Fingerprint */
+      target_fingerprint: string;
+    };
+    /** ModelEvaluationCreateRequest */
+    ModelEvaluationCreateRequest: {
+      /** Dataset Id */
+      dataset_id: string;
+      /** Dataset Manifest Sha256 */
+      dataset_manifest_sha256: string;
+      /**
+       * Definition Version
+       * @default 1.0
+       */
+      definition_version: string;
+      /** Environment */
+      environment?: {
+        [key: string]: unknown;
+      };
+      /** Metrics */
+      metrics: {
+        [key: string]: number;
+      };
+      /** Quality Gates */
+      quality_gates?: {
+        [key: string]: unknown;
+      };
+      /**
+       * Report Ref
+       * @default
+       */
+      report_ref: string;
+      /** Thresholds */
+      thresholds?: {
+        [key: string]: unknown;
+      };
+    };
     /** ModelGpuDeviceRequest */
     ModelGpuDeviceRequest: {
       /** Device Id */
       device_id?: number | null;
+    };
+    /** ModelRegistryCreateRequest */
+    ModelRegistryCreateRequest: {
+      /**
+       * Artifact Size
+       * @default 0
+       */
+      artifact_size: number;
+      /**
+       * Artifact Uri
+       * @default
+       */
+      artifact_uri: string;
+      /** Capability */
+      capability: string;
+      /** Dataset Lineage */
+      dataset_lineage?: string[];
+      /**
+       * Description
+       * @default
+       */
+      description: string;
+      /**
+       * Framework
+       * @default onnx
+       */
+      framework: string;
+      /** Governance Ref */
+      governance_ref: string;
+      /** Input Contract */
+      input_contract?: {
+        [key: string]: unknown;
+      };
+      /** License */
+      license: string;
+      /**
+       * Max Batch Size
+       * @default 1
+       */
+      max_batch_size: number;
+      /** Model Card Ref */
+      model_card_ref: string;
+      /** Model Target */
+      model_target: string;
+      /** Name */
+      name: string;
+      /** Output Contract */
+      output_contract?: {
+        [key: string]: unknown;
+      };
+      /** Owner */
+      owner?: string | null;
+      /** Quality Gates */
+      quality_gates?: {
+        [key: string]: unknown;
+      };
+      /**
+       * Redistribution Allowed
+       * @default false
+       */
+      redistribution_allowed: boolean;
+      /**
+       * Runtime
+       * @default onnxruntime
+       */
+      runtime: string;
+      /** Sha256 */
+      sha256: string;
+      /** Source */
+      source: string;
+      /**
+       * Supports Batching
+       * @default false
+       */
+      supports_batching: boolean;
+      /**
+       * Supports Cpu
+       * @default false
+       */
+      supports_cpu: boolean;
+      /** Thresholds */
+      thresholds?: {
+        [key: string]: unknown;
+      };
+      /** Version */
+      version: string;
+    };
+    /** ModelReleaseRequest */
+    ModelReleaseRequest: {
+      /**
+       * Action
+       * @default activate
+       */
+      action: string;
+      /** Alias */
+      alias: string;
+      /** Expected Current Target */
+      expected_current_target?: string | null;
+      /** Model Version Id */
+      model_version_id: string;
+      /** Reason */
+      reason: string;
+      /**
+       * Risk Level
+       * @default high
+       */
+      risk_level: string;
+      /**
+       * Traffic Percentage
+       * @default 5
+       */
+      traffic_percentage: number;
     };
     /** ModelRequest */
     ModelRequest: {
@@ -2676,13 +4249,11 @@ export interface components {
       /**
        * Schema Version
        * @constant
-       * @enum {string}
        */
       schema_version: "1.0";
       /**
        * Status
        * @constant
-       * @enum {string}
        */
       status: "error";
     };
@@ -2695,13 +4266,11 @@ export interface components {
       /**
        * Schema Version
        * @constant
-       * @enum {string}
        */
       schema_version: "1.0";
       /**
        * Status
        * @constant
-       * @enum {string}
        */
       status: "success";
       /** Warnings */
@@ -2716,13 +4285,11 @@ export interface components {
       /**
        * Schema Version
        * @constant
-       * @enum {string}
        */
       schema_version: "1.0";
       /**
        * Status
        * @constant
-       * @enum {string}
        */
       status: "success";
       /** Warnings */
@@ -2737,13 +4304,11 @@ export interface components {
       /**
        * Schema Version
        * @constant
-       * @enum {string}
        */
       schema_version: "1.0";
       /**
        * Status
        * @constant
-       * @enum {string}
        */
       status: "success";
       /** Warnings */
@@ -2758,13 +4323,11 @@ export interface components {
       /**
        * Schema Version
        * @constant
-       * @enum {string}
        */
       schema_version: "1.0";
       /**
        * Status
        * @constant
-       * @enum {string}
        */
       status: "success";
       /** Warnings */
@@ -2779,13 +4342,11 @@ export interface components {
       /**
        * Schema Version
        * @constant
-       * @enum {string}
        */
       schema_version: "1.0";
       /**
        * Status
        * @constant
-       * @enum {string}
        */
       status: "success";
       /** Warnings */
@@ -2800,13 +4361,11 @@ export interface components {
       /**
        * Schema Version
        * @constant
-       * @enum {string}
        */
       schema_version: "1.0";
       /**
        * Status
        * @constant
-       * @enum {string}
        */
       status: "success";
       /** Warnings */
@@ -2821,13 +4380,11 @@ export interface components {
       /**
        * Schema Version
        * @constant
-       * @enum {string}
        */
       schema_version: "1.0";
       /**
        * Status
        * @constant
-       * @enum {string}
        */
       status: "success";
       /** Warnings */
@@ -2842,13 +4399,11 @@ export interface components {
       /**
        * Schema Version
        * @constant
-       * @enum {string}
        */
       schema_version: "1.0";
       /**
        * Status
        * @constant
-       * @enum {string}
        */
       status: "success";
       /** Warnings */
@@ -2863,13 +4418,11 @@ export interface components {
       /**
        * Schema Version
        * @constant
-       * @enum {string}
        */
       schema_version: "1.0";
       /**
        * Status
        * @constant
-       * @enum {string}
        */
       status: "success";
       /** Warnings */
@@ -2884,13 +4437,11 @@ export interface components {
       /**
        * Schema Version
        * @constant
-       * @enum {string}
        */
       schema_version: "1.0";
       /**
        * Status
        * @constant
-       * @enum {string}
        */
       status: "success";
       /** Warnings */
@@ -2947,6 +4498,119 @@ export interface components {
       /** Retention Days */
       retention_days: number;
     };
+    /** ReviewSampleCreateRequest */
+    ReviewSampleCreateRequest: {
+      /** Confidence */
+      confidence?: number | null;
+      /**
+       * Content Sha256
+       * @default
+       */
+      content_sha256: string;
+      /**
+       * Contract Version
+       * @default 1.0
+       */
+      contract_version: string;
+      /** Expires At */
+      expires_at?: number | null;
+      /**
+       * Masked Preview Ref
+       * @default
+       */
+      masked_preview_ref: string;
+      /**
+       * Model Id
+       * @default
+       */
+      model_id: string;
+      /**
+       * Model Sha256
+       * @default
+       */
+      model_sha256: string;
+      /** Model Version Id */
+      model_version_id: string;
+      /**
+       * Object Ref
+       * @default
+       */
+      object_ref: string;
+      /**
+       * Priority
+       * @default 50
+       */
+      priority: number;
+      /** Proposed Labels */
+      proposed_labels?: {
+        [key: string]: unknown;
+      };
+      /** Reason */
+      reason: string;
+      /** Retention Policy Id */
+      retention_policy_id?: string | null;
+      /**
+       * Risk Level
+       * @default medium
+       */
+      risk_level: string;
+      /** Source Item Id */
+      source_item_id: string;
+      /** Source Request Id */
+      source_request_id?: string | null;
+      /**
+       * Source Type
+       * @default inference
+       */
+      source_type: string;
+      /** Tags */
+      tags?: string[];
+    };
+    /** ReviewSampleExportRequest */
+    ReviewSampleExportRequest: {
+      /** External Task Id */
+      external_task_id?: string | null;
+      /**
+       * Format
+       * @default label_studio
+       */
+      format: string;
+      /** Sample Ids */
+      sample_ids: string[];
+      /**
+       * Schema Version
+       * @default 1.0
+       */
+      schema_version: string;
+    };
+    /** RightsRequestCreateRequest */
+    RightsRequestCreateRequest: {
+      /** Due At */
+      due_at?: number | null;
+      /** Request Type */
+      request_type: string;
+      /** Subject Reference */
+      subject_reference: string;
+    };
+    /** RightsRequestPatchRequest */
+    RightsRequestPatchRequest: {
+      /** Exception Basis */
+      exception_basis?: string | null;
+      /** Execution Evidence */
+      execution_evidence?:
+        | {
+            [key: string]: unknown;
+          }[]
+        | null;
+      /** Expected Version */
+      expected_version?: number | null;
+      /** Identity Verification */
+      identity_verification?: string | null;
+      /** Status */
+      status: string;
+      /** Timeline Message */
+      timeline_message?: string | null;
+    };
     /** RuntimeShapeContract */
     RuntimeShapeContract: {
       /** Embedding Count */
@@ -2962,16 +4626,121 @@ export interface components {
     } & {
       [key: string]: unknown;
     };
+    /** SLADefinitionCreateRequest */
+    SLADefinitionCreateRequest: {
+      /**
+       * Availability Target
+       * @default 0.995
+       */
+      availability_target: number;
+      /**
+       * Definition Version
+       * @default 1.0
+       */
+      definition_version: string;
+      /** Effective At */
+      effective_at?: number | null;
+      /** Exclusion Rules */
+      exclusion_rules?: {
+        [key: string]: unknown;
+      }[];
+      /** Expires At */
+      expires_at?: number | null;
+      /**
+       * P95 Latency Ms
+       * @default 2000
+       */
+      p95_latency_ms: number;
+      /**
+       * P99 Latency Ms
+       * @default 5000
+       */
+      p99_latency_ms: number;
+      /**
+       * Timezone
+       * @default Asia/Shanghai
+       */
+      timezone: string;
+      /**
+       * Window Seconds
+       * @default 2592000
+       */
+      window_seconds: number;
+    };
+    /** SLAReportCreateRequest */
+    SLAReportCreateRequest: {
+      /** Created Since */
+      created_since: number;
+      /** Created Until */
+      created_until?: number;
+    };
     /** StreamCreateRequest */
     StreamCreateRequest: {
       /** Metadata */
-      metadata?: Record<string, never>;
+      metadata?: {
+        [key: string]: unknown;
+      };
       /** Name */
       name?: string | null;
       /** Settings */
-      settings?: Record<string, never>;
+      settings?: {
+        [key: string]: unknown;
+      };
       /** Stream Url */
       stream_url: string;
+    };
+    /** SupportCaseCreateRequest */
+    SupportCaseCreateRequest: {
+      /** Description */
+      description: string;
+      /** Environment */
+      environment: string;
+      /** Owner */
+      owner?: string | null;
+      /** Product Version */
+      product_version: string;
+      /** Redacted Attachments */
+      redacted_attachments?: {
+        [key: string]: unknown;
+      }[];
+      /** Request Ids */
+      request_ids?: string[];
+      /** Response Due At */
+      response_due_at?: number | null;
+      /**
+       * Severity
+       * @default sev3
+       */
+      severity: string;
+      /** Task Ids */
+      task_ids?: string[];
+      /** Title */
+      title: string;
+    };
+    /** SupportCasePatchRequest */
+    SupportCasePatchRequest: {
+      /** Description */
+      description?: string | null;
+      /** Expected Version */
+      expected_version?: number | null;
+      /** Owner */
+      owner?: string | null;
+      /** Redacted Attachments */
+      redacted_attachments?:
+        | {
+            [key: string]: unknown;
+          }[]
+        | null;
+      /** Request Ids */
+      request_ids?: string[] | null;
+      /** Response Due At */
+      response_due_at?: number | null;
+      /** Severity */
+      severity?: string | null;
+      /** Status */
+      status?: string | null;
+      /** Task Ids */
+      task_ids?: string[] | null;
     };
     /** ThresholdUpdateRequest */
     ThresholdUpdateRequest: {
@@ -3038,6 +4807,25 @@ export interface components {
     } & {
       [key: string]: unknown;
     };
+    /** TrackCorrectionCreateRequest */
+    TrackCorrectionCreateRequest: {
+      /** Action */
+      action: string;
+      /** Evidence Ref */
+      evidence_ref?: string | null;
+      /** Job Id */
+      job_id: string;
+      /** Reason */
+      reason?: string | null;
+      /** Reviewer */
+      reviewer?: string | null;
+      /** Split Frame Index */
+      split_frame_index?: number | null;
+      /** Target Track Id */
+      target_track_id?: string | null;
+      /** Track Ids */
+      track_ids: string[];
+    };
     /** TrackFrameContract */
     TrackFrameContract: {
       /** Frame Index */
@@ -3089,14 +4877,100 @@ export interface components {
     } & {
       [key: string]: unknown;
     };
+    /** UsageReversalRequest */
+    UsageReversalRequest: {
+      /** Reason */
+      reason: string;
+    };
     /** ValidationError */
     ValidationError: {
+      /** Context */
+      ctx?: Record<string, never>;
+      /** Input */
+      input?: unknown;
       /** Location */
       loc: (string | number)[];
       /** Message */
       msg: string;
       /** Error Type */
       type: string;
+    };
+    /** VideoJobResumeRequest */
+    VideoJobResumeRequest: {
+      /** Priority */
+      priority?: number | null;
+    };
+    /** VideoUploadCompleteRequest */
+    VideoUploadCompleteRequest: {
+      /**
+       * Batch Size
+       * @default 16
+       */
+      batch_size: number;
+      /**
+       * Confidence
+       * @default 0.25
+       */
+      confidence: number;
+      /**
+       * Detector Model Name
+       * @default yolov8n.onnx
+       */
+      detector_model_name: string;
+      /**
+       * Detector Project Name
+       * @default portrait_hub
+       */
+      detector_project_name: string;
+      /**
+       * Include Embeddings
+       * @default false
+       */
+      include_embeddings: boolean;
+      /**
+       * Iou
+       * @default 0.45
+       */
+      iou: number;
+      /**
+       * Max Detections
+       * @default 100
+       */
+      max_detections: number;
+      /**
+       * Priority
+       * @default 0
+       */
+      priority: number;
+      /**
+       * Reid Model Name
+       * @default osnet_ibn_x1_0.onnx
+       */
+      reid_model_name: string;
+      /**
+       * Reid Project Name
+       * @default portrait_hub
+       */
+      reid_project_name: string;
+      /**
+       * Sample Interval Seconds
+       * @default 1
+       */
+      sample_interval_seconds: number;
+    };
+    /** VideoUploadCreateRequest */
+    VideoUploadCreateRequest: {
+      /**
+       * Content Type
+       * @default application/octet-stream
+       */
+      content_type: string;
+      /** Filename */
+      filename: string;
+      /** Sha256 */
+      sha256: string;
+      /** Total Bytes */
+      total_bytes: number;
     };
     /** VisionInferData */
     VisionInferData: {
@@ -3327,6 +5201,37 @@ export interface operations {
       };
     };
   };
+  oidc_step_up_auth_oidc_step_up_get: {
+    parameters: {
+      query?: {
+        return_to?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": unknown;
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
   portrait_console_console_get: {
     parameters: {
       query?: never;
@@ -3390,7 +5295,9 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": Record<string, never>;
+          "application/json": {
+            [key: string]: unknown;
+          };
         };
       };
       /** @description Validation Error */
@@ -3419,7 +5326,9 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": Record<string, never>;
+          "application/json": {
+            [key: string]: unknown;
+          };
         };
       };
     };
@@ -3480,7 +5389,9 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": Record<string, never>;
+          "application/json": {
+            [key: string]: unknown;
+          };
         };
       };
       /** @description Validation Error */
@@ -3513,7 +5424,9 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": Record<string, never>;
+          "application/json": {
+            [key: string]: unknown;
+          };
         };
       };
       /** @description Validation Error */
@@ -3549,7 +5462,9 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": Record<string, never>;
+          "application/json": {
+            [key: string]: unknown;
+          };
         };
       };
       /** @description Validation Error */
@@ -3684,6 +5599,7 @@ export interface operations {
         authorization?: string | null;
         "x-api-key"?: string | null;
         "x-tenant-id"?: string | null;
+        "Idempotency-Key"?: string | null;
       };
       path?: never;
       cookie?: never;
@@ -3802,6 +5718,7 @@ export interface operations {
         authorization?: string | null;
         "x-api-key"?: string | null;
         "x-tenant-id"?: string | null;
+        "Idempotency-Key"?: string | null;
       };
       path: {
         app_id: string;
@@ -3922,6 +5839,7 @@ export interface operations {
         authorization?: string | null;
         "x-api-key"?: string | null;
         "x-tenant-id"?: string | null;
+        "Idempotency-Key"?: string | null;
       };
       path: {
         app_id: string;
@@ -4276,7 +6194,717 @@ export interface operations {
       };
     };
   };
+  v1_cost_models_v1_access_cost_models_get: {
+    parameters: {
+      query?: never;
+      header?: {
+        authorization?: string | null;
+        "x-api-key"?: string | null;
+        "x-tenant-id"?: string | null;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+    };
+  };
+  v1_create_cost_model_v1_access_cost_models_post: {
+    parameters: {
+      query?: never;
+      header?: {
+        authorization?: string | null;
+        "x-api-key"?: string | null;
+        "x-tenant-id"?: string | null;
+        "Idempotency-Key"?: string | null;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["CostModelCreateRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+    };
+  };
+  v1_entitlements_v1_access_entitlements_get: {
+    parameters: {
+      query?: {
+        q?: string | null;
+        created_since?: number | null;
+        created_until?: number | null;
+        sort_by?: string;
+        sort_order?: string;
+        limit?: number;
+        offset?: number | null;
+        cursor?: string | null;
+      };
+      header?: {
+        authorization?: string | null;
+        "x-api-key"?: string | null;
+        "x-tenant-id"?: string | null;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+    };
+  };
+  v1_create_entitlement_v1_access_entitlements_post: {
+    parameters: {
+      query?: never;
+      header?: {
+        authorization?: string | null;
+        "x-api-key"?: string | null;
+        "x-tenant-id"?: string | null;
+        "Idempotency-Key"?: string | null;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["EntitlementCreateRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+    };
+  };
+  v1_change_entitlement_status_v1_access_entitlements__entitlement_id__actions_post: {
+    parameters: {
+      query?: never;
+      header?: {
+        authorization?: string | null;
+        "x-api-key"?: string | null;
+        "x-tenant-id"?: string | null;
+        "Idempotency-Key"?: string | null;
+      };
+      path: {
+        entitlement_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["EntitlementActionRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+    };
+  };
   v1_access_error_codes_v1_access_error_codes_get: {
+    parameters: {
+      query?: never;
+      header?: {
+        authorization?: string | null;
+        "x-api-key"?: string | null;
+        "x-tenant-id"?: string | null;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+    };
+  };
+  v1_commercial_license_status_v1_access_license_status_get: {
     parameters: {
       query?: never;
       header?: {
@@ -4511,6 +7139,7 @@ export interface operations {
         authorization?: string | null;
         "x-api-key"?: string | null;
         "x-tenant-id"?: string | null;
+        "Idempotency-Key"?: string | null;
       };
       path?: never;
       cookie?: never;
@@ -4629,6 +7258,7 @@ export interface operations {
         authorization?: string | null;
         "x-api-key"?: string | null;
         "x-tenant-id"?: string | null;
+        "Idempotency-Key"?: string | null;
       };
       path: {
         project_id: string;
@@ -4638,6 +7268,721 @@ export interface operations {
     requestBody: {
       content: {
         "application/json": components["schemas"]["AccessProjectPatchRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+    };
+  };
+  v1_commercial_profile_v1_access_projects__project_id__commercial_profile_get: {
+    parameters: {
+      query?: never;
+      header?: {
+        authorization?: string | null;
+        "x-api-key"?: string | null;
+        "x-tenant-id"?: string | null;
+      };
+      path: {
+        project_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+    };
+  };
+  v1_update_commercial_profile_v1_access_projects__project_id__commercial_profile_patch: {
+    parameters: {
+      query?: never;
+      header?: {
+        authorization?: string | null;
+        "x-api-key"?: string | null;
+        "x-tenant-id"?: string | null;
+        "Idempotency-Key"?: string | null;
+      };
+      path: {
+        project_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["CommercialProfilePatchRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+    };
+  };
+  v1_quota_forecast_v1_access_quota_forecast_get: {
+    parameters: {
+      query?: never;
+      header?: {
+        authorization?: string | null;
+        "x-api-key"?: string | null;
+        "x-tenant-id"?: string | null;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+    };
+  };
+  v1_support_cases_v1_access_support_cases_get: {
+    parameters: {
+      query?: {
+        status?: string | null;
+        q?: string | null;
+        created_since?: number | null;
+        created_until?: number | null;
+        sort_by?: string;
+        sort_order?: string;
+        limit?: number;
+        offset?: number | null;
+        cursor?: string | null;
+      };
+      header?: {
+        authorization?: string | null;
+        "x-api-key"?: string | null;
+        "x-tenant-id"?: string | null;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+    };
+  };
+  v1_create_support_case_v1_access_support_cases_post: {
+    parameters: {
+      query?: never;
+      header?: {
+        authorization?: string | null;
+        "x-api-key"?: string | null;
+        "x-tenant-id"?: string | null;
+        "Idempotency-Key"?: string | null;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["SupportCaseCreateRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+    };
+  };
+  v1_update_support_case_v1_access_support_cases__support_case_id__patch: {
+    parameters: {
+      query?: never;
+      header?: {
+        authorization?: string | null;
+        "x-api-key"?: string | null;
+        "x-tenant-id"?: string | null;
+        "Idempotency-Key"?: string | null;
+      };
+      path: {
+        support_case_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["SupportCasePatchRequest"];
       };
     };
     responses: {
@@ -4863,6 +8208,7 @@ export interface operations {
         authorization?: string | null;
         "x-api-key"?: string | null;
         "x-tenant-id"?: string | null;
+        "Idempotency-Key"?: string | null;
       };
       path?: never;
       cookie?: never;
@@ -4981,6 +8327,7 @@ export interface operations {
         authorization?: string | null;
         "x-api-key"?: string | null;
         "x-tenant-id"?: string | null;
+        "Idempotency-Key"?: string | null;
       };
       path: {
         tenant_id: string;
@@ -4992,6 +8339,726 @@ export interface operations {
         "application/json": components["schemas"]["AccessTenantPatchRequest"];
       };
     };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+    };
+  };
+  v1_usage_events_v1_access_usage_events_get: {
+    parameters: {
+      query?: {
+        created_since?: number | null;
+        created_until?: number | null;
+        q?: string | null;
+        sort_by?: string;
+        sort_order?: string;
+        limit?: number | null;
+        offset?: number | null;
+        cursor?: string | null;
+      };
+      header?: {
+        authorization?: string | null;
+        "x-api-key"?: string | null;
+        "x-tenant-id"?: string | null;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+    };
+  };
+  v1_reverse_usage_event_v1_access_usage_events__usage_event_id__reversal_post: {
+    parameters: {
+      query?: never;
+      header?: {
+        authorization?: string | null;
+        "x-api-key"?: string | null;
+        "x-tenant-id"?: string | null;
+        "Idempotency-Key"?: string | null;
+      };
+      path: {
+        usage_event_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["UsageReversalRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+    };
+  };
+  v1_usage_summary_v1_access_usage_summary_get: {
+    parameters: {
+      query?: {
+        created_since?: number | null;
+        created_until?: number | null;
+      };
+      header?: {
+        authorization?: string | null;
+        "x-api-key"?: string | null;
+        "x-tenant-id"?: string | null;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+    };
+  };
+  v1_usage_timeseries_v1_access_usage_timeseries_get: {
+    parameters: {
+      query?: {
+        created_since?: number | null;
+        created_until?: number | null;
+        timezone?: string;
+        granularity?: string;
+        sort_by?: string;
+        sort_order?: string;
+        limit?: number | null;
+        offset?: number | null;
+        cursor?: string | null;
+      };
+      header?: {
+        authorization?: string | null;
+        "x-api-key"?: string | null;
+        "x-tenant-id"?: string | null;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+    };
+  };
+  v1_access_webhook_deliveries_v1_access_webhook_deliveries_get: {
+    parameters: {
+      query?: {
+        webhook_id?: string | null;
+        status?: string | null;
+        limit?: number;
+      };
+      header?: {
+        authorization?: string | null;
+        "x-api-key"?: string | null;
+        "x-tenant-id"?: string | null;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+    };
+  };
+  v1_access_retry_webhook_delivery_v1_access_webhook_deliveries__delivery_id__retry_post: {
+    parameters: {
+      query?: never;
+      header?: {
+        authorization?: string | null;
+        "x-api-key"?: string | null;
+        "x-tenant-id"?: string | null;
+        "Idempotency-Key"?: string | null;
+      };
+      path: {
+        delivery_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
     responses: {
       /** @description Successful Response */
       200: {
@@ -5215,6 +9282,7 @@ export interface operations {
         authorization?: string | null;
         "x-api-key"?: string | null;
         "x-tenant-id"?: string | null;
+        "Idempotency-Key"?: string | null;
       };
       path?: never;
       cookie?: never;
@@ -5333,6 +9401,7 @@ export interface operations {
         authorization?: string | null;
         "x-api-key"?: string | null;
         "x-tenant-id"?: string | null;
+        "Idempotency-Key"?: string | null;
       };
       path: {
         webhook_id: string;
@@ -5453,6 +9522,7 @@ export interface operations {
         authorization?: string | null;
         "x-api-key"?: string | null;
         "x-tenant-id"?: string | null;
+        "Idempotency-Key"?: string | null;
       };
       path: {
         webhook_id: string;
@@ -5569,6 +9639,7 @@ export interface operations {
         authorization?: string | null;
         "x-api-key"?: string | null;
         "x-tenant-id"?: string | null;
+        "Idempotency-Key"?: string | null;
       };
       path: {
         webhook_id: string;
@@ -5921,6 +9992,7 @@ export interface operations {
         authorization?: string | null;
         "x-api-key"?: string | null;
         "x-tenant-id"?: string | null;
+        "Idempotency-Key"?: string | null;
       };
       path?: never;
       cookie?: never;
@@ -6037,6 +10109,606 @@ export interface operations {
       query?: {
         limit?: number;
       };
+      header?: {
+        authorization?: string | null;
+        "x-api-key"?: string | null;
+        "x-tenant-id"?: string | null;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+    };
+  };
+  v1_upsert_compliance_record_v1_admin_compliance_records__control_id__put: {
+    parameters: {
+      query?: never;
+      header?: {
+        authorization?: string | null;
+        "x-api-key"?: string | null;
+        "x-tenant-id"?: string | null;
+        "Idempotency-Key"?: string | null;
+      };
+      path: {
+        control_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ComplianceRecordRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+    };
+  };
+  v1_rights_requests_v1_admin_compliance_rights_requests_get: {
+    parameters: {
+      query?: {
+        status?: string | null;
+        request_type?: string | null;
+        q?: string | null;
+        created_since?: number | null;
+        created_until?: number | null;
+        sort_by?: string;
+        sort_order?: string;
+        limit?: number;
+        offset?: number | null;
+        cursor?: string | null;
+      };
+      header?: {
+        authorization?: string | null;
+        "x-api-key"?: string | null;
+        "x-tenant-id"?: string | null;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+    };
+  };
+  v1_create_rights_request_v1_admin_compliance_rights_requests_post: {
+    parameters: {
+      query?: never;
+      header?: {
+        authorization?: string | null;
+        "x-api-key"?: string | null;
+        "x-tenant-id"?: string | null;
+        "Idempotency-Key"?: string | null;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["RightsRequestCreateRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+    };
+  };
+  v1_update_rights_request_v1_admin_compliance_rights_requests__rights_request_id__patch: {
+    parameters: {
+      query?: never;
+      header?: {
+        authorization?: string | null;
+        "x-api-key"?: string | null;
+        "x-tenant-id"?: string | null;
+        "Idempotency-Key"?: string | null;
+      };
+      path: {
+        rights_request_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["RightsRequestPatchRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+    };
+  };
+  v1_compliance_status_v1_admin_compliance_status_get: {
+    parameters: {
+      query?: never;
       header?: {
         authorization?: string | null;
         "x-api-key"?: string | null;
@@ -6269,6 +10941,7 @@ export interface operations {
         authorization?: string | null;
         "x-api-key"?: string | null;
         "x-tenant-id"?: string | null;
+        "Idempotency-Key"?: string | null;
       };
       path?: never;
       cookie?: never;
@@ -6278,6 +10951,129 @@ export interface operations {
         "application/json": components["schemas"]["ConfigurationUpdateRequest"];
       };
     };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+    };
+  };
+  v1_evidence_packages_v1_admin_evidence_get: {
+    parameters: {
+      query?: {
+        q?: string | null;
+        created_since?: number | null;
+        created_until?: number | null;
+        sort_by?: string;
+        sort_order?: string;
+        limit?: number;
+        offset?: number | null;
+        cursor?: string | null;
+      };
+      header?: {
+        authorization?: string | null;
+        "x-api-key"?: string | null;
+        "x-tenant-id"?: string | null;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
     responses: {
       /** @description Successful Response */
       200: {
@@ -6622,6 +11418,608 @@ export interface operations {
       };
     };
   };
+  v1_industry_template_applications_v1_admin_industry_template_applications_get: {
+    parameters: {
+      query?: {
+        q?: string | null;
+        created_since?: number | null;
+        created_until?: number | null;
+        sort_by?: string;
+        sort_order?: string;
+        limit?: number;
+        offset?: number | null;
+        cursor?: string | null;
+      };
+      header?: {
+        authorization?: string | null;
+        "x-api-key"?: string | null;
+        "x-tenant-id"?: string | null;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+    };
+  };
+  v1_rollback_industry_template_v1_admin_industry_template_applications__template_application_id__rollback_post: {
+    parameters: {
+      query?: never;
+      header?: {
+        authorization?: string | null;
+        "x-api-key"?: string | null;
+        "x-tenant-id"?: string | null;
+        "Idempotency-Key"?: string | null;
+      };
+      path: {
+        template_application_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["IndustryTemplateRollbackRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+    };
+  };
+  v1_industry_templates_v1_admin_industry_templates_get: {
+    parameters: {
+      query?: {
+        q?: string | null;
+        sort_by?: string;
+        sort_order?: string;
+        limit?: number;
+        offset?: number | null;
+        cursor?: string | null;
+      };
+      header?: {
+        authorization?: string | null;
+        "x-api-key"?: string | null;
+        "x-tenant-id"?: string | null;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+    };
+  };
+  v1_apply_industry_template_v1_admin_industry_templates__template_id__apply_post: {
+    parameters: {
+      query?: never;
+      header?: {
+        authorization?: string | null;
+        "x-api-key"?: string | null;
+        "x-tenant-id"?: string | null;
+        "Idempotency-Key"?: string | null;
+      };
+      path: {
+        template_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["IndustryTemplateApplyRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+    };
+  };
+  v1_preview_industry_template_v1_admin_industry_templates__template_id__preview_get: {
+    parameters: {
+      query?: never;
+      header?: {
+        authorization?: string | null;
+        "x-api-key"?: string | null;
+        "x-tenant-id"?: string | null;
+      };
+      path: {
+        template_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+    };
+  };
   portrait_identity_members_v1_admin_members_get: {
     parameters: {
       query?: {
@@ -6746,6 +12144,7 @@ export interface operations {
         authorization?: string | null;
         "x-api-key"?: string | null;
         "x-tenant-id"?: string | null;
+        "Idempotency-Key"?: string | null;
       };
       path?: never;
       cookie?: never;
@@ -6864,6 +12263,7 @@ export interface operations {
         authorization?: string | null;
         "x-api-key"?: string | null;
         "x-tenant-id"?: string | null;
+        "Idempotency-Key"?: string | null;
       };
       path: {
         member_id: string;
@@ -6980,6 +12380,7 @@ export interface operations {
         authorization?: string | null;
         "x-api-key"?: string | null;
         "x-tenant-id"?: string | null;
+        "Idempotency-Key"?: string | null;
       };
       path: {
         member_id: string;
@@ -6989,6 +12390,363 @@ export interface operations {
     requestBody: {
       content: {
         "application/json": components["schemas"]["IdentityMemberPatchRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+    };
+  };
+  apply_model_config_v1_admin_models_config_apply_post: {
+    parameters: {
+      query?: never;
+      header?: {
+        authorization?: string | null;
+        "x-api-key"?: string | null;
+        "x-tenant-id"?: string | null;
+        "Idempotency-Key"?: string | null;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ModelConfigChangeRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+    };
+  };
+  preview_model_config_v1_admin_models_config_preview_post: {
+    parameters: {
+      query?: never;
+      header?: {
+        authorization?: string | null;
+        "x-api-key"?: string | null;
+        "x-tenant-id"?: string | null;
+        "Idempotency-Key"?: string | null;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ModelConfigPreviewRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+    };
+  };
+  rollback_model_config_v1_admin_models_config_rollback_post: {
+    parameters: {
+      query?: never;
+      header?: {
+        authorization?: string | null;
+        "x-api-key"?: string | null;
+        "x-tenant-id"?: string | null;
+        "Idempotency-Key"?: string | null;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ModelConfigRollbackRequest"];
       };
     };
     responses: {
@@ -7207,6 +12965,1224 @@ export interface operations {
       };
     };
   };
+  v1_model_registry_v1_admin_models_registry_get: {
+    parameters: {
+      query?: {
+        capability?: string | null;
+        status?: string | null;
+        q?: string | null;
+        created_since?: number | null;
+        created_until?: number | null;
+        sort_by?: string;
+        sort_order?: string;
+        limit?: number | null;
+        offset?: number | null;
+        cursor?: string | null;
+      };
+      header?: {
+        authorization?: string | null;
+        "x-api-key"?: string | null;
+        "x-tenant-id"?: string | null;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+    };
+  };
+  v1_register_model_v1_admin_models_registry_post: {
+    parameters: {
+      query?: never;
+      header?: {
+        authorization?: string | null;
+        "x-api-key"?: string | null;
+        "x-tenant-id"?: string | null;
+        "Idempotency-Key"?: string | null;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ModelRegistryCreateRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+    };
+  };
+  v1_create_model_approval_v1_admin_models_registry_versions__model_version_id__approvals_post: {
+    parameters: {
+      query?: never;
+      header?: {
+        authorization?: string | null;
+        "x-api-key"?: string | null;
+        "x-tenant-id"?: string | null;
+        "Idempotency-Key"?: string | null;
+      };
+      path: {
+        model_version_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ModelApprovalCreateRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+    };
+  };
+  v1_create_model_evaluation_v1_admin_models_registry_versions__model_version_id__evaluations_post: {
+    parameters: {
+      query?: never;
+      header?: {
+        authorization?: string | null;
+        "x-api-key"?: string | null;
+        "x-tenant-id"?: string | null;
+        "Idempotency-Key"?: string | null;
+      };
+      path: {
+        model_version_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ModelEvaluationCreateRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+    };
+  };
+  v1_model_versions_v1_admin_models_registry__model_id__versions_get: {
+    parameters: {
+      query?: {
+        status?: string | null;
+        q?: string | null;
+        created_since?: number | null;
+        created_until?: number | null;
+        sort_by?: string;
+        sort_order?: string;
+        limit?: number | null;
+        offset?: number | null;
+        cursor?: string | null;
+      };
+      header?: {
+        authorization?: string | null;
+        "x-api-key"?: string | null;
+        "x-tenant-id"?: string | null;
+      };
+      path: {
+        model_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+    };
+  };
+  v1_model_release_apply_v1_admin_models_releases_apply_post: {
+    parameters: {
+      query?: never;
+      header?: {
+        authorization?: string | null;
+        "x-api-key"?: string | null;
+        "x-tenant-id"?: string | null;
+        "Idempotency-Key"?: string | null;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ModelReleaseRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+    };
+  };
+  v1_model_release_audit_v1_admin_models_releases_audit_get: {
+    parameters: {
+      query?: {
+        action?: string | null;
+        outcome?: string | null;
+        q?: string | null;
+        created_since?: number | null;
+        created_until?: number | null;
+        sort_by?: string;
+        sort_order?: string;
+        limit?: number;
+        offset?: number | null;
+        cursor?: string | null;
+      };
+      header?: {
+        authorization?: string | null;
+        "x-api-key"?: string | null;
+        "x-tenant-id"?: string | null;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+    };
+  };
+  v1_model_release_dry_run_v1_admin_models_releases_dry_run_post: {
+    parameters: {
+      query?: never;
+      header?: {
+        authorization?: string | null;
+        "x-api-key"?: string | null;
+        "x-tenant-id"?: string | null;
+        "Idempotency-Key"?: string | null;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ModelReleaseRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+    };
+  };
+  v1_model_release_rollback_v1_admin_models_releases_rollback_post: {
+    parameters: {
+      query?: never;
+      header?: {
+        authorization?: string | null;
+        "x-api-key"?: string | null;
+        "x-tenant-id"?: string | null;
+        "Idempotency-Key"?: string | null;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ModelReleaseRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+    };
+  };
+  v1_model_shadow_results_v1_admin_models_releases_shadow_results_get: {
+    parameters: {
+      query?: {
+        status?: string | null;
+        q?: string | null;
+        created_since?: number | null;
+        created_until?: number | null;
+        sort_by?: string;
+        sort_order?: string;
+        limit?: number;
+        offset?: number | null;
+        cursor?: string | null;
+      };
+      header?: {
+        authorization?: string | null;
+        "x-api-key"?: string | null;
+        "x-tenant-id"?: string | null;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+    };
+  };
   reload_model_v1_admin_models_reload_post: {
     parameters: {
       query?: never;
@@ -7214,6 +14190,7 @@ export interface operations {
         authorization?: string | null;
         "x-api-key"?: string | null;
         "x-tenant-id"?: string | null;
+        "Idempotency-Key"?: string | null;
       };
       path?: never;
       cookie?: never;
@@ -7332,6 +14309,7 @@ export interface operations {
         authorization?: string | null;
         "x-api-key"?: string | null;
         "x-tenant-id"?: string | null;
+        "Idempotency-Key"?: string | null;
       };
       path?: never;
       cookie?: never;
@@ -7677,6 +14655,7 @@ export interface operations {
         authorization?: string | null;
         "x-api-key"?: string | null;
         "x-tenant-id"?: string | null;
+        "Idempotency-Key"?: string | null;
       };
       path?: never;
       cookie?: never;
@@ -7795,6 +14774,7 @@ export interface operations {
         authorization?: string | null;
         "x-api-key"?: string | null;
         "x-tenant-id"?: string | null;
+        "Idempotency-Key"?: string | null;
       };
       path?: never;
       cookie?: never;
@@ -7913,6 +14893,7 @@ export interface operations {
         authorization?: string | null;
         "x-api-key"?: string | null;
         "x-tenant-id"?: string | null;
+        "Idempotency-Key"?: string | null;
       };
       path?: never;
       cookie?: never;
@@ -8147,6 +15128,7 @@ export interface operations {
         authorization?: string | null;
         "x-api-key"?: string | null;
         "x-tenant-id"?: string | null;
+        "Idempotency-Key"?: string | null;
       };
       path?: never;
       cookie?: never;
@@ -8265,6 +15247,7 @@ export interface operations {
         authorization?: string | null;
         "x-api-key"?: string | null;
         "x-tenant-id"?: string | null;
+        "Idempotency-Key"?: string | null;
       };
       path: {
         model_id: string;
@@ -8499,6 +15482,7 @@ export interface operations {
         authorization?: string | null;
         "x-api-key"?: string | null;
         "x-tenant-id"?: string | null;
+        "Idempotency-Key"?: string | null;
       };
       path?: never;
       cookie?: never;
@@ -8610,6 +15594,978 @@ export interface operations {
       };
     };
   };
+  v1_health_timeline_v1_admin_operations_health_timeline_get: {
+    parameters: {
+      query?: {
+        q?: string | null;
+        created_since?: number | null;
+        created_until?: number | null;
+        sort_by?: string;
+        sort_order?: string;
+        limit?: number;
+        offset?: number | null;
+        cursor?: string | null;
+      };
+      header?: {
+        authorization?: string | null;
+        "x-api-key"?: string | null;
+        "x-tenant-id"?: string | null;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+    };
+  };
+  v1_incidents_v1_admin_operations_incidents_get: {
+    parameters: {
+      query?: {
+        status?: string | null;
+        severity?: string | null;
+        q?: string | null;
+        created_since?: number | null;
+        created_until?: number | null;
+        sort_by?: string;
+        sort_order?: string;
+        limit?: number;
+        offset?: number | null;
+        cursor?: string | null;
+      };
+      header?: {
+        authorization?: string | null;
+        "x-api-key"?: string | null;
+        "x-tenant-id"?: string | null;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+    };
+  };
+  v1_create_incident_v1_admin_operations_incidents_post: {
+    parameters: {
+      query?: never;
+      header?: {
+        authorization?: string | null;
+        "x-api-key"?: string | null;
+        "x-tenant-id"?: string | null;
+        "Idempotency-Key"?: string | null;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["IncidentCreateRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+    };
+  };
+  v1_update_incident_v1_admin_operations_incidents__incident_id__patch: {
+    parameters: {
+      query?: never;
+      header?: {
+        authorization?: string | null;
+        "x-api-key"?: string | null;
+        "x-tenant-id"?: string | null;
+        "Idempotency-Key"?: string | null;
+      };
+      path: {
+        incident_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["IncidentPatchRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+    };
+  };
+  v1_sla_definitions_v1_admin_operations_sla_get: {
+    parameters: {
+      query?: {
+        q?: string | null;
+        created_since?: number | null;
+        created_until?: number | null;
+        sort_by?: string;
+        sort_order?: string;
+        limit?: number | null;
+        offset?: number | null;
+        cursor?: string | null;
+      };
+      header?: {
+        authorization?: string | null;
+        "x-api-key"?: string | null;
+        "x-tenant-id"?: string | null;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+    };
+  };
+  v1_create_sla_definition_v1_admin_operations_sla_post: {
+    parameters: {
+      query?: never;
+      header?: {
+        authorization?: string | null;
+        "x-api-key"?: string | null;
+        "x-tenant-id"?: string | null;
+        "Idempotency-Key"?: string | null;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["SLADefinitionCreateRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+    };
+  };
+  v1_sla_reports_v1_admin_operations_sla_reports_get: {
+    parameters: {
+      query?: {
+        q?: string | null;
+        created_since?: number | null;
+        created_until?: number | null;
+        sort_by?: string;
+        sort_order?: string;
+        limit?: number;
+        offset?: number | null;
+        cursor?: string | null;
+      };
+      header?: {
+        authorization?: string | null;
+        "x-api-key"?: string | null;
+        "x-tenant-id"?: string | null;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+    };
+  };
+  v1_create_sla_report_v1_admin_operations_sla_reports_post: {
+    parameters: {
+      query?: never;
+      header?: {
+        authorization?: string | null;
+        "x-api-key"?: string | null;
+        "x-tenant-id"?: string | null;
+        "Idempotency-Key"?: string | null;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["SLAReportCreateRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+    };
+  };
   v1_admin_retention_cleanup_v1_admin_retention_cleanup_post: {
     parameters: {
       query?: never;
@@ -8617,6 +16573,7 @@ export interface operations {
         authorization?: string | null;
         "x-api-key"?: string | null;
         "x-tenant-id"?: string | null;
+        "Idempotency-Key"?: string | null;
       };
       path?: never;
       cookie?: never;
@@ -9227,7 +17184,9 @@ export interface operations {
   local_login_v1_auth_local_login_post: {
     parameters: {
       query?: never;
-      header?: never;
+      header?: {
+        "Idempotency-Key"?: string | null;
+      };
       path?: never;
       cookie?: never;
     };
@@ -9338,10 +17297,128 @@ export interface operations {
       };
     };
   };
+  local_step_up_v1_auth_local_step_up_post: {
+    parameters: {
+      query?: never;
+      header?: {
+        "Idempotency-Key"?: string | null;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["LocalStepUpRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+    };
+  };
   browser_logout_v1_auth_logout_post: {
     parameters: {
       query?: never;
-      header?: never;
+      header?: {
+        "Idempotency-Key"?: string | null;
+      };
       path?: never;
       cookie?: never;
     };
@@ -9558,6 +17635,116 @@ export interface operations {
       };
     };
   };
+  step_up_status_v1_auth_step_up_status_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+    };
+  };
   v1_compare_batch_v1_compare_batch_post: {
     parameters: {
       query?: never;
@@ -9565,6 +17752,7 @@ export interface operations {
         authorization?: string | null;
         "x-api-key"?: string | null;
         "x-tenant-id"?: string | null;
+        "Idempotency-Key"?: string | null;
       };
       path?: never;
       cookie?: never;
@@ -9683,6 +17871,7 @@ export interface operations {
         authorization?: string | null;
         "x-api-key"?: string | null;
         "x-tenant-id"?: string | null;
+        "Idempotency-Key"?: string | null;
       };
       path?: never;
       cookie?: never;
@@ -9801,6 +17990,7 @@ export interface operations {
         authorization?: string | null;
         "x-api-key"?: string | null;
         "x-tenant-id"?: string | null;
+        "Idempotency-Key"?: string | null;
       };
       path?: never;
       cookie?: never;
@@ -9919,6 +18109,7 @@ export interface operations {
         authorization?: string | null;
         "x-api-key"?: string | null;
         "x-tenant-id"?: string | null;
+        "Idempotency-Key"?: string | null;
       };
       path?: never;
       cookie?: never;
@@ -10151,6 +18342,7 @@ export interface operations {
         authorization?: string | null;
         "x-api-key"?: string | null;
         "x-tenant-id"?: string | null;
+        "Idempotency-Key"?: string | null;
       };
       path?: never;
       cookie?: never;
@@ -10265,6 +18457,364 @@ export interface operations {
   v1_evaluation_datasets_v1_evaluation_datasets_get: {
     parameters: {
       query?: {
+        q?: string | null;
+        created_since?: number | null;
+        created_until?: number | null;
+        sort_by?: string;
+        sort_order?: string;
+        limit?: number;
+        offset?: number | null;
+        cursor?: string | null;
+      };
+      header?: {
+        authorization?: string | null;
+        "x-api-key"?: string | null;
+        "x-tenant-id"?: string | null;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+    };
+  };
+  v1_create_dataset_manifest_v1_evaluation_datasets_post: {
+    parameters: {
+      query?: never;
+      header?: {
+        authorization?: string | null;
+        "x-api-key"?: string | null;
+        "x-tenant-id"?: string | null;
+        "Idempotency-Key"?: string | null;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["DatasetManifestCreateRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+    };
+  };
+  v1_dataset_manifest_v1_evaluation_datasets__dataset_id__manifest_get: {
+    parameters: {
+      query?: never;
+      header?: {
+        authorization?: string | null;
+        "x-api-key"?: string | null;
+        "x-tenant-id"?: string | null;
+      };
+      path: {
+        dataset_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+    };
+  };
+  v1_feedback_analysis_reports_v1_evaluation_feedback_analysis_reports_get: {
+    parameters: {
+      query?: {
         limit?: number;
       };
       header?: {
@@ -10276,6 +18826,724 @@ export interface operations {
       cookie?: never;
     };
     requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+    };
+  };
+  v1_create_feedback_analysis_report_v1_evaluation_feedback_analysis_reports_post: {
+    parameters: {
+      query?: never;
+      header?: {
+        authorization?: string | null;
+        "x-api-key"?: string | null;
+        "x-tenant-id"?: string | null;
+        "Idempotency-Key"?: string | null;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["FeedbackAnalysisReportCreateRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+    };
+  };
+  v1_feedback_analysis_report_v1_evaluation_feedback_analysis_reports__analysis_report_id__get: {
+    parameters: {
+      query?: never;
+      header?: {
+        authorization?: string | null;
+        "x-api-key"?: string | null;
+        "x-tenant-id"?: string | null;
+      };
+      path: {
+        analysis_report_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+    };
+  };
+  v1_review_samples_v1_evaluation_review_samples_get: {
+    parameters: {
+      query?: {
+        status?: string | null;
+        reason?: string | null;
+        risk_level?: string | null;
+        q?: string | null;
+        created_since?: number | null;
+        created_until?: number | null;
+        sort_by?: string;
+        sort_order?: string;
+        limit?: number;
+        offset?: number | null;
+        cursor?: string | null;
+      };
+      header?: {
+        authorization?: string | null;
+        "x-api-key"?: string | null;
+        "x-tenant-id"?: string | null;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+    };
+  };
+  v1_create_review_sample_v1_evaluation_review_samples_post: {
+    parameters: {
+      query?: never;
+      header?: {
+        authorization?: string | null;
+        "x-api-key"?: string | null;
+        "x-tenant-id"?: string | null;
+        "Idempotency-Key"?: string | null;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ReviewSampleCreateRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+    };
+  };
+  v1_export_review_samples_v1_evaluation_review_samples_export_post: {
+    parameters: {
+      query?: never;
+      header?: {
+        authorization?: string | null;
+        "x-api-key"?: string | null;
+        "x-tenant-id"?: string | null;
+        "Idempotency-Key"?: string | null;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ReviewSampleExportRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+    };
+  };
+  v1_import_review_annotations_v1_evaluation_review_samples_import_post: {
+    parameters: {
+      query?: never;
+      header?: {
+        authorization?: string | null;
+        "x-api-key"?: string | null;
+        "x-tenant-id"?: string | null;
+        "Idempotency-Key"?: string | null;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["AnnotationImportRequest"];
+      };
+    };
     responses: {
       /** @description Successful Response */
       200: {
@@ -10492,13 +19760,264 @@ export interface operations {
       };
     };
   };
+  v1_track_corrections_v1_evaluation_track_corrections_get: {
+    parameters: {
+      query?: {
+        job_id?: string | null;
+        action?: string | null;
+        q?: string | null;
+        created_since?: number | null;
+        created_until?: number | null;
+        sort_by?: string;
+        sort_order?: string;
+        limit?: number;
+        offset?: number | null;
+        cursor?: string | null;
+      };
+      header?: {
+        authorization?: string | null;
+        "x-api-key"?: string | null;
+        "x-tenant-id"?: string | null;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+    };
+  };
+  v1_create_track_correction_v1_evaluation_track_corrections_post: {
+    parameters: {
+      query?: never;
+      header?: {
+        authorization?: string | null;
+        "x-api-key"?: string | null;
+        "x-tenant-id"?: string | null;
+        "Idempotency-Key"?: string | null;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["TrackCorrectionCreateRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+    };
+  };
   v1_track_review_annotations_v1_evaluation_track_reviews_get: {
     parameters: {
       query?: {
         job_id?: string | null;
         track_id?: string | null;
         label?: string | null;
+        q?: string | null;
+        created_since?: number | null;
+        created_until?: number | null;
+        sort_by?: string;
+        sort_order?: string;
         limit?: number;
+        offset?: number | null;
+        cursor?: string | null;
       };
       header?: {
         authorization?: string | null;
@@ -10618,6 +20137,7 @@ export interface operations {
         authorization?: string | null;
         "x-api-key"?: string | null;
         "x-tenant-id"?: string | null;
+        "Idempotency-Key"?: string | null;
       };
       path?: never;
       cookie?: never;
@@ -10855,6 +20375,7 @@ export interface operations {
         authorization?: string | null;
         "x-api-key"?: string | null;
         "x-tenant-id"?: string | null;
+        "Idempotency-Key"?: string | null;
       };
       path?: never;
       cookie?: never;
@@ -11093,6 +20614,7 @@ export interface operations {
         authorization?: string | null;
         "x-api-key"?: string | null;
         "x-tenant-id"?: string | null;
+        "Idempotency-Key"?: string | null;
       };
       path?: never;
       cookie?: never;
@@ -11215,6 +20737,7 @@ export interface operations {
         authorization?: string | null;
         "x-api-key"?: string | null;
         "x-tenant-id"?: string | null;
+        "Idempotency-Key"?: string | null;
       };
       path?: never;
       cookie?: never;
@@ -11329,6 +20852,7 @@ export interface operations {
         authorization?: string | null;
         "x-api-key"?: string | null;
         "x-tenant-id"?: string | null;
+        "Idempotency-Key"?: string | null;
       };
       path?: never;
       cookie?: never;
@@ -11447,6 +20971,7 @@ export interface operations {
         authorization?: string | null;
         "x-api-key"?: string | null;
         "x-tenant-id"?: string | null;
+        "Idempotency-Key"?: string | null;
       };
       path?: never;
       cookie?: never;
@@ -11681,6 +21206,7 @@ export interface operations {
         authorization?: string | null;
         "x-api-key"?: string | null;
         "x-tenant-id"?: string | null;
+        "Idempotency-Key"?: string | null;
       };
       path: {
         person_id: string;
@@ -11797,6 +21323,7 @@ export interface operations {
         authorization?: string | null;
         "x-api-key"?: string | null;
         "x-tenant-id"?: string | null;
+        "Idempotency-Key"?: string | null;
       };
       path: {
         person_id: string;
@@ -11917,6 +21444,7 @@ export interface operations {
         authorization?: string | null;
         "x-api-key"?: string | null;
         "x-tenant-id"?: string | null;
+        "Idempotency-Key"?: string | null;
       };
       path?: never;
       cookie?: never;
@@ -12035,6 +21563,7 @@ export interface operations {
         authorization?: string | null;
         "x-api-key"?: string | null;
         "x-tenant-id"?: string | null;
+        "Idempotency-Key"?: string | null;
       };
       path?: never;
       cookie?: never;
@@ -12153,6 +21682,7 @@ export interface operations {
         authorization?: string | null;
         "x-api-key"?: string | null;
         "x-tenant-id"?: string | null;
+        "Idempotency-Key"?: string | null;
       };
       path?: never;
       cookie?: never;
@@ -12271,6 +21801,7 @@ export interface operations {
         authorization?: string | null;
         "x-api-key"?: string | null;
         "x-tenant-id"?: string | null;
+        "Idempotency-Key"?: string | null;
       };
       path?: never;
       cookie?: never;
@@ -12389,6 +21920,7 @@ export interface operations {
         authorization?: string | null;
         "x-api-key"?: string | null;
         "x-tenant-id"?: string | null;
+        "Idempotency-Key"?: string | null;
       };
       path?: never;
       cookie?: never;
@@ -12507,6 +22039,7 @@ export interface operations {
         authorization?: string | null;
         "x-api-key"?: string | null;
         "x-tenant-id"?: string | null;
+        "Idempotency-Key"?: string | null;
       };
       path?: never;
       cookie?: never;
@@ -12747,6 +22280,7 @@ export interface operations {
         authorization?: string | null;
         "x-api-key"?: string | null;
         "x-tenant-id"?: string | null;
+        "Idempotency-Key"?: string | null;
       };
       path?: never;
       cookie?: never;
@@ -12981,6 +22515,124 @@ export interface operations {
         authorization?: string | null;
         "x-api-key"?: string | null;
         "x-tenant-id"?: string | null;
+        "Idempotency-Key"?: string | null;
+      };
+      path: {
+        job_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+    };
+  };
+  v1_pause_video_job_v1_jobs__job_id__pause_post: {
+    parameters: {
+      query?: never;
+      header?: {
+        authorization?: string | null;
+        "x-api-key"?: string | null;
+        "x-tenant-id"?: string | null;
+        "Idempotency-Key"?: string | null;
       };
       path: {
         job_id: string;
@@ -13101,6 +22753,241 @@ export interface operations {
       path: {
         job_id: string;
       };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+    };
+  };
+  v1_resume_video_job_v1_jobs__job_id__resume_post: {
+    parameters: {
+      query?: never;
+      header?: {
+        authorization?: string | null;
+        "x-api-key"?: string | null;
+        "x-tenant-id"?: string | null;
+        "Idempotency-Key"?: string | null;
+      };
+      path: {
+        job_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["VideoJobResumeRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+    };
+  };
+  api_metadata_v1_meta_get: {
+    parameters: {
+      query?: never;
+      header?: {
+        authorization?: string | null;
+        "x-api-key"?: string | null;
+        "x-tenant-id"?: string | null;
+      };
+      path?: never;
       cookie?: never;
     };
     requestBody?: never;
@@ -13445,6 +23332,7 @@ export interface operations {
         authorization?: string | null;
         "x-api-key"?: string | null;
         "x-tenant-id"?: string | null;
+        "Idempotency-Key"?: string | null;
       };
       path: {
         model_id: string;
@@ -13561,6 +23449,7 @@ export interface operations {
         authorization?: string | null;
         "x-api-key"?: string | null;
         "x-tenant-id"?: string | null;
+        "Idempotency-Key"?: string | null;
       };
       path: {
         model_id: string;
@@ -13795,6 +23684,7 @@ export interface operations {
         authorization?: string | null;
         "x-api-key"?: string | null;
         "x-tenant-id"?: string | null;
+        "Idempotency-Key"?: string | null;
       };
       path?: never;
       cookie?: never;
@@ -14149,6 +24039,7 @@ export interface operations {
         authorization?: string | null;
         "x-api-key"?: string | null;
         "x-tenant-id"?: string | null;
+        "Idempotency-Key"?: string | null;
       };
       path: {
         stream_id: string;
@@ -14381,6 +24272,7 @@ export interface operations {
         authorization?: string | null;
         "x-api-key"?: string | null;
         "x-tenant-id"?: string | null;
+        "Idempotency-Key"?: string | null;
       };
       path: {
         stream_id: string;
@@ -14611,6 +24503,7 @@ export interface operations {
         authorization?: string | null;
         "x-api-key"?: string | null;
         "x-tenant-id"?: string | null;
+        "Idempotency-Key"?: string | null;
       };
       path: {
         profile: string;
@@ -14724,6 +24617,599 @@ export interface operations {
       };
     };
   };
+  v1_create_video_upload_v1_uploads_video_post: {
+    parameters: {
+      query?: never;
+      header?: {
+        "Idempotency-Key"?: string | null;
+        authorization?: string | null;
+        "x-api-key"?: string | null;
+        "x-tenant-id"?: string | null;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["VideoUploadCreateRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+    };
+  };
+  v1_get_video_upload_v1_uploads_video__upload_id__get: {
+    parameters: {
+      query?: never;
+      header?: {
+        authorization?: string | null;
+        "x-api-key"?: string | null;
+        "x-tenant-id"?: string | null;
+      };
+      path: {
+        upload_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+    };
+  };
+  v1_abort_video_upload_v1_uploads_video__upload_id__delete: {
+    parameters: {
+      query?: never;
+      header?: {
+        authorization?: string | null;
+        "x-api-key"?: string | null;
+        "x-tenant-id"?: string | null;
+        "Idempotency-Key"?: string | null;
+      };
+      path: {
+        upload_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+    };
+  };
+  v1_complete_video_upload_v1_uploads_video__upload_id__complete_post: {
+    parameters: {
+      query?: never;
+      header?: {
+        authorization?: string | null;
+        "x-api-key"?: string | null;
+        "x-tenant-id"?: string | null;
+        "Idempotency-Key"?: string | null;
+      };
+      path: {
+        upload_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["VideoUploadCompleteRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+    };
+  };
+  v1_put_video_upload_part_v1_uploads_video__upload_id__parts__part_number__put: {
+    parameters: {
+      query?: never;
+      header: {
+        "X-Chunk-Offset": number;
+        "X-Chunk-SHA256": string;
+        authorization?: string | null;
+        "x-api-key"?: string | null;
+        "x-tenant-id"?: string | null;
+        "Idempotency-Key"?: string | null;
+      };
+      path: {
+        upload_id: string;
+        part_number: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitSuccess_GenericData_"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+      /** @description Portrait Hub error envelope */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PortraitErrorResponse"];
+        };
+      };
+    };
+  };
   vision_infer_v1_vision_infer_post: {
     parameters: {
       query?: never;
@@ -14731,6 +25217,7 @@ export interface operations {
         authorization?: string | null;
         "x-api-key"?: string | null;
         "x-tenant-id"?: string | null;
+        "Idempotency-Key"?: string | null;
       };
       path?: never;
       cookie?: never;

@@ -7,7 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.api_contracts import ContractAPIRouter as APIRouter
 from app.portrait_async import run_blocking_io
 from app.portrait_audit import audit_event
-from app.portrait_auth import permission_dependency
+from app.portrait_auth import permission_dependency, require_step_up_authentication
 from app.portrait_gallery import (
     GALLERY,
     add_feature,
@@ -288,7 +288,10 @@ async def v1_gallery_patch_person(
     return portrait_success(request_id, {"person": person.public_dict(include_embeddings=False)})
 
 
-@router.delete("/v1/gallery/{person_id}", dependencies=[Depends(permission_dependency("gallery:write"))])
+@router.delete(
+    "/v1/gallery/{person_id}",
+    dependencies=[Depends(permission_dependency("gallery:write")), Depends(require_step_up_authentication)],
+)
 async def v1_gallery_delete_person(
     person_id: str,
     ctx: PortraitRequestContext = Depends(portrait_request_context),

@@ -1,0 +1,24 @@
+{
+  "schema_version": "1.0",
+  "template_id": "visitor-control",
+  "template_version": "1.0.0",
+  "evidence_status": "specification_only",
+  "customer_validation_required": true,
+  "fixture_policy": "synthetic_or_customer-approved-deidentified-only",
+  "cases": [
+    {
+      "case_id": "consented-visitor-match",
+      "input_contract": "synthetic-consented-visitor-pair-v1",
+      "required_capabilities": ["face_detection", "face_embedding"],
+      "expected_outcomes": ["comparison includes threshold, confidence, and model digest"],
+      "assertions": ["consent proof is required", "alternative non-face process is available"]
+    },
+    {
+      "case_id": "visitor-track-handoff",
+      "input_contract": "synthetic-visitor-sequence-v1",
+      "required_capabilities": ["tracking"],
+      "expected_outcomes": ["track evidence uses project-scoped identifiers"],
+      "assertions": ["prohibited privacy spaces excluded", "manual review and appeal remain available"]
+    }
+  ]
+}

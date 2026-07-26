@@ -1,3 +1,4 @@
+import json
 from collections.abc import Iterator
 
 import pytest
@@ -12,6 +13,7 @@ from app import (
     security,
 )
 from main import app
+from sdk.python.portrait_hub_client import PortraitHubClient
 
 
 @pytest.fixture(autouse=True)
@@ -54,6 +56,23 @@ def create_application(
     assert response.status_code == 200, response.text
     data = response.json()["data"]
     return data["application"], data["one_time_secret"]
+
+
+def test_application_allocation_expansion_detection() -> None:
+    current = {
+        "project_id": "default",
+        "status": "active",
+        "scopes": ["infer", "compare"],
+        "rate_limit_per_minute": 100,
+        "rate_limit_burst": 20,
+        "daily_quota": 1000,
+    }
+    assert not routes_portrait_access.application_allocation_expands(current, {"status": "disabled"})
+    assert not routes_portrait_access.application_allocation_expands(current, {"scopes": ["infer"]})
+    assert not routes_portrait_access.application_allocation_expands(current, {"daily_quota": 500})
+    assert routes_portrait_access.application_allocation_expands(current, {"scopes": ["infer", "jobs"]})
+    assert routes_portrait_access.application_allocation_expands(current, {"rate_limit_burst": None})
+    assert routes_portrait_access.application_allocation_expands(current, {"project_id": "other"})
 
 
 def test_access_tenant_catalog_creates_default_application() -> None:
@@ -245,11 +264,13 @@ def test_access_webhooks_validate_urls_hide_hashes_and_generate_sample_delivery(
 
     assert created.status_code == 200, created.text
     data = created.json()["data"]
-    assert data["one_time_secret"].startswith("whsec_")
+    signing_secret = data["one_time_secret"]
+    assert signing_secret.startswith("whsec_")
     webhook = data["webhook"]
     assert webhook["webhook_id"] == "events-primary"
     assert webhook["status"] == "active"
     assert "signing_secret_hash" not in webhook
+    assert "signing_secret_protected" not in webhook
 
     missing_app = client.post(
         "/v1/access/webhooks",
@@ -291,6 +312,16 @@ def test_access_webhooks_validate_urls_hide_hashes_and_generate_sample_delivery(
     assert delivery["delivery_status"] == "dry_run"
     assert delivery["headers"]["X-PortraitHub-Signature"].startswith("sha256=")
     assert delivery["body"]["tenant_id"] == "tenant-a"
+    serialized = json.dumps(
+        delivery["body"], ensure_ascii=False, separators=(",", ":"), sort_keys=True
+    ).encode("utf-8")
+    assert PortraitHubClient.verify_webhook_signature(
+        serialized,
+        delivery["headers"]["X-PortraitHub-Signature"],
+        signing_secret,
+        timestamp=delivery["headers"]["X-PortraitHub-Timestamp"],
+        now=int(delivery["headers"]["X-PortraitHub-Timestamp"]),
+    )
 
 
 def test_access_application_api_key_authenticates_with_scope(monkeypatch: pytest.MonkeyPatch) -> None:

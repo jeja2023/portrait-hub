@@ -26,6 +26,8 @@ def test_production_profile_requires_external_services(monkeypatch) -> None:
     monkeypatch.setattr(settings, "OPENTELEMETRY_ENABLED", False)
     monkeypatch.setattr(settings, "OTEL_EXPORTER_OTLP_ENDPOINT", "")
     monkeypatch.setattr(settings, "PORTRAIT_REQUIRE_PRODUCTION_MODEL_CAPABILITIES", False)
+    monkeypatch.setattr(settings, "COMMERCIAL_DELIVERY_PROFILE", "development")
+    monkeypatch.setattr(settings, "COMMERCIAL_ENTITLEMENT_ENFORCEMENT_ENABLED", False)
     monkeypatch.setattr(production_gates, "postgres_driver_available", lambda: False)
     monkeypatch.setattr(production_gates, "postgres_pool_available", lambda: False)
     monkeypatch.setattr(production_gates, "boto3", None)
@@ -46,6 +48,8 @@ def test_production_profile_requires_external_services(monkeypatch) -> None:
     assert any("API_TOKEN_TENANT_ID" in failure for failure in failures)
     assert "生产环境中 VIDEO_JOB_WORKER_IN_PROCESS 必须为 false" in failures
     assert "生产环境中 OPENTELEMETRY_ENABLED 必须为 true" in failures
+    assert "COMMERCIAL_DELIVERY_PROFILE must identify a production delivery profile" in failures
+    assert "COMMERCIAL_ENTITLEMENT_ENFORCEMENT_ENABLED must be true in production" in failures
 
 
 def test_production_profile_accepts_externalized_pgvector_stack(monkeypatch) -> None:
@@ -74,6 +78,9 @@ def test_production_profile_accepts_externalized_pgvector_stack(monkeypatch) -> 
     monkeypatch.setattr(settings, "OPENTELEMETRY_ENABLED", True)
     monkeypatch.setattr(settings, "OTEL_EXPORTER_OTLP_ENDPOINT", "http://otel:4318/v1/traces")
     monkeypatch.setattr(settings, "PORTRAIT_REQUIRE_PRODUCTION_MODEL_CAPABILITIES", True)
+    monkeypatch.setattr(settings, "COMMERCIAL_DELIVERY_PROFILE", "platform_api")
+    monkeypatch.setattr(settings, "COMMERCIAL_ENTITLEMENT_ENFORCEMENT_ENABLED", True)
+    monkeypatch.setattr(settings, "COMMERCIAL_LICENSE_REQUIRED", False)
     monkeypatch.setattr(production_gates, "postgres_driver_available", lambda: True)
     monkeypatch.setattr(production_gates, "postgres_pool_available", lambda: True)
     monkeypatch.setattr(production_gates, "boto3", object())
@@ -82,6 +89,24 @@ def test_production_profile_accepts_externalized_pgvector_stack(monkeypatch) -> 
 
     assert production_gates.production_externalization_failures() == []
     production_gates.validate_production_externalization()
+
+
+def test_private_production_profile_requires_signed_license_mounts(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr(settings, "PORTRAIT_RUNTIME_PROFILE", "production")
+    monkeypatch.setattr(settings, "PRODUCTION_EXTERNAL_SERVICES_REQUIRED", True)
+    monkeypatch.setattr(settings, "COMMERCIAL_DELIVERY_PROFILE", "private_standard")
+    monkeypatch.setattr(settings, "COMMERCIAL_ENTITLEMENT_ENFORCEMENT_ENABLED", True)
+    monkeypatch.setattr(settings, "COMMERCIAL_LICENSE_REQUIRED", False)
+    monkeypatch.setattr(settings, "COMMERCIAL_LICENSE_INSTANCE_ID", "")
+    monkeypatch.setattr(settings, "COMMERCIAL_LICENSE_PATH", tmp_path / "missing-license.json")
+    monkeypatch.setattr(settings, "COMMERCIAL_LICENSE_PUBLIC_KEY_PATH", tmp_path / "missing-public.pem")
+
+    failures = production_gates.production_externalization_failures()
+
+    assert "private production profiles require COMMERCIAL_LICENSE_REQUIRED=true" in failures
+    assert "private production profiles require COMMERCIAL_LICENSE_INSTANCE_ID" in failures
+    assert "private production profiles require a mounted commercial license" in failures
+    assert "private production profiles require a mounted commercial license public key" in failures
 
 
 def test_production_profile_rejects_request_limit_below_video_limit(monkeypatch) -> None:

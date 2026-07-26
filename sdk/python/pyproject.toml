@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "portrait-hub-sdk"
+version = "0.18.0"
+description = "Official Python SDK for the PortraitHub v1 API"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "Proprietary" }
+authors = [{ name = "PortraitHub" }]
+classifiers = [
+  "Development Status :: 5 - Production/Stable",
+  "Programming Language :: Python :: 3",
+  "Typing :: Typed",
+]
+
+[tool.setuptools]
+py-modules = ["portrait_hub_client"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["portrait_hub_sdk*"]
+
+[tool.setuptools.package-data]
+portrait_hub_sdk = ["py.typed"]

@@ -7,16 +7,136 @@ from uuid import uuid4
 import yaml
 from fastapi import HTTPException, status
 
+from app.model_config_loader import configured_alias_targets
 from app.model_config_resolver import alias_target
 from app.model_refs import INVALID_ALIAS_NAME_DETAIL, validate_model_target, validate_path_name
 from app.observability import logger
 from app.portrait_response import exception_log_summary
 from app.rollout_audit import write_rollout_audit
-from app.settings import MODEL_CONFIG_PATH
+from app.settings import MODEL_CONFIG_HISTORY_DIR, MODEL_CONFIG_PATH
 
 
 def model_config_path_fingerprint(path: Path) -> str:
     return hashlib.sha256(str(path).encode("utf-8")).hexdigest()[:16]
+
+
+def model_config_document_fingerprint(raw: dict[str, Any]) -> str:
+    canonical = yaml.safe_dump(raw, allow_unicode=True, sort_keys=True)
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def validate_model_config_document(raw: dict[str, Any]) -> dict[str, Any]:
+    models = models_mapping(raw)
+    aliases = raw.get("aliases", {})
+    if not isinstance(aliases, dict):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="aliases must be a mapping")
+    for model_id, config in models.items():
+        if not isinstance(model_id, str):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="model ids must be strings")
+        validate_model_target(model_id)
+        if not isinstance(config, dict):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="model configs must be mappings")
+    for alias_name, alias_config in aliases.items():
+        if not isinstance(alias_name, str):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="alias names must be strings")
+        validate_alias_name(alias_name)
+        try:
+            targets = configured_alias_targets(alias_name, alias_config)
+        except ValueError as exc:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="alias config is invalid") from exc
+        missing = [target for target in targets if target not in models]
+        if missing:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="alias target is not configured",
+            )
+    return raw
+
+
+def model_config_diff(before: Any, after: Any, path: str = "$") -> list[dict[str, Any]]:
+    if isinstance(before, dict) and isinstance(after, dict):
+        changes: list[dict[str, Any]] = []
+        for key in sorted(set(before) | set(after), key=str):
+            child_path = f"{path}.{key}"
+            if key not in before:
+                changes.append({"path": child_path, "change": "added", "after": after[key]})
+            elif key not in after:
+                changes.append({"path": child_path, "change": "removed", "before": before[key]})
+            else:
+                changes.extend(model_config_diff(before[key], after[key], child_path))
+        return changes
+    if isinstance(before, list) and isinstance(after, list):
+        if before == after:
+            return []
+        return [{"path": path, "change": "changed", "before": before, "after": after}]
+    if before != after:
+        return [{"path": path, "change": "changed", "before": before, "after": after}]
+    return []
+
+
+def save_model_config_snapshot(raw: dict[str, Any]) -> str:
+    fingerprint = model_config_document_fingerprint(raw)
+    MODEL_CONFIG_HISTORY_DIR.mkdir(parents=True, exist_ok=True)
+    snapshot_path = MODEL_CONFIG_HISTORY_DIR / f"{fingerprint}.yml"
+    if not snapshot_path.exists():
+        temp_path = snapshot_path.with_name(f".{snapshot_path.name}.{uuid4().hex}.tmp")
+        try:
+            with temp_path.open("x", encoding="utf-8") as file:
+                yaml.safe_dump(raw, file, allow_unicode=True, sort_keys=False)
+            os.replace(temp_path, snapshot_path)
+        finally:
+            temp_path.unlink(missing_ok=True)
+    return fingerprint
+
+
+def load_model_config_snapshot(fingerprint: str) -> dict[str, Any]:
+    normalized = fingerprint.strip().lower()
+    if len(normalized) != 64 or any(char not in "0123456789abcdef" for char in normalized):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="config fingerprint is invalid")
+    snapshot_path = MODEL_CONFIG_HISTORY_DIR / f"{normalized}.yml"
+    if not snapshot_path.is_file():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="config snapshot was not found")
+    try:
+        raw = yaml.safe_load(snapshot_path.read_text(encoding="utf-8")) or {}
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="config snapshot could not be read",
+        ) from exc
+    if not isinstance(raw, dict) or model_config_document_fingerprint(raw) != normalized:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="config snapshot digest mismatch")
+    return validate_model_config_document(raw)
+
+
+def preview_model_config_change(candidate: dict[str, Any]) -> dict[str, Any]:
+    current = load_raw_model_config()
+    validate_model_config_document(candidate)
+    return {
+        "current_fingerprint": model_config_document_fingerprint(current),
+        "candidate_fingerprint": model_config_document_fingerprint(candidate),
+        "changes": model_config_diff(current, candidate),
+    }
+
+
+def apply_model_config_document(
+    candidate: dict[str, Any],
+    *,
+    expected_current_fingerprint: str,
+) -> dict[str, Any]:
+    current = load_raw_model_config()
+    current_fingerprint = model_config_document_fingerprint(current)
+    if current_fingerprint != expected_current_fingerprint.strip().lower():
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="model config changed concurrently")
+    preview = preview_model_config_change(candidate)
+    previous_fingerprint = save_model_config_snapshot(current)
+    write_raw_model_config(candidate)
+    candidate_fingerprint = save_model_config_snapshot(candidate)
+    return {
+        **preview,
+        "previous_fingerprint": previous_fingerprint,
+        "applied_fingerprint": candidate_fingerprint,
+        "written": True,
+    }
 
 
 def load_raw_model_config() -> dict[str, Any]:
@@ -328,6 +448,46 @@ def configure_weighted_alias_rollout(
     if not dry_run:
         commit_model_config_with_audit(raw, previous_raw, "alias_weighted_rollout", result)
 
+    return result
+
+
+def configure_alias_shadow(
+    alias_name: str,
+    target_model_id: str | None,
+    *,
+    traffic_percentage: int = 100,
+    dry_run: bool = False,
+) -> dict[str, Any]:
+    alias_name = validate_alias_name(alias_name)
+    raw = load_raw_model_config()
+    previous_raw = yaml.safe_load(yaml.safe_dump(raw, allow_unicode=True, sort_keys=False)) or {}
+    models = models_mapping(raw)
+    aliases = aliases_mapping(raw)
+    alias_config = aliases.get(alias_name)
+    if alias_config is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="alias was not found")
+    current_target = current_alias_target(alias_name, alias_config)
+    next_config = dict(alias_config) if isinstance(alias_config, dict) else {"target": current_target}
+    if target_model_id is None:
+        next_config.pop("shadow_target", None)
+        next_config.pop("shadow_percentage", None)
+    else:
+        target_model_id = validate_configured_target(target_model_id, models)
+        if target_model_id == current_target:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="shadow target must differ from active target")
+        next_config["shadow_target"] = target_model_id
+        next_config["shadow_percentage"] = max(1, min(100, int(traffic_percentage)))
+    aliases[alias_name] = next_config
+    result = {
+        "alias": alias_name,
+        "active_target": current_target,
+        "shadow_target": target_model_id,
+        "shadow_percentage": next_config.get("shadow_percentage", 0),
+        "dry_run": dry_run,
+        "written": not dry_run,
+    }
+    if not dry_run:
+        commit_model_config_with_audit(raw, previous_raw, "alias_shadow_configured", result)
     return result
 
 

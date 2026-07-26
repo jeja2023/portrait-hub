@@ -1,11 +1,13 @@
 # Console Next 验收报告
 
-- 验收日期：2026-07-22
-- 发布版本：0.17.0
-- 验收对象：frontend/console-next 项目会话上下文、统一响应/OpenAPI 类型、既有控制台功能、生产静态入口与版本元数据
-- 结论：0.17.0 项目上下文和强结构化契约接入已完成；Console Next 继续作为唯一生产入口。生产上线仍需执行组织审批、镜像回退演练，并验证共享外部服务、生产 OIDC 项目 claim 和真实模型目录。
+- 验收日期：2026-07-26
+- 发布版本：0.18.0
+- 验收对象：frontend/console-next 商业运营、服务质量、合规、模型注册、Webhook 投递调试、既有产品路由、响应式布局与版本元数据
+- 结论：0.18.0 仓库内控制台功能和自动化验收已完成；Console Next 继续作为唯一生产入口。目标环境仍需完成真实模型、共享后端、OIDC、镜像回退、集群故障恢复和组织审批。
 
 
+> 2026-07-26 / 0.18.0 验收：商业运营、服务质量、合规、模型注册和 Webhook 投递调试入口完成；列表状态、高风险确认和响应式布局通过；Vitest 44 tests、Node SDK、ESLint、Vue TypeScript、Vite build 及 Playwright 五项目 40 tests 通过。
+>
 > 2026-07-22 / 0.17.0 验收：会话保存当前项目并在非默认项目请求中发送 `X-Project-ID`；能力上下文、WebSocket 和统一响应契约同步项目语义；OpenAPI TypeScript 类型重新生成；Vitest 9 files / 36 tests、Node SDK、ESLint、Vue TypeScript 与 Vite production build 通过。
 >
 > 2026-07-22 / 0.16.0 验收：侧栏隐藏垂直滚动条且桌面菜单间隔收紧；全项目 19 个原生表和 4 个 Element Plus 表统一显示序号；配置中心全部配置表格具备边框、分页和分类排序；Vitest 9 files / 35 tests、ESLint、Vue TypeScript 与 Vite production build 通过。
@@ -20,6 +22,17 @@
 > 2026-07-18 / 0.11.2 补充验收：二次复核修复 WS query 主凭证回退、`/v1/*` no-store、默认 CSP、流详情深链、meta.nav 导航、aria-live、错误横幅 request_id、值级脱敏与搜索质量分；新增 me auth_kind×3、403、ws-ticket 401/stream/TTL、空库契约测试，并完成 typecheck、ruff、pytest、npm check、Playwright E2E 与 diff check。
 
 > 2026-07-18 / 0.11.1 补充验收：deploy_check --import-app 已新增旧源码目录缺失断言，duplicate /v1 检查改为扫描 frontend/console-next/src；平台 strict readiness 同步阻断旧灰度变量、旧静态路径和旧 DOM 标记回归。
+
+## 0.18.0 增量验收
+
+| 范围 | 完成状态 | 关键检查 |
+| --- | --- | --- |
+| 商业运营 | 完成 | 客户状态、授权版本、计量/成本、预算、配额预测、支持与关闭流程 |
+| 服务质量与合规 | 完成 | SLA/事件、COM-001 至 COM-012、数据权利和签名证据状态 |
+| 模型与反馈 | 完成 | 注册、审批、发布/回滚、反馈分析、阈值建议和候选决策 |
+| Webhook 调试 | 完成 | 投递尝试、签名、重试、死信、人工重投和项目隔离 |
+| 交互与响应式 | 完成 | 加载/空/错、分页连续序号、高风险确认、桌面/平板/移动端 |
+| 自动化门禁 | 完成 | Vitest 44 tests；Playwright 五项目 40 tests；ESLint、类型与 build 通过 |
 
 ## 0.17.0 增量验收
 
@@ -76,21 +89,22 @@
 
 | 检查 | 结果 |
 |---|---|
+| 0.18.0 发布验证 | Pytest 746 passed / 6 skipped；严格 mypy 215 sources；Vitest 44 tests；Playwright 五项目 40 passed；Node SDK、Ruff、ESLint、Vue TypeScript、Vite build、deploy_check、平台 strict readiness、OpenAPI 兼容、支持矩阵与 diff check 通过 |
 | 0.17.0 发布验证 | Pytest 601 passed / 4 skipped；严格 mypy 187 sources；Vitest 9 files / 36 tests；Node SDK、Ruff、ESLint、Vue TypeScript、Vite build、deploy_check、平台 strict readiness 与 diff check 通过 |
 | 0.14.0 发布验证 | Pytest 567 passed / 4 skipped；Vitest 8 files / 32 tests；Playwright 五项目 15 passed；四种 SDK、GPU/CPU Compose、Vue TypeScript、ESLint、Vite production build、浏览器响应式/Logo 验收和 diff check 通过 |
 | 0.13.0 发布验证 | Pytest 563 passed / 4 skipped；OIDC/本地登录专项 23 passed；Vitest 6 files / 19 tests；Vue TypeScript、ESLint、Vite production build、Compose config、diff check、本机浏览器登录验收和 /ready/deep version=0.13.0 通过 |
 | 0.12.1 发布验证 | Python strict typecheck 177 sources、Ruff、Pytest 549 passed / 4 skipped、npm check、Vitest 6 files / 18 tests、Playwright 15 passed / 0 skipped、deploy_check、平台 strict readiness 与 diff check 均通过 |
-| Python 全量回归 | 601 passed / 4 skipped；Python SDK 通过 |
+| Python 全量回归 | 746 passed / 6 skipped；Python SDK 0.18.0 干净环境实时烟测通过 |
 | Node SDK | 通过 |
 | npm test | 通过，Node SDK + console:check 标准入口 |
 | Go SDK | 当前验证机无 Go 可执行文件，未重复运行；版本和项目参数静态契约通过 |
 | Java SDK | 当前验证机无 Maven 可执行文件，未重复运行；Maven 版本和项目参数静态契约通过 |
 | ESLint | 通过，0 warning |
-| Python 类型门禁 | 严格 mypy 187 个源文件通过 |
+| Python 类型门禁 | 严格 mypy 215 个源文件通过 |
 | Vue TypeScript | 通过 |
-| Vitest | 9 files，36 passed |
+| Vitest | 44 passed |
 | Vite production build | 通过，随 npm run check 完成 |
-| Playwright | 0.17.0 未重复运行；0.14.0 历史验收为 15 passed / 0 skipped |
+| Playwright | 五个浏览器/视口项目共 40 passed |
 | 平台严格 readiness | 通过，strict_failure_count=0 |
 | deploy_check | 通过，--json --import-app ok=true |
 

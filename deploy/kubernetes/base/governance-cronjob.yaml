@@ -1,0 +1,53 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: portrait-governance-scheduler
+spec:
+  schedule: "17 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 5
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: portrait-governance-scheduler
+            app.kubernetes.io/component: maintenance
+        spec:
+          restartPolicy: Never
+          serviceAccountName: portrait-hub
+          automountServiceAccountToken: false
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 10001
+            runAsGroup: 10001
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: governance-scheduler
+              image: ghcr.io/example/portrait-hub@sha256:0000000000000000000000000000000000000000000000000000000000000000
+              command: ["python", "-m", "tools.portrait_governance_scheduler", "--once"]
+              env:
+                - name: PORTRAIT_BASE_URL
+                  value: http://portrait-hub-api:8000
+                - name: PORTRAIT_GOVERNANCE_TENANT
+                  value: default
+                - name: DATA_RETENTION_DAYS
+                  value: "90"
+              envFrom:
+                - secretRef:
+                    name: portrait-hub-secrets
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 128Mi
+                limits:
+                  cpu: 500m
+                  memory: 512Mi
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop: [ALL]
+                readOnlyRootFilesystem: true

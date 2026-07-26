@@ -165,7 +165,7 @@ def check_state_integrity(root: Path) -> list[dict[str, Any]]:
         {
             "name": "security:tenant_scoped_background_jobs",
             "ok": (
-                '"tenant_id": tenant_id' in portrait_job_routes
+                '"tenant_id": job.tenant_id' in portrait_job_routes
                 and '"input_ref": input_ref' in portrait_job_routes
                 and "stage_video_upload" in portrait_job_routes
                 and "background_tasks.add_task(" not in portrait_job_routes

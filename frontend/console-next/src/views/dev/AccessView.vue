@@ -16,6 +16,7 @@ import {
 } from "element-plus";
 
 import { apiRequest, jsonBody } from "../../api/client";
+import type { WebhookDelivery } from "../../api/contracts";
 import DataTablePagination from "../../components/DataTablePagination.vue";
 import DangerConfirm from "../../components/DangerConfirm.vue";
 import EmptyState from "../../components/EmptyState.vue";
@@ -24,6 +25,13 @@ import { errorBannerMessage } from "../../utils/errors";
 import { eventLabel, formatTimestamp, statusLabel } from "../../utils/format";
 import { useRouteTab } from "../../utils/routeState";
 import { useTablePagination } from "../../utils/tablePagination";
+import {
+  canRetryWebhookDelivery,
+  webhookAttemptResponse,
+  webhookAttemptTriggerLabel,
+  webhookDeliveryStatusLabel,
+  webhookSignatureStatusLabel,
+} from "../../utils/webhookDeliveries";
 
 interface ApplicationRow {
   app_id: string;
@@ -57,11 +65,16 @@ const capabilities = useCapabilitiesStore();
 const tab = useRouteTab("applications");
 const loading = ref(true);
 const actionLoading = ref(false);
+const deliveriesLoading = ref(false);
+const retryLoading = ref(false);
 const errorMessage = ref("");
+const deliveryErrorMessage = ref("");
 const applications = ref<ApplicationRow[]>([]);
 const applicationsPager = useTablePagination(applications);
 const webhooks = ref<WebhookRow[]>([]);
 const webhooksPager = useTablePagination(webhooks);
+const deliveries = ref<WebhookDelivery[]>([]);
+const deliveriesPager = useTablePagination(deliveries);
 const appDialogOpen = ref(false);
 const editDialogOpen = ref(false);
 const editingApp = ref<ApplicationRow | null>(null);
@@ -73,6 +86,9 @@ const rotateType = ref<"application" | "webhook">("application");
 const rotateId = ref("");
 const oneTimeSecret = ref("");
 const secretDialogOpen = ref(false);
+const retryConfirmOpen = ref(false);
+const retryingDelivery = ref<WebhookDelivery | null>(null);
+const deliveryFilters = reactive({ webhook_id: "", status: "" });
 const appForm = reactive({
   name: "",
   owner: "",
@@ -127,6 +143,29 @@ async function load(): Promise<void> {
   } finally {
     loading.value = false;
   }
+}
+
+async function loadDeliveries(): Promise<void> {
+  deliveriesLoading.value = true;
+  deliveryErrorMessage.value = "";
+  const query = new URLSearchParams({ limit: "500" });
+  if (deliveryFilters.webhook_id) query.set("webhook_id", deliveryFilters.webhook_id);
+  if (deliveryFilters.status) query.set("status", deliveryFilters.status);
+  try {
+    const payload = await apiRequest<{ deliveries: WebhookDelivery[] }>(
+      "/v1/access/webhook-deliveries?" + query.toString(),
+    );
+    deliveries.value = payload.deliveries;
+  } catch (error) {
+    deliveries.value = [];
+    deliveryErrorMessage.value = errorBannerMessage(error, "Webhook 交付记录加载失败");
+  } finally {
+    deliveriesLoading.value = false;
+  }
+}
+
+async function loadAll(): Promise<void> {
+  await Promise.all([load(), loadDeliveries()]);
 }
 
 function splitList(value: string): string[] {
@@ -343,6 +382,31 @@ async function sendSample(webhookId: string): Promise<void> {
   }
 }
 
+function requestDeliveryRetry(delivery: WebhookDelivery): void {
+  retryingDelivery.value = delivery;
+  retryConfirmOpen.value = true;
+}
+
+async function retryDelivery(): Promise<void> {
+  if (!retryingDelivery.value) return;
+  retryLoading.value = true;
+  deliveryErrorMessage.value = "";
+  try {
+    await apiRequest(
+      "/v1/access/webhook-deliveries/" + encodeURIComponent(retryingDelivery.value.delivery_id) + "/retry",
+      { method: "POST" },
+      75_000,
+    );
+    retryConfirmOpen.value = false;
+    ElMessage.success("Webhook 已重新投递");
+    await loadDeliveries();
+  } catch (error) {
+    deliveryErrorMessage.value = errorBannerMessage(error, "Webhook 重新投递失败");
+  } finally {
+    retryLoading.value = false;
+  }
+}
+
 function revealSecret(secret: string): void {
   oneTimeSecret.value = secret;
   secretDialogOpen.value = true;
@@ -355,7 +419,7 @@ function clearSecret(): void {
   oneTimeSecret.value = "";
 }
 
-onMounted(() => void load());
+onMounted(() => void loadAll());
 </script>
 
 <template>
@@ -366,9 +430,9 @@ onMounted(() => void load());
         <p>管理应用访问范围、调用状态与事件回调。</p>
       </div>
       <div class="page-actions">
-        <ElButton :icon="RefreshCw" :loading="loading" @click="load">刷新</ElButton>
+        <ElButton :icon="RefreshCw" :loading="loading || deliveriesLoading" @click="loadAll">刷新</ElButton>
         <ElButton
-          v-if="capabilities.hasPermission('access:write')"
+          v-if="capabilities.hasPermission('access:write') && tab !== 'deliveries'"
           type="primary"
           :icon="Plus"
           @click="tab === 'applications' ? (appDialogOpen = true) : (webhookDialogOpen = true)"
@@ -513,6 +577,140 @@ onMounted(() => void load());
             v-model:page="webhooksPager.page"
             v-model:page-size="webhooksPager.pageSize"
             :total="webhooksPager.total"
+          />
+        </ElTabPane>
+
+        <ElTabPane label="交付记录" name="deliveries">
+          <div class="delivery-toolbar">
+            <ElSelect
+              v-model="deliveryFilters.webhook_id"
+              clearable
+              placeholder="全部回调"
+              aria-label="按回调筛选交付记录"
+              @change="loadDeliveries"
+            >
+              <ElOption
+                v-for="hook in webhooks"
+                :key="hook.webhook_id"
+                :label="hook.name"
+                :value="hook.webhook_id"
+              />
+            </ElSelect>
+            <ElSelect
+              v-model="deliveryFilters.status"
+              clearable
+              placeholder="全部状态"
+              aria-label="按状态筛选交付记录"
+              @change="loadDeliveries"
+            >
+              <ElOption label="待投递" value="pending" />
+              <ElOption label="投递中" value="delivering" />
+              <ElOption label="等待重试" value="retrying" />
+              <ElOption label="已送达" value="delivered" />
+              <ElOption label="投递失败" value="failed" />
+              <ElOption label="死信" value="dead_letter" />
+            </ElSelect>
+            <ElButton :icon="RefreshCw" :loading="deliveriesLoading" @click="loadDeliveries">刷新记录</ElButton>
+          </div>
+
+          <div v-if="deliveryErrorMessage" class="delivery-error" role="alert">
+            <ElAlert :title="deliveryErrorMessage" type="error" show-icon :closable="false" />
+            <ElButton @click="loadDeliveries">重新加载</ElButton>
+          </div>
+
+          <ElSkeleton :loading="deliveriesLoading" :rows="7" animated>
+            <EmptyState
+              v-if="!deliveryErrorMessage && deliveries.length === 0"
+              title="没有符合条件的交付记录"
+              description="事件首次投递后，会在这里显示每次尝试、HTTP 响应和签名状态。"
+            />
+            <div v-else-if="deliveries.length" class="table-wrap">
+              <table class="data-table delivery-table">
+                <thead>
+                  <tr>
+                    <th class="sequence-column">序号</th>
+                    <th>交付 / 事件</th>
+                    <th>回调 / 地址</th>
+                    <th>状态 / 时间</th>
+                    <th>尝试 / HTTP 响应</th>
+                    <th>签名状态</th>
+                    <th>重试 / 死信</th>
+                    <th>操作</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="(delivery, index) in deliveriesPager.items" :key="delivery.delivery_id">
+                    <td class="sequence-column">{{ deliveriesPager.startIndex + index + 1 }}</td>
+                    <td>
+                      <strong>{{ eventLabel(delivery.event) }}</strong><br />
+                      <code>{{ delivery.delivery_id }}</code><br />
+                      <small>资源 {{ delivery.resource_id || "--" }}</small><br />
+                      <small>请求 {{ delivery.request_id || "--" }}</small>
+                    </td>
+                    <td>
+                      <code>{{ delivery.webhook_id }}</code><br />
+                      <span class="delivery-endpoint">{{ delivery.endpoint || "--" }}</span>
+                    </td>
+                    <td>
+                      <span class="status-pill" :data-status="delivery.status">{{
+                        webhookDeliveryStatusLabel(delivery.status)
+                      }}</span>
+                      <br /><small>创建 {{ formatTimestamp(delivery.created_at) }}</small>
+                      <br /><small>更新 {{ formatTimestamp(delivery.updated_at) }}</small>
+                    </td>
+                    <td>
+                      <div v-if="delivery.attempts?.length" class="attempt-list">
+                        <div v-for="attempt in delivery.attempts" :key="attempt.attempt" class="attempt-row">
+                          <span>#{{ attempt.attempt }} · {{ webhookAttemptTriggerLabel(attempt.trigger) }}</span>
+                          <strong :data-success="attempt.success">{{ webhookAttemptResponse(attempt) }}</strong>
+                          <small>{{ formatTimestamp(attempt.finished_at) }}</small>
+                        </div>
+                      </div>
+                      <span v-else>尚未尝试</span>
+                    </td>
+                    <td>
+                      <strong>{{ webhookSignatureStatusLabel(delivery.signature_status) }}</strong><br />
+                      <small>{{ delivery.signature_algorithm || "算法未记录" }}</small>
+                    </td>
+                    <td>
+                      <template v-if="delivery.next_retry_at">
+                        <strong>下次重试</strong><br />{{ formatTimestamp(delivery.next_retry_at) }}
+                      </template>
+                      <template v-else-if="delivery.dead_letter || delivery.status === 'dead_letter'">
+                        <strong class="dead-letter-text">{{
+                          delivery.dead_letter_reason === "retry_exhausted"
+                            ? "重试次数已耗尽"
+                            : delivery.dead_letter_reason || "已进入死信"
+                        }}</strong>
+                        <br /><small>{{ formatTimestamp(delivery.dead_lettered_at) }}</small>
+                      </template>
+                      <template v-else>
+                        <span>无需调度</span>
+                      </template>
+                      <br /><small v-if="delivery.manual_retry_count">手动重试 {{ delivery.manual_retry_count }} 次</small>
+                    </td>
+                    <td>
+                      <ElButton
+                        v-if="
+                          capabilities.hasPermission('access:write') && canRetryWebhookDelivery(delivery.status)
+                        "
+                        text
+                        :icon="RefreshCw"
+                        @click="requestDeliveryRetry(delivery)"
+                        >重新投递</ElButton
+                      >
+                      <span v-else>--</span>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </ElSkeleton>
+          <DataTablePagination
+            v-if="deliveries.length"
+            v-model:page="deliveriesPager.page"
+            v-model:page-size="deliveriesPager.pageSize"
+            :total="deliveriesPager.total"
           />
         </ElTabPane>
       </ElTabs>
@@ -692,6 +890,20 @@ onMounted(() => void load());
       @confirm="rotateSecret"
     />
 
+    <DangerConfirm
+      v-model="retryConfirmOpen"
+      title="重新投递 Webhook"
+      :description="
+        '将使用相同的交付 ID 和原始请求标识重新发送 ' +
+        (retryingDelivery?.delivery_id || '') +
+        '。接收方必须按幂等键去重。'
+      "
+      high-risk
+      confirmation-text="重试投递"
+      :loading="retryLoading"
+      @confirm="retryDelivery"
+    />
+
     <ElDialog
       v-model="secretDialogOpen"
       title="一次性密钥"
@@ -769,5 +981,80 @@ onMounted(() => void load());
   gap: 6px;
   color: #62706d;
   font-size: 12px;
+}
+.delivery-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.delivery-toolbar .el-select {
+  width: 210px;
+}
+.delivery-error {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.delivery-error .el-alert {
+  flex: 1;
+}
+.delivery-table {
+  min-width: 1320px;
+}
+.delivery-endpoint {
+  display: inline-block;
+  max-width: 220px;
+  overflow-wrap: anywhere;
+}
+.attempt-list {
+  display: grid;
+  min-width: 230px;
+  gap: 7px;
+}
+.attempt-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #e5ebe9;
+}
+.attempt-row:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+.attempt-row small {
+  grid-column: 1 / -1;
+}
+.attempt-row strong[data-success="false"],
+.dead-letter-text {
+  color: #98202b;
+}
+.attempt-row strong[data-success="true"] {
+  color: #17643b;
+}
+.status-pill[data-status="delivered"] {
+  color: #17643b;
+  background: #e2f3e9;
+}
+.status-pill[data-status="delivering"],
+.status-pill[data-status="retrying"] {
+  color: #875407;
+  background: #fff0d5;
+}
+.status-pill[data-status="dead_letter"] {
+  color: #98202b;
+  background: #fde7e9;
+}
+@media (max-width: 720px) {
+  .delivery-toolbar .el-select,
+  .delivery-toolbar .el-button {
+    width: 100%;
+  }
+  .delivery-error {
+    align-items: stretch;
+    flex-direction: column;
+  }
 }
 </style>

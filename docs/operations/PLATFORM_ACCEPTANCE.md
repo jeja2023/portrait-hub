@@ -1,6 +1,6 @@
 # PortraitHub 平台验收
 
-本文档定义 0.17.0 平台能力版本的验收范围。
+本文档定义 0.18.0 商业产品能力版本的仓库验收范围，并明确区分自动化完成、目标环境观察和人工审批。
 
 ## 范围
 
@@ -13,12 +13,18 @@
 - 旧调用未选择项目时使用 `default`，API Key/JWT/OIDC 不能越权选择其他项目。
 - PostgreSQL 访问状态 CAS、原子日配额、调用日志/摘要以及连接池并发行为通过真实容器集成测试。
 - Console Next 与 Python、Node、Go、Java SDK 的项目头和版本元数据一致。
+- 商业客户状态、授权版本、离线许可证、并发分配、支持和关闭流程具备幂等、CAS、审计与回滚语义。
+- 不可变计量、冲正、日/月聚合、成本模型、预算状态和配额预测使用一致事件源。
+- 调度、模型注册、可信热更新、影子推理、反馈分析、视频续传和 Webhook 投递治理通过定向回归。
+- 近期交互认证、COM-001 至 COM-012 专属语义、数据权利删除证明和签名证据包不能被非交互式凭证绕过。
+- Kubernetes 发布物、支持矩阵、OpenAPI 兼容、商业迁移、发布前检查和 SDK 干净环境烟测通过。
 
-以下内容明确不纳入本次验收范围：
+以下内容属于生产验收，不能由本地仓库自动化代替：
 
 - 用生产级模型替换兜底或占位模型能力。
 - 使用真实 Qdrant、S3 兼容对象存储和 Redis 部署执行完整端到端生产数据栈演练。
 - 执行真实运维演练，例如生产压测、故障注入、备份恢复演练、镜像扫描门禁、漏洞门禁、GPU OOM 演练、告警验证和回滚彩排。
+- 法律适用性、隐私影响评估、安全/产品/交付审批、客户验收和 30 天服务质量观察。
 
 ## 验收门禁
 
@@ -30,6 +36,10 @@ python tools\type_check.py
 npm run check
 python tools\deploy_check.py --import-app --json
 python tools\portrait_production_readiness.py --scope platform --strict
+python tools\openapi_compatibility_check.py
+python tools\portrait_support_matrix.py --json
+python tools\portrait_sdk_clean_smoke.py
+python tools\portrait_upgrade_traceability.py
 git diff --check
 ```
 
@@ -50,6 +60,18 @@ python tools\portrait_production_readiness.py --strict
 ```
 
 在被排除的真实模型能力完成模型接入，且真实数据与运维验证已在本次受限平台验收之外执行之前，不得将该完整门禁视为完成。
+
+## 0.18.0 验证记录
+
+- Python：`746 passed / 6 skipped`；Ruff 全量通过；严格 mypy `215` 个源文件通过。
+- Console Next：Vitest `44` 个用例、Node SDK、ESLint、Vue TypeScript 和 Vite production build 通过。
+- Playwright：Chromium 桌面/平板/移动端、Firefox 桌面和 WebKit 桌面共 `40 passed`，覆盖商业运营、Webhook 调试、确认对话框和全部产品路由。
+- OpenAPI：154 条当前路径对比 147 条 0.17.0 基线路径，0 个破坏性变更。
+- Kubernetes：稳定/灰度使用不同不可变 SHA256 镜像，27 个资源物化和静态验证通过；目标集群行为演练未执行。
+- Python 0.18.0 wheel 在全新虚拟环境无依赖安装并从该环境导入，连接隔离服务完成健康与 API 兼容烟测。
+- 商业生命周期、授权、不可变计量、冲正、聚合、成本、预算、配额、反馈、模型、模板、视频、Webhook、step-up 和合规门禁定向回归通过。
+- 部署检查、平台范围严格就绪、支持矩阵、升级追踪结构校验和差异空白检查通过。
+- 完整严格门禁仍缺少 `appearance`、`face_detection`、`face_embedding`、`gait`、`pose` 五类合法生产制品；外部基础设施演练和人工审批未完成，因此生产发布决策保持阻塞。
 
 ## 0.17.0 验证记录
 

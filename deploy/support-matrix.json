@@ -1,0 +1,291 @@
+{
+  "schema_version": "1.0",
+  "product": {
+    "name": "PortraitHub",
+    "version": "0.18.0",
+    "previous_stable_version": "0.17.0",
+    "support_policy": "N and N-1 upgrade path",
+    "published_on": "2026-07-26"
+  },
+  "runtime": {
+    "python": ">=3.12,<3.13",
+    "node_build": ">=22.12,<23",
+    "gpu_image": "nvidia/cuda:12.4.1-cudnn-runtime-ubuntu22.04",
+    "cpu_image": "python:3.12-slim-bookworm",
+    "frontend_builder": "node:22.14.0-bookworm-slim",
+    "container_architecture": "linux/amd64"
+  },
+  "operating_systems": [
+    {
+      "id": "ubuntu-22.04-amd64",
+      "name": "Ubuntu 22.04 LTS",
+      "architecture": "x86_64",
+      "support_level": "supported",
+      "production": true
+    },
+    {
+      "id": "ubuntu-24.04-amd64",
+      "name": "Ubuntu 24.04 LTS",
+      "architecture": "x86_64",
+      "support_level": "limited",
+      "production": true,
+      "restriction": "Clean install, offline install, N-1 upgrade and rollback evidence is pending."
+    },
+    {
+      "id": "windows-11-amd64",
+      "name": "Windows 11 with Docker Desktop",
+      "architecture": "x86_64",
+      "support_level": "experimental",
+      "production": false,
+      "restriction": "Development and automated test use only."
+    },
+    {
+      "id": "linux-arm64",
+      "name": "Linux ARM64",
+      "architecture": "arm64",
+      "support_level": "unsupported",
+      "production": false,
+      "restriction": "No release image or model-runtime qualification."
+    }
+  ],
+  "accelerators": [
+    {
+      "id": "nvidia-cuda-12.4",
+      "vendor": "NVIDIA",
+      "device_range": "T4, A10, L4, A100 class devices with at least 16 GiB VRAM",
+      "driver": ">=550.54.14 with CUDA 12.4 compatibility",
+      "cuda": "12.4.1",
+      "cudnn": "9 runtime family",
+      "support_level": "limited",
+      "restriction": "Each exact GPU/model combination requires a passing capacity and quality report before SLA use."
+    },
+    {
+      "id": "cpu-only-amd64",
+      "vendor": "x86_64 CPU",
+      "device_range": "AVX2-capable server CPU",
+      "support_level": "limited",
+      "restriction": "Development, demonstration or separately accepted low-performance workloads only; never a silent GPU fallback."
+    },
+    {
+      "id": "non-nvidia-accelerator",
+      "vendor": "Other",
+      "device_range": "AMD GPU, Apple Silicon NPU/GPU and other accelerators",
+      "support_level": "unsupported",
+      "restriction": "No qualified runtime image."
+    }
+  ],
+  "container_platforms": [
+    {
+      "id": "docker-compose-v2",
+      "version": "Docker Engine 26+ and Compose v2.27+",
+      "support_level": "limited",
+      "restriction": "Exact host/runtime combination remains subject to clean-install evidence."
+    },
+    {
+      "id": "kubernetes",
+      "version": "Kubernetes 1.30-1.32",
+      "support_level": "limited",
+      "restriction": "Requires Gateway API, metrics-server and KEDA-compatible external metrics; HA qualification is pending."
+    }
+  ],
+  "data_services": [
+    {
+      "id": "postgres-pgvector",
+      "version": "PostgreSQL 16 / pgvector image pgvector/pgvector:pg16",
+      "support_level": "supported",
+      "evidence": "Scheduled real-container integration suite and commercial migration idempotency test."
+    },
+    {
+      "id": "qdrant",
+      "version": "Qdrant 1.9.7",
+      "support_level": "supported",
+      "evidence": "Scheduled real-container health integration suite."
+    },
+    {
+      "id": "redis",
+      "version": "Redis 7.x",
+      "support_level": "supported",
+      "evidence": "Scheduled real-container queue integration suite."
+    },
+    {
+      "id": "minio-s3",
+      "version": "S3 API / MinIO RELEASE.2025-04-22T22-12-26Z",
+      "support_level": "supported",
+      "evidence": "Scheduled real-container signed object round-trip integration suite."
+    },
+    {
+      "id": "otel-collector",
+      "version": "OTLP/HTTP compatible OpenTelemetry Collector 0.100+",
+      "support_level": "limited",
+      "restriction": "Deployment-specific collector and backend load qualification required."
+    },
+    {
+      "id": "reverse-proxy",
+      "version": "HTTP/1.1 and WebSocket-capable reverse proxy with TLS 1.2+",
+      "support_level": "limited",
+      "restriction": "NGINX, Envoy or equivalent configuration must pass deployment security checks."
+    }
+  ],
+  "installation_modes": [
+    {
+      "id": "online",
+      "support_level": "limited",
+      "evidence_required": "clean install and strict readiness"
+    },
+    {
+      "id": "offline",
+      "support_level": "limited",
+      "evidence_required": "signed image/model bundle, checksums, SBOM, migrations, release notes and rollback materials"
+    },
+    {
+      "id": "proxy-network",
+      "support_level": "limited",
+      "evidence_required": "proxy allowlist, certificate trust and image/model retrieval smoke"
+    },
+    {
+      "id": "air-gapped",
+      "support_level": "limited",
+      "evidence_required": "offline import, signature verification, install, N-1 upgrade and rollback"
+    }
+  ],
+  "hardware_profiles": [
+    {
+      "id": "private-standard-candidate",
+      "support_level": "limited",
+      "minimum": {
+        "cpu_cores": 8,
+        "ram_gib": 32,
+        "gpu_count": 1,
+        "gpu_vram_gib": 16,
+        "usable_storage_gib": 500
+      },
+      "recommended": {
+        "cpu_cores": 16,
+        "ram_gib": 64,
+        "gpu_count": 1,
+        "gpu_vram_gib": 24,
+        "usable_storage_gib": 2048
+      },
+      "restriction": "Sizing input only; not an SLA until a signed capacity report passes for the selected models and workload."
+    },
+    {
+      "id": "private-ha-candidate",
+      "support_level": "limited",
+      "minimum": {
+        "api_nodes": 3,
+        "gpu_worker_nodes": 2,
+        "gpu_count_per_worker": 1,
+        "gpu_vram_gib": 24,
+        "external_data_service_replicas": 3
+      },
+      "restriction": "Topology input only; node-failure, scaling, restore and capacity evidence is mandatory."
+    }
+  ],
+  "profiles": [
+    {
+      "id": "development",
+      "purpose": "Local development and functional testing",
+      "support_level": "supported",
+      "commercial_sla": false,
+      "topology": "single process or development Compose",
+      "operating_system_ids": ["ubuntu-22.04-amd64", "windows-11-amd64"],
+      "accelerator_ids": ["cpu-only-amd64", "nvidia-cuda-12.4"],
+      "container_platform_ids": ["docker-compose-v2"],
+      "data_service_ids": [],
+      "installation_mode_ids": ["online"],
+      "limits": {
+        "max_loaded_models": null,
+        "max_projects": null,
+        "max_concurrency": null,
+        "max_streams": null,
+        "max_data_gib": null,
+        "qualification_status": "not_applicable"
+      },
+      "blockers": []
+    },
+    {
+      "id": "private_standard",
+      "purpose": "Single-site private commercial deployment",
+      "support_level": "limited",
+      "commercial_sla": false,
+      "topology": "Docker Compose behind a TLS reverse proxy with external production data services",
+      "operating_system_ids": ["ubuntu-22.04-amd64", "ubuntu-24.04-amd64"],
+      "accelerator_ids": ["nvidia-cuda-12.4"],
+      "container_platform_ids": ["docker-compose-v2"],
+      "data_service_ids": ["postgres-pgvector", "qdrant", "redis", "minio-s3", "otel-collector", "reverse-proxy"],
+      "installation_mode_ids": ["online", "offline", "proxy-network", "air-gapped"],
+      "hardware_profile_id": "private-standard-candidate",
+      "limits": {
+        "max_loaded_models": null,
+        "max_projects": null,
+        "max_concurrency": null,
+        "max_streams": null,
+        "max_data_gib": null,
+        "qualification_status": "capacity_report_required"
+      },
+      "blockers": [
+        "Five commercial model artifacts and model-quality evidence are incomplete.",
+        "Signed capacity and recovery reports are not available for a production target.",
+        "Clean install, offline, N-1 upgrade and rollback acceptance is incomplete."
+      ]
+    },
+    {
+      "id": "private_ha",
+      "purpose": "Highly available private commercial deployment",
+      "support_level": "limited",
+      "commercial_sla": false,
+      "topology": "Kubernetes with multiple API/worker replicas, GPU node pool and external HA data services",
+      "operating_system_ids": ["ubuntu-22.04-amd64", "ubuntu-24.04-amd64"],
+      "accelerator_ids": ["nvidia-cuda-12.4"],
+      "container_platform_ids": ["kubernetes"],
+      "data_service_ids": ["postgres-pgvector", "qdrant", "redis", "minio-s3", "otel-collector", "reverse-proxy"],
+      "installation_mode_ids": ["online", "offline", "proxy-network", "air-gapped"],
+      "hardware_profile_id": "private-ha-candidate",
+      "limits": {
+        "max_loaded_models": null,
+        "max_projects": null,
+        "max_concurrency": null,
+        "max_streams": null,
+        "max_data_gib": null,
+        "qualification_status": "ha_capacity_report_required"
+      },
+      "blockers": [
+        "All Private Standard blockers remain open.",
+        "Multi-node failure, autoscaling, canary and RTO/RPO acceptance is incomplete."
+      ]
+    },
+    {
+      "id": "platform_api",
+      "purpose": "Managed multi-tenant platform API",
+      "support_level": "experimental",
+      "commercial_sla": false,
+      "topology": "Multi-zone Kubernetes or equivalent orchestration",
+      "operating_system_ids": ["ubuntu-22.04-amd64"],
+      "accelerator_ids": ["nvidia-cuda-12.4"],
+      "container_platform_ids": ["kubernetes"],
+      "data_service_ids": ["postgres-pgvector", "qdrant", "redis", "minio-s3", "otel-collector", "reverse-proxy"],
+      "installation_mode_ids": ["online", "proxy-network"],
+      "hardware_profile_id": "private-ha-candidate",
+      "limits": {
+        "max_loaded_models": null,
+        "max_projects": null,
+        "max_concurrency": null,
+        "max_streams": null,
+        "max_data_gib": null,
+        "qualification_status": "managed_service_qualification_required"
+      },
+      "blockers": [
+        "Multi-zone tenant-isolation, SLA, security, cost and operations acceptance is incomplete."
+      ]
+    }
+  ],
+  "upgrade_paths": [
+    {
+      "from": "0.17.0",
+      "to": "0.18.0",
+      "support_level": "limited",
+      "rollback_window": "Before non-default project writes or by restoring the pre-upgrade data snapshot",
+      "evidence_required": "backup, expand migration, smoke, rollback and data reconciliation"
+    }
+  ]
+}

@@ -64,6 +64,7 @@ VIDEO_MEDIA_TYPES = {
 class JobStatus(StrEnum):
     QUEUED = "queued"
     RUNNING = "running"
+    PAUSED = "paused"
     COMPLETED = "completed"
     FAILED = "failed"
     CANCELLED = "cancelled"
@@ -172,6 +173,12 @@ class VideoJob:
     attempts: int = 0
     max_retries: int = VIDEO_JOB_MAX_RETRIES
     next_retry_at: float | None = None
+    pause_requested: bool = False
+    priority: int = 0
+    terminal_reason: str | None = None
+    checkpoint: dict[str, Any] = field(default_factory=dict)
+    task_payload: dict[str, Any] = field(default_factory=dict, repr=False)
+    timeline: list[dict[str, Any]] = field(default_factory=list)
 
     def public_dict(self, include_result: bool = False) -> dict[str, Any]:
         payload: dict[str, Any] = {
@@ -188,6 +195,11 @@ class VideoJob:
                 self.max_retries, VIDEO_JOB_MAX_RETRIES
             ),
             "next_retry_at": self.next_retry_at,
+            "pause_requested": self.pause_requested,
+            "priority": self.priority,
+            "terminal_reason": self.terminal_reason,
+            "checkpoint": deepcopy(self.checkpoint),
+            "timeline": deepcopy(self.timeline),
         }
         if include_result:
             payload["result"] = public_video_job_result(self.result)
@@ -216,10 +228,19 @@ class VideoJob:
             ),
             "next_retry_at": self.next_retry_at,
             "result": result,
+            "pause_requested": self.pause_requested,
+            "priority": self.priority,
+            "terminal_reason": self.terminal_reason,
+            "checkpoint": deepcopy(self.checkpoint),
+            "task_payload": deepcopy(self.task_payload),
+            "timeline": deepcopy(self.timeline),
         }
 
     @classmethod
     def from_state(cls, payload: dict[str, Any]) -> "VideoJob":
+        raw_checkpoint = payload.get("checkpoint")
+        raw_task_payload = payload.get("task_payload")
+        raw_timeline = payload.get("timeline")
         return cls(
             job_id=str(payload["job_id"]),
             tenant_id=str(payload.get("tenant_id", "default")),
@@ -236,6 +257,12 @@ class VideoJob:
                 payload.get("max_retries", VIDEO_JOB_MAX_RETRIES), VIDEO_JOB_MAX_RETRIES
             ),
             next_retry_at=normalize_retry_timestamp(payload.get("next_retry_at")),
+            pause_requested=bool(payload.get("pause_requested", False)),
+            priority=max(-100, min(100, int(payload.get("priority", 0) or 0))),
+            terminal_reason=str(payload.get("terminal_reason") or "") or None,
+            checkpoint=deepcopy(raw_checkpoint) if isinstance(raw_checkpoint, dict) else {},
+            task_payload=deepcopy(raw_task_payload) if isinstance(raw_task_payload, dict) else {},
+            timeline=deepcopy(raw_timeline) if isinstance(raw_timeline, list) else [],
         )
 
 
@@ -288,6 +315,12 @@ def restore_video_job(job: VideoJob, previous: VideoJob) -> None:
     job.attempts = previous.attempts
     job.max_retries = previous.max_retries
     job.next_retry_at = previous.next_retry_at
+    job.pause_requested = previous.pause_requested
+    job.priority = previous.priority
+    job.terminal_reason = previous.terminal_reason
+    job.checkpoint = deepcopy(previous.checkpoint)
+    job.task_payload = deepcopy(previous.task_payload)
+    job.timeline = deepcopy(previous.timeline)
 
 
 def persist_video_job(job: VideoJob, *, lightweight_result: bool = False) -> None:
@@ -347,6 +380,7 @@ def create_video_job(filename: str | None, tenant_id: str = "default") -> VideoJ
         job = VideoJob(
             job_id=f"job_{uuid4().hex[:16]}", tenant_id=tenant_id, filename=filename
         )
+        job.timeline.append({"event": "created", "at": job.created_at, "status": "queued"})
         key = job_key(job.tenant_id, job.job_id)
         VIDEO_JOBS[key] = job
         try:
@@ -422,8 +456,11 @@ def request_cancel_video_job(job_id: str, tenant_id: str | None = None) -> bool:
             return True
         previous_job = deepcopy(job)
         job.cancel_requested = True
+        job.pause_requested = False
         job.status = JobStatus.CANCELLED
+        job.terminal_reason = "cancelled_by_user"
         job.updated_at = wall_time()
+        job.timeline.append({"event": "cancelled", "at": job.updated_at, "status": "cancelled"})
         try:
             persist_video_job(job)
         except Exception:
@@ -431,6 +468,84 @@ def request_cancel_video_job(job_id: str, tenant_id: str | None = None) -> bool:
             VIDEO_JOBS[job_key(job.tenant_id, job.job_id)] = job
             raise
         return True
+
+
+def configure_video_job_task(job: VideoJob, task_payload: dict[str, Any], *, priority: int = 0) -> VideoJob:
+    with VIDEO_JOBS_LOCK:
+        previous = deepcopy(job)
+        job.priority = max(-100, min(100, int(priority)))
+        job.task_payload = {**deepcopy(task_payload), "priority": job.priority}
+        job.updated_at = wall_time()
+        job.timeline.append(
+            {
+                "event": "queued",
+                "at": job.updated_at,
+                "status": "queued",
+                "priority": job.priority,
+            }
+        )
+        try:
+            persist_video_job(job)
+        except Exception:
+            restore_video_job(job, previous)
+            raise
+        return job
+
+
+def request_pause_video_job(job_id: str, tenant_id: str) -> VideoJob | None:
+    with VIDEO_JOBS_LOCK:
+        job = get_video_job(job_id, tenant_id=tenant_id)
+        if job is None:
+            return None
+        status_value = normalize_job_status(job.status)
+        if status_value in TERMINAL_JOB_STATUSES:
+            raise ValueError("terminal jobs cannot be paused")
+        if status_value == JobStatus.PAUSED:
+            return job
+        previous = deepcopy(job)
+        job.pause_requested = True
+        job.status = JobStatus.PAUSED
+        job.updated_at = wall_time()
+        job.timeline.append({"event": "paused", "at": job.updated_at, "status": "paused"})
+        try:
+            persist_video_job(job, lightweight_result=True)
+        except Exception:
+            restore_video_job(job, previous)
+            raise
+        return job
+
+
+def resume_video_job(job_id: str, tenant_id: str, *, priority: int | None = None) -> VideoJob | None:
+    with VIDEO_JOBS_LOCK:
+        job = get_video_job(job_id, tenant_id=tenant_id)
+        if job is None:
+            return None
+        if normalize_job_status(job.status) != JobStatus.PAUSED:
+            raise ValueError("only paused jobs can be resumed")
+        if not job.task_payload:
+            raise ValueError("job resume payload is unavailable")
+        previous = deepcopy(job)
+        job.pause_requested = False
+        job.status = JobStatus.QUEUED
+        job.error = None
+        job.next_retry_at = None
+        if priority is not None:
+            job.priority = max(-100, min(100, int(priority)))
+        job.updated_at = wall_time()
+        job.timeline.append(
+            {
+                "event": "resumed",
+                "at": job.updated_at,
+                "status": "queued",
+                "priority": job.priority,
+            }
+        )
+        try:
+            persist_video_job(job, lightweight_result=True)
+        except Exception:
+            restore_video_job(job, previous)
+            raise
+        return job
 
 
 def remove_video_job(job_id: str, tenant_id: str) -> bool:
@@ -519,6 +634,12 @@ async def run_video_job(
         return
 
     async def cancellation_requested() -> bool:
+        nonlocal job
+        if not VIDEO_JOB_WORKER_IN_PROCESS:
+            latest = await run_blocking_io(refresh_video_job, job_id, tenant_id)
+            if latest is not None:
+                job = latest
+        assert job is not None
         if job.cancel_requested:
             return True
         from app.portrait_task_queue import TASK_QUEUE
@@ -526,6 +647,15 @@ async def run_video_job(
         return await run_blocking_io(
             TASK_QUEUE.is_cancelled, "video_jobs", tenant_id, job_id
         )
+
+    async def pause_requested() -> bool:
+        nonlocal job
+        if not VIDEO_JOB_WORKER_IN_PROCESS:
+            latest = await run_blocking_io(refresh_video_job, job_id, tenant_id)
+            if latest is not None:
+                job = latest
+        assert job is not None
+        return job.pause_requested or normalize_job_status(job.status) == JobStatus.PAUSED
 
     while True:
         # 在锁内做状态转换，避免与 request_cancel_video_job 竞态：
@@ -536,17 +666,26 @@ async def run_video_job(
                 job.status = JobStatus.CANCELLED
                 job.updated_at = wall_time()
                 cancelled_on_entry = True
+                paused_on_entry = False
+            elif job.pause_requested or normalize_job_status(job.status) == JobStatus.PAUSED:
+                job.pause_requested = True
+                job.status = JobStatus.PAUSED
+                job.updated_at = wall_time()
+                paused_on_entry = True
+                cancelled_on_entry = False
             else:
                 job.status = JobStatus.RUNNING
                 job.progress = 0.05
                 job.error = None
                 job.next_retry_at = None
-                job.result = None
                 job.attempts = normalize_retry_count(job.attempts) + 1
                 job.updated_at = wall_time()
                 cancelled_on_entry = False
+                paused_on_entry = False
         await run_blocking_io(persist_video_job, job)
         if cancelled_on_entry:
+            return
+        if paused_on_entry:
             return
         try:
             if await cancellation_requested():
@@ -554,6 +693,12 @@ async def run_video_job(
                 job.status = JobStatus.CANCELLED
                 job.updated_at = wall_time()
                 await run_blocking_io(persist_video_job, job)
+                return
+            if await pause_requested():
+                job.pause_requested = True
+                job.status = JobStatus.PAUSED
+                job.updated_at = wall_time()
+                await run_blocking_io(persist_video_job, job, lightweight_result=True)
                 return
 
             (
@@ -589,15 +734,24 @@ async def run_video_job(
             source_artifact: AnalysisArtifact | None = None
 
             # 按批提特征，收集所有帧结果
-            all_frames: list[dict[str, Any]] = []
+            existing_result = job.result if isinstance(job.result, dict) and job.result.get("partial") else {}
+            existing_metadata = (
+                existing_result.get("metadata", {})
+                if isinstance(existing_result.get("metadata"), dict)
+                else {}
+            )
+            all_frames: list[dict[str, Any]] = deepcopy(existing_result.get("frames", []))
+            if not isinstance(all_frames, list):
+                all_frames = []
             all_archive_images: list[Image.Image] = []
-            all_source_indexes: list[int] = []
-            all_source_seconds: list[float] = []
+            all_source_indexes: list[int] = list(existing_metadata.get("source_frame_indexes", []))
+            all_source_seconds: list[float] = list(existing_metadata.get("source_seconds", []))
             fps_value = 0.0
             total_frame_count = 0
-            total_embedding_count = 0
-            frame_index_offset = 0
-            batch_count = 0
+            total_embedding_count = int(existing_result.get("embedding_count", 0) or 0)
+            frame_index_offset = len(all_frames)
+            batch_count = int(job.checkpoint.get("completed_batches", 0) or 0)
+            resume_frame_index = int(job.checkpoint.get("next_source_frame_index", 0) or 0)
             detector_key = ""
             reid_key = ""
             detector_load_seconds = 0.0
@@ -607,20 +761,35 @@ async def run_video_job(
             persist_interval = float(VIDEO_JOB_PROGRESS_PERSIST_INTERVAL_SECONDS)
             last_progress_persist_at = 0.0
 
-            job.result = video_job_progress_result({}, 0, "person_tracks")
+            if not all_frames:
+                job.result = video_job_progress_result({}, 0, "person_tracks")
             job.progress = 0.10
             job.updated_at = wall_time()
             await run_blocking_io(persist_video_job, job, lightweight_result=True)
 
             try:
-                async for batch_images, batch_source_indexes, batch_source_seconds, fps, total_fc in aiter_video_frame_batches(
-                    source_path, sample_interval_seconds, batch_size
-                ):
+                frame_batches = (
+                    aiter_video_frame_batches(
+                        source_path,
+                        sample_interval_seconds,
+                        batch_size,
+                        start_frame_index=resume_frame_index,
+                    )
+                    if resume_frame_index > 0
+                    else aiter_video_frame_batches(source_path, sample_interval_seconds, batch_size)
+                )
+                async for batch_images, batch_source_indexes, batch_source_seconds, fps, total_fc in frame_batches:
                     if await cancellation_requested():
                         job.cancel_requested = True
                         job.status = JobStatus.CANCELLED
                         job.updated_at = wall_time()
                         await run_blocking_io(persist_video_job, job)
+                        return
+                    if await pause_requested():
+                        job.pause_requested = True
+                        job.status = JobStatus.PAUSED
+                        job.updated_at = wall_time()
+                        await run_blocking_io(persist_video_job, job, lightweight_result=True)
                         return
                     fps_value = fps
                     total_frame_count = total_fc
@@ -679,12 +848,20 @@ async def run_video_job(
                         frames=all_frames,
                         total_frame_count=total_frame_count or None,
                     )
+                    job.result["embedding_count"] = total_embedding_count
                     if total_frame_count > 0 and batch_source_indexes:
                         decoded_ratio = min(1.0, (batch_source_indexes[-1] + 1) / total_frame_count)
                         job.progress = 0.10 + 0.75 * decoded_ratio
                     else:
                         job.progress = min(0.84, 0.10 + 0.75 * (batch_count / (batch_count + 1)))
                     job.updated_at = wall_time()
+                    if batch_source_indexes:
+                        job.checkpoint = {
+                            "next_source_frame_index": int(batch_source_indexes[-1]) + 1,
+                            "completed_batches": batch_count,
+                            "processed_frames": len(all_frames),
+                            "updated_at": job.updated_at,
+                        }
                     if persist_interval <= 0 or (job.updated_at - last_progress_persist_at) >= persist_interval:
                         await run_blocking_io(persist_video_job, job, lightweight_result=VIDEO_JOB_WORKER_IN_PROCESS)
                         last_progress_persist_at = job.updated_at
@@ -745,7 +922,16 @@ async def run_video_job(
             )
             job.status = JobStatus.COMPLETED
             job.progress = 1.0
+            job.pause_requested = False
+            job.terminal_reason = "completed"
             job.updated_at = wall_time()
+            job.checkpoint = {
+                **job.checkpoint,
+                "completed": True,
+                "processed_frames": len(all_frames),
+                "updated_at": job.updated_at,
+            }
+            job.timeline.append({"event": "completed", "at": job.updated_at, "status": "completed"})
             await run_blocking_io(
                 create_analysis_archive,
                 tenant_id=job.tenant_id,
@@ -772,6 +958,7 @@ async def run_video_job(
             if await cancellation_requested():
                 job.cancel_requested = True
                 job.status = JobStatus.CANCELLED
+                job.terminal_reason = "cancelled_by_user"
                 job.updated_at = wall_time()
                 await run_blocking_io(persist_video_job, job)
                 return
@@ -791,7 +978,16 @@ async def run_video_job(
                 continue
             job.status = JobStatus.FAILED
             job.error = VIDEO_JOB_ERROR_MESSAGE
+            job.terminal_reason = f"retry_exhausted:{type(exc).__name__}"
             job.next_retry_at = None
             job.updated_at = wall_time()
+            job.timeline.append(
+                {
+                    "event": "failed",
+                    "at": job.updated_at,
+                    "status": "failed",
+                    "reason": job.terminal_reason,
+                }
+            )
             await run_blocking_io(persist_video_job, job)
             return

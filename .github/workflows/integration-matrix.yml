@@ -10,11 +10,15 @@ on:
     paths:
       - "app/postgres_*.py"
       - "app/portrait_postgres.py"
+      - "tools/portrait_postgres_migrate.py"
+      - "tools/postgres_migrations/**"
+      - "tools/portrait_release_preflight.py"
       - "app/portrait_vector_store.py"
       - "app/portrait_object_storage.py"
       - "app/portrait_task_queue.py"
       - "requirements/prod-optional.txt"
       - "tests/test_production_integration_containers.py"
+      - "tests/test_postgres_migrations.py"
 
 jobs:
   external-services:
@@ -40,7 +44,7 @@ jobs:
       - name: 运行选定集成测试
         run: |
           case "${{ matrix.stack }}" in
-            postgres) python -m pytest -q tests/test_production_integration_containers.py::test_postgres_container_gallery_round_trip ;;
+            postgres) python -m pytest -q tests/test_production_integration_containers.py -k postgres ;;
             qdrant) python -m pytest -q tests/test_production_integration_containers.py::test_qdrant_container_health_round_trip ;;
             redis) python -m pytest -q tests/test_production_integration_containers.py::test_redis_container_queue_round_trip ;;
             minio) python -m pytest -q tests/test_production_integration_containers.py::test_minio_container_s3_round_trip ;;

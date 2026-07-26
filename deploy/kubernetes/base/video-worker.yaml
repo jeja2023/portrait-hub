@@ -1,0 +1,98 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: portrait-video-job-worker
+spec:
+  replicas: 0
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: portrait-video-job-worker
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: portrait-video-job-worker
+        app.kubernetes.io/component: async-worker
+    spec:
+      serviceAccountName: portrait-hub
+      automountServiceAccountToken: false
+      runtimeClassName: nvidia
+      terminationGracePeriodSeconds: 120
+      nodeSelector:
+        nvidia.com/gpu.present: "true"
+      tolerations:
+        - key: nvidia.com/gpu
+          operator: Exists
+          effect: NoSchedule
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: video-job-worker
+          image: ghcr.io/example/portrait-hub@sha256:0000000000000000000000000000000000000000000000000000000000000000
+          command: ["python", "-m", "app.portrait_video_job_worker"]
+          env:
+            - name: VIDEO_JOB_WORKER_IN_PROCESS
+              value: "false"
+          envFrom:
+            - configMapRef:
+                name: portrait-hub-config
+            - secretRef:
+                name: portrait-hub-secrets
+          startupProbe:
+            exec:
+              command: ["/bin/sh", "-c", "grep -q app.portrait_video_job_worker /proc/1/cmdline"]
+            failureThreshold: 30
+            periodSeconds: 5
+          livenessProbe:
+            exec:
+              command: ["/bin/sh", "-c", "grep -q app.portrait_video_job_worker /proc/1/cmdline"]
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: "1"
+              memory: 2Gi
+              nvidia.com/gpu: "1"
+            limits:
+              cpu: "4"
+              memory: 12Gi
+              nvidia.com/gpu: "1"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - name: models
+              mountPath: /models
+              readOnly: true
+            - name: model-config
+              mountPath: /workspace/models.yml
+              subPath: models.yml
+              readOnly: true
+            - name: model-capabilities
+              mountPath: /workspace/model-capabilities.yml
+              subPath: model-capabilities.yml
+              readOnly: true
+            - name: runtime-state
+              mountPath: /workspace/runtime-state
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: models
+          persistentVolumeClaim:
+            claimName: portrait-models
+        - name: model-config
+          configMap:
+            name: portrait-hub-models
+        - name: model-capabilities
+          configMap:
+            name: portrait-hub-capabilities
+        - name: runtime-state
+          persistentVolumeClaim:
+            claimName: portrait-runtime-state
+        - name: tmp
+          emptyDir: {}

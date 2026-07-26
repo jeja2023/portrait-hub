@@ -499,6 +499,7 @@ onMounted(load);
         <ElInput
           v-else
           v-model="editValue"
+          :aria-label="editingItem.key"
           :type="editingItem.sensitive ? 'password' : editingItem.value_type === 'string' ? 'textarea' : 'text'"
           :rows="editingItem.value_type === 'string' ? 4 : undefined"
           show-password

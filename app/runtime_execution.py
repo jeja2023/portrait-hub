@@ -1,12 +1,22 @@
 import asyncio
-from typing import Any
+import hashlib
+from collections import deque
+from typing import Any, cast
 
 import numpy as np
 import numpy.typing as npt
 from fastapi import HTTPException, status
 
+from app.inference_scheduler import InferenceScheduler
 from app.metrics import observe
-from app.observability import logger, now, trace_span, wall_time
+from app.observability import (
+    current_request_id,
+    current_scheduling_scope,
+    logger,
+    now,
+    trace_span,
+    wall_time,
+)
 from app.portrait_response import exception_log_summary
 from app.runtime_sessions import primary_execution_provider, run_session
 from app.runtime_state import decrement_gpu_queue_waiters, gpu_semaphore_for_device, increment_gpu_queue_waiters
@@ -14,6 +24,101 @@ from app.schemas import ModelBundle
 from app.settings import MAX_TENSOR_ITEMS
 
 Array = npt.NDArray[Any]
+SHADOW_ROUTES: dict[str, dict[str, Any]] = {}
+SHADOW_RESULTS: deque[dict[str, Any]] = deque(maxlen=1000)
+_SHADOW_TASKS: set[asyncio.Task[None]] = set()
+
+
+def configure_shadow_bundle(
+    active_model_id: str,
+    candidate_bundle: ModelBundle,
+    *,
+    percentage: int = 100,
+) -> None:
+    SHADOW_ROUTES[active_model_id] = {
+        "candidate": candidate_bundle,
+        "percentage": max(1, min(100, int(percentage))),
+    }
+
+
+def clear_shadow_bundle(active_model_id: str) -> None:
+    SHADOW_ROUTES.pop(active_model_id, None)
+
+
+def shadow_results_snapshot(limit: int = 100) -> list[dict[str, Any]]:
+    return list(SHADOW_RESULTS)[-max(1, min(1000, int(limit))) :][::-1]
+
+
+def should_run_shadow(active_model_id: str, percentage: int) -> bool:
+    if percentage >= 100:
+        return True
+    traffic_key = current_request_id() or current_scheduling_scope() or str(wall_time())
+    bucket = int.from_bytes(
+        hashlib.sha256(f"{active_model_id}:{traffic_key}".encode()).digest()[:4], "big"
+    ) % 100
+    return bucket < percentage
+
+
+def schedule_shadow_inference(
+    bundle: ModelBundle,
+    input_array: Array,
+    official_outputs: list[Array],
+) -> None:
+    active_model_id = str(bundle.get("key") or "")
+    route = SHADOW_ROUTES.get(active_model_id)
+    if route is None or not should_run_shadow(active_model_id, int(route["percentage"])):
+        return
+    candidate = route["candidate"]
+    if not isinstance(candidate, dict) or candidate is bundle:
+        return
+    candidate_bundle = cast(ModelBundle, candidate)
+    copied_input = np.array(input_array, copy=True)
+
+    async def run_shadow() -> None:
+        started = now()
+        record: dict[str, Any] = {
+            "active_model_id": active_model_id,
+            "candidate_model_id": str(candidate_bundle.get("key") or ""),
+            "active_fingerprint": bundle.get("model_fingerprint"),
+            "candidate_fingerprint": candidate_bundle.get("model_fingerprint"),
+            "recorded_at": wall_time(),
+        }
+        try:
+            candidate_outputs, _, _ = await _run_model_bundle_direct(candidate_bundle, copied_input)
+            shape_match = [list(output.shape) for output in official_outputs] == [
+                list(output.shape) for output in candidate_outputs
+            ]
+            diffs = []
+            if shape_match:
+                for official, shadow in zip(official_outputs, candidate_outputs, strict=True):
+                    if np.issubdtype(official.dtype, np.number) and np.issubdtype(shadow.dtype, np.number):
+                        diffs.append(float(np.mean(np.abs(official.astype(np.float64) - shadow.astype(np.float64)))))
+            record.update(
+                {
+                    "status": "completed",
+                    "shape_match": shape_match,
+                    "mean_absolute_difference": max(diffs) if diffs else None,
+                    "latency_seconds": now() - started,
+                }
+            )
+            observe("shadow_inference_total")
+            if not shape_match:
+                observe("shadow_output_mismatch_total")
+        except Exception as exc:
+            record.update(
+                {
+                    "status": "failed",
+                    "error_type": type(exc).__name__,
+                    "latency_seconds": now() - started,
+                }
+            )
+            observe("shadow_inference_errors_total")
+            logger.warning("shadow inference failed: %s", exception_log_summary(exc))
+        SHADOW_RESULTS.append(record)
+
+    task = asyncio.create_task(run_shadow(), name="portrait-shadow-inference")
+    _SHADOW_TASKS.add(task)
+    task.add_done_callback(_SHADOW_TASKS.discard)
 
 
 def build_input_array(tensor_data: list[Any], dtype: Any) -> Array:
@@ -64,7 +169,7 @@ async def acquire_with_timeout(
             decrement_gpu_queue_waiters(gpu_device_id)
 
 
-async def run_model_bundle(bundle: ModelBundle, input_array: Array) -> tuple[list[Array], float, float]:
+async def _run_model_bundle_direct(bundle: ModelBundle, input_array: Array) -> tuple[list[Array], float, float]:
     session = bundle["session"]
     model_semaphore = bundle.get("semaphore")
     gpu_device_id = bundle.get("gpu_device_id")
@@ -130,6 +235,40 @@ async def run_model_bundle(bundle: ModelBundle, input_array: Array) -> tuple[lis
     observe("queue_seconds_sum", queue_seconds)
     observe("inference_seconds_sum", inference_seconds)
     return raw_outputs, queue_seconds, inference_seconds
+
+
+async def run_model_bundle(
+    bundle: ModelBundle,
+    input_array: Array,
+    *,
+    priority: str = "sync",
+    scheduling_scope: str | None = None,
+    scheduling_weight: int = 1,
+    timeout_seconds: float | None = None,
+) -> tuple[list[Array], float, float]:
+    if not bundle.get("dynamic_batching_enabled", False):
+        result = await _run_model_bundle_direct(bundle, input_array)
+        schedule_shadow_inference(bundle, input_array, result[0])
+        return result
+
+    scheduler = bundle.get("dynamic_batch_scheduler")
+    if not isinstance(scheduler, InferenceScheduler) or not scheduler.compatible_with_current_loop():
+        scheduler = InferenceScheduler(bundle, _run_model_bundle_direct)
+        bundle["dynamic_batch_scheduler"] = scheduler
+    queue_timeout = (
+        float(timeout_seconds)
+        if timeout_seconds is not None
+        else float(bundle.get("queue_timeout_seconds", 0.0) or 0.0)
+    )
+    result = await scheduler.submit(
+        input_array,
+        scope=scheduling_scope or current_scheduling_scope() or "anonymous",
+        priority=priority,
+        weight=scheduling_weight,
+        timeout_seconds=max(0.0, queue_timeout),
+    )
+    schedule_shadow_inference(bundle, input_array, result[0])
+    return result
 
 
 async def run_model_bundle_batch(
@@ -205,11 +344,16 @@ async def run_yolo_frames(
 
 
 __all__ = [
+    "_run_model_bundle_direct",
     "acquire_with_timeout",
     "build_input_array",
     "bundle_execution_provider",
+    "clear_shadow_bundle",
+    "configure_shadow_bundle",
     "run_model_bundle",
     "run_model_bundle_batch",
     "run_yolo_frames",
+    "schedule_shadow_inference",
+    "shadow_results_snapshot",
     "stack_outputs",
 ]

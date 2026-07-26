@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from typing import Any, ClassVar
 
 from app import postgres_core
@@ -31,3 +32,17 @@ def test_get_postgres_pool_opens_and_reuses_pool(monkeypatch: Any) -> None:
     assert len(FakePool.instances) == 1
     assert FakePool.instances[0].open_count == 1
     assert FakePool.instances[0].kwargs["open"] is False
+
+
+def test_psycopg_pool_logs_redact_connection_details(caplog: Any) -> None:
+    caplog.set_level(logging.WARNING, logger="psycopg.pool")
+
+    logging.getLogger("psycopg.pool").warning(
+        "error connecting in %r: %s",
+        "postgresql://user:secret-password@db.internal/app",
+        RuntimeError("failed to resolve host db.internal"),
+    )
+
+    assert "psycopg pool event (connection details redacted)" in caplog.text
+    assert "secret-password" not in caplog.text
+    assert "db.internal" not in caplog.text

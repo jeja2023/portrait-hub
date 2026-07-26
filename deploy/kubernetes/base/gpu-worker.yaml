@@ -1,0 +1,147 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: portrait-hub-gpu-worker
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: portrait-hub-gpu-worker
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: portrait-hub-gpu-worker
+        app.kubernetes.io/component: inference
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+        prometheus.io/path: /metrics
+    spec:
+      serviceAccountName: portrait-hub
+      automountServiceAccountToken: false
+      runtimeClassName: nvidia
+      terminationGracePeriodSeconds: 90
+      nodeSelector:
+        nvidia.com/gpu.present: "true"
+      tolerations:
+        - key: nvidia.com/gpu
+          operator: Exists
+          effect: NoSchedule
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                topologyKey: kubernetes.io/hostname
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: portrait-hub-gpu-worker
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: gpu-worker
+          image: ghcr.io/example/portrait-hub@sha256:0000000000000000000000000000000000000000000000000000000000000000
+          ports:
+            - name: http
+              containerPort: 8000
+          env:
+            - name: FORCE_CPU
+              value: "false"
+            - name: DYNAMIC_BATCHING_ENABLED
+              value: "true"
+          envFrom:
+            - configMapRef:
+                name: portrait-hub-config
+            - secretRef:
+                name: portrait-hub-secrets
+          startupProbe:
+            httpGet:
+              path: /ready
+              port: http
+            failureThreshold: 60
+            periodSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 2
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 15
+            timeoutSeconds: 3
+            failureThreshold: 3
+          lifecycle:
+            preStop:
+              exec:
+                command: ["/bin/sh", "-c", "sleep 20"]
+          resources:
+            requests:
+              cpu: "2"
+              memory: 8Gi
+              nvidia.com/gpu: "1"
+            limits:
+              cpu: "8"
+              memory: 24Gi
+              nvidia.com/gpu: "1"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - name: models
+              mountPath: /models
+              readOnly: true
+            - name: model-config
+              mountPath: /workspace/models.yml
+              subPath: models.yml
+              readOnly: true
+            - name: model-capabilities
+              mountPath: /workspace/model-capabilities.yml
+              subPath: model-capabilities.yml
+              readOnly: true
+            - name: runtime-state
+              mountPath: /workspace/runtime-state
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: models
+          persistentVolumeClaim:
+            claimName: portrait-models
+        - name: model-config
+          configMap:
+            name: portrait-hub-models
+        - name: model-capabilities
+          configMap:
+            name: portrait-hub-capabilities
+        - name: runtime-state
+          persistentVolumeClaim:
+            claimName: portrait-runtime-state
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: portrait-hub-gpu-worker
+spec:
+  selector:
+    app.kubernetes.io/name: portrait-hub-gpu-worker
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http

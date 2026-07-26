@@ -6,9 +6,10 @@ tools/portrait_production_readiness.py 完全一致的检查字典列表；
 """
 
 from tools.readiness.security import check_security_controls
-from tools.readiness.structure import check_data_stack, check_templates
+from tools.readiness.structure import check_commercial_delivery, check_data_stack, check_templates
 
 __all__ = [
+    "check_commercial_delivery",
     "check_data_stack",
     "check_security_controls",
     "check_templates",

@@ -20,7 +20,10 @@ def check_sdk_and_console(root: Path) -> list[dict[str, Any]]:
             "ok": (
                 "class PortraitHubHTTPError" in python_sdk
                 and "except HTTPError as exc" in python_sdk
-                and "raise PortraitHubHTTPError(exc.code" in python_sdk
+                and "def _http_error" in python_sdk
+                and "raise self._http_error(exc.code, payload, headers)" in python_sdk
+                and "class PortraitHubRateLimitError(PortraitHubHTTPError)" in python_sdk
+                and "class PortraitHubTransportError(RuntimeError)" in python_sdk
                 and "class PortraitHubHTTPError extends Error" in node_sdk
                 and "async decodeBody(response)" in node_sdk
                 and "JSON.parse(text)" in node_sdk

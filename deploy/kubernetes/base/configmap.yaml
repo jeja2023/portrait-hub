@@ -1,0 +1,55 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: portrait-hub-config
+data:
+  PORTRAIT_RUNTIME_PROFILE: production
+  PRODUCTION_EXTERNAL_SERVICES_REQUIRED: "true"
+  PORTRAIT_STORAGE_BACKEND: postgres
+  PORTRAIT_VECTOR_BACKEND: qdrant
+  PORTRAIT_OBJECT_STORAGE_BACKEND: s3
+  TASK_QUEUE_BACKEND: redis
+  AUTH_REQUIRED: "true"
+  RBAC_ENABLED: "true"
+  REQUIRE_ENCRYPTION: "true"
+  MODEL_CONFIG_READ_FAIL_CLOSED: "true"
+  AUDIT_WRITE_FAIL_CLOSED: "true"
+  STATE_READ_FAIL_CLOSED: "true"
+  STATE_WRITE_FAIL_CLOSED: "true"
+  PORTRAIT_REQUIRE_PRODUCTION_MODEL_CAPABILITIES: "true"
+  CPU_FALLBACK_ENABLED: "false"
+  VIDEO_JOB_WORKER_IN_PROCESS: "false"
+  WARMUP_FAIL_FAST: "true"
+  DYNAMIC_BATCHING_ENABLED: "false"
+  DYNAMIC_BATCH_MAX_SIZE: "8"
+  DYNAMIC_BATCH_MAX_WAIT_MS: "5"
+  DYNAMIC_BATCH_ASYNC_MAX_WAIT_MS: "25"
+  DYNAMIC_BATCH_MAX_QUEUE_SIZE: "256"
+  MODEL_DRAIN_TIMEOUT_SECONDS: "30"
+  OPENTELEMETRY_ENABLED: "true"
+  OTEL_SERVICE_NAME: portrait-hub
+  ENABLE_API_DOCS: "false"
+  DEBUG_ENDPOINTS_ENABLED: "false"
+  LOCAL_AUTH_ENABLED: "false"
+  STEP_UP_AUTH_MAX_AGE_SECONDS: "300"
+  IDEMPOTENCY_WINDOW_SECONDS: "86400"
+  IDEMPOTENCY_MAX_ENTRIES: "10000"
+  IDEMPOTENCY_MAX_RESPONSE_BYTES: "2097152"
+  TRUSTED_HOSTS: portrait-hub-api,portrait-hub-api-canary,portrait-hub-gpu-worker
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: portrait-hub-models
+data:
+  models.yml: |
+    models: {}
+    aliases: {}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: portrait-hub-capabilities
+data:
+  model-capabilities.yml: |
+    capabilities: {}

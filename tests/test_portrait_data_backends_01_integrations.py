@@ -373,6 +373,8 @@ def test_backend_health_errors_are_redacted(monkeypatch, caplog) -> None:
         "postgres://user:secret-password@db.internal/app",
     )
     monkeypatch.setattr(portrait_postgres, "psycopg", FailingPsycopg())
+    monkeypatch.setattr(portrait_postgres, "ConnectionPool", None)
+    monkeypatch.setattr(portrait_postgres, "POSTGRES_POOL", None)
     monkeypatch.setattr(
         portrait_task_queue, "REDIS_URL", "redis://:secret-token@redis.internal/0"
     )

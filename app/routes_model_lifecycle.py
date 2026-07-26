@@ -16,7 +16,10 @@ from app.runtime import (
     MODEL_LOAD_LOCKS,
     MODEL_REGISTRY,
     get_or_load_model,
-    unload_model_by_key,
+    prewarm_model_bundle,
+    release_model_bundle,
+    replace_model_bundle,
+    retire_model_bundle,
 )
 from app.schemas import ModelBundle, ModelRequest, WarmupRequest
 from app.security import require_api_token
@@ -59,12 +62,15 @@ async def warmup(req: WarmupRequest, request: Request) -> dict[str, Any]:
         key = cache_key(model.project_name, model.model_name)
         model_path = get_model_path(model.project_name, model.model_name)
         bundle, cold_loaded, load_seconds = await get_or_load_model(key, model_path)
+        prewarm = await prewarm_model_bundle(key, bundle)
         results.append(
             {
                 "model": key,
                 "cold_loaded": cold_loaded,
                 "load_seconds": load_seconds,
                 "model_hash": bundle["model_hash"],
+                "model_fingerprint": bundle.get("model_fingerprint"),
+                "prewarm": prewarm,
             }
         )
     try:
@@ -94,9 +100,9 @@ async def reload_model(req: ModelRequest, request: Request) -> dict[str, Any]:
     key = cache_key(req.project_name, req.model_name)
     previous_registry = model_registry_snapshot()
     previous_locks = model_load_locks_snapshot()
-    await unload_model_by_key(key)
     model_path = get_model_path(req.project_name, req.model_name)
-    bundle, cold_loaded, load_seconds = await get_or_load_model(key, model_path)
+    bundle, previous_bundle, load_seconds, prewarm = await replace_model_bundle(key, model_path)
+    cold_loaded = previous_bundle is None
     try:
         await run_blocking_io(
             audit_event,
@@ -108,7 +114,9 @@ async def reload_model(req: ModelRequest, request: Request) -> dict[str, Any]:
         )
     except Exception:
         restore_model_registry_snapshot(previous_registry, previous_locks)
+        release_model_bundle(bundle)
         raise
+    retire_model_bundle(previous_bundle)
     return portrait_success(
         request_id,
         {
@@ -116,5 +124,7 @@ async def reload_model(req: ModelRequest, request: Request) -> dict[str, Any]:
             "cold_loaded": cold_loaded,
             "load_seconds": load_seconds,
             "model_hash": bundle["model_hash"],
+            "model_fingerprint": bundle.get("model_fingerprint"),
+            "prewarm": prewarm,
         },
     )

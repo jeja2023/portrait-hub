@@ -15,8 +15,20 @@ METRICS: dict[str, float] = {
     "cache_hits_total": 0,
     "cache_misses_total": 0,
     "model_unloads_total": 0,
+    "model_prewarms_total": 0,
     "inference_seconds_sum": 0,
     "queue_seconds_sum": 0,
+    "dynamic_batch_enqueued_total": 0,
+    "dynamic_batches_total": 0,
+    "dynamic_batch_items_total": 0,
+    "dynamic_batch_utilization_sum": 0,
+    "dynamic_batch_dropped_total": 0,
+    "dynamic_batch_timeouts_total": 0,
+    "dynamic_batch_cancelled_total": 0,
+    "dynamic_batch_fallback_total": 0,
+    "shadow_inference_total": 0,
+    "shadow_inference_errors_total": 0,
+    "shadow_output_mismatch_total": 0,
     "model_load_seconds_sum": 0,
     "persons_requests_total": 0,
     "persons_errors_total": 0,
@@ -58,6 +70,8 @@ class Histogram(TypedDict):
 HISTOGRAM_BUCKETS: dict[str, tuple[float, ...]] = {
     "inference_seconds": (0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0),
     "queue_seconds": (0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0),
+    "dynamic_batch_wait_seconds": (0.001, 0.0025, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0),
+    "dynamic_batch_size": (1.0, 2.0, 4.0, 8.0, 16.0, 32.0, 64.0, 128.0, 256.0),
     "model_load_seconds": (0.01, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0, 60.0),
     "decode_seconds": (0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0),
     "preprocess_seconds": (0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5),
@@ -213,6 +227,7 @@ def prometheus_metrics() -> str:
 
 def build_prometheus_metrics() -> str:
     from app import runtime_state
+    from app.inference_scheduler import dynamic_batch_queue_depth
     from app.model_config import MODEL_CONFIGS
     from app.portrait_stream_worker import STREAM_WORKER_SESSIONS
 
@@ -225,6 +240,7 @@ def build_prometheus_metrics() -> str:
     queue_depth = max(0, int(runtime_state.GPU_QUEUE_WAITERS)) + sum(
         max(0, int(depth)) for depth in runtime_state.GPU_DEVICE_QUEUE_WAITERS.values()
     )
+    batch_queue_depth = dynamic_batch_queue_depth()
     device_queue_depths = {
         device_id: max(0, int(depth))
         for device_id, depth in runtime_state.GPU_DEVICE_QUEUE_WAITERS.items()
@@ -257,12 +273,45 @@ def build_prometheus_metrics() -> str:
         "# HELP gpu_worker_model_unloads_total 模型卸载或逐出的总数。",
         "# TYPE gpu_worker_model_unloads_total counter",
         f"gpu_worker_model_unloads_total {METRICS.get('model_unloads_total', 0)}",
+        "# HELP gpu_worker_model_prewarms_total Successful model smoke-inference prewarms.",
+        "# TYPE gpu_worker_model_prewarms_total counter",
+        f"gpu_worker_model_prewarms_total {METRICS.get('model_prewarms_total', 0)}",
         "# HELP gpu_worker_loaded_models 当前加载的模型数。",
         "# TYPE gpu_worker_loaded_models gauge",
         f"gpu_worker_loaded_models {loaded_models}",
         "# HELP gpu_worker_gpu_queue_depth 当前等待全局 GPU 访问的协程数。",
         "# TYPE gpu_worker_gpu_queue_depth gauge",
         f"gpu_worker_gpu_queue_depth {queue_depth}",
+        "# HELP gpu_worker_dynamic_batch_queue_depth Requests waiting for cross-request batching.",
+        "# TYPE gpu_worker_dynamic_batch_queue_depth gauge",
+        f"gpu_worker_dynamic_batch_queue_depth {batch_queue_depth}",
+        "# HELP gpu_worker_dynamic_batches_total Dynamic batches dispatched.",
+        "# TYPE gpu_worker_dynamic_batches_total counter",
+        f"gpu_worker_dynamic_batches_total {METRICS.get('dynamic_batches_total', 0)}",
+        "# HELP gpu_worker_dynamic_batch_items_total Input items dispatched through dynamic batching.",
+        "# TYPE gpu_worker_dynamic_batch_items_total counter",
+        f"gpu_worker_dynamic_batch_items_total {METRICS.get('dynamic_batch_items_total', 0)}",
+        "# HELP gpu_worker_dynamic_batch_dropped_total Requests rejected because the batch queue was full.",
+        "# TYPE gpu_worker_dynamic_batch_dropped_total counter",
+        f"gpu_worker_dynamic_batch_dropped_total {METRICS.get('dynamic_batch_dropped_total', 0)}",
+        "# HELP gpu_worker_dynamic_batch_timeouts_total Requests expired before batch dispatch.",
+        "# TYPE gpu_worker_dynamic_batch_timeouts_total counter",
+        f"gpu_worker_dynamic_batch_timeouts_total {METRICS.get('dynamic_batch_timeouts_total', 0)}",
+        "# HELP gpu_worker_dynamic_batch_cancelled_total Requests cancelled before result delivery.",
+        "# TYPE gpu_worker_dynamic_batch_cancelled_total counter",
+        f"gpu_worker_dynamic_batch_cancelled_total {METRICS.get('dynamic_batch_cancelled_total', 0)}",
+        "# HELP gpu_worker_dynamic_batch_fallback_total Failed batch executions retried per request.",
+        "# TYPE gpu_worker_dynamic_batch_fallback_total counter",
+        f"gpu_worker_dynamic_batch_fallback_total {METRICS.get('dynamic_batch_fallback_total', 0)}",
+        "# HELP gpu_worker_shadow_inference_total Successful background shadow inferences.",
+        "# TYPE gpu_worker_shadow_inference_total counter",
+        f"gpu_worker_shadow_inference_total {METRICS.get('shadow_inference_total', 0)}",
+        "# HELP gpu_worker_shadow_inference_errors_total Failed background shadow inferences.",
+        "# TYPE gpu_worker_shadow_inference_errors_total counter",
+        f"gpu_worker_shadow_inference_errors_total {METRICS.get('shadow_inference_errors_total', 0)}",
+        "# HELP gpu_worker_shadow_output_mismatch_total Shadow outputs with shapes differing from active outputs.",
+        "# TYPE gpu_worker_shadow_output_mismatch_total counter",
+        f"gpu_worker_shadow_output_mismatch_total {METRICS.get('shadow_output_mismatch_total', 0)}",
         "# HELP gpu_worker_gpu_device_queue_depth 当前等待 GPU 设备队列的协程数。",
         "# TYPE gpu_worker_gpu_device_queue_depth gauge",
         "# HELP gpu_worker_stream_active_sessions 当前运行的流处理工作器会话数。",
@@ -411,6 +460,8 @@ def build_prometheus_metrics() -> str:
         lines.append(f"gpu_worker_model_last_used_at_seconds{{{labels}}} {bundle.get('last_used_at', 0)}")
     append_histogram(lines, "inference_seconds", "推理执行延迟（秒）。")
     append_histogram(lines, "queue_seconds", "推理队列等待延迟（秒）。")
+    append_histogram(lines, "dynamic_batch_wait_seconds", "Dynamic batching queue wait in seconds.")
+    append_histogram(lines, "dynamic_batch_size", "Actual number of input items per dynamic batch.")
     append_histogram(lines, "model_load_seconds", "模型加载延迟（秒）。")
     append_histogram(lines, "decode_seconds", "图像或视频解码延迟（秒）。")
     append_histogram(lines, "video_frame_quality", "Quality score distribution of selected video frames.")

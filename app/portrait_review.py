@@ -14,7 +14,7 @@ from app.portrait_state import read_json_state, write_json_state
 from app.settings import PORTRAIT_REVIEW_STATE_PATH
 
 _REVIEW_LOCK = threading.RLock()
-_REVIEW_STATE: dict[str, list[dict[str, Any]]] = {"annotations": []}
+_REVIEW_STATE: dict[str, list[dict[str, Any]]] = {"annotations": [], "corrections": []}
 _REVIEW_LABELS = {"false_positive", "mismatch", "low_quality", "confirmed", "uncertain"}
 MAX_REVIEW_ANNOTATIONS = 10_000
 MAX_REVIEW_LIST_LIMIT = 500
@@ -32,6 +32,7 @@ def review_state_payload() -> dict[str, list[dict[str, Any]]]:
 def restore_review_state(snapshot: dict[str, list[dict[str, Any]]]) -> None:
     with _REVIEW_LOCK:
         _REVIEW_STATE["annotations"] = copy.deepcopy(snapshot.get("annotations", []))
+        _REVIEW_STATE["corrections"] = copy.deepcopy(snapshot.get("corrections", []))
         save_review_state()
 
 
@@ -40,20 +41,25 @@ def save_review_state() -> None:
 
 
 def load_review_state() -> None:
-    payload = read_json_state(PORTRAIT_REVIEW_STATE_PATH, {"annotations": []})
+    payload = read_json_state(PORTRAIT_REVIEW_STATE_PATH, {"annotations": [], "corrections": []})
     if not isinstance(payload, dict):
-        payload = {"annotations": []}
+        payload = {"annotations": [], "corrections": []}
     annotations = payload.get("annotations", [])
+    corrections = payload.get("corrections", [])
     with _REVIEW_LOCK:
         _REVIEW_STATE["annotations"] = [annotation for annotation in annotations if isinstance(annotation, dict)]
+        _REVIEW_STATE["corrections"] = [correction for correction in corrections if isinstance(correction, dict)]
 
 
 def clear_review_state() -> None:
     with _REVIEW_LOCK:
         _REVIEW_STATE["annotations"] = []
+        _REVIEW_STATE["corrections"] = []
 
 
-def bounded_text(value: Any, field_name: str, *, required: bool = False, max_length: int = MAX_REVIEW_TEXT_LENGTH) -> str:
+def bounded_text(
+    value: Any, field_name: str, *, required: bool = False, max_length: int = MAX_REVIEW_TEXT_LENGTH
+) -> str:
     text = str(value or "").strip()
     if required and not text:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"{field_name} 为必填项")
@@ -83,6 +89,102 @@ def public_review_annotation(record: dict[str, Any]) -> dict[str, Any]:
         "created_at": record.get("created_at"),
         "source": record.get("source"),
     }
+
+
+def public_track_correction(record: dict[str, Any]) -> dict[str, Any]:
+    return copy.deepcopy(record)
+
+
+def list_track_corrections(
+    tenant_id: str,
+    *,
+    job_id: str | None = None,
+    action: str | None = None,
+    limit: int | None = 100,
+) -> list[dict[str, Any]]:
+    normalized_action = str(action or "").strip().lower() or None
+    if normalized_action not in {None, "merge", "split"}:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="unsupported track correction action"
+        )
+    with _REVIEW_LOCK:
+        rows = [
+            public_track_correction(record)
+            for record in _REVIEW_STATE["corrections"]
+            if record.get("tenant_id") == tenant_id
+            and (job_id is None or record.get("job_id") == job_id)
+            and (normalized_action is None or record.get("action") == normalized_action)
+        ]
+    rows.sort(key=_created_at_sort_value, reverse=True)
+    if limit is None:
+        return rows
+    return rows[: max(1, min(int(limit), MAX_REVIEW_LIST_LIMIT))]
+
+
+def create_track_correction(
+    tenant_id: str,
+    *,
+    job_id: Any,
+    action: Any,
+    track_ids: Any,
+    target_track_id: Any = None,
+    split_frame_index: Any = None,
+    reviewer: Any = None,
+    reason: Any = None,
+    evidence_ref: Any = None,
+) -> dict[str, Any]:
+    normalized_action = bounded_text(action, "action", required=True, max_length=16).lower()
+    if normalized_action not in {"merge", "split"}:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="unsupported track correction action"
+        )
+    if not isinstance(track_ids, list):
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="track_ids must be a list")
+    normalized_tracks = sorted(
+        {bounded_text(item, "track_id", required=True) for item in track_ids if str(item or "").strip()}
+    )
+    if normalized_action == "merge" and len(normalized_tracks) < 2:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="merge requires at least two tracks"
+        )
+    if normalized_action == "split" and len(normalized_tracks) != 1:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="split requires exactly one track")
+    normalized_split_frame: int | None = None
+    if normalized_action == "split":
+        try:
+            normalized_split_frame = int(split_frame_index)
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="split_frame_index is required for split",
+            ) from exc
+        if normalized_split_frame < 0:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="split_frame_index is invalid")
+    output_track_id = bounded_text(target_track_id, "target_track_id") or (
+        normalized_tracks[0] if normalized_action == "merge" else None
+    )
+    record = {
+        "correction_id": f"corr_{secrets.token_hex(12)}",
+        "tenant_id": bounded_text(tenant_id, "tenant_id", required=True),
+        "job_id": bounded_text(job_id, "job_id", required=True),
+        "action": normalized_action,
+        "track_ids": normalized_tracks,
+        "target_track_id": output_track_id,
+        "split_frame_index": normalized_split_frame,
+        "split_output_track_ids": (
+            [f"{normalized_tracks[0]}:before", f"{normalized_tracks[0]}:after"] if normalized_action == "split" else []
+        ),
+        "reviewer": bounded_text(reviewer, "reviewer", max_length=128) or "operator",
+        "reason": bounded_text(reason, "reason", max_length=MAX_REVIEW_NOTE_LENGTH),
+        "evidence_ref": bounded_text(evidence_ref, "evidence_ref"),
+        "status": "applied_overlay",
+        "created_at": wall_time(),
+    }
+    with _REVIEW_LOCK:
+        _REVIEW_STATE["corrections"].append(record)
+        _REVIEW_STATE["corrections"] = _REVIEW_STATE["corrections"][-MAX_REVIEW_ANNOTATIONS:]
+        save_review_state()
+    return public_track_correction(record)
 
 
 def _created_at_sort_value(row: dict[str, Any]) -> float:
@@ -127,8 +229,10 @@ def list_review_annotations(
     job_id: str | None = None,
     track_id: str | None = None,
     label: str | None = None,
-    limit: int = 100,
+    limit: int | None = 100,
 ) -> list[dict[str, Any]]:
+    if limit is None:
+        return _matching_review_rows(tenant_id, job_id=job_id, track_id=track_id, label=label)
     bounded_limit = max(1, min(int(limit), MAX_REVIEW_LIST_LIMIT))
     return _matching_review_rows(tenant_id, job_id=job_id, track_id=track_id, label=label)[:bounded_limit]
 
@@ -171,6 +275,7 @@ def review_annotation_summary(
         "evidence_index": evidence_index,
         "filters": {"job_id": job_id, "track_id": track_id, "label": label},
     }
+
 
 def _dataset_id(tenant_id: str, name: str, rows: list[dict[str, Any]]) -> str:
     digest = hashlib.sha256()
@@ -239,13 +344,24 @@ def list_review_datasets(
     mismatch_rows = [row for row in rows if row.get("label") in {"mismatch", "false_positive"}]
     candidates = [
         _dataset_record(tenant_id, "review_all_annotations", "manual_review_pool", rows, evidence_limit=bounded_limit),
-        _dataset_record(tenant_id, "review_attention_holdout", "regression_holdout", attention_rows, evidence_limit=bounded_limit),
-        _dataset_record(tenant_id, "review_confirmed_samples", "positive_control", confirmed_rows, evidence_limit=bounded_limit),
-        _dataset_record(tenant_id, "review_low_quality_samples", "quality_calibration", low_quality_rows, evidence_limit=bounded_limit),
-        _dataset_record(tenant_id, "review_mismatch_samples", "association_regression", mismatch_rows, evidence_limit=bounded_limit),
+        _dataset_record(
+            tenant_id, "review_attention_holdout", "regression_holdout", attention_rows, evidence_limit=bounded_limit
+        ),
+        _dataset_record(
+            tenant_id, "review_confirmed_samples", "positive_control", confirmed_rows, evidence_limit=bounded_limit
+        ),
+        _dataset_record(
+            tenant_id,
+            "review_low_quality_samples",
+            "quality_calibration",
+            low_quality_rows,
+            evidence_limit=bounded_limit,
+        ),
+        _dataset_record(
+            tenant_id, "review_mismatch_samples", "association_regression", mismatch_rows, evidence_limit=bounded_limit
+        ),
     ]
     return [dataset for dataset in candidates if dataset["sample_count"] > 0][:bounded_limit]
-
 
 
 def _clamp_threshold(value: float) -> float:
@@ -366,6 +482,7 @@ def review_threshold_recommendations(
         "auto_apply": False,
     }
 
+
 def create_review_annotation(
     tenant_id: str,
     *,
@@ -407,8 +524,10 @@ __all__ = [
     "MAX_REVIEW_LIST_LIMIT",
     "clear_review_state",
     "create_review_annotation",
+    "create_track_correction",
     "list_review_annotations",
     "list_review_datasets",
+    "list_track_corrections",
     "load_review_state",
     "restore_review_state",
     "review_annotation_summary",

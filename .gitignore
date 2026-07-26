@@ -58,5 +58,9 @@ frontend/console-next/dist/
 frontend/console-next/test-results/
 frontend/console-next/playwright-report/
 
+# Python package build output
+sdk/python/build/
+sdk/python/*.egg-info/
+
 # Java build output
 sdk/java/target/

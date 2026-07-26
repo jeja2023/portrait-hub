@@ -1,0 +1,24 @@
+{
+  "schema_version": "1.0",
+  "template_id": "venue-flow",
+  "template_version": "1.0.0",
+  "evidence_status": "specification_only",
+  "customer_validation_required": true,
+  "fixture_policy": "synthetic_or_customer-approved-deidentified-only",
+  "cases": [
+    {
+      "case_id": "crowd-flow",
+      "input_contract": "synthetic-venue-flow-sequence-v1",
+      "required_capabilities": ["person_detection", "tracking"],
+      "expected_outcomes": ["directional aggregate flow", "bounded queue and latency metadata"],
+      "assertions": ["no identity output", "capacity assumption remains unqualified until target test"]
+    },
+    {
+      "case_id": "gait-review-candidate",
+      "input_contract": "synthetic-gait-sequence-v1",
+      "required_capabilities": ["gait"],
+      "expected_outcomes": ["gait comparison is confidence gated and reviewable"],
+      "assertions": ["not used as sole identity decision", "production artifact gate must pass"]
+    }
+  ]
+}

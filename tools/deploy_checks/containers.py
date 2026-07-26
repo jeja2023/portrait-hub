@@ -279,6 +279,7 @@ def check_docker_files(root: Path, report: DeployReport) -> None:
                 "LOCAL_AUTH_TENANT_ID",
                 "LOCAL_AUTH_SESSION_SECRET",
                 "LOCAL_AUTH_COOKIE_SECURE",
+                "STEP_UP_AUTH_MAX_AGE_SECONDS",
             ]
         )
         and all(
@@ -291,6 +292,7 @@ def check_docker_files(root: Path, report: DeployReport) -> None:
                 "LOCAL_AUTH_TENANT_ID",
                 "LOCAL_AUTH_SESSION_SECRET",
                 "LOCAL_AUTH_COOKIE_SECURE",
+                "STEP_UP_AUTH_MAX_AGE_SECONDS",
             ]
         ),
         None,

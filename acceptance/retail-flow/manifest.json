@@ -1,0 +1,24 @@
+{
+  "schema_version": "1.0",
+  "template_id": "retail-flow",
+  "template_version": "1.0.0",
+  "evidence_status": "specification_only",
+  "customer_validation_required": true,
+  "fixture_policy": "synthetic_or_customer-approved-deidentified-only",
+  "cases": [
+    {
+      "case_id": "anonymous-footfall",
+      "input_contract": "synthetic-retail-entrance-sequence-v1",
+      "required_capabilities": ["person_detection", "tracking"],
+      "expected_outcomes": ["anonymous entry and exit counts", "deduplicated track count"],
+      "assertions": ["no facial identity required", "aggregate output is project scoped"]
+    },
+    {
+      "case_id": "service-quality-review",
+      "input_contract": "synthetic-retail-service-sequence-v1",
+      "required_capabilities": ["appearance"],
+      "expected_outcomes": ["reviewable appearance observations with confidence"],
+      "assertions": ["raw media follows retention policy", "operator can correct result"]
+    }
+  ]
+}

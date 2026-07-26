@@ -5,7 +5,7 @@ import "element-plus/dist/index.css";
 import "./styles/base.css";
 
 import App from "./App.vue";
-import { clearSession } from "./auth/session";
+import { clearSession, isSessionLogoutPending } from "./auth/session";
 import router from "./router";
 import { useCapabilitiesStore } from "./stores/capabilities";
 
@@ -15,6 +15,7 @@ app.use(pinia);
 app.use(router);
 
 function redirectToLogin(): void {
+  if (isSessionLogoutPending()) return;
   clearSession();
   useCapabilitiesStore().clear();
   if (window.location.pathname !== "/") {

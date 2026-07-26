@@ -1,0 +1,24 @@
+{
+  "schema_version": "1.0",
+  "template_id": "worksite-safety",
+  "template_version": "1.0.0",
+  "evidence_status": "specification_only",
+  "customer_validation_required": true,
+  "fixture_policy": "synthetic_or_customer-approved-deidentified-only",
+  "cases": [
+    {
+      "case_id": "ppe-assistive-review",
+      "input_contract": "synthetic-worksite-frame-v1",
+      "required_capabilities": ["person_detection", "appearance"],
+      "expected_outcomes": ["review candidate includes confidence and source time"],
+      "assertions": ["human confirmation required", "result is not an automatic disciplinary decision"]
+    },
+    {
+      "case_id": "unsafe-posture-review",
+      "input_contract": "synthetic-pose-sequence-v1",
+      "required_capabilities": ["pose"],
+      "expected_outcomes": ["pose result links model version and frame range"],
+      "assertions": ["low-quality pose is rejected", "operator appeal path is documented"]
+    }
+  ]
+}

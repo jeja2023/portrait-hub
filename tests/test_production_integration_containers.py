@@ -281,6 +281,47 @@ def test_postgres_container_gallery_round_trip() -> None:
             postgres_core.POSTGRES_DSN = previous_dsn
 
 
+def test_postgres_commercial_migrations_apply_idempotently() -> None:
+    from tools.portrait_postgres_migrate import apply_migrations, discover_migrations, migration_status
+
+    DockerContainer = _docker_container()
+    with (
+        DockerContainer("pgvector/pgvector:pg16")
+        .with_env("POSTGRES_USER", "portrait")
+        .with_env("POSTGRES_PASSWORD", "portrait-secret")
+        .with_env("POSTGRES_DB", "portrait")
+        .with_exposed_ports(5432) as container
+    ):
+        _exec_ok(
+            container,
+            ["psql", "-U", "portrait", "-d", "portrait", "-v", "ON_ERROR_STOP=1", "-c", "SELECT 1"],
+            timeout=90,
+        )
+        host = container.get_container_host_ip()
+        port = container.get_exposed_port(5432)
+        dsn = f"postgresql://portrait:portrait-secret@{host}:{port}/portrait"
+
+        expected_versions = [migration.version for migration in discover_migrations()]
+        before = migration_status(dsn)
+        first = apply_migrations(dsn, applied_by="integration-test")
+        second = apply_migrations(dsn, applied_by="integration-test")
+        status = migration_status(dsn)
+
+        assert before["applied_versions"] == []
+        assert before["pending_versions"] == expected_versions
+        assert first["ok"] is True
+        assert first["applied_now"] == expected_versions
+        assert first["applied_versions"] == expected_versions
+        assert first["pending_versions"] == []
+        assert second["ok"] is True
+        assert second["applied_now"] == []
+        assert second["applied_versions"] == expected_versions
+        assert second["pending_versions"] == []
+        assert status["ok"] is True
+        assert status["applied_versions"] == expected_versions
+        assert status["pending_versions"] == []
+
+
 def test_qdrant_container_health_round_trip() -> None:
     DockerContainer = _docker_container()
 
@@ -296,7 +337,7 @@ def test_qdrant_container_health_round_trip() -> None:
         assert "result" in payload
 
 
-def test_redis_container_queue_round_trip() -> None:
+def test_redis_container_queue_round_trip(monkeypatch: pytest.MonkeyPatch) -> None:
     DockerContainer = _docker_container()
 
     with DockerContainer("redis:7-alpine").with_exposed_ports(6379) as container:
@@ -306,6 +347,34 @@ def test_redis_container_queue_round_trip() -> None:
         assert pong.startswith(b"+PONG")
         assert _redis_command(host, port, "LPUSH", "portrait:test", "message").startswith(b":1")
         assert b"message" in _redis_command(host, port, "RPOP", "portrait:test")
+
+        from app import portrait_idempotency, settings
+
+        monkeypatch.setattr(settings, "REDIS_URL", f"redis://{host}:{port}/0")
+        portrait_idempotency.reset_idempotency_store()
+        context = portrait_idempotency.IdempotencyContext(
+            storage_key="portrait:idempotency:integration",
+            public_key_fingerprint="integration",
+            request_hash="request-hash",
+            owner_token="owner-token",
+            expires_at=time.time() + 60,
+        )
+        assert portrait_idempotency._reserve(context) is None
+        pending = portrait_idempotency._reserve(context)
+        assert pending is not None and pending.state == "in_progress"
+        completed = portrait_idempotency.IdempotencyRecord(
+            request_hash=context.request_hash,
+            owner_token=context.owner_token,
+            state="completed",
+            expires_at=context.expires_at,
+            status_code=200,
+            headers={"content-type": "application/json"},
+            body_base64="e30=",
+        )
+        assert portrait_idempotency._complete(context, completed) is True
+        replay = portrait_idempotency._reserve(context)
+        assert replay is not None and replay.state == "completed"
+        portrait_idempotency.reset_idempotency_store()
 
 
 def test_minio_container_s3_round_trip() -> None:

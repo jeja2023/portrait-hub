@@ -21,3 +21,9 @@ defineEmits<{ action: [] }>();
     </ElEmpty>
   </div>
 </template>
+
+<style scoped>
+.empty-state :deep(.el-empty__description p) {
+  color: var(--muted);
+}
+</style>

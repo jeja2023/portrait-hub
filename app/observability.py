@@ -42,6 +42,7 @@ REQUEST_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
 TRACEPARENT_PATTERN = re.compile(r"^00-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$")
 REQUEST_ID_CONTEXT: ContextVar[str | None] = ContextVar("request_id", default=None)
 TENANT_ID_CONTEXT: ContextVar[str | None] = ContextVar("tenant_id", default=None)
+SCHEDULING_SCOPE_CONTEXT: ContextVar[str | None] = ContextVar("scheduling_scope", default=None)
 TRACEPARENT_CONTEXT: ContextVar[str | None] = ContextVar("traceparent", default=None)
 
 
@@ -89,6 +90,10 @@ def current_request_id() -> str | None:
 
 def current_tenant_id() -> str | None:
     return TENANT_ID_CONTEXT.get()
+
+
+def current_scheduling_scope() -> str | None:
+    return SCHEDULING_SCOPE_CONTEXT.get()
 
 
 def current_traceparent() -> str | None:

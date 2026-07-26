@@ -1,0 +1,30 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: portrait-hub-api
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: portrait-hub-api
+      app.kubernetes.io/track: stable
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: portrait-hub-gpu-worker
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: portrait-hub-gpu-worker
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: portrait-stream-worker
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: portrait-stream-worker

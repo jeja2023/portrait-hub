@@ -32,8 +32,56 @@ describe("backend feature coverage", () => {
     ],
     ["src/views/admin/OpsView.vue", ["/v1/admin/export", "updated_since", "/v1/admin/backup"]],
     [
+      "src/views/admin/ModelRegistryView.vue",
+      [
+        "/v1/admin/models/registry",
+        "/v1/admin/models/releases/dry-run",
+        "/v1/admin/models/releases/apply",
+        "/v1/admin/models/releases/rollback",
+        "确认模型回滚",
+      ],
+    ],
+    [
+      "src/views/business/CommercialView.vue",
+      [
+        "/v1/access/usage/summary",
+        "/v1/access/quota/forecast",
+        "/v1/access/entitlements",
+        "/v1/access/license/status",
+        "/v1/access/support/cases",
+        "/v1/admin/industry-templates",
+        "/v1/admin/industry-template-applications",
+        "回滚行业模板",
+      ],
+    ],
+    [
+      "src/views/operations/ServiceQualityView.vue",
+      ["/v1/admin/operations/sla", "/v1/admin/operations/incidents", "expected_version"],
+    ],
+    [
+      "src/views/operations/ComplianceView.vue",
+      [
+        "/v1/admin/compliance/status",
+        "/v1/admin/compliance/rights-requests",
+        "/v1/admin/evidence",
+        "CONTROL_REQUIRED_FIELDS",
+        "DELETION_BACKENDS",
+        "updateRightsRequest",
+      ],
+    ],
+    [
       "src/views/dev/AccessView.vue",
-      ['method: "PATCH"', "retry_limit", "timeout_seconds", "jwt_issuer", "jwt_audience"],
+      [
+        'method: "PATCH"',
+        "retry_limit",
+        "timeout_seconds",
+        "jwt_issuer",
+        "jwt_audience",
+        "/v1/access/webhook-deliveries",
+        'confirmation-text="重试投递"',
+        "webhookAttemptResponse",
+        "dead_letter_reason",
+      ],
     ],
     [
       "src/views/analysis/ImageAnalysisView.vue",

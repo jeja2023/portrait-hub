@@ -1,19 +1,26 @@
 from __future__ import annotations
 
 import importlib.util
-
-try:  # pragma: no cover - 可选生产依赖
-    import boto3
-except Exception:  # pragma: no cover - 本地环境可能故意缺少该依赖
-    boto3 = None
-
-try:  # pragma: no cover - 可选生产依赖
-    import redis
-except Exception:  # pragma: no cover - 本地环境可能故意缺少该依赖
-    redis = None
+from typing import Any
 
 from app import settings
 from app.postgres_core import postgres_driver_available, postgres_pool_available
+
+boto3: Any
+try:  # pragma: no cover - 可选生产依赖
+    import boto3 as _boto3
+except Exception:  # pragma: no cover - 本地环境可能故意缺少该依赖
+    boto3 = None
+else:
+    boto3 = _boto3
+
+redis: Any
+try:  # pragma: no cover - 可选生产依赖
+    import redis as _redis
+except Exception:  # pragma: no cover - 本地环境可能故意缺少该依赖
+    redis = None
+else:
+    redis = _redis
 
 PRODUCTION_PROFILES = {"prod", "production"}
 PRODUCTION_VECTOR_BACKENDS = {"pgvector", "qdrant"}
@@ -98,6 +105,10 @@ def production_externalization_failures() -> list[str]:
         failures.append("REDIS_URL must be configured in production")
     if not optional_dependency_available("redis", redis):
         failures.append("redis must be installed in production")
+    if settings.COMMERCIAL_CONCURRENCY_LEASE_SECONDS <= 0:
+        failures.append("COMMERCIAL_CONCURRENCY_LEASE_SECONDS must be greater than 0 in production")
+    if not 60 <= settings.STEP_UP_AUTH_MAX_AGE_SECONDS <= 900:
+        failures.append("STEP_UP_AUTH_MAX_AGE_SECONDS must be between 60 and 900 in production")
 
     if not settings.OPENTELEMETRY_ENABLED:
         failures.append("生产环境中 OPENTELEMETRY_ENABLED 必须为 true")
@@ -113,6 +124,19 @@ def production_externalization_failures() -> list[str]:
 
     if not settings.PORTRAIT_REQUIRE_PRODUCTION_MODEL_CAPABILITIES:
         failures.append("PORTRAIT_REQUIRE_PRODUCTION_MODEL_CAPABILITIES must be true in production")
+    if settings.COMMERCIAL_DELIVERY_PROFILE not in {"private_standard", "private_ha", "platform_api"}:
+        failures.append("COMMERCIAL_DELIVERY_PROFILE must identify a production delivery profile")
+    if not settings.COMMERCIAL_ENTITLEMENT_ENFORCEMENT_ENABLED:
+        failures.append("COMMERCIAL_ENTITLEMENT_ENFORCEMENT_ENABLED must be true in production")
+    if settings.COMMERCIAL_DELIVERY_PROFILE in {"private_standard", "private_ha"}:
+        if not settings.COMMERCIAL_LICENSE_REQUIRED:
+            failures.append("private production profiles require COMMERCIAL_LICENSE_REQUIRED=true")
+        if not settings.COMMERCIAL_LICENSE_INSTANCE_ID:
+            failures.append("private production profiles require COMMERCIAL_LICENSE_INSTANCE_ID")
+        if not settings.COMMERCIAL_LICENSE_PATH.is_file():
+            failures.append("private production profiles require a mounted commercial license")
+        if not settings.COMMERCIAL_LICENSE_PUBLIC_KEY_PATH.is_file():
+            failures.append("private production profiles require a mounted commercial license public key")
     return failures
 
 

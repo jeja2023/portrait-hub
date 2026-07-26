@@ -631,6 +631,7 @@ def iter_video_frame_batches(
     batch_size: int,
     read_timeout_seconds: int | None = None,
     stop_requested: Callable[[], bool] | None = None,
+    start_frame_index: int = 0,
 ) -> Generator[VideoFrameBatch, None, None]:
     """顺序 decode 整个视频，按秒采样，每 batch_size 帧 yield 一批。
 
@@ -650,9 +651,11 @@ def iter_video_frame_batches(
         batch_images: list[Image.Image] = []
         batch_indexes: list[int] = []
         batch_seconds: list[float] = []
-        frame_index = 0
+        frame_index = max(0, int(start_frame_index))
+        if frame_index > 0:
+            capture.set(cv2.CAP_PROP_POS_FRAMES, frame_index)
         last_sample_seconds: float | None = None
-        previous_seconds = 0.0
+        previous_seconds = frame_index / fps if fps > 0 else 0.0
         fallback_start = now()
         while True:
             if stop_requested is not None and stop_requested():
@@ -690,6 +693,7 @@ async def aiter_video_frame_batches(
     sample_interval_seconds: float,
     batch_size: int,
     read_timeout_seconds: int | None = None,
+    start_frame_index: int = 0,
 ) -> AsyncGenerator[VideoFrameBatch, None]:
     """Bridge the blocking decoder to asyncio with one batch of read-ahead."""
     batch_queue: queue.Queue[VideoFrameBatch | BaseException | None] = queue.Queue(maxsize=1)
@@ -706,9 +710,25 @@ async def aiter_video_frame_batches(
 
     def produce() -> None:
         try:
-            for batch in iter_video_frame_batches(
-                source, sample_interval_seconds, batch_size, read_timeout_seconds, stop_event.is_set
-            ):
+            batch_iterator = (
+                iter_video_frame_batches(
+                    source,
+                    sample_interval_seconds,
+                    batch_size,
+                    read_timeout_seconds,
+                    stop_event.is_set,
+                )
+                if start_frame_index == 0
+                else iter_video_frame_batches(
+                    source,
+                    sample_interval_seconds,
+                    batch_size,
+                    read_timeout_seconds,
+                    stop_event.is_set,
+                    start_frame_index,
+                )
+            )
+            for batch in batch_iterator:
                 if not put(batch):
                     return
         except BaseException as exc:

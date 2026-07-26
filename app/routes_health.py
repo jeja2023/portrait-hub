@@ -3,16 +3,17 @@ from typing import Any
 
 import numpy as np
 import onnxruntime as ort
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response, status
+from fastapi import Depends, Header, HTTPException, Query, Request, Response, status
 
+from app.api_contracts import ContractAPIRouter as APIRouter
 from app.metrics import prometheus_metrics
 from app.model_config import MODEL_CONFIGS
 from app.model_package import get_model_path
 from app.model_refs import split_cache_key
-from app.observability import logger
+from app.observability import logger, request_id_from_headers
 from app.portrait_async import run_blocking_io
 from app.portrait_auth import permission_dependency
-from app.portrait_response import MODEL_READINESS_CHECK_FAILED, exception_log_summary
+from app.portrait_response import MODEL_READINESS_CHECK_FAILED, exception_log_summary, portrait_success
 from app.runtime import get_or_load_model, input_dtype, run_model_bundle
 from app.runtime_sessions import runtime_provider_status
 from app.security import request_is_authenticated, require_api_token
@@ -20,12 +21,38 @@ from app.settings import APP_VERSION, OBJECT_STORAGE_DIR, READY_CHECK_DEPENDENCI
 
 router = APIRouter()
 
+API_CONTRACT_VERSION = "v1"
+PYTHON_SDK_MINIMUM_VERSION = "0.14.0"
+PYTHON_SDK_MAXIMUM_VERSION_EXCLUSIVE = "1.0.0"
+
 
 @router.get("/health")
 async def health() -> dict[str, Any]:
     # 公开存活探针：刻意保持最小化，不向未鉴权调用方泄露精确构建版本号
     # （版本号改在鉴权的 /ready/deep 与管理员状态端点暴露给运维）。
     return {"status": "healthy"}
+
+
+@router.get("/v1/meta", dependencies=[Depends(require_api_token)])
+async def api_metadata(request: Request) -> dict[str, Any]:
+    return portrait_success(
+        request_id_from_headers(request),
+        {
+            "api_contract": API_CONTRACT_VERSION,
+            "service_version": APP_VERSION,
+            "supported_sdks": {
+                "python": {
+                    "status": "stable",
+                    "minimum_version": PYTHON_SDK_MINIMUM_VERSION,
+                    "maximum_version_exclusive": PYTHON_SDK_MAXIMUM_VERSION_EXCLUSIVE,
+                },
+                "node": {"status": "maintenance"},
+                "go": {"status": "experimental"},
+                "java": {"status": "experimental"},
+            },
+            "deprecations": [],
+        },
+    )
 
 
 @router.get("/ready")

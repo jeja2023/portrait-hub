@@ -1,0 +1,132 @@
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: portrait-hub-api
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: portrait-hub-api
+  minReplicas: 3
+  maxReplicas: 20
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 0
+      policies:
+        - type: Percent
+          value: 100
+          periodSeconds: 60
+        - type: Pods
+          value: 4
+          periodSeconds: 60
+      selectPolicy: Max
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+        - type: Percent
+          value: 25
+          periodSeconds: 60
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 65
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: portrait-hub-gpu-worker
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: portrait-hub-gpu-worker
+  minReplicas: 2
+  maxReplicas: 12
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 30
+      policies:
+        - type: Pods
+          value: 2
+          periodSeconds: 60
+    scaleDown:
+      stabilizationWindowSeconds: 600
+      policies:
+        - type: Pods
+          value: 1
+          periodSeconds: 120
+  metrics:
+    - type: Pods
+      pods:
+        metric:
+          name: gpu_worker_gpu_queue_depth
+        target:
+          type: AverageValue
+          averageValue: "2"
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: portrait-stream-worker
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: portrait-stream-worker
+  minReplicas: 2
+  maxReplicas: 10
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+---
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: portrait-video-job-worker
+spec:
+  scaleTargetRef:
+    name: portrait-video-job-worker
+  pollingInterval: 10
+  cooldownPeriod: 300
+  minReplicaCount: 0
+  maxReplicaCount: 10
+  fallback:
+    failureThreshold: 3
+    replicas: 1
+  advanced:
+    horizontalPodAutoscalerConfig:
+      behavior:
+        scaleDown:
+          stabilizationWindowSeconds: 300
+  triggers:
+    - type: redis-streams
+      metadata:
+        addressFromEnv: REDIS_URL
+        stream: portrait:video_jobs:high
+        consumerGroup: portrait-workers
+        pendingEntriesCount: "1"
+        activationPendingEntriesCount: "1"
+    - type: redis-streams
+      metadata:
+        addressFromEnv: REDIS_URL
+        stream: portrait:video_jobs
+        consumerGroup: portrait-workers
+        pendingEntriesCount: "2"
+        activationPendingEntriesCount: "1"
+    - type: redis-streams
+      metadata:
+        addressFromEnv: REDIS_URL
+        stream: portrait:video_jobs:low
+        consumerGroup: portrait-workers
+        pendingEntriesCount: "4"
+        activationPendingEntriesCount: "1"

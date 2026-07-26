@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import time
+from urllib.parse import parse_qs, urlparse
 
 import pytest
 from cryptography.hazmat.primitives import hashes
@@ -43,12 +44,14 @@ def session_cookie(
 ) -> str:
     payload = {
         "purpose": "session",
+        "auth_kind": "oidc",
         "sub": "user-01",
         "name": "Test User",
         "email": "user@example.com",
         "tenant_id": tenant_id,
         "roles": roles,
         "csrf": csrf,
+        "auth_time": int(time.time()),
         "iat": int(time.time()),
         "exp": int(time.time()) + 300,
     }
@@ -183,6 +186,98 @@ def test_oidc_public_config_is_safe_when_disabled() -> None:
         "provider_name": oidc_auth.OIDC_PROVIDER_NAME,
         "credential_login_available": True,
     }
+
+
+def test_oidc_step_up_requests_forced_reauthentication(
+    configured_oidc: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def discovery() -> dict[str, str]:
+        return {"authorization_endpoint": "https://identity.example.com/authorize"}
+
+    monkeypatch.setattr(oidc_auth, "OIDC_ALLOW_INSECURE_HTTP", True)
+    monkeypatch.setattr(oidc_auth, "OIDC_COOKIE_SECURE", False)
+    monkeypatch.setattr(oidc_auth, "_discovery", discovery)
+    client = TestClient(app)
+    client.cookies.set("portrait_oidc_session", session_cookie(roles=["admin"]))
+
+    response = client.get(
+        "/auth/oidc/step-up?return_to=/admin/models%3Ftab%3Drelease",
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 302
+    query = parse_qs(urlparse(response.headers["location"]).query)
+    assert query["prompt"] == ["login"]
+    assert query["max_age"] == ["0"]
+    assert query["code_challenge_method"] == ["S256"]
+    flow = oidc_auth._read_signed_payload(response.cookies.get("portrait_oidc_flow"), purpose="flow")
+    assert flow is not None
+    assert flow["step_up"] is True
+    assert flow["return_to"] == "/admin/models?tab=release"
+
+
+def test_oidc_step_up_callback_rejects_stale_authentication(
+    configured_oidc: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def discovery() -> dict[str, str]:
+        return {"token_endpoint": "https://identity.example.com/token"}
+
+    async def validate_id_token(_token: str, *, nonce: str) -> dict[str, object]:
+        assert nonce == "nonce-value"
+        now = int(time.time())
+        return {
+            "sub": "enterprise-user",
+            "exp": now + 300,
+            "iat": now,
+            "auth_time": now - 3600,
+        }
+
+    class FakeResponse:
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict[str, str]:
+            return {"id_token": "id-token"}
+
+    class FakeClient:
+        def __init__(self, **_kwargs: object) -> None:
+            pass
+
+        async def __aenter__(self) -> FakeClient:
+            return self
+
+        async def __aexit__(self, *_args: object) -> None:
+            return None
+
+        async def post(self, _url: str, **_kwargs: object) -> FakeResponse:
+            return FakeResponse()
+
+    monkeypatch.setattr(oidc_auth, "OIDC_ALLOW_INSECURE_HTTP", True)
+    monkeypatch.setattr(oidc_auth, "OIDC_COOKIE_SECURE", False)
+    monkeypatch.setattr(oidc_auth, "_discovery", discovery)
+    monkeypatch.setattr(oidc_auth, "_validate_id_token", validate_id_token)
+    monkeypatch.setattr(oidc_auth.httpx, "AsyncClient", FakeClient)
+    flow = {
+        "purpose": "flow",
+        "state": "state-value",
+        "nonce": "nonce-value",
+        "verifier": "verifier-value",
+        "return_to": "/admin/models",
+        "step_up": True,
+        "exp": int(time.time()) + 300,
+    }
+    client = TestClient(app)
+    client.cookies.set("portrait_oidc_flow", oidc_auth._signed_payload(flow))
+
+    response = client.get(
+        "/auth/oidc/callback?code=code-value&state=state-value",
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 302
+    assert response.headers["location"] == "/?oidc_error=step_up_failed"
 
 
 def test_oidc_role_mapping_accepts_groups_and_rejects_unassigned_users(

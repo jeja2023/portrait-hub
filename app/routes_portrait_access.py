@@ -14,6 +14,7 @@ from app.portrait_access import (
     create_project,
     create_tenant,
     create_webhook,
+    find_application,
     find_tenant,
     list_applications,
     list_projects,
@@ -30,12 +31,21 @@ from app.portrait_access import (
 )
 from app.portrait_async import run_blocking_io
 from app.portrait_audit import audit_event
-from app.portrait_auth import permission_dependency
+from app.portrait_auth import permission_dependency, require_step_up_authentication
 from app.portrait_call_logs import list_call_logs, summarize_call_logs
+from app.portrait_commercial import require_entitlement_allocation, require_project_allocation
+from app.portrait_commercial_license import require_license_allocation
 from app.portrait_errors import error_code_catalog
 from app.portrait_projects import request_grants_project
 from app.portrait_request_context import PortraitRequestContext, portrait_request_context
 from app.portrait_response import portrait_success
+from app.portrait_webhook_delivery import (
+    WebhookDeliveryConflictError,
+    WebhookDeliveryNotFoundError,
+    get_webhook_delivery,
+    list_webhook_deliveries,
+    retry_webhook_delivery,
+)
 from app.security import require_api_token
 
 router = APIRouter(dependencies=[Depends(require_api_token)])
@@ -158,6 +168,28 @@ def generated_id(prefix: str) -> str:
     return f"{prefix}_{secrets.token_hex(8)}"
 
 
+def _capacity_rank(value: Any) -> float:
+    if value is None:
+        return float("inf")
+    normalized = int(value)
+    return float("inf") if normalized == 0 else float(normalized)
+
+
+def application_allocation_expands(current: dict[str, Any] | None, updates: dict[str, Any]) -> bool:
+    if current is None:
+        return False
+    if "project_id" in updates and str(updates["project_id"]) != str(current.get("project_id") or "default"):
+        return True
+    if "scopes" in updates and not set(updates.get("scopes") or []).issubset(set(current.get("scopes") or [])):
+        return True
+    if updates.get("status") == "active" and current.get("status") != "active":
+        return True
+    for field in ("rate_limit_per_minute", "rate_limit_burst", "daily_quota"):
+        if field in updates and _capacity_rank(updates[field]) > _capacity_rank(current.get(field)):
+            return True
+    return False
+
+
 async def audit_or_restore(event: str, snapshot: dict[str, list[dict[str, Any]]], **payload: Any) -> None:
     try:
         await run_blocking_io(audit_event, event, **payload)
@@ -187,6 +219,12 @@ async def v1_access_create_tenant(payload: AccessTenantCreateRequest, request: R
             status_value=payload.status,
         )
         if payload.create_default_application:
+            await run_blocking_io(
+                require_license_allocation,
+                tenant["tenant_id"],
+                "default",
+                "credential_create",
+            )
             application, secret = await run_blocking_io(
                 create_application,
                 tenant["tenant_id"],
@@ -268,6 +306,14 @@ async def v1_access_create_project(
     ctx: PortraitRequestContext = Depends(portrait_request_context),
 ) -> dict[str, Any]:
     require_project_grant(request, ctx, payload.project_id)
+    existing_projects = await run_blocking_io(list_projects, ctx.tenant_id)
+    await run_blocking_io(
+        require_project_allocation,
+        ctx.tenant_id,
+        ctx.project_id,
+        payload.project_id,
+        current_count=len(existing_projects),
+    )
     snapshot = await run_blocking_io(access_state_payload)
     project = await run_blocking_io(
         create_project,
@@ -338,6 +384,12 @@ async def v1_access_create_application(
     tenant_id = ctx.tenant_id
     target_project = payload.project_id or ctx.project_id
     require_project_grant(request, ctx, target_project)
+    await run_blocking_io(
+        require_entitlement_allocation,
+        tenant_id,
+        target_project,
+        "credential_create",
+    )
     snapshot = await run_blocking_io(access_state_payload)
     app, secret = await run_blocking_io(
         create_application,
@@ -379,8 +431,19 @@ async def v1_access_patch_application(
     request_id = ctx.request_id
     tenant_id = ctx.tenant_id
     updates = payload.model_dump(exclude_unset=True)
-    target_project = str(updates.get("project_id") or ctx.project_id)
+    current_application = await run_blocking_io(find_application, tenant_id, app_id)
+    current_project = str((current_application or {}).get("project_id") or ctx.project_id)
+    if current_application is not None and not request_grants_project(request, ctx.tenant_id, current_project):
+        current_application = None
+    target_project = str(updates.get("project_id") or (current_application or {}).get("project_id") or ctx.project_id)
     require_project_grant(request, ctx, target_project)
+    if application_allocation_expands(current_application, updates):
+        await run_blocking_io(
+            require_entitlement_allocation,
+            tenant_id,
+            target_project,
+            "capacity_change",
+        )
     snapshot = await run_blocking_io(access_state_payload)
     app = await run_blocking_io(
         update_application,
@@ -402,13 +465,22 @@ async def v1_access_patch_application(
     return portrait_success(request_id, {"application": app})
 
 
-@router.post("/v1/access/applications/{app_id}/rotate", dependencies=[Depends(permission_dependency("access:write"))])
+@router.post(
+    "/v1/access/applications/{app_id}/rotate",
+    dependencies=[Depends(permission_dependency("access:write")), Depends(require_step_up_authentication)],
+)
 async def v1_access_rotate_application(
     app_id: str,
     ctx: PortraitRequestContext = Depends(portrait_request_context),
 ) -> dict[str, Any]:
     request_id = ctx.request_id
     tenant_id = ctx.tenant_id
+    await run_blocking_io(
+        require_entitlement_allocation,
+        tenant_id,
+        ctx.project_id,
+        "credential_rotate",
+    )
     snapshot = await run_blocking_io(access_state_payload)
     app, secret = await run_blocking_io(
         rotate_application_secret,
@@ -517,6 +589,84 @@ async def v1_access_webhooks(ctx: PortraitRequestContext = Depends(portrait_requ
     )
 
 
+@router.get(
+    "/v1/access/webhook-deliveries",
+    dependencies=[Depends(permission_dependency("access:read"))],
+)
+async def v1_access_webhook_deliveries(
+    webhook_id: str | None = Query(default=None, max_length=96),
+    status_filter: str | None = Query(default=None, alias="status", max_length=32),
+    limit: int = Query(default=100, ge=1, le=500),
+    ctx: PortraitRequestContext = Depends(portrait_request_context),
+) -> dict[str, Any]:
+    deliveries = await run_blocking_io(
+        list_webhook_deliveries,
+        ctx.tenant_id,
+        ctx.project_id,
+        webhook_id=webhook_id,
+        status=status_filter,
+        limit=limit,
+    )
+    return portrait_success(
+        ctx.request_id,
+        {
+            "tenant_id": ctx.tenant_id,
+            "project_id": ctx.project_id,
+            "deliveries": deliveries,
+            "count": len(deliveries),
+        },
+    )
+
+
+@router.post(
+    "/v1/access/webhook-deliveries/{delivery_id}/retry",
+    dependencies=[Depends(permission_dependency("access:write")), Depends(require_step_up_authentication)],
+)
+async def v1_access_retry_webhook_delivery(
+    delivery_id: str,
+    ctx: PortraitRequestContext = Depends(portrait_request_context),
+) -> dict[str, Any]:
+    try:
+        current = await run_blocking_io(
+            get_webhook_delivery,
+            ctx.tenant_id,
+            ctx.project_id,
+            delivery_id,
+        )
+    except WebhookDeliveryNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    if current.get("status") not in {"failed", "dead_letter"}:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="only failed or dead-letter webhook deliveries can be retried",
+        )
+
+    await run_blocking_io(
+        audit_event,
+        "access_webhook_delivery_retry_requested",
+        request_id=ctx.request_id,
+        tenant_id=ctx.tenant_id,
+        project_id=ctx.project_id,
+        delivery_id=delivery_id,
+        webhook_id=current.get("webhook_id"),
+        original_request_id=current.get("request_id"),
+        prior_status=current.get("status"),
+        prior_attempt_count=current.get("attempt_count"),
+    )
+    try:
+        delivery = await run_blocking_io(
+            retry_webhook_delivery,
+            ctx.tenant_id,
+            ctx.project_id,
+            delivery_id,
+        )
+    except WebhookDeliveryNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except WebhookDeliveryConflictError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    return portrait_success(ctx.request_id, {"delivery": delivery})
+
+
 @router.post("/v1/access/webhooks", dependencies=[Depends(permission_dependency("access:write"))])
 async def v1_access_create_webhook(
     payload: WebhookCreateRequest,
@@ -524,6 +674,12 @@ async def v1_access_create_webhook(
 ) -> dict[str, Any]:
     request_id = ctx.request_id
     tenant_id = ctx.tenant_id
+    await run_blocking_io(
+        require_entitlement_allocation,
+        tenant_id,
+        ctx.project_id,
+        "credential_create",
+    )
     snapshot = await run_blocking_io(access_state_payload)
     webhook, secret = await run_blocking_io(
         create_webhook,
@@ -580,13 +736,22 @@ async def v1_access_patch_webhook(
     return portrait_success(request_id, {"webhook": webhook})
 
 
-@router.post("/v1/access/webhooks/{webhook_id}/rotate", dependencies=[Depends(permission_dependency("access:write"))])
+@router.post(
+    "/v1/access/webhooks/{webhook_id}/rotate",
+    dependencies=[Depends(permission_dependency("access:write")), Depends(require_step_up_authentication)],
+)
 async def v1_access_rotate_webhook(
     webhook_id: str,
     ctx: PortraitRequestContext = Depends(portrait_request_context),
 ) -> dict[str, Any]:
     request_id = ctx.request_id
     tenant_id = ctx.tenant_id
+    await run_blocking_io(
+        require_entitlement_allocation,
+        tenant_id,
+        ctx.project_id,
+        "credential_rotate",
+    )
     snapshot = await run_blocking_io(access_state_payload)
     webhook, secret = await run_blocking_io(
         rotate_webhook_secret,

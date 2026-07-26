@@ -9,7 +9,7 @@ import tomllib
 from pathlib import Path
 
 DEFAULT_TARGET_ROOTS = ("app", "tools", "sdk")
-IGNORED_PATH_PARTS = {".git", ".mypy_cache", ".pytest_cache", ".venv", "__pycache__"}
+IGNORED_PATH_PARTS = {".git", ".mypy_cache", ".pytest_cache", ".venv", "__pycache__", "build"}
 MYPY_CACHE_DIR = Path(".codex-tmp") / "mypy-cache"
 
 

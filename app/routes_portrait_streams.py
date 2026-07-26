@@ -9,6 +9,7 @@ from app.observability import logger
 from app.portrait_async import run_blocking_io
 from app.portrait_audit import audit_event
 from app.portrait_auth import permission_dependency
+from app.portrait_commercial import require_entitlement_allocation
 from app.portrait_pagination import normalize_list_pagination, normalize_stream_event_pagination, page_items_keyset
 from app.portrait_request_context import PortraitRequestContext, portrait_request_context
 from app.portrait_response import exception_log_summary, portrait_success, raise_rollback_failure
@@ -79,6 +80,14 @@ async def v1_create_stream(
 ) -> dict[str, Any]:
     request_id = ctx.request_id
     tenant_id = ctx.scope_id
+    current_stream_count = sum(1 for item in stream_records_snapshot() if item.tenant_id == tenant_id)
+    await run_blocking_io(
+        require_entitlement_allocation,
+        ctx.tenant_id,
+        ctx.project_id,
+        "stream_create",
+        current_count=current_stream_count,
+    )
     stream = await run_blocking_io(
         create_stream,
         payload.stream_url,
@@ -150,6 +159,19 @@ async def v1_start_stream(
     tenant_id = ctx.scope_id
     await run_blocking_io(refresh_streams_state)
     stream = stream_or_404(stream_id, tenant_id)
+    if str(stream.status) != "running":
+        running_count = sum(
+            1
+            for item in stream_records_snapshot()
+            if item.tenant_id == tenant_id and str(item.status) == "running" and item.stream_id != stream.stream_id
+        )
+        await run_blocking_io(
+            require_entitlement_allocation,
+            ctx.tenant_id,
+            ctx.project_id,
+            "stream_start",
+            current_count=running_count,
+        )
     previous_stream = deepcopy(stream)
     previous_worker_sessions = stream_worker_sessions_snapshot()
     try:

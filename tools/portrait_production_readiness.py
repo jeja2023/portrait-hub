@@ -18,6 +18,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from tools.readiness import (  # noqa: E402  sys.path 注入后再导入
+    check_commercial_delivery,
     check_data_stack,
     check_security_controls,
     check_templates,
@@ -29,6 +30,7 @@ from tools.readiness_checks import (  # noqa: E402  sys.path 注入后再导入
 
 __all__ = [
     "check_capabilities",
+    "check_commercial_delivery",
     "check_data_stack",
     "check_model_files",
     "check_security_controls",
@@ -58,6 +60,7 @@ def main() -> int:
         *check_templates(root),
         *check_data_stack(root),
         *check_security_controls(root),
+        *check_commercial_delivery(root),
     ]
     skipped: list[dict[str, Any]] = []
     if args.scope == "all":

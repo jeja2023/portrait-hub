@@ -15,7 +15,8 @@ from app.portrait_audit import (
     read_public_audit_events,
     read_public_backup_snapshots,
 )
-from app.portrait_auth import permission_dependency
+from app.portrait_auth import permission_dependency, require_step_up_authentication
+from app.portrait_commercial import require_compliance_control
 from app.portrait_gallery import (
     GALLERY,
     PersonRecord,
@@ -332,7 +333,10 @@ async def v1_admin_audit_events(
     return portrait_success(request_id_header, {"tenant_id": tenant_id, **audit_events})
 
 
-@router.get("/v1/admin/export", dependencies=[Depends(permission_dependency("admin:export"))])
+@router.get(
+    "/v1/admin/export",
+    dependencies=[Depends(permission_dependency("admin:export")), Depends(require_step_up_authentication)],
+)
 async def v1_admin_export(
     people_limit: int | None = Query(None),
     people_offset: int | None = Query(None),
@@ -349,6 +353,7 @@ async def v1_admin_export(
     updated_since: float | None = Query(None, ge=0),
     ctx: PortraitRequestContext = Depends(portrait_request_context),
 ) -> dict[str, Any]:
+    await run_blocking_io(require_compliance_control, ctx.tenant_id, ctx.project_id, "COM-006")
     request_id = ctx.request_id
     tenant_id = ctx.scope_id
     people_request = normalize_list_pagination(people_limit, people_offset, people_cursor)
@@ -471,7 +476,10 @@ async def v1_admin_backups(
     return portrait_success(request_id, {"tenant_id": tenant_id, **backups})
 
 
-@router.post("/v1/admin/backup", dependencies=[Depends(permission_dependency("admin:export"))])
+@router.post(
+    "/v1/admin/backup",
+    dependencies=[Depends(permission_dependency("admin:export")), Depends(require_step_up_authentication)],
+)
 async def v1_admin_backup(
     payload: AdminBackupRequest,
     ctx: PortraitRequestContext = Depends(portrait_request_context),
@@ -525,7 +533,10 @@ async def v1_admin_backup(
     )
 
 
-@router.post("/v1/admin/retention/cleanup", dependencies=[Depends(permission_dependency("admin:retention"))])
+@router.post(
+    "/v1/admin/retention/cleanup",
+    dependencies=[Depends(permission_dependency("admin:retention")), Depends(require_step_up_authentication)],
+)
 async def v1_admin_retention_cleanup(
     payload: RetentionCleanupRequest,
     ctx: PortraitRequestContext = Depends(portrait_request_context),

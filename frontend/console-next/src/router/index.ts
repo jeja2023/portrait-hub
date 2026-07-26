@@ -2,8 +2,11 @@ import { nextTick } from "vue";
 import { createMemoryHistory, createRouter, createWebHashHistory } from "vue-router";
 import {
   Archive,
+  BadgeDollarSign,
   Boxes,
   Braces,
+  ChartNoAxesCombined,
+  ClipboardCheck,
   FileClock,
   Gauge,
   Image as ImageIcon,
@@ -48,7 +51,7 @@ const router = createRouter({
           meta: {
             title: "总览",
             permission: "admin:status",
-            nav: { section: "工作台", order: 1, icon: Gauge },
+            nav: { section: "总览", order: 1, icon: Gauge },
           },
         },
         {
@@ -58,7 +61,7 @@ const router = createRouter({
           meta: {
             title: "图片分析",
             permission: "infer",
-            nav: { section: "工作台", order: 2, icon: ImageIcon },
+            nav: { section: "智能分析", order: 1, icon: ImageIcon },
           },
         },
         {
@@ -68,7 +71,7 @@ const router = createRouter({
           meta: {
             title: "视频任务",
             permission: "jobs:read",
-            nav: { section: "工作台", order: 3, icon: Video },
+            nav: { section: "智能分析", order: 2, icon: Video },
           },
         },
         {
@@ -84,7 +87,7 @@ const router = createRouter({
           meta: {
             title: "实时视频流",
             permission: "streams:read",
-            nav: { section: "工作台", order: 4, icon: Radio },
+            nav: { section: "智能分析", order: 3, icon: Radio },
           },
         },
         {
@@ -100,7 +103,7 @@ const router = createRouter({
           meta: {
             title: "分析结果",
             permission: "infer",
-            nav: { section: "工作台", order: 5, icon: Archive },
+            nav: { section: "智能分析", order: 4, icon: Archive },
           },
         },
         {
@@ -110,7 +113,7 @@ const router = createRouter({
           meta: {
             title: "人员比对",
             permission: "compare",
-            nav: { section: "工作台", order: 6, icon: Waypoints },
+            nav: { section: "智能分析", order: 5, icon: Waypoints },
           },
         },
         {
@@ -120,7 +123,7 @@ const router = createRouter({
           meta: {
             title: "以图搜人",
             permission: "gallery:read",
-            nav: { section: "工作台", order: 7, icon: ScanSearch },
+            nav: { section: "智能分析", order: 6, icon: ScanSearch },
           },
         },
         {
@@ -130,7 +133,7 @@ const router = createRouter({
           meta: {
             title: "人员库",
             permission: "gallery:read",
-            nav: { section: "工作台", order: 8, icon: Images },
+            nav: { section: "人员库", order: 1, icon: Images },
           },
         },
         {
@@ -146,7 +149,7 @@ const router = createRouter({
           meta: {
             title: "接入配置",
             permission: "access:read",
-            nav: { section: "开发者中心", order: 1, icon: Settings2 },
+            nav: { section: "接入中心", order: 1, icon: Settings2 },
           },
         },
         {
@@ -156,7 +159,7 @@ const router = createRouter({
           meta: {
             title: "调试台",
             permission: "infer",
-            nav: { section: "开发者中心", order: 2, icon: Braces },
+            nav: { section: "接入中心", order: 2, icon: Braces },
           },
         },
         {
@@ -166,7 +169,7 @@ const router = createRouter({
           meta: {
             title: "调用日志",
             permission: "access:read",
-            nav: { section: "开发者中心", order: 3, icon: FileClock },
+            nav: { section: "接入中心", order: 3, icon: FileClock },
           },
         },
         {
@@ -176,7 +179,7 @@ const router = createRouter({
           meta: {
             title: "身份与权限",
             permission: "admin:identity",
-            nav: { section: "系统管理", order: 1, icon: IdCard },
+            nav: { section: "平台管理", order: 1, icon: IdCard },
           },
         },
         {
@@ -186,7 +189,7 @@ const router = createRouter({
           meta: {
             title: "模型中心",
             permission: "models:read",
-            nav: { section: "系统管理", order: 2, icon: Boxes },
+            nav: { section: "模型与评估", order: 1, icon: Boxes },
           },
         },
         {
@@ -196,7 +199,17 @@ const router = createRouter({
           meta: {
             title: "阈值与标注",
             permission: "models:read",
-            nav: { section: "系统管理", order: 3, icon: SlidersHorizontal },
+            nav: { section: "模型与评估", order: 3, icon: SlidersHorizontal },
+          },
+        },
+        {
+          path: "admin/model-registry",
+          name: "admin-model-registry",
+          component: () => import("../views/admin/ModelRegistryView.vue"),
+          meta: {
+            title: "模型注册与发布",
+            permission: "models:read",
+            nav: { section: "模型与评估", order: 2, icon: ClipboardCheck },
           },
         },
         {
@@ -206,7 +219,7 @@ const router = createRouter({
           meta: {
             title: "配置中心",
             permission: "admin:configuration",
-            nav: { section: "系统管理", order: 4, icon: Settings },
+            nav: { section: "平台管理", order: 2, icon: Settings },
           },
         },
         {
@@ -216,7 +229,7 @@ const router = createRouter({
           meta: {
             title: "运维与合规",
             permission: "admin:status",
-            nav: { section: "系统管理", order: 5, icon: ShieldCheck },
+            nav: { section: "运维合规", order: 1, icon: ShieldCheck },
           },
         },
         {
@@ -224,6 +237,36 @@ const router = createRouter({
           name: "forbidden",
           component: () => import("../views/ForbiddenView.vue"),
           meta: { title: "无权访问" },
+        },
+        {
+          path: "admin/service-quality",
+          name: "admin-service-quality",
+          component: () => import("../views/operations/ServiceQualityView.vue"),
+          meta: {
+            title: "服务质量与事故",
+            permission: "operations:read",
+            nav: { section: "运维合规", order: 2, icon: ChartNoAxesCombined },
+          },
+        },
+        {
+          path: "admin/compliance",
+          name: "admin-compliance",
+          component: () => import("../views/operations/ComplianceView.vue"),
+          meta: {
+            title: "合规证据",
+            permission: "compliance:read",
+            nav: { section: "运维合规", order: 3, icon: ClipboardCheck },
+          },
+        },
+        {
+          path: "business/commercial",
+          name: "business-commercial",
+          component: () => import("../views/business/CommercialView.vue"),
+          meta: {
+            title: "商业运营",
+            permission: "commercial:read",
+            nav: { section: "商业运营", order: 1, icon: BadgeDollarSign },
+          },
         },
       ],
     },

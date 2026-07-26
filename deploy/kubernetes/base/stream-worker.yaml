@@ -1,0 +1,78 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: portrait-stream-worker
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: portrait-stream-worker
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: portrait-stream-worker
+        app.kubernetes.io/component: stream-worker
+    spec:
+      serviceAccountName: portrait-hub
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 120
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                topologyKey: kubernetes.io/hostname
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: portrait-stream-worker
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: stream-worker
+          image: ghcr.io/example/portrait-hub@sha256:0000000000000000000000000000000000000000000000000000000000000000
+          command: ["python", "-m", "app.portrait_stream_worker_daemon"]
+          env:
+            - name: FORCE_CPU
+              value: "true"
+          envFrom:
+            - configMapRef:
+                name: portrait-hub-config
+            - secretRef:
+                name: portrait-hub-secrets
+          startupProbe:
+            exec:
+              command: ["/bin/sh", "-c", "grep -q app.portrait_stream_worker_daemon /proc/1/cmdline"]
+            failureThreshold: 30
+            periodSeconds: 5
+          livenessProbe:
+            exec:
+              command: ["/bin/sh", "-c", "grep -q app.portrait_stream_worker_daemon /proc/1/cmdline"]
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            limits:
+              cpu: "2"
+              memory: 4Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - name: runtime-state
+              mountPath: /workspace/runtime-state
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: runtime-state
+          persistentVolumeClaim:
+            claimName: portrait-runtime-state
+        - name: tmp
+          emptyDir: {}

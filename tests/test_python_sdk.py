@@ -86,7 +86,7 @@ def test_python_sdk_raises_structured_http_error(monkeypatch) -> None:
         )
 
     monkeypatch.setattr("sdk.python.portrait_hub_client.urllib_request.urlopen", fake_urlopen)
-    client = PortraitHubClient("http://testserver", api_token="token", tenant_id="tenant-a")
+    client = PortraitHubClient("http://testserver", api_token="token", tenant_id="tenant-a", max_retries=0)
 
     with pytest.raises(PortraitHubHTTPError) as exc_info:
         client.health()

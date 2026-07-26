@@ -1,0 +1,72 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: portrait-release-preflight
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-weight: "-10"
+spec:
+  backoffLimit: 1
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: portrait-release-preflight
+        app.kubernetes.io/component: maintenance
+    spec:
+      restartPolicy: Never
+      serviceAccountName: portrait-hub
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: preflight
+          image: ghcr.io/example/portrait-hub@sha256:0000000000000000000000000000000000000000000000000000000000000000
+          command: ["python", "-m", "tools.portrait_release_preflight", "--apply-migrations", "--check-migrations", "--check-models", "--prewarm"]
+          envFrom:
+            - configMapRef:
+                name: portrait-hub-config
+            - secretRef:
+                name: portrait-hub-secrets
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 2Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - name: models
+              mountPath: /models
+              readOnly: true
+            - name: model-config
+              mountPath: /workspace/models.yml
+              subPath: models.yml
+              readOnly: true
+            - name: model-capabilities
+              mountPath: /workspace/model-capabilities.yml
+              subPath: model-capabilities.yml
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: models
+          persistentVolumeClaim:
+            claimName: portrait-models
+        - name: model-config
+          configMap:
+            name: portrait-hub-models
+        - name: model-capabilities
+          configMap:
+            name: portrait-hub-capabilities
+        - name: tmp
+          emptyDir: {}

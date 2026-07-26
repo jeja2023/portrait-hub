@@ -4,7 +4,7 @@ import logging
 import signal
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import Any, cast
+from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.exceptions import RequestValidationError
@@ -33,6 +33,12 @@ from app.portrait_async import run_blocking_io
 from app.portrait_bootstrap import ensure_portrait_runtime_state_loaded
 from app.portrait_call_logs import application_id_from_api_key, record_call_log
 from app.portrait_errors import PortraitError
+from app.portrait_idempotency import (
+    IdempotencyReplay,
+    finalize_idempotent_response,
+    replay_response,
+)
+from app.portrait_metering import record_http_usage_event
 from app.portrait_response import exception_log_summary
 from app.portrait_security import inferred_tenant_id_from_request
 from app.portrait_video_job_worker import start_in_process_worker
@@ -350,6 +356,10 @@ def create_app() -> FastAPI:
         )
         return JSONResponse(status_code=exc.status_code, content=content, headers=exc.headers)
 
+    @app.exception_handler(IdempotencyReplay)
+    async def idempotency_replay_exception_handler(_request: Request, exc: IdempotencyReplay) -> Response:
+        return replay_response(exc)
+
     @app.exception_handler(HTTPException)
     async def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
         request_id = request_id_from_headers(request)
@@ -428,7 +438,29 @@ def create_app() -> FastAPI:
                 created_at=start_time,
                 error_code=logged_error_code,
             )
+            delivery_kind = "duplicate" if response.headers.get("Idempotency-Replayed") == "true" else "original"
+            if request.headers.get("x-retry-attempt", "0").strip() not in {"", "0"}:
+                delivery_kind = "retry"
+            try:
+                usage_dimensions = getattr(request_state, "portrait_usage_dimensions", None)
+                await run_blocking_io(
+                    record_http_usage_event,
+                    tenant_id=tenant_id,
+                    project_id=project_id,
+                    request_id=request_id,
+                    application_id=application_id,
+                    method=request.method,
+                    path=request.url.path,
+                    status_code=response.status_code,
+                    event_time=start_time,
+                    delivery_kind=delivery_kind,
+                    dimensions=usage_dimensions if isinstance(usage_dimensions, dict) else None,
+                )
+            except Exception as exc:
+                logger.warning("Usage metering event write failed: %s", exception_log_summary(exc))
             response.headers["X-Request-ID"] = request_id
+            response.headers["X-PortraitHub-API-Version"] = "v1"
+            response.headers["X-PortraitHub-Service-Version"] = APP_VERSION
             if traceparent:
                 response.headers["traceparent"] = traceparent
             # 契约（方案 §8.2.5）：敏感 API 与鉴权对象响应统一 no-store；
@@ -440,6 +472,7 @@ def create_app() -> FastAPI:
             if ENABLE_API_DOCS and request.url.path in {"/docs", "/redoc"}:
                 response.headers.setdefault("Content-Security-Policy", DOCS_CONTENT_SECURITY_POLICY)
             apply_security_headers(response)
+            response = await finalize_idempotent_response(request, response)
             log_json(
                 logging.INFO,
                 "http_request",
@@ -450,7 +483,7 @@ def create_app() -> FastAPI:
                 status_code=response.status_code,
                 duration_seconds=round(duration, 6),
             )
-            return cast(Response, response)
+            return response
         finally:
             reset_log_context(context_tokens)
 

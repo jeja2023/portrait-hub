@@ -5,7 +5,7 @@ from copy import deepcopy
 from typing import Any
 
 from fastapi import HTTPException, status
-from PIL import Image
+from PIL import Image, ImageFilter
 
 from app.inference_tracks import infer_tracks_for_images
 from app.media.quality import assess_image_quality
@@ -61,7 +61,19 @@ STREAM_ANALYSIS_SETTING_KEYS = {
     "reid_project_name",
     "sample_interval_seconds",
     "batch_size",
+    "privacy_mask",
+    "profile",
+    "roi",
+    "target_classes",
 }
+
+STREAM_ANALYSIS_PROFILES: dict[str, dict[str, Any]] = {
+    "balanced": {},
+    "low_latency": {"batch_size": 1, "sample_interval_seconds": 1.0},
+    "high_accuracy": {"batch_size": 4, "sample_interval_seconds": 0.5},
+    "privacy_first": {"include_embeddings": False, "privacy_mask": "persons"},
+}
+PRIVACY_MASK_MODES = {"none", "persons", "full"}
 
 
 def _float_setting(settings: dict[str, Any], key: str, default: float) -> float:
@@ -86,7 +98,58 @@ def _bool_setting(settings: dict[str, Any], key: str, default: bool) -> bool:
     raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"{key} 必须是布尔值")
 
 
+def _stream_profile_settings(settings: dict[str, Any]) -> tuple[str, dict[str, Any]]:
+    profile = str(settings.get("profile") or "balanced").strip().lower()
+    if profile not in STREAM_ANALYSIS_PROFILES:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="profile is not supported")
+    return profile, {**STREAM_ANALYSIS_PROFILES[profile], **settings}
+
+
+def _normalize_roi(value: Any) -> dict[str, float] | None:
+    if value is None or value == "":
+        return None
+    if isinstance(value, dict):
+        raw = [value.get("x"), value.get("y"), value.get("width"), value.get("height")]
+    elif isinstance(value, (list, tuple)) and len(value) == 4:
+        raw = list(value)
+    else:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="roi must contain x, y, width and height")
+    values: list[float] = []
+    for item in raw:
+        if not isinstance(item, (int, float, str)):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="roi values must be numeric")
+        try:
+            values.append(float(item))
+        except ValueError as exc:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="roi values must be numeric") from exc
+    x, y, width, height = values
+    if not all(math.isfinite(item) for item in (x, y, width, height)):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="roi values must be finite")
+    if x < 0 or y < 0 or width <= 0 or height <= 0 or x + width > 1 or y + height > 1:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="roi must be normalized within the frame")
+    return {"x": x, "y": y, "width": width, "height": height}
+
+
+def _normalize_target_classes(value: Any) -> list[str]:
+    if value is None:
+        return ["person"]
+    if not isinstance(value, list) or not value:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="target_classes must be a non-empty list")
+    classes = sorted({str(item).strip().lower() for item in value if str(item).strip()})
+    if not classes or any(len(item) > 64 for item in classes):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="target_classes is invalid")
+    return classes
+
+
+def _privacy_mask_mode(value: Any) -> str:
+    mode = "persons" if value is True else "none" if value is None or value is False or value == "" else str(value).strip().lower()
+    if mode not in PRIVACY_MASK_MODES:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="privacy_mask is not supported")
+    return mode
+
+
 def stream_analysis_parameters(settings: dict[str, Any]) -> dict[str, Any]:
+    profile, settings = _stream_profile_settings(settings)
     detector_project_name = str(settings.get("detector_project_name", DEFAULT_DETECTOR_PROJECT))
     detector_model_name = str(settings.get("detector_model_name", DEFAULT_DETECTOR_ARTIFACT))
     reid_project_name = str(settings.get("reid_project_name", DEFAULT_DETECTOR_PROJECT))
@@ -115,6 +178,7 @@ def stream_analysis_parameters(settings: dict[str, Any]) -> dict[str, Any]:
             detail="sample_interval_seconds 必须大于 0",
         )
     return {
+        "profile": profile,
         "detector_project_name": detector_project_name,
         "detector_model_name": detector_model_name,
         "reid_project_name": reid_project_name,
@@ -136,15 +200,62 @@ def stream_analysis_parameters(settings: dict[str, Any]) -> dict[str, Any]:
             minimum=1,
             maximum=STREAM_READ_TIMEOUT_SECONDS,
         ),
+        "roi": _normalize_roi(settings.get("roi")),
+        "target_classes": _normalize_target_classes(settings.get("target_classes")),
+        "privacy_mask": _privacy_mask_mode(settings.get("privacy_mask")),
     }
 
 
 def normalize_stream_analysis_settings(settings: dict[str, Any]) -> dict[str, Any]:
     parameters = stream_analysis_parameters(settings)
     normalized = dict(settings)
-    for key in STREAM_ANALYSIS_SETTING_KEYS & settings.keys():
-        normalized[key] = parameters[key]
+    for key in STREAM_ANALYSIS_SETTING_KEYS:
+        if key in settings or key in {"profile", "roi", "target_classes", "privacy_mask"}:
+            normalized[key] = parameters[key]
     return normalized
+
+
+def _person_matches_stream_scope(
+    person: dict[str, Any],
+    image: Image.Image,
+    *,
+    roi: dict[str, float] | None,
+    target_classes: set[str],
+) -> bool:
+    class_name = str(person.get("class_name") or person.get("label") or "person").strip().lower()
+    if class_name not in target_classes:
+        return False
+    if roi is None:
+        return True
+    box = person.get("box")
+    if not isinstance(box, list) or len(box) < 4:
+        return False
+    center_x = (float(box[0]) + float(box[2])) / 2 / max(1, image.width)
+    center_y = (float(box[1]) + float(box[3])) / 2 / max(1, image.height)
+    return (
+        roi["x"] <= center_x <= roi["x"] + roi["width"]
+        and roi["y"] <= center_y <= roi["y"] + roi["height"]
+    )
+
+
+def _apply_privacy_mask(image: Image.Image, persons: list[dict[str, Any]], mode: str) -> Image.Image:
+    if mode == "none":
+        return image
+    if mode == "full":
+        return image.filter(ImageFilter.GaussianBlur(radius=16))
+    masked = image.copy()
+    for person in persons:
+        box = person.get("box")
+        if not isinstance(box, list) or len(box) < 4:
+            continue
+        left = max(0, min(masked.width, int(float(box[0]))))
+        top = max(0, min(masked.height, int(float(box[1]))))
+        right = max(left, min(masked.width, int(float(box[2]))))
+        bottom = max(top, min(masked.height, int(float(box[3]))))
+        if right > left and bottom > top:
+            region = masked.crop((left, top, right, bottom)).filter(ImageFilter.GaussianBlur(radius=16))
+            masked.paste(region, (left, top, right, bottom))
+    return masked
 
 
 async def analyze_stream_frames(
@@ -155,6 +266,8 @@ async def analyze_stream_frames(
     if not images:
         raise ValueError("视频流未读取到可解析帧")
     parameters = stream_analysis_parameters(stream.settings)
+    roi = parameters["roi"]
+    target_classes = set(parameters["target_classes"])
     result = await infer_tracks_for_images(
         images,
         [None] * len(images),
@@ -166,6 +279,12 @@ async def analyze_stream_frames(
         iou=parameters["iou"],
         max_detections=parameters["max_detections"],
         include_embeddings=parameters["include_embeddings"],
+        person_filter=lambda _frame, person, image: _person_matches_stream_scope(
+            person,
+            image,
+            roi=roi,
+            target_classes=target_classes,
+        ),
     )
     source_indexes = metadata.get("source_frame_indexes", [])
     source_seconds = metadata.get("source_seconds", [])
@@ -179,11 +298,17 @@ async def analyze_stream_frames(
         elif fps:
             frame["source_seconds"] = round(source_frame_index / fps, 6)
         if image is not None:
-            frame["thumbnail"] = image_thumbnail_data_url(image)
+            visible_image = _apply_privacy_mask(image, frame.get("persons", []), parameters["privacy_mask"])
+            images[index] = visible_image
+            frame["thumbnail"] = image_thumbnail_data_url(visible_image)
             frame["quality"] = assess_image_quality(image)
     observe_video_sampling_metrics(metadata)
     return {
         "analysis_mode": "person_tracks",
+        "processing_profile": parameters["profile"],
+        "privacy_mask": parameters["privacy_mask"],
+        "roi": parameters["roi"],
+        "target_classes": parameters["target_classes"],
         "stream": public_video_metadata(metadata),
         "frames": result["frames"],
         "tracks": result["tracks"],
@@ -459,6 +584,10 @@ async def run_stream_worker_session(
                         "extracted_frames": metadata.get("extracted_frames"),
                     },
                 )
+                # The retry budget protects against consecutive failures. A completed
+                # analysis proves that the source recovered; restart_count remains the
+                # cumulative operational signal for the lifetime of the session.
+                attempts = 0
             if stream.status == StreamStatus.RUNNING:
                 raise ConnectionError("stream source ended")
             return public_stream_worker_session(STREAM_WORKER_SESSIONS[stream_session_key(stream)])

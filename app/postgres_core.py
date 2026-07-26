@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import math
 import threading
 from collections.abc import Iterator
@@ -14,6 +15,32 @@ from app.settings import POSTGRES_CONNECT_TIMEOUT_SECONDS, POSTGRES_DSN, POSTGRE
 psycopg: Any = None
 dict_row: Any = None
 ConnectionPool: Any = None
+
+
+class _PostgresPoolLogFilter(logging.Filter):
+    _portrait_redacts_postgres_pool = True
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        # psycopg_pool logs connection exceptions verbatim, which may contain the DSN host.
+        record.msg = "psycopg pool event (connection details redacted)"
+        record.args = ()
+        record.exc_info = None
+        record.exc_text = None
+        record.stack_info = None
+        return True
+
+
+def _install_postgres_pool_log_filter() -> None:
+    pool_logger = logging.getLogger("psycopg.pool")
+    if any(
+        getattr(log_filter, "_portrait_redacts_postgres_pool", False)
+        for log_filter in pool_logger.filters
+    ):
+        return
+    pool_logger.addFilter(_PostgresPoolLogFilter())
+
+
+_install_postgres_pool_log_filter()
 
 try:  # pragma: no cover - 可选的生产环境依赖
     import psycopg as _psycopg

@@ -6,11 +6,14 @@ from fastapi import (
     Depends,
     File,
     Form,
+    Header,
     HTTPException,
     Query,
+    Request,
     UploadFile,
     status,
 )
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.api_contracts import ContractAPIRouter as APIRouter
 from app.model_refs import validate_model_reference_parts
@@ -21,6 +24,7 @@ from app.portrait_auth import permission_dependency
 from app.portrait_jobs import (
     JobStatus,
     VideoJob,
+    configure_video_job_task,
     create_video_job,
     get_video_job,
     load_video_jobs_state,
@@ -28,7 +32,9 @@ from app.portrait_jobs import (
     public_video_job_result,
     remove_video_job,
     request_cancel_video_job,
+    request_pause_video_job,
     restore_video_job,
+    resume_video_job,
 )
 from app.portrait_pagination import normalize_list_pagination, page_items_keyset
 from app.portrait_request_context import (
@@ -44,6 +50,14 @@ from app.portrait_response import (
 from app.portrait_runtime_store import video_jobs_snapshots
 from app.portrait_security import validate_job_id
 from app.portrait_task_queue import TASK_QUEUE
+from app.portrait_video_uploads import (
+    abort_upload_session,
+    complete_upload_session,
+    create_upload_session,
+    get_upload_session,
+    put_upload_part,
+    reopen_completed_upload,
+)
 from app.routes_inference_common import validate_detection_parameters
 from app.security import require_api_token
 from app.settings import (
@@ -60,6 +74,238 @@ from app.settings import (
 from app.video_io import delete_video_job_input, stage_video_upload
 
 router = APIRouter(dependencies=[Depends(require_api_token)])
+
+
+class VideoUploadCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    filename: str = Field(..., min_length=1, max_length=512)
+    content_type: str = Field(default="application/octet-stream", max_length=256)
+    total_bytes: int = Field(..., gt=0)
+    sha256: str = Field(..., min_length=64, max_length=64)
+
+
+class VideoUploadCompleteRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", protected_namespaces=())
+
+    sample_interval_seconds: float = Field(default=VIDEO_SAMPLE_INTERVAL_SECONDS, gt=0)
+    batch_size: int = Field(default=VIDEO_INFERENCE_BATCH_SIZE, ge=1, le=INFERENCE_BATCH_SIZE_LIMIT)
+    detector_project_name: str = Field(default=DEFAULT_DETECTOR_PROJECT, min_length=1, max_length=128)
+    detector_model_name: str = Field(default=DEFAULT_DETECTOR_ARTIFACT, min_length=1, max_length=256)
+    reid_project_name: str = Field(default=DEFAULT_DETECTOR_PROJECT, min_length=1, max_length=128)
+    reid_model_name: str = Field(default=DEFAULT_REID_ARTIFACT, min_length=1, max_length=256)
+    confidence: float = Field(default=DEFAULT_CONFIDENCE, ge=0, le=1)
+    iou: float = Field(default=DEFAULT_IOU, ge=0, le=1)
+    max_detections: int = Field(default=100, ge=1, le=1000)
+    include_embeddings: bool = False
+    priority: int = Field(default=0, ge=-100, le=100)
+
+
+class VideoJobResumeRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    priority: int | None = Field(default=None, ge=-100, le=100)
+
+
+def video_job_task_payload(
+    job: VideoJob,
+    input_ref: str,
+    *,
+    sample_interval_seconds: float,
+    batch_size: int,
+    detector_project_name: str,
+    detector_model_name: str,
+    reid_project_name: str,
+    reid_model_name: str,
+    confidence: float,
+    iou: float,
+    max_detections: int,
+    include_embeddings: bool,
+) -> dict[str, Any]:
+    return {
+        "job_id": job.job_id,
+        "tenant_id": job.tenant_id,
+        "input_ref": input_ref,
+        "sample_interval_seconds": sample_interval_seconds,
+        "batch_size": batch_size,
+        "detector_project_name": detector_project_name,
+        "detector_model_name": detector_model_name,
+        "reid_project_name": reid_project_name,
+        "reid_model_name": reid_model_name,
+        "confidence": confidence,
+        "iou": iou,
+        "max_detections": max_detections,
+        "include_embeddings": include_embeddings,
+    }
+
+
+@router.post("/v1/uploads/video", dependencies=[Depends(permission_dependency("jobs"))])
+async def v1_create_video_upload(
+    payload: VideoUploadCreateRequest,
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key", max_length=256),
+    ctx: PortraitRequestContext = Depends(portrait_request_context),
+) -> dict[str, Any]:
+    upload = await run_blocking_io(
+        create_upload_session,
+        ctx.scope_id,
+        payload.model_dump(),
+        idempotency_key,
+    )
+    await run_blocking_io(
+        audit_event,
+        "video_upload_created",
+        request_id=ctx.request_id,
+        tenant_id=ctx.scope_id,
+        upload_id=upload["upload_id"],
+        total_bytes=upload["total_bytes"],
+        sha256=upload["sha256"],
+    )
+    return portrait_success(ctx.request_id, {"upload": upload})
+
+
+@router.get(
+    "/v1/uploads/video/{upload_id}",
+    dependencies=[Depends(permission_dependency("jobs:read"))],
+)
+async def v1_get_video_upload(
+    upload_id: str,
+    ctx: PortraitRequestContext = Depends(portrait_request_context),
+) -> dict[str, Any]:
+    upload = await run_blocking_io(get_upload_session, upload_id, ctx.scope_id)
+    return portrait_success(ctx.request_id, {"upload": upload})
+
+
+@router.put(
+    "/v1/uploads/video/{upload_id}/parts/{part_number}",
+    dependencies=[Depends(permission_dependency("jobs"))],
+)
+async def v1_put_video_upload_part(
+    upload_id: str,
+    part_number: int,
+    request: Request,
+    x_chunk_offset: int = Header(..., alias="X-Chunk-Offset", ge=0),
+    x_chunk_sha256: str = Header(..., alias="X-Chunk-SHA256", min_length=64, max_length=64),
+    ctx: PortraitRequestContext = Depends(portrait_request_context),
+) -> dict[str, Any]:
+    data = await request.body()
+    upload = await run_blocking_io(
+        put_upload_part,
+        upload_id,
+        ctx.scope_id,
+        part_number,
+        x_chunk_offset,
+        data,
+        x_chunk_sha256,
+    )
+    return portrait_success(ctx.request_id, {"upload": upload})
+
+
+@router.delete(
+    "/v1/uploads/video/{upload_id}",
+    dependencies=[Depends(permission_dependency("jobs"))],
+)
+async def v1_abort_video_upload(
+    upload_id: str,
+    ctx: PortraitRequestContext = Depends(portrait_request_context),
+) -> dict[str, Any]:
+    aborted = await run_blocking_io(abort_upload_session, upload_id, ctx.scope_id)
+    await run_blocking_io(
+        audit_event,
+        "video_upload_aborted",
+        request_id=ctx.request_id,
+        tenant_id=ctx.scope_id,
+        upload_id=upload_id,
+    )
+    return portrait_success(ctx.request_id, {"upload_id": upload_id, "aborted": aborted})
+
+
+@router.post(
+    "/v1/uploads/video/{upload_id}/complete",
+    dependencies=[Depends(permission_dependency("jobs"))],
+)
+async def v1_complete_video_upload(
+    upload_id: str,
+    payload: VideoUploadCompleteRequest,
+    ctx: PortraitRequestContext = Depends(portrait_request_context),
+) -> dict[str, Any]:
+    current_upload = await run_blocking_io(get_upload_session, upload_id, ctx.scope_id)
+    if current_upload["status"] == "completed" and current_upload.get("job_id"):
+        existing = get_video_job(str(current_upload["job_id"]), tenant_id=ctx.scope_id)
+        if existing is not None:
+            return portrait_success(
+                ctx.request_id,
+                {"upload": current_upload, "job": existing.public_dict(include_result=False), "idempotent_replay": True},
+            )
+
+    values = payload.model_dump()
+    detector_project_name, detector_model_name, reid_project_name, reid_model_name = validate_model_reference_parts(
+        values["detector_project_name"],
+        values["detector_model_name"],
+        values["reid_project_name"],
+        values["reid_model_name"],
+    )
+    validate_detection_parameters(
+        confidence=values["confidence"],
+        iou=values["iou"],
+        max_detections=values["max_detections"],
+    )
+    job = await run_blocking_io(create_video_job, None, tenant_id=ctx.scope_id)
+    input_ref: str | None = None
+    queue_message: Any | None = None
+    try:
+        completed_input_ref, completed_upload = await run_blocking_io(
+            complete_upload_session, upload_id, ctx.scope_id, job.job_id
+        )
+        input_ref = completed_input_ref
+        task_payload = video_job_task_payload(
+            job,
+            completed_input_ref,
+            sample_interval_seconds=values["sample_interval_seconds"],
+            batch_size=values["batch_size"],
+            detector_project_name=detector_project_name,
+            detector_model_name=detector_model_name,
+            reid_project_name=reid_project_name,
+            reid_model_name=reid_model_name,
+            confidence=values["confidence"],
+            iou=values["iou"],
+            max_detections=values["max_detections"],
+            include_embeddings=values["include_embeddings"],
+        )
+        await run_blocking_io(
+            configure_video_job_task,
+            job,
+            task_payload,
+            priority=values["priority"],
+        )
+        task_payload = deepcopy(job.task_payload)
+        queue_message = await run_blocking_io(TASK_QUEUE.enqueue, "video_jobs", task_payload)
+        await run_blocking_io(
+            audit_event,
+            "video_upload_completed",
+            request_id=ctx.request_id,
+            tenant_id=ctx.scope_id,
+            upload_id=upload_id,
+            job_id=job.job_id,
+            sha256=completed_upload["sha256"],
+        )
+    except Exception:
+        if queue_message is not None:
+            await run_blocking_io(TASK_QUEUE.remove, queue_message)
+        if input_ref is not None:
+            await run_blocking_io(delete_video_job_input, input_ref)
+            await run_blocking_io(reopen_completed_upload, upload_id, ctx.scope_id, job.job_id)
+        await run_blocking_io(remove_video_job, job.job_id, ctx.scope_id)
+        raise
+    assert queue_message is not None
+    return portrait_success(
+        ctx.request_id,
+        {
+            "upload": completed_upload,
+            "job": job.public_dict(include_result=False),
+            "queue_message": queue_message.public_dict(),
+            "idempotent_replay": False,
+        },
+    )
 
 
 async def refresh_video_job_view() -> None:
@@ -148,6 +394,7 @@ async def v1_create_video_job(
     iou: float = Form(DEFAULT_IOU),
     max_detections: int = Form(100),
     include_embeddings: bool = Form(False),
+    priority: int = Form(0),
     ctx: PortraitRequestContext = Depends(portrait_request_context),
 ) -> dict[str, Any]:
     request_id = ctx.request_id
@@ -162,11 +409,28 @@ async def v1_create_video_job(
         reid_artifact_name,
     )
     validate_detection_parameters(confidence=confidence, iou=iou, max_detections=max_detections)
+    priority = validate_int_range("priority", priority, minimum=-100, maximum=100)
     job = await run_blocking_io(create_video_job, None, tenant_id=tenant_id)
     input_ref: str | None = None
     queue_message: Any | None = None
     try:
         input_ref = await stage_video_upload(file, tenant_id, job.job_id)
+        task_payload = video_job_task_payload(
+            job,
+            input_ref,
+            sample_interval_seconds=sample_interval_seconds,
+            batch_size=batch_size,
+            detector_project_name=detector_project_name,
+            detector_model_name=detector_model_name,
+            reid_project_name=reid_project_name,
+            reid_model_name=reid_model_name,
+            confidence=confidence,
+            iou=iou,
+            max_detections=max_detections,
+            include_embeddings=include_embeddings,
+        )
+        await run_blocking_io(configure_video_job_task, job, task_payload, priority=priority)
+        task_payload = deepcopy(job.task_payload)
         await run_blocking_io(
             audit_event,
             "video_job_created",
@@ -177,21 +441,7 @@ async def v1_create_video_job(
         queue_message = await run_blocking_io(
             TASK_QUEUE.enqueue,
             "video_jobs",
-            {
-                "job_id": job.job_id,
-                "tenant_id": tenant_id,
-                "input_ref": input_ref,
-                "sample_interval_seconds": sample_interval_seconds,
-                "batch_size": batch_size,
-                "detector_project_name": detector_project_name,
-                "detector_model_name": detector_model_name,
-                "reid_project_name": reid_project_name,
-                "reid_model_name": reid_model_name,
-                "confidence": confidence,
-                "iou": iou,
-                "max_detections": max_detections,
-                "include_embeddings": include_embeddings,
-            },
+            task_payload,
         )
     except Exception:
         if queue_message is not None:
@@ -286,3 +536,82 @@ async def v1_cancel_video_job(
                 raise_job_rollback_failure(exc, rollback_errors)
         raise
     return portrait_success(request_id, {"job": job.public_dict(include_result=False) if job else None})
+
+
+@router.post("/v1/jobs/{job_id}/pause", dependencies=[Depends(permission_dependency("jobs"))])
+async def v1_pause_video_job(
+    job_id: str,
+    ctx: PortraitRequestContext = Depends(portrait_request_context),
+) -> dict[str, Any]:
+    job_id = validate_job_id(job_id)
+    await refresh_video_job_view()
+    previous = deepcopy(get_video_job(job_id, tenant_id=ctx.scope_id))
+    try:
+        job = await run_blocking_io(request_pause_video_job, job_id, ctx.scope_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    if job is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="video job was not found")
+    try:
+        await run_blocking_io(
+            audit_event,
+            "video_job_paused",
+            request_id=ctx.request_id,
+            tenant_id=ctx.scope_id,
+            job_id=job_id,
+            checkpoint=job.checkpoint,
+        )
+    except Exception as exc:
+        if previous is not None:
+            rollback_errors = rollback_video_job_snapshot(job, previous)
+            if rollback_errors:
+                raise_job_rollback_failure(exc, rollback_errors)
+        raise
+    return portrait_success(ctx.request_id, {"job": job.public_dict(include_result=False)})
+
+
+@router.post("/v1/jobs/{job_id}/resume", dependencies=[Depends(permission_dependency("jobs"))])
+async def v1_resume_video_job(
+    job_id: str,
+    payload: VideoJobResumeRequest,
+    ctx: PortraitRequestContext = Depends(portrait_request_context),
+) -> dict[str, Any]:
+    job_id = validate_job_id(job_id)
+    await refresh_video_job_view()
+    previous = deepcopy(get_video_job(job_id, tenant_id=ctx.scope_id))
+    queue_message: Any | None = None
+    try:
+        job = await run_blocking_io(
+            resume_video_job,
+            job_id,
+            ctx.scope_id,
+            priority=payload.priority,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    if job is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="video job was not found")
+    try:
+        queue_message = await run_blocking_io(TASK_QUEUE.enqueue, "video_jobs", job.task_payload)
+        await run_blocking_io(
+            audit_event,
+            "video_job_resumed",
+            request_id=ctx.request_id,
+            tenant_id=ctx.scope_id,
+            job_id=job_id,
+            priority=job.priority,
+            checkpoint=job.checkpoint,
+        )
+    except Exception as exc:
+        if queue_message is not None:
+            await run_blocking_io(TASK_QUEUE.remove, queue_message)
+        if previous is not None:
+            rollback_errors = rollback_video_job_snapshot(job, previous)
+            if rollback_errors:
+                raise_job_rollback_failure(exc, rollback_errors)
+        raise
+    assert queue_message is not None
+    return portrait_success(
+        ctx.request_id,
+        {"job": job.public_dict(include_result=False), "queue_message": queue_message.public_dict()},
+    )

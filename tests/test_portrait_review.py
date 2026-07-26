@@ -334,3 +334,65 @@ def test_track_review_annotation_rolls_back_when_audit_fails(
 
     assert response.status_code == 503
     assert rows == []
+
+
+def test_track_merge_and_split_corrections_are_tenant_scoped_overlays() -> None:
+    client = TestClient(app)
+    merged = client.post(
+        "/v1/evaluation/track-corrections",
+        headers=tenant_headers(),
+        json={
+            "job_id": "job-001",
+            "action": "merge",
+            "track_ids": ["track-b", "track-a"],
+            "target_track_id": "track-person-1",
+            "reason": "same person across occlusion",
+        },
+    )
+    split = client.post(
+        "/v1/evaluation/track-corrections",
+        headers=tenant_headers(),
+        json={
+            "job_id": "job-001",
+            "action": "split",
+            "track_ids": ["track-c"],
+            "split_frame_index": 48,
+        },
+    )
+
+    assert merged.status_code == 200, merged.text
+    assert merged.json()["data"]["correction"]["track_ids"] == ["track-a", "track-b"]
+    assert merged.json()["data"]["correction"]["status"] == "applied_overlay"
+    assert split.status_code == 200, split.text
+    assert split.json()["data"]["correction"]["split_output_track_ids"] == [
+        "track-c:before",
+        "track-c:after",
+    ]
+
+    same_tenant = client.get(
+        "/v1/evaluation/track-corrections?job_id=job-001",
+        headers=tenant_headers(),
+    )
+    other_tenant = client.get(
+        "/v1/evaluation/track-corrections?job_id=job-001",
+        headers=tenant_headers("tenant-b"),
+    )
+    assert same_tenant.json()["data"]["count"] == 2
+    assert other_tenant.json()["data"]["count"] == 0
+
+
+def test_track_correction_validates_action_shape() -> None:
+    client = TestClient(app)
+    invalid_merge = client.post(
+        "/v1/evaluation/track-corrections",
+        headers=tenant_headers(),
+        json={"job_id": "job-001", "action": "merge", "track_ids": ["track-a"]},
+    )
+    invalid_split = client.post(
+        "/v1/evaluation/track-corrections",
+        headers=tenant_headers(),
+        json={"job_id": "job-001", "action": "split", "track_ids": ["track-a"]},
+    )
+
+    assert invalid_merge.status_code == 422
+    assert invalid_split.status_code == 422

@@ -1,0 +1,24 @@
+{
+  "schema_version": "1.0",
+  "template_id": "campus-safety",
+  "template_version": "1.0.0",
+  "evidence_status": "specification_only",
+  "customer_validation_required": true,
+  "fixture_policy": "synthetic_or_customer-approved-deidentified-only",
+  "cases": [
+    {
+      "case_id": "controlled-zone-entry",
+      "input_contract": "synthetic-multi-person-frame-v1",
+      "required_capabilities": ["person_detection", "tracking"],
+      "expected_outcomes": ["stable track identifiers", "zone entry event without biometric identity"],
+      "assertions": ["no prohibited-area collection", "human review remains available"]
+    },
+    {
+      "case_id": "appearance-review",
+      "input_contract": "synthetic-appearance-sequence-v1",
+      "required_capabilities": ["appearance"],
+      "expected_outcomes": ["appearance attributes include confidence and model version"],
+      "assertions": ["low-confidence results enter review", "no sole high-impact decision"]
+    }
+  ]
+}

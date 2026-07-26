@@ -34,6 +34,8 @@ jobs:
         run: |
           npm run console:generate
           git diff --exit-code -- frontend/console-next/src/api/generated.ts
+      - name: Reject unreviewed breaking OpenAPI changes
+        run: python tools/openapi_compatibility_check.py --json
       - name: Verify console frontend
         run: |
           npm run console:lint
@@ -62,6 +64,8 @@ jobs:
         run: python tools/deploy_check.py --json --skip-node
       - name: Run Node SDK contract tests
         run: npm run check
+      - name: Run Python SDK clean-environment smoke
+        run: python tools/portrait_sdk_clean_smoke.py --json
       - name: Run deployment contract checks
         run: python tools/deploy_check.py --json
       - name: Run example model regression gates
@@ -72,3 +76,8 @@ jobs:
         # scope=platform 保留模板/数据栈/安全/契约/模型文件检查，跳过需要真实生产模型产物的
         # 能力状态检查（CI runner 不携带这些大模型）。任何 strict 失败都会使该步骤非零退出。
         run: python tools/portrait_production_readiness.py --strict --scope platform
+      - name: Verify commercial delivery controls
+        run: |
+          python tools/portrait_support_matrix.py --json
+          python tools/portrait_support_matrix.py --render .codex-tmp/SUPPORT_MATRIX.md --json
+          diff -u docs/deployment/SUPPORT_MATRIX.md .codex-tmp/SUPPORT_MATRIX.md

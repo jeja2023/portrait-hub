@@ -33,6 +33,18 @@
 | 调用统计 | `GET /v1/access/call-logs`、`GET /v1/access/call-logs/summary` |
 | Webhook | `GET /v1/access/webhooks`、`POST /v1/access/webhooks`、`PATCH /v1/access/webhooks/{webhook_id}`、`POST /v1/access/webhooks/{webhook_id}/rotate`、`POST /v1/access/webhooks/{webhook_id}/sample` |
 
+## 0.18.0 商业接入与可靠交付
+
+- 生产接入应先创建独立项目和应用，再为客户关联商业档案与授权版本；调用方不能依据前端展示状态自行推断授权，必须处理服务端稳定错误码。
+- 对创建、变更、续约、上传初始化和人工 Webhook 重投等写操作使用唯一幂等键。相同键不得复用于不同载荷；冲突应停止自动重试并由调用方核对请求。
+- Python SDK 是正式支持客户端，内置安全请求重试、指数退避/抖动、幂等、可恢复视频上传、任务轮询和 Webhook 验签。Node SDK仅维护兼容，Go/Java 是实验性参考实现。
+- 视频大文件使用续传协议并持久化上传 ID、偏移和分片摘要；网络恢复后从服务端确认偏移继续，不能盲目重发整个文件。
+- Webhook 消费端必须先以原始请求体和时间戳验签，再执行业务幂等；根据投递 ID 去重，并允许平台按相同事件进行受控重投。
+- API 发布前运行 `python tools/openapi_compatibility_check.py`，SDK 上线前运行 `python tools/portrait_sdk_clean_smoke.py`，并用 `python tools/portrait_support_matrix.py --json` 校验支持范围；正式范围以 [支持矩阵](../deployment/SUPPORT_MATRIX.md) 为准。
+- 删除、导出、模型发布/回滚、密钥轮换和商业关键变更需要近期交互认证，服务凭证不能用于绕过 step-up。
+
+0.18.0 在 0.17.0 的 `/v1` 契约上新增商业、反馈、模型注册、视频续传和 Webhook 投递能力。当前 OpenAPI 为 154 条路径，对比 147 条审查基线无破坏性变更；接入方仍应重新生成客户端，以获得新增模型和错误码类型。
+
 ## 0.17.0 统一契约与项目上下文
 
 所有 `/v1` 成功响应都使用 `status`、`schema_version: "1.0"`、`request_id`、`data`、可选 `warnings`/`meta`；错误响应使用 `status`、`schema_version`、`request_id` 和 `error.code/message/details`。业务代码只应读取 `data`，日志和链路追踪保留顶层 `request_id`，重试策略同时参考 HTTP 状态和稳定 `error.code`。
@@ -76,6 +88,8 @@ curl "https://portrait.internal.example/v1/analysis/artifacts/${ARCHIVE_ID}/${AR
 - 接入应用支持 `jwt_issuer` 与 `jwt_audience`；Webhook 支持 PATCH 编辑 status、events、retry_limit 与 timeout_seconds。
 - 模型运维新增 warmup、reload、reload-config、weighted rollout、traffic preview、rollback 和 rollout audit。正式灰度/回滚必须在同配置预演后执行。
 - `GET /v1/admin/export` 支持 updated_since 与资源上限；备份接口支持 updated_since 增量起点。大租户应分批导出并同时校验审计记录。
+- 删除、回滚、模型发布、密钥轮换、数据导出和商业/合规关键变更要求近期交互式认证；默认窗口由 `STEP_UP_AUTH_MAX_AGE_SECONDS=300` 控制，生产配置门禁只接受 60 至 900 秒。API Key、平台令牌和未携带近期 `auth_time` 的服务 JWT 不能执行这些操作。
+- 本地账号由控制台调用 `POST /v1/auth/local/step-up` 重新校验密码；企业账号使用 `GET /auth/oidc/step-up`，该入口发送 OIDC `prompt=login` 与 `max_age=0`，并在回调中校验身份平台返回的近期 `auth_time`。身份平台必须支持这些标准参数并返回 NumericDate 格式的 `auth_time`。
 - 图片轨迹使用 `POST /v1/infer/tracks`；视频任务与实时流可传 detector/reid 项目和模型、confidence、iou、max_detections、sample_interval_seconds、batch_size、read_timeout_seconds 与 include_embeddings。
 - 比对按接口支持 `include_vectors`、`async_mode` 和融合模态列表；人员库 reindex 可按 modality 和 target_model 定向预演/执行。
 - SDK User-Agent 和项目运行时版本统一升级为 `0.14.0`。旧 SDK 仍可调用兼容接口，但升级 SDK 便于日志与支持团队准确识别客户端版本。
@@ -103,7 +117,7 @@ curl "https://portrait.internal.example/v1/analysis/artifacts/${ARCHIVE_ID}/${AR
 - 解析结果详情可通过 `GET /v1/analysis/results/{archive_id}` 读取，服务端继续执行租户隔离。控制台将 `source_type`、`mode`、`archive_id`、日志日期范围和人员搜索词保存在 URL query，接入网关不得丢弃这些参数。
 - `POST /v1/infer/faces` 与 `POST /v1/infer/persons` 的 multipart 请求支持 `confidence`、`iou` 和 `max_detections`。调用方应以模型校准值为准，服务端会把阈值限制在 0 到 1、检测数限制在 1 到 256。
 - 控制台视频任务和实时流 WebSocket 降级时会轮询详情，因此网关必须同时允许 ws-ticket WebSocket 和对应 HTTP 详情接口。长效 API Key/JWT 仍不得进入 WebSocket URL。
-- 多 API worker/多副本生产拓扑必须设置 `REDIS_URL`。ws-ticket 会写入 Redis 并通过 Lua 原子读取删除；未配置 Redis 时仅使用进程内存，不能跨副本消费。
+- 多 API worker/多副本生产拓扑必须设置 `REDIS_URL`。ws-ticket 会写入 Redis 并通过 Lua 原子读取删除；商业推理并发额度也使用 Redis 原子租约跨副本计数，`COMMERCIAL_CONCURRENCY_LEASE_SECONDS` 控制进程异常退出后的最迟回收时间。生产环境中 Redis 不可用时新推理请求失败关闭；未配置 Redis 的进程内计数仅适用于开发环境。
 - 控制台按 `/v1/console/me` 的 `expires_at` 自动清理会话。身份系统应返回准确、带时区的到期时间；续期后需重新读取 capabilities，不能只延长浏览器本地状态。
 
 ### 0.11.2 控制台唯一入口、安全响应头与运维能力
@@ -271,7 +285,18 @@ console.log(batch.request_id, batch.data?.batch_id);
 
 离线视频任务建议优先使用 Webhook 接收 `job.completed`，需要主动查询时按状态轮询，终态后再读取结果。
 
-上传请求会分块写入 `VIDEO_JOB_INPUT_DIR`，随后由持久化队列交给独立 worker。生产环境应设置 `TASK_QUEUE_BACKEND=redis`、`VIDEO_JOB_WORKER_IN_PROCESS=false`，运行 `python -m app.portrait_video_job_worker`，并让 API 与 worker 共享视频暂存目录；任务取消信号同样通过队列后端跨进程传播。
+正式 Python SDK 提供摘要校验、分片重试和断点跳过。网络中断后保留 `upload_id` 并再次传入即可继续；任务可通过 `wait_for_job` 轮询，也可调用 pause、resume 和 cancel 接口。
+
+```python
+upload = client.upload_video_resumable(
+    "clip.mp4",
+    chunk_size=8 * 1024 * 1024,
+    priority=20,
+)
+job = client.wait_for_job(upload["job"]["job_id"], timeout=900)
+```
+
+上传分片写入 `VIDEO_UPLOAD_PART_DIR`，完成摘要校验后原子组装到 `VIDEO_JOB_INPUT_DIR`，随后由持久化队列交给独立 worker。生产环境应设置 `TASK_QUEUE_BACKEND=redis`、`VIDEO_JOB_WORKER_IN_PROCESS=false`，运行 `python -m app.portrait_video_job_worker`，并让 API 与 worker 共享视频暂存目录；Redis 使用高、普通、低三条优先级流，KEDA 同时监控三条流。
 
 ```javascript
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -321,6 +346,8 @@ curl -H "X-Tenant-ID: tenant-a" \
 
 OpenAPI 可用于生成接入侧客户端、网关放行清单和 smoke test 路径校验。生产环境若关闭 `/openapi.json`，应在发布物中保留同版本的契约快照，并由控制台“OpenAPI”页或 CI 记录核心路径是否完整。控制台接入中心的应用与 Webhook 配置分别落到 `/v1/access/applications` 和 `/v1/access/webhooks`，要求管理员或具备对应权限的 JWT/全局 token 操作。
 
+Python SDK 启动时可调用 `client.check_compatibility()` 读取 `GET /v1/meta`。当前 Python 为稳定支持，Node 为维护状态，Go/Java 为实验状态；兼容范围和变更记录见 `sdk/python/COMPATIBILITY.md` 与 `sdk/python/CHANGELOG.md`。
+
 Webhook 面向异步任务、视频流事件和模型发布通知。建议事件体保持以下外层结构：
 
 ```json
@@ -340,14 +367,17 @@ Webhook 面向异步任务、视频流事件和模型发布通知。建议事件
 Content-Type: application/json
 X-PortraitHub-Event: job.completed
 X-PortraitHub-Delivery: evt_...
-X-PortraitHub-Signature: sha256=<hmac-sha256-body>
+X-PortraitHub-Timestamp: 1784770000
+X-PortraitHub-Signature: sha256=<hmac-sha256(timestamp + "." + raw_body)>
+Idempotency-Key: evt_...
 ```
 
 接入方处理要求：
 
 - 以 `X-PortraitHub-Delivery` 做幂等去重。
-- 校验 `X-PortraitHub-Signature` 后再解析业务载荷。
+- 使用原始请求体校验 `X-PortraitHub-Signature`，并拒绝超出 5 分钟窗口的 `X-PortraitHub-Timestamp`；Python SDK 可直接调用 `verify_webhook_signature`。
 - 2xx 视为成功；非 2xx 按控制台 Webhook 配置的 `retry_limit` 和 `timeout_seconds` 重试。
+- 通过 `GET /v1/access/webhook-deliveries` 查看每次发送、重试、响应码和最终状态。
 - 回调 URL 不应包含 token；敏感凭证放在服务端配置或 mTLS 中。
 - 订阅事件至少覆盖 `gallery.enrolled`、`search.completed`、`compare.completed`、`job.completed`、`stream.event` 和 `model.rollout` 中实际使用的类型。
 - 排查模型发布、灰度和回滚时，可用 `GET /v1/admin/models/rollout/audit?limit=20` 查看最近非 dry-run 发布审计；响应会忽略损坏 JSONL 行并只返回白名单字段，避免把任意审计载荷透给接入侧。

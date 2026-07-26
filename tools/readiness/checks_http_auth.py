@@ -2,10 +2,32 @@
 
 from __future__ import annotations
 
+import ast
 from pathlib import Path
 from typing import Any
 
 from tools.readiness.sources import load_sources
+
+
+def parsed_role_permissions(source: str) -> dict[str, set[str]]:
+    try:
+        module = ast.parse(source)
+        for node in module.body:
+            if not isinstance(node, ast.Assign) or not any(
+                isinstance(target, ast.Name) and target.id == "ROLE_PERMISSIONS" for target in node.targets
+            ):
+                continue
+            value = ast.literal_eval(node.value)
+            if not isinstance(value, dict):
+                return {}
+            return {
+                str(role): {str(permission) for permission in permissions}
+                for role, permissions in value.items()
+                if isinstance(permissions, set)
+            }
+    except (SyntaxError, ValueError):
+        return {}
+    return {}
 
 
 def check_http_auth_hardening(root: Path) -> list[dict[str, Any]]:
@@ -33,6 +55,11 @@ def check_http_auth_hardening(root: Path) -> list[dict[str, Any]]:
     postgres_health_section = src["postgres_health_section"]
     redis_health_section = src["redis_health_section"]
     local_object_health_section = src["local_object_health_section"]
+    role_permissions = parsed_role_permissions(portrait_auth)
+    operator_permissions = role_permissions.get("operator", set())
+    algorithm_permissions = role_permissions.get("algorithm", set())
+    auditor_permissions = role_permissions.get("auditor", set())
+    viewer_permissions = role_permissions.get("viewer", set())
     s3_health_section = src["s3_health_section"]
     portrait_audit = src["portrait_audit"]
     portrait_postgres_impl = src["portrait_postgres_impl"]
@@ -144,16 +171,37 @@ def check_http_auth_hardening(root: Path) -> list[dict[str, Any]]:
         {
             "name": "security:least_privilege_rbac_roles",
             "ok": (
-                '"admin": {"*"}' in portrait_auth
-                and '"operator": {"infer", "compare", "gallery:read", "gallery:write", "jobs", "streams", "models:read", "admin:status", "metrics:read", "access:read"}'
-                in portrait_auth
-                and '"algorithm": {"infer", "compare", "models:read", "models:write", "thresholds:write"}'
-                in portrait_auth
-                and '"auditor": {"gallery:read", "jobs:read", "streams:read", "models:read", "admin:status", "admin:export", "metrics:read", "access:read"}'
-                in portrait_auth
-                and '"viewer": {"gallery:read", "jobs:read", "streams:read", "models:read"}'
-                in portrait_auth
-                and '"viewer": {"infer"' not in portrait_auth
+                role_permissions.get("admin") == {"*"}
+                and {
+                    "infer", "compare", "gallery:read", "gallery:write", "jobs", "streams", "models:read",
+                    "admin:status", "metrics:read", "access:read", "commercial:read", "operations:read",
+                    "operations:write", "support:read", "support:write",
+                }.issubset(operator_permissions)
+                and not {"models:write", "models:approve", "thresholds:write", "compliance:write"}.intersection(
+                    operator_permissions
+                )
+                and {
+                    "infer", "compare", "models:read", "models:write", "models:approve", "thresholds:write",
+                    "datasets:read", "datasets:write",
+                }.issubset(algorithm_permissions)
+                and not {"commercial:read", "operations:write", "support:write", "compliance:read"}.intersection(
+                    algorithm_permissions
+                )
+                and {
+                    "gallery:read", "jobs:read", "streams:read", "models:read", "admin:status", "admin:export",
+                    "metrics:read", "access:read", "commercial:read", "operations:read", "compliance:read",
+                    "evidence:read",
+                }.issubset(auditor_permissions)
+                and not any(permission.endswith(":write") for permission in auditor_permissions)
+                and not {"infer", "compare"}.intersection(auditor_permissions)
+                and {
+                    "gallery:read", "jobs:read", "streams:read", "models:read", "commercial:read",
+                    "operations:read", "support:read",
+                }.issubset(viewer_permissions)
+                and not any(permission.endswith(":write") for permission in viewer_permissions)
+                and not {"infer", "compare", "admin:status", "admin:export", "metrics:read"}.intersection(
+                    viewer_permissions
+                )
                 and 'permission_dependency("models:write")' in debug_routes
                 and 'permission_dependency("models:read")' not in debug_routes
                 and '@router.get("/metrics", dependencies=[Depends(require_api_token), Depends(permission_dependency("metrics:read"))])'

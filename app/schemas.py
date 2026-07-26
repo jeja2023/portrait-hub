@@ -8,11 +8,13 @@ from app.model_refs import validate_path_name
 
 
 class ModelBundle(TypedDict):
+    key: NotRequired[str]
     session: ort.InferenceSession
     lock: asyncio.Lock
     semaphore: asyncio.Semaphore
     path: str
     model_hash: str
+    model_fingerprint: NotRequired[str]
     file_size: int
     loaded_at: float
     last_used_at: float
@@ -23,6 +25,15 @@ class ModelBundle(TypedDict):
     queue_timeout_seconds: float
     gpu_device_id: int
     execution_provider: NotRequired[str]
+    contract_version: NotRequired[str]
+    dynamic_batching_enabled: NotRequired[bool]
+    dynamic_batch_max_size: NotRequired[int]
+    dynamic_batch_max_wait_ms: NotRequired[float]
+    dynamic_batch_async_max_wait_ms: NotRequired[float]
+    dynamic_batch_max_queue_size: NotRequired[int]
+    dynamic_batch_scheduler: NotRequired[Any]
+    prewarm: NotRequired[dict[str, Any]]
+    shadow_target: NotRequired[str]
 
 
 class LetterboxMeta(TypedDict):

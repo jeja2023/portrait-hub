@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from typing import Any
 
 from PIL import Image
@@ -151,6 +152,7 @@ async def infer_tracks_for_images(
     iou: float,
     max_detections: int,
     include_embeddings: bool,
+    person_filter: Callable[[dict[str, Any], dict[str, Any], Image.Image], bool] | None = None,
 ) -> dict[str, Any]:
     analysis = await infer_detections_and_embeddings(
         images,
@@ -165,6 +167,19 @@ async def infer_tracks_for_images(
         include_embeddings=include_embeddings,
     )
     frames = analysis["frames"]
+    if person_filter is not None:
+        for index, frame in enumerate(frames):
+            image = images[index] if index < len(images) else images[-1]
+            persons = frame.get("persons", [])
+            if not isinstance(persons, list):
+                persons = []
+            frame["persons"] = [
+                person
+                for person in persons
+                if isinstance(person, dict) and person_filter(frame, person, image)
+            ]
+            frame["person_count"] = len(frame["persons"])
+        analysis["person_count"] = sum(int(frame.get("person_count", 0)) for frame in frames)
     tracking_meta = associate_person_tracks(frames, include_template_embeddings=include_embeddings)
     return {
         **analysis,

@@ -14,6 +14,7 @@ interface StoredSession {
 
 const SESSION_KEY = "portraitHubConsoleSessionV2";
 let expiryTimer: number | null = null;
+let logoutPending = false;
 
 function emptySession(): StoredSession {
   return {
@@ -76,6 +77,7 @@ export function beginSession(input: {
   apiKey?: string;
   bearer?: string;
 }): void {
+  logoutPending = false;
   sessionState.tenantId = input.tenantId.trim();
   sessionState.projectId = input.projectId?.trim() || "default";
   sessionState.authMode = input.authMode;
@@ -142,6 +144,18 @@ export function clearSession(): void {
   if (typeof window !== "undefined") {
     window.sessionStorage.removeItem(SESSION_KEY);
   }
+}
+
+export function markSessionLogoutPending(): void {
+  logoutPending = true;
+}
+
+export function clearSessionLogoutPending(): void {
+  logoutPending = false;
+}
+
+export function isSessionLogoutPending(): boolean {
+  return logoutPending;
 }
 
 armExpiryTimer();

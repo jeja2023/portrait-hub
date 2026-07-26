@@ -25,6 +25,8 @@ test.beforeEach(async ({ page }) => {
 async function loginAsDefaultAdmin(page: Page): Promise<void> {
   await page.getByLabel("密码", { exact: true }).fill("123456");
   await page.getByRole("button", { name: "登录", exact: true }).click();
+  await expect(page).toHaveURL(/\/console#\//);
+  await expect(page.getByRole("button", { name: "退出", exact: true })).toBeVisible();
 }
 
 test("[E2E-SHELL-01] loads the public shell, logs in, and keeps credentials out of durable storage", async ({
@@ -87,6 +89,7 @@ test("[E2E-SHELL-01] loads the public shell, logs in, and keeps credentials out 
     await expect(developerSwitch).toBeVisible();
   }
   await expect(page.getByRole("switch", { name: "调试信息" })).toHaveCount(1);
+  await expect(page.locator(".el-message")).toHaveCount(0, { timeout: 5_000 });
   await expect(page.locator("body")).not.toHaveCSS("overflow-x", "scroll");
 
   const accessibility = await new AxeBuilder({ page }).analyze();
@@ -108,6 +111,31 @@ test("[E2E-ROUTE-01] supports direct deep links after authentication", async ({ 
 
   await expect(page).toHaveURL(/#\/analysis\/video$/);
   await expect(page.getByRole("heading", { name: "视频任务" })).toBeVisible();
+  expect(await page.evaluate(() => window.__portraitCspViolations)).toEqual([]);
+});
+
+test("[E2E-COMMERCIAL-01] exposes commercial, service, compliance, and model release workspaces", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await loginAsDefaultAdmin(page);
+
+  for (const [path, heading] of [
+    ["/console#/business/commercial", "商业运营"],
+    ["/console#/admin/service-quality", "服务质量与事故"],
+    ["/console#/admin/compliance", "合规证据"],
+    ["/console#/admin/model-registry", "模型注册与发布"],
+  ] as const) {
+    await page.goto(path);
+    await expect(page.getByRole("heading", { name: heading, exact: true })).toBeVisible();
+    await expect(page.locator(".error-banner")).toHaveCount(0);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+  }
+
+  const accessibility = await new AxeBuilder({ page }).analyze();
+  expect(
+    accessibility.violations.filter((violation) => ["serious", "critical"].includes(violation.impact ?? "")),
+  ).toEqual([]);
   expect(await page.evaluate(() => window.__portraitCspViolations)).toEqual([]);
 });
 
@@ -238,6 +266,7 @@ test("[E2E-CONFIG-01] manages network CIDRs and exposes the complete configurati
   await expect(page.getByRole("dialog", { name: "GPU_WORKER_0_DEVICE" })).toBeVisible();
   await expect(page.getByText("需要在宿主机同步 .env 后重建容器")).toBeVisible();
   await page.getByRole("button", { name: "取消" }).click();
+  await expect(page.getByRole("dialog", { name: "GPU_WORKER_0_DEVICE" })).not.toBeVisible();
 
   await expect(page.locator("body")).not.toHaveCSS("overflow-x", "scroll");
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
@@ -249,6 +278,104 @@ test("[E2E-CONFIG-01] manages network CIDRs and exposes the complete configurati
     path: testInfo.outputPath("configuration-" + testInfo.project.name + ".png"),
     fullPage: true,
   });
+});
+
+test("[E2E-WEBHOOK-01] inspects and explicitly retries a dead-letter webhook delivery", async ({ page }) => {
+  let retried = false;
+  await page.route("**/v1/access/applications", async (route) => {
+    await route.fulfill({
+      json: { status: "success", data: { applications: [], count: 0 } },
+    });
+  });
+  await page.route("**/v1/access/webhooks", async (route) => {
+    await route.fulfill({
+      json: {
+        status: "success",
+        data: {
+          webhooks: [
+            {
+              webhook_id: "jobs-primary",
+              name: "任务通知",
+              application_id: "app-a",
+              url: "https://hooks.example.test/jobs",
+              events: ["job.completed"],
+              status: "active",
+            },
+          ],
+          count: 1,
+        },
+      },
+    });
+  });
+  await page.route("**/v1/access/webhook-deliveries**", async (route) => {
+    if (route.request().method() === "POST") {
+      retried = true;
+      await route.fulfill({ json: { status: "success", data: { delivery: { status: "delivered" } } } });
+      return;
+    }
+    const now = Date.now() / 1000;
+    await route.fulfill({
+      json: {
+        status: "success",
+        data: {
+          deliveries: [
+            {
+              delivery_id: "evt_debug_123",
+              webhook_id: "jobs-primary",
+              event: "job.completed",
+              resource_id: "job_123",
+              request_id: "req_original",
+              endpoint: "https://hooks.example.test/jobs",
+              status: retried ? "delivered" : "dead_letter",
+              attempt_count: retried ? 2 : 1,
+              attempts: [
+                {
+                  attempt: 1,
+                  started_at: now - 2,
+                  finished_at: now - 1,
+                  status_code: 503,
+                  success: false,
+                  error_type: "HTTPError",
+                  response_bytes: 17,
+                  signature_status: "self_verified",
+                  signed_at: now - 2,
+                  trigger: "initial",
+                },
+              ],
+              signature_status: "self_verified",
+              signature_algorithm: "hmac-sha256",
+              next_retry_at: null,
+              dead_letter: !retried,
+              dead_lettered_at: retried ? null : now,
+              dead_letter_reason: retried ? null : "retry_exhausted",
+              manual_retry_count: retried ? 1 : 0,
+              created_at: now - 5,
+              updated_at: now,
+              delivered_at: retried ? now : null,
+            },
+          ],
+          count: 1,
+        },
+      },
+    });
+  });
+
+  await page.goto("/");
+  await loginAsDefaultAdmin(page);
+  await page.goto("/console#/dev/access");
+  await page.getByRole("tab", { name: "交付记录" }).click();
+
+  await expect(page.getByText("HTTP 503 · 17 B")).toBeVisible();
+  await expect(page.getByText("本地校验通过")).toBeVisible();
+  await expect(page.getByText("重试次数已耗尽")).toBeVisible();
+  await page.getByRole("button", { name: "重新投递" }).click();
+  await expect(page.getByRole("dialog", { name: "重新投递 Webhook" })).toBeVisible();
+  await page.getByLabel("输入“重试投递”继续").fill("重试投递");
+  await page.getByRole("dialog", { name: "重新投递 Webhook" }).getByRole("button", { name: "确认" }).click();
+
+  await expect(page.getByText("Webhook 已重新投递")).toBeVisible();
+  await expect(page.locator(".delivery-table").getByText("已送达", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "重新投递" })).toHaveCount(0);
 });
 
 test("[E2E-ROUTES-02] loads every product route and opens guarded dialogs without CSP violations", async ({

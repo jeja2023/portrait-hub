@@ -563,7 +563,8 @@ def test_admin_namespace_uses_dedicated_rbac_permissions(monkeypatch) -> None:
     viewer = hs256_token(valid_jwt_payload(roles=["viewer"]))
     algorithm = hs256_token(valid_jwt_payload(roles=["algorithm"]))
     operator = hs256_token(valid_jwt_payload(roles=["operator"]))
-    auditor = hs256_token(valid_jwt_payload(roles=["auditor"]))
+    stale_auditor = hs256_token(valid_jwt_payload(roles=["auditor"]))
+    auditor = hs256_token(valid_jwt_payload(roles=["auditor"], auth_time=int(time.time())))
 
     viewer_export = client.get("/v1/admin/export", headers={"Authorization": f"Bearer {viewer}"})
     algorithm_cleanup = client.post(
@@ -574,6 +575,10 @@ def test_admin_namespace_uses_dedicated_rbac_permissions(monkeypatch) -> None:
     operator_status = client.get("/v1/admin/status", headers={"Authorization": f"Bearer {operator}"})
     operator_console = client.get("/console", headers={"Authorization": f"Bearer {operator}"})
     viewer_console = client.get("/console", headers={"Authorization": f"Bearer {viewer}"})
+    stale_auditor_export = client.get(
+        "/v1/admin/export",
+        headers={"Authorization": f"Bearer {stale_auditor}"},
+    )
     auditor_export = client.get("/v1/admin/export", headers={"Authorization": f"Bearer {auditor}"})
     auditor_cleanup = client.post(
         "/v1/admin/retention/cleanup",
@@ -589,6 +594,8 @@ def test_admin_namespace_uses_dedicated_rbac_permissions(monkeypatch) -> None:
     assert operator_console.status_code == 200
     assert viewer_console.status_code == 200
     assert "Content-Security-Policy" in viewer_console.headers
+    assert stale_auditor_export.status_code == 403
+    assert stale_auditor_export.json()["error"]["code"] == "step_up_authentication_required"
     assert auditor_export.status_code == 200
     assert auditor_cleanup.status_code == 403
     assert "admin:retention" in api_error_message(auditor_cleanup)

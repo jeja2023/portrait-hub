@@ -17,6 +17,14 @@ def check_templates(root: Path) -> list[dict[str, Any]]:
         "app/config_overrides.py",
         "app/network_access_policy.py",
         "app/routes_admin_configuration.py",
+        "app/portrait_commercial.py",
+        "app/portrait_feedback.py",
+        "app/portrait_model_registry.py",
+        "app/portrait_control_state.py",
+        "app/postgres_control_state.py",
+        "app/routes_portrait_commercial.py",
+        "app/routes_portrait_feedback.py",
+        "app/routes_portrait_model_registry.py",
         "app/portrait_call_logs.py",
         "app/rollout_audit.py",
         "app/routes_portrait_access.py",
@@ -37,6 +45,10 @@ def check_templates(root: Path) -> list[dict[str, Any]]:
         "frontend/console-next/src/auth/session.ts",
         "frontend/console-next/src/api/generated.ts",
         "frontend/console-next/src/views/admin/ConfigurationView.vue",
+        "frontend/console-next/src/views/admin/ModelRegistryView.vue",
+        "frontend/console-next/src/views/business/CommercialView.vue",
+        "frontend/console-next/src/views/operations/ComplianceView.vue",
+        "frontend/console-next/src/views/operations/ServiceQualityView.vue",
         "frontend/console-next/dist/index.html",
         "frontend/console-next/dist/.vite/manifest.json",
         "tools/deploy_check.py",
@@ -51,6 +63,16 @@ def check_templates(root: Path) -> list[dict[str, Any]]:
         "tools/portrait_migrate.py",
         "tools/portrait_backup_scheduler.py",
         "tools/portrait_governance_scheduler.py",
+        "tools/portrait_postgres_migrate.py",
+        "tools/postgres_migrations/0001_commercial_control_plane.sql",
+        "tools/postgres_migrations/0002_control_entity_projection.sql",
+        "tools/portrait_release_preflight.py",
+        "tools/portrait_support_matrix.py",
+        "tools/portrait_acceptance_evidence.py",
+        "tools/portrait_evidence_package.py",
+        "tools/portrait_commercial_consistency.py",
+        "tools/portrait_commercial_release_gate.py",
+        "tools/portrait_upgrade_traceability.py",
         "tools/console_screenshot_acceptance.py",
         "tools/load_test.py",
         "tools/type_check.py",
@@ -71,6 +93,17 @@ def check_templates(root: Path) -> list[dict[str, Any]]:
         "deploy/portrait-governance-scheduler.service",
         "deploy/portrait-governance-scheduler.timer",
         "deploy/k8s-governance-cronjob.yaml",
+        "deploy/support-matrix.json",
+        "deploy/kubernetes/base/kustomization.yaml",
+        "deploy/kubernetes/base/migration-job.yaml",
+        "docs/deployment/SUPPORT_MATRIX.md",
+        "docs/deployment/COMMERCIAL_DATA_MIGRATION.md",
+        "docs/operations/CAPACITY_AND_RECOVERY_EVIDENCE.md",
+        "docs/operations/CAPACITY_BASELINE.md",
+        "docs/operations/EVIDENCE_PACKAGE.md",
+        "docs/operations/COMMERCIAL_RELEASE_GATE.md",
+        "docs/plans/COMMERCIAL_PRODUCT_UPGRADE_STATUS.md",
+        "docs/requirements/COMMERCIAL_REQUIREMENTS.json",
         ".github/workflows/ci.yml",
         ".github/workflows/integration-matrix.yml",
         ".github/workflows/console-acceptance.yml",
@@ -123,3 +156,49 @@ def check_data_stack(root: Path) -> list[dict[str, Any]]:
         },
     ]
     return checks
+
+
+def check_commercial_delivery(root: Path) -> list[dict[str, Any]]:
+    from tools.portrait_support_matrix import load_matrix, matrix_status, render_markdown
+
+    matrix_path = root / "deploy" / "support-matrix.json"
+    try:
+        matrix = load_matrix(matrix_path)
+        support = matrix_status(matrix, root=root)
+        rendered = render_markdown(matrix)
+    except ValueError as exc:
+        support = {"ok": False, "errors": [str(exc)]}
+        rendered = ""
+    human_matrix = root / "docs" / "deployment" / "SUPPORT_MATRIX.md"
+    migration_job = (root / "deploy" / "kubernetes" / "base" / "migration-job.yaml").read_text(encoding="utf-8")
+    evidence_tool = (root / "tools" / "portrait_evidence_package.py").read_text(encoding="utf-8")
+    release_gate = (root / "tools" / "portrait_commercial_release_gate.py").read_text(encoding="utf-8")
+    return [
+        {
+            "name": "commercial_delivery:support_matrix",
+            "ok": bool(support.get("ok"))
+            and human_matrix.is_file()
+            and human_matrix.read_text(encoding="utf-8") == rendered,
+        },
+        {
+            "name": "commercial_delivery:migration_gate",
+            "ok": all(
+                marker in migration_job
+                for marker in ("tools.portrait_release_preflight", "--apply-migrations", "--check-migrations", "--prewarm")
+            ),
+        },
+        {
+            "name": "commercial_delivery:signed_evidence_package",
+            "ok": all(
+                marker in evidence_tool
+                for marker in ("REQUIRED_ARTIFACT_KINDS", "Ed25519", '"internal", "customer"', "verify_evidence_package")
+            ),
+        },
+        {
+            "name": "commercial_delivery:fail_closed_release_gate",
+            "ok": all(
+                marker in release_gate
+                for marker in ("support_matrix", "evidence_package", "check_migrations", "check_consistency", "security_audit")
+            ),
+        },
+    ]

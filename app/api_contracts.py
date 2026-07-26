@@ -4,7 +4,7 @@ import inspect
 from collections.abc import Callable
 from typing import Any, Literal, get_args, get_origin
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from fastapi.datastructures import DefaultPlaceholder
 from pydantic import BaseModel, ConfigDict, Field
 from starlette.responses import Response
@@ -366,6 +366,18 @@ class ContractAPIRouter(APIRouter):
         endpoint: Callable[..., Any],
         **kwargs: Any,
     ) -> None:
+        methods = {str(method).upper() for method in (kwargs.get("methods") or [])}
+        parameters = inspect.signature(endpoint).parameters
+        if (
+            path.startswith("/v1/")
+            and methods & {"POST", "PUT", "PATCH", "DELETE"}
+            and "idempotency_key" not in parameters
+        ):
+            from app.portrait_idempotency import require_idempotent_write
+
+            dependencies = list(kwargs.get("dependencies") or [])
+            dependencies.append(Depends(require_idempotent_write))
+            kwargs["dependencies"] = dependencies
         response_model = kwargs.get("response_model")
         if path.startswith("/v1/") and not _returns_raw_response(endpoint):
             if isinstance(response_model, DefaultPlaceholder):

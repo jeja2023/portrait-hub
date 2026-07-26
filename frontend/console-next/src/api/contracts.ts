@@ -97,6 +97,50 @@ export interface AuthPublicConfig {
   credential_login_available: boolean;
 }
 
+export interface StepUpStatus {
+  authenticated: boolean;
+  auth_kind: string;
+  recent: boolean;
+  seconds_remaining: number;
+  max_age_seconds: number;
+}
+
+export interface WebhookDeliveryAttempt {
+  attempt: number;
+  started_at: number;
+  finished_at: number;
+  status_code: number | null;
+  success: boolean;
+  error_type: string | null;
+  response_bytes: number;
+  signature_status?: string;
+  signed_at?: number | null;
+  trigger?: string;
+}
+
+export interface WebhookDelivery {
+  delivery_id: string;
+  webhook_id: string;
+  event: string;
+  resource_id: string;
+  request_id: string;
+  endpoint: string;
+  status: string;
+  attempt_count: number;
+  attempts: WebhookDeliveryAttempt[];
+  signature_status?: string;
+  signature_algorithm?: string;
+  next_retry_at?: number | null;
+  dead_letter?: boolean;
+  dead_lettered_at?: number | null;
+  dead_letter_reason?: string | null;
+  manual_retry_count?: number;
+  last_manual_retry_at?: number | null;
+  created_at: number;
+  updated_at: number;
+  delivered_at?: number | null;
+}
+
 export interface JobSummary {
   job_id: string;
   kind: "video" | "batch";

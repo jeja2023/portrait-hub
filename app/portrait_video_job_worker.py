@@ -15,6 +15,7 @@ from app.observability import logger
 from app.portrait_async import run_blocking_io
 from app.portrait_jobs import (
     TERMINAL_JOB_STATUSES,
+    JobStatus,
     get_video_job,
     normalize_job_status,
     refresh_video_job,
@@ -23,6 +24,7 @@ from app.portrait_jobs import (
 )
 from app.portrait_response import exception_log_summary
 from app.portrait_task_queue import TASK_QUEUE, QueueMessage
+from app.portrait_webhook_delivery import deliver_job_terminal_event
 from app.routes_inference_common import validate_detection_parameters
 from app.settings import (
     DEFAULT_CONFIDENCE,
@@ -134,6 +136,7 @@ async def process_video_job_message(message: QueueMessage) -> dict[str, Any]:
         job.cancel_requested
         or normalize_job_status(job.status) in TERMINAL_JOB_STATUSES
     ):
+        await run_blocking_io(deliver_job_terminal_event, job)
         await run_blocking_io(delete_video_job_input, task["input_ref"])
         await run_blocking_io(
             TASK_QUEUE.clear_cancelled, "video_jobs", job.tenant_id, job.job_id
@@ -141,6 +144,13 @@ async def process_video_job_message(message: QueueMessage) -> dict[str, Any]:
         await run_blocking_io(TASK_QUEUE.ack, message)
         return {
             "status": str(normalize_job_status(job.status)),
+            "job_id": job.job_id,
+            "tenant_id": job.tenant_id,
+        }
+    if normalize_job_status(job.status) == JobStatus.PAUSED:
+        await run_blocking_io(TASK_QUEUE.ack, message)
+        return {
+            "status": "paused",
             "job_id": job.job_id,
             "tenant_id": job.tenant_id,
         }
@@ -163,11 +173,19 @@ async def process_video_job_message(message: QueueMessage) -> dict[str, Any]:
         include_embeddings=task["include_embeddings"],
     )
     final_job = get_video_job(job.job_id, tenant_id=job.tenant_id)
+    if final_job is not None and normalize_job_status(final_job.status) == JobStatus.PAUSED:
+        await run_blocking_io(TASK_QUEUE.ack, message)
+        return {
+            "status": "paused",
+            "job_id": final_job.job_id,
+            "tenant_id": final_job.tenant_id,
+        }
     if (
         final_job is None
         or normalize_job_status(final_job.status) not in TERMINAL_JOB_STATUSES
     ):
         raise RuntimeError("视频任务执行后未进入终态")
+    await run_blocking_io(deliver_job_terminal_event, final_job)
     await run_blocking_io(delete_video_job_input, task["input_ref"])
     await run_blocking_io(
         TASK_QUEUE.clear_cancelled, "video_jobs", final_job.tenant_id, final_job.job_id

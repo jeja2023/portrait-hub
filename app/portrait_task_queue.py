@@ -23,10 +23,13 @@ from app.settings import (
     TASK_QUEUE_VISIBILITY_TIMEOUT_SECONDS,
 )
 
+redis: Any
 try:  # pragma: no cover - optional production dependency
-    import redis
+    import redis as _redis
 except Exception:  # pragma: no cover - executed when the dependency is unavailable
     redis = None
+else:
+    redis = _redis
 
 
 _QUEUE_NAME_PATTERN = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
@@ -41,6 +44,7 @@ class QueueMessage:
     status: str = "queued"
     created_at: float = field(default_factory=wall_time)
     attempts: int = 0
+    priority: int = 0
     receipt: str | None = field(default=None, repr=False)
     raw_body: str | None = field(default=None, repr=False)
 
@@ -52,6 +56,7 @@ class QueueMessage:
             "status": self.status,
             "created_at": self.created_at,
             "attempts": self.attempts,
+            "priority": self.priority,
         }
 
     def public_dict(self) -> dict[str, Any]:
@@ -62,6 +67,7 @@ class QueueMessage:
             "status": self.status,
             "created_at": self.created_at,
             "attempts": self.attempts,
+            "priority": self.priority,
         }
 
     @classmethod
@@ -76,6 +82,7 @@ class QueueMessage:
             status=str(payload.get("status") or "queued"),
             created_at=float(payload.get("created_at") or wall_time()),
             attempts=max(0, int(payload.get("attempts") or 0)),
+            priority=max(-100, min(100, int(payload.get("priority") or 0))),
         )
 
 
@@ -166,12 +173,25 @@ def _safe_receipt_path(message: QueueMessage) -> Path | None:
     return target
 
 
+def _pending_message_sort_key(path: Path) -> tuple[int, float, str]:
+    try:
+        message = _read_local_message(path)
+        return (-message.priority, message.created_at, message.message_id)
+    except Exception:
+        return (0, float("inf"), path.name)
+
+
 class LocalTaskQueue:
     backend_name = "local_spool"
 
     def enqueue(self, queue: str, payload: dict[str, Any]) -> QueueMessage:
         queue_name = normalize_queue_name(queue)
-        message = QueueMessage(message_id=f"msg_{uuid4().hex[:16]}", queue=queue_name, payload=dict(payload))
+        message = QueueMessage(
+            message_id=f"msg_{uuid4().hex[:16]}",
+            queue=queue_name,
+            payload=dict(payload),
+            priority=max(-100, min(100, int(payload.get("priority") or 0))),
+        )
         target = _message_path(queue_name, "pending", message.message_id)
         target.parent.mkdir(parents=True, exist_ok=True)
         write_json_state(target, message.state_dict())
@@ -224,7 +244,8 @@ class LocalTaskQueue:
                 self._requeue_stale(queue_name)
                 last_stale_check = time.monotonic()
             pending_dir = local_queue_path(queue_name, "pending")
-            sources = sorted(pending_dir.glob("msg_*.json")) if pending_dir.is_dir() else []
+            sources = list(pending_dir.glob("msg_*.json")) if pending_dir.is_dir() else []
+            sources.sort(key=_pending_message_sort_key)
             for source in sources:
                 target = _message_path(queue_name, "processing", source.stem)
                 target.parent.mkdir(parents=True, exist_ok=True)
@@ -340,8 +361,22 @@ class RedisTaskQueue(LocalTaskQueue):
         return self._cached_client
 
     @staticmethod
-    def _stream_key(queue: str) -> str:
-        return f"portrait:{normalize_queue_name(queue)}"
+    def _priority_bucket(priority: int) -> str:
+        if priority > 0:
+            return "high"
+        if priority < 0:
+            return "low"
+        return "default"
+
+    @classmethod
+    def _stream_key(cls, queue: str, priority: int = 0) -> str:
+        base = f"portrait:{normalize_queue_name(queue)}"
+        bucket = cls._priority_bucket(priority)
+        return base if bucket == "default" else f"{base}:{bucket}"
+
+    @classmethod
+    def _stream_keys(cls, queue: str) -> list[str]:
+        return [cls._stream_key(queue, 1), cls._stream_key(queue, 0), cls._stream_key(queue, -1)]
 
     @staticmethod
     def _cancel_key(queue: str, tenant_id: str, job_id: str) -> str:
@@ -349,18 +384,19 @@ class RedisTaskQueue(LocalTaskQueue):
 
     def _ensure_group(self, queue: str) -> None:
         queue_name = normalize_queue_name(queue)
-        if queue_name in self._known_groups:
-            return
-        try:
-            self._client().xgroup_create(self._stream_key(queue_name), _REDIS_CONSUMER_GROUP, id="0-0", mkstream=True)
-        except Exception as exc:
-            message = exc.args[0] if exc.args else None
-            if not isinstance(message, str) or not message.startswith("BUSYGROUP"):
-                raise
-        self._known_groups.add(queue_name)
+        for stream in self._stream_keys(queue_name):
+            if stream in self._known_groups:
+                continue
+            try:
+                self._client().xgroup_create(stream, _REDIS_CONSUMER_GROUP, id="0-0", mkstream=True)
+            except Exception as exc:
+                message = exc.args[0] if exc.args else None
+                if not isinstance(message, str) or not message.startswith("BUSYGROUP"):
+                    raise
+            self._known_groups.add(stream)
 
     @staticmethod
-    def _entry_message(queue: str, entry_id: Any, fields: Any) -> QueueMessage:
+    def _entry_message(queue: str, stream: str, entry_id: Any, fields: Any) -> QueueMessage:
         if not isinstance(fields, dict):
             raise ValueError("Invalid Redis task message fields")
         raw_body = fields.get("body")
@@ -374,19 +410,36 @@ class RedisTaskQueue(LocalTaskQueue):
         message = QueueMessage.from_state(payload)
         if message.queue != normalize_queue_name(queue):
             raise ValueError("Redis task message queue mismatch")
-        message.receipt = entry_id.decode("utf-8") if isinstance(entry_id, bytes) else str(entry_id)
+        normalized_entry_id = entry_id.decode("utf-8") if isinstance(entry_id, bytes) else str(entry_id)
+        message.receipt = f"{stream}|{normalized_entry_id}"
         message.raw_body = raw_body
         message.status = "processing"
         message.attempts += 1
         return message
 
+    @staticmethod
+    def _receipt_parts(message: QueueMessage) -> tuple[str, str]:
+        if not message.receipt or "|" not in message.receipt:
+            raise RuntimeError("Redis task message receipt is invalid")
+        stream, entry_id = message.receipt.split("|", 1)
+        if not stream or not entry_id:
+            raise RuntimeError("Redis task message receipt is invalid")
+        return stream, entry_id
+
     def enqueue(self, queue: str, payload: dict[str, Any]) -> QueueMessage:
         queue_name = normalize_queue_name(queue)
         self._ensure_group(queue_name)
-        message = QueueMessage(message_id=f"msg_{uuid4().hex[:16]}", queue=queue_name, payload=dict(payload))
+        message = QueueMessage(
+            message_id=f"msg_{uuid4().hex[:16]}",
+            queue=queue_name,
+            payload=dict(payload),
+            priority=max(-100, min(100, int(payload.get("priority") or 0))),
+        )
         body = json.dumps(message.state_dict(), ensure_ascii=False, sort_keys=True, separators=(",", ":"))
         try:
-            message.receipt = str(self._client().xadd(self._stream_key(queue_name), {"body": body}))
+            stream = self._stream_key(queue_name, message.priority)
+            entry_id = str(self._client().xadd(stream, {"body": body}))
+            message.receipt = f"{stream}|{entry_id}"
         except Exception as exc:
             logger.warning("Redis task enqueue failed: error=%s", exception_log_summary(exc))
             raise
@@ -398,56 +451,75 @@ class RedisTaskQueue(LocalTaskQueue):
     def claim(self, queue: str, consumer_id: str, block_seconds: float = 0.0) -> QueueMessage | None:
         queue_name = normalize_queue_name(queue)
         self._ensure_group(queue_name)
-        stream = self._stream_key(queue_name)
+        streams = self._stream_keys(queue_name)
         client = self._client()
-        entries: list[Any] = []
-        try:
-            claimed = client.xautoclaim(
-                stream,
-                _REDIS_CONSUMER_GROUP,
-                consumer_id,
-                min_idle_time=max(1, int(float(TASK_QUEUE_VISIBILITY_TIMEOUT_SECONDS) * 1000)),
-                start_id="0-0",
-                count=1,
-            )
-            if isinstance(claimed, (list, tuple)) and len(claimed) >= 2 and isinstance(claimed[1], list):
-                entries = claimed[1]
-        except Exception as exc:
-            logger.warning("Redis task reclaim check failed: error=%s", exception_log_summary(exc))
-        if not entries:
-            kwargs: dict[str, Any] = {
-                "groupname": _REDIS_CONSUMER_GROUP,
-                "consumername": consumer_id,
-                "streams": {stream: ">"},
-                "count": 1,
-            }
-            if block_seconds > 0:
-                kwargs["block"] = max(1, int(float(block_seconds) * 1000))
-            response = client.xreadgroup(**kwargs)
-            if response:
-                entries = response[0][1]
-        if not entries:
+        deadline = time.monotonic() + max(0.0, float(block_seconds))
+        selected_stream: str | None = None
+        selected_entry: Any | None = None
+        sleep_interval = 0.05
+        while selected_entry is None:
+            for stream in streams:
+                try:
+                    claimed = client.xautoclaim(
+                        stream,
+                        _REDIS_CONSUMER_GROUP,
+                        consumer_id,
+                        min_idle_time=max(1, int(float(TASK_QUEUE_VISIBILITY_TIMEOUT_SECONDS) * 1000)),
+                        start_id="0-0",
+                        count=1,
+                    )
+                    entries = (
+                        claimed[1]
+                        if isinstance(claimed, (list, tuple))
+                        and len(claimed) >= 2
+                        and isinstance(claimed[1], list)
+                        else []
+                    )
+                    if entries:
+                        selected_stream = stream
+                        selected_entry = entries[0]
+                        break
+                except Exception as exc:
+                    logger.warning("Redis task reclaim check failed: error=%s", exception_log_summary(exc))
+            if selected_entry is not None:
+                break
+            for stream in streams:
+                response = client.xreadgroup(
+                    groupname=_REDIS_CONSUMER_GROUP,
+                    consumername=consumer_id,
+                    streams={stream: ">"},
+                    count=1,
+                )
+                if response and response[0][1]:
+                    selected_stream = stream
+                    selected_entry = response[0][1][0]
+                    break
+            if selected_entry is not None or time.monotonic() >= deadline:
+                break
+            remaining = deadline - time.monotonic()
+            time.sleep(min(sleep_interval, max(0.0, remaining)))
+            sleep_interval = min(0.25, sleep_interval * 2)
+        if selected_entry is None or selected_stream is None:
             return None
-        entry_id, fields = entries[0]
+        entry_id, fields = selected_entry
         try:
-            message = self._entry_message(queue_name, entry_id, fields)
+            message = self._entry_message(queue_name, selected_stream, entry_id, fields)
         except Exception:
-            client.xack(stream, _REDIS_CONSUMER_GROUP, entry_id)
-            client.xdel(stream, entry_id)
+            client.xack(selected_stream, _REDIS_CONSUMER_GROUP, entry_id)
+            client.xdel(selected_stream, entry_id)
             raise
         TASK_MESSAGE_STORE.append(message)
         append_task_queue_state({**message.public_dict(), "event": "task_claimed"}, required=False)
         return message
 
     def heartbeat(self, message: QueueMessage, consumer_id: str) -> None:
-        if not message.receipt:
-            raise RuntimeError("Redis task message receipt is missing")
+        stream, entry_id = self._receipt_parts(message)
         claimed = self._client().xclaim(
-            self._stream_key(message.queue),
+            stream,
             _REDIS_CONSUMER_GROUP,
             consumer_id,
             min_idle_time=0,
-            message_ids=[message.receipt],
+            message_ids=[entry_id],
             justid=True,
         )
         if not claimed:
@@ -455,9 +527,9 @@ class RedisTaskQueue(LocalTaskQueue):
 
     def ack(self, message: QueueMessage) -> None:
         if message.receipt:
-            stream = self._stream_key(message.queue)
-            self._client().xack(stream, _REDIS_CONSUMER_GROUP, message.receipt)
-            self._client().xdel(stream, message.receipt)
+            stream, entry_id = self._receipt_parts(message)
+            self._client().xack(stream, _REDIS_CONSUMER_GROUP, entry_id)
+            self._client().xdel(stream, entry_id)
         TASK_MESSAGE_STORE.remove(message)
         append_task_queue_state({**message.public_dict(), "event": "task_acknowledged"}, required=False)
 
@@ -468,9 +540,9 @@ class RedisTaskQueue(LocalTaskQueue):
 
     def remove(self, message: QueueMessage) -> None:
         if message.receipt:
-            stream = self._stream_key(message.queue)
-            self._client().xack(stream, _REDIS_CONSUMER_GROUP, message.receipt)
-            self._client().xdel(stream, message.receipt)
+            stream, entry_id = self._receipt_parts(message)
+            self._client().xack(stream, _REDIS_CONSUMER_GROUP, entry_id)
+            self._client().xdel(stream, entry_id)
         TASK_MESSAGE_STORE.remove(message)
         append_task_queue_state({**message.public_dict(), "event": "task_removed"}, required=False)
 

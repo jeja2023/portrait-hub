@@ -30,7 +30,9 @@ def bounded_limit(value: int | None, *, default: int, max_limit: int, field_name
     try:
         limit = int(raw)
     except (TypeError, ValueError) as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"{field_name} 必须是整数") from exc
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"{field_name} 必须是整数"
+        ) from exc
     if limit < 0:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"{field_name} 必须大于等于 0")
     if limit > max_limit:
@@ -46,7 +48,9 @@ def bounded_offset(value: int | None, *, field_name: str = "offset") -> int:
     try:
         offset = int(raw)
     except (TypeError, ValueError) as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"{field_name} 必须是整数") from exc
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"{field_name} 必须是整数"
+        ) from exc
     if offset < 0:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"{field_name} 必须大于等于 0")
     return offset
@@ -71,9 +75,16 @@ def decode_cursor(value: str | None) -> list[Any] | None:
     return payload
 
 
-def normalize_list_pagination(limit: int | None, offset: int | None, cursor: str | None = None) -> Pagination:
+def normalize_list_pagination(
+    limit: int | None,
+    offset: int | None,
+    cursor: str | None = None,
+    *,
+    default: int = API_LIST_DEFAULT_LIMIT,
+    max_limit: int = MAX_API_LIST_LIMIT,
+) -> Pagination:
     return Pagination(
-        limit=bounded_limit(limit, default=API_LIST_DEFAULT_LIMIT, max_limit=MAX_API_LIST_LIMIT),
+        limit=bounded_limit(limit, default=default, max_limit=max_limit),
         offset=bounded_offset(offset),
         cursor=cursor,
     )
@@ -106,6 +117,93 @@ def page_items(items: Sequence[T], *, limit: int, offset: int) -> tuple[list[T],
         "next_cursor": None,
         "has_more": next_offset is not None,
     }
+
+
+def page_items_cursor(
+    items: Sequence[T],
+    *,
+    limit: int,
+    offset: int = 0,
+    cursor: str | None = None,
+) -> tuple[list[T], dict[str, Any]]:
+    """Page an already sorted control-plane collection with an opaque offset cursor."""
+
+    start_index = bounded_offset(offset)
+    decoded = decode_cursor(cursor)
+    if decoded is not None:
+        if (
+            len(decoded) != 2
+            or decoded[0] != "offset"
+            or isinstance(decoded[1], bool)
+            or not isinstance(decoded[1], int)
+            or decoded[1] < 0
+        ):
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="invalid pagination cursor")
+        start_index = decoded[1]
+    page, metadata = page_items(items, limit=limit, offset=start_index)
+    next_offset = metadata["next_offset"]
+    metadata["cursor"] = cursor
+    metadata["next_cursor"] = encode_cursor(["offset", next_offset]) if next_offset is not None else None
+    metadata["has_more"] = next_offset is not None
+    return page, metadata
+
+
+def filter_sort_dict_rows(
+    items: Sequence[dict[str, Any]],
+    *,
+    search: str | None = None,
+    search_fields: Sequence[str] = (),
+    created_since: float | None = None,
+    created_until: float | None = None,
+    time_field: str | None = None,
+    sort_by: str,
+    sort_order: str,
+    id_field: str,
+) -> list[dict[str, Any]]:
+    """Apply the common search, time-window and stable-sort contract for list APIs."""
+
+    if created_since is not None and created_until is not None and created_since > created_until:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="created_since must be less than or equal to created_until",
+        )
+    normalized_order = str(sort_order).strip().lower()
+    if normalized_order not in {"asc", "desc"}:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="sort_order must be asc or desc")
+    needle = str(search or "").strip().casefold()
+
+    def included(item: dict[str, Any]) -> bool:
+        if needle and not any(needle in str(item.get(field) or "").casefold() for field in search_fields):
+            return False
+        if time_field is None or (created_since is None and created_until is None):
+            return True
+        raw_timestamp = item.get(time_field)
+        if isinstance(raw_timestamp, bool) or not isinstance(raw_timestamp, (int, float, str)):
+            return False
+        try:
+            timestamp = float(raw_timestamp)
+        except (TypeError, ValueError):
+            return False
+        return not (
+            (created_since is not None and timestamp < created_since)
+            or (created_until is not None and timestamp > created_until)
+        )
+
+    def sortable(value: Any) -> tuple[str, float | str]:
+        if isinstance(value, bool):
+            return ("number", float(value))
+        if isinstance(value, (int, float)):
+            return ("number", float(value))
+        if value is None:
+            return ("none", "")
+        return ("text", str(value).casefold())
+
+    rows = [item for item in items if included(item)]
+    rows.sort(
+        key=lambda item: (sortable(item.get(sort_by)), str(item.get(id_field) or "")),
+        reverse=normalized_order == "desc",
+    )
+    return rows
 
 
 def page_items_keyset(

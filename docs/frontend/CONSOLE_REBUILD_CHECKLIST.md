@@ -1,13 +1,15 @@
 # 控制台重建行为对照清单
 
-- 冻结日期：2026-07-22
-- 交付版本：0.17.0
+- 冻结日期：2026-07-26
+- 交付版本：0.18.0
 - 范围：legacy 模板中全部 27 个 data-view 和其写操作
 - 正式入口：/ 登录，认证成功后进入 /console；/console/next 仅保留直达验收
 - 状态定义：实现完成表示代码与自动化链路已落库；观察中表示必须在生产灰度后收集指标，不能以本地测试代替。
 - 通用状态：所有新路由均有加载骨架、空状态、错误横幅、权限路由和直接深链；列表使用服务端数据，不静默回退本地假数据。
 
 
+> 2026-07-26 / 0.18.0：商业运营、服务质量、合规、模型注册和 Webhook 投递调试已接入；加载/空/错、分页、序号、高风险确认和响应式布局完成；Vitest 44 tests、Playwright 五项目 40 tests、Node SDK、ESLint、Vue TypeScript、Vite build 通过。
+>
 > 2026-07-22 / 0.17.0：会话、HTTP、能力上下文和 WebSocket 已接入项目 ID；OpenAPI TypeScript 类型同步强结构化响应；Console Next 9 files / 36 tests、Node SDK、ESLint、Vue TypeScript、Vite build 通过。
 >
 > 2026-07-22 / 0.16.0：侧栏垂直滚动条隐藏、菜单间隔收紧、全站表格序号统一、配置中心边框/分页/分类排序和自动化序号契约测试已完成；Console Next 9 files / 35 tests、ESLint、Vue TypeScript、Vite build 通过。
@@ -21,6 +23,18 @@
 > 2026-07-18 / 0.11.2：二次复核补齐流详情深链、meta.nav 导航、aria-live、错误 request_id、值级脱敏、搜索质量分，并同步后端 WS/no-store/CSP 契约和 me/ws-ticket/gallery 回归测试。
 
 > 2026-07-18 / 0.11.1：迁移后补强 deploy_check 与 readiness，确认旧目录、旧灰度变量、旧静态路径、data-view= 属性和 PortraitConsoleModules 不会回归。
+
+## 0.18.0 增量验收
+
+| 范围 | 完成状态 | 关键入口/契约 |
+| --- | --- | --- |
+| 商业运营 | 完成 | `/business/commercial`；客户、授权、计量、成本、预算、配额、支持和关闭 |
+| 服务质量 | 完成 | `/admin/service-quality`；SLA、事件、成功率与延迟 |
+| 合规治理 | 完成 | `/admin/compliance`；商业控制项、数据权利、删除证据和签名证据包 |
+| 模型注册 | 完成 | `/admin/model-registry`；注册、来源、评估、审批、发布状态、别名和回滚 |
+| Webhook 调试 | 完成 | `/dev/access`；尝试时间线、重试、死信、人工重投和项目隔离 |
+| 交互门禁 | 完成 | 加载/空/错、连续序号、分页、近期认证和高风险确认 |
+| 响应式与自动化 | 完成 | Vitest 44 tests；Playwright 五项目 40 tests；ESLint、类型与 build |
 
 ## 0.17.0 增量验收
 
@@ -122,15 +136,16 @@
 
 ## 本轮自动化验证
 
-- python -m pytest -q：通过，601 passed / 4 skipped；Python SDK 通过。
+- python -m pytest -q：通过，746 passed / 6 skipped；Python SDK 0.18.0 干净环境实时烟测通过。
 - 强结构化契约、项目隔离和版本一致性定向回归：通过。
-- python tools/type_check.py：严格 mypy 187 个源文件通过。
+- python tools/type_check.py：严格 mypy 215 个源文件通过。
 - python -m ruff check app tests tools sdk/python：通过。
-- npm run check：通过，覆盖 Node SDK、ESLint、Vitest 9 files / 36 tests、Vue TypeScript 和 Vite production build。
+- npm run check：通过，覆盖 Node SDK、ESLint、Vitest 44 tests、Vue TypeScript 和 Vite production build。
+- npm run console:e2e：Playwright 五个浏览器/视口项目 40 passed。
 - deploy_check --json：ok=true，确认应用依赖、PostgreSQL 新表、Compose 和 Console Next 源码契约。
 - platform strict readiness：ok=true，strict_failure_count=0。
 - 真实 PostgreSQL/pgvector 容器：schema、访问状态 CAS、日配额、调用日志和核心存储集成通过。
-- Docker Compose GPU/CPU 配置解析、统一 0.17.0 版本断言和 git diff --check：通过。
+- Docker Compose GPU/CPU 配置解析、统一 0.18.0 版本断言和 git diff --check：通过。
 - 当前验证机没有 Go 与 Maven 可执行文件，原生 Go/Java 测试未重复执行；静态版本与项目参数契约通过。
 - 完整 strict readiness 仍缺少五类真实模型能力，未达到最终生产切换条件。
 
@@ -138,7 +153,7 @@
 
 以下事项依赖真实发布环境，不以代码门禁结果代替：
 
-- [ ] 产品、安全、运维负责人完成 0.17.0 上线签字。
+- [ ] 产品、安全、隐私、运维和交付负责人完成 0.18.0 上线签字。
 - [ ] 使用上一版镜像或受控静态构件完成回退演练，验证业务数据和解析档案不变。
 - [ ] 记录真实登录、前端异常、API 4xx/5xx、关键流程成功率和 p95/p99 观察结果。
 - [x] WS ticket 在配置 REDIS_URL 时使用共享 Redis TTL 与 Lua 原子单次消费；无 Redis 的本地开发保留进程内实现。
