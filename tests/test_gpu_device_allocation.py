@@ -1,9 +1,10 @@
 import asyncio
+import logging
 
 import numpy as np
 import pytest
 
-from app import runtime_execution, runtime_registry, runtime_sessions, runtime_state
+from app import model_config_state, runtime_execution, runtime_registry, runtime_sessions, runtime_state
 
 
 def patch_devices(monkeypatch, device_ids: list[int], queue_limit: int = 1) -> None:
@@ -21,6 +22,21 @@ def test_gpu_device_ids_lists_configured_devices(monkeypatch) -> None:
     patch_devices(monkeypatch, [0, 1, 2])
 
     assert runtime_state.gpu_device_ids() == [0, 1, 2]
+
+
+def test_gpu_device_discovery_failure_warns_before_fallback(monkeypatch, caplog) -> None:
+    class BrokenModelConfigs:
+        def values(self):
+            raise RuntimeError("device probe failed")
+
+    monkeypatch.setattr(runtime_state, "GPU_DEVICE_SEMAPHORES", {})
+    monkeypatch.setattr(model_config_state, "MODEL_CONFIGS", BrokenModelConfigs())
+
+    with caplog.at_level(logging.WARNING):
+        assert runtime_state.gpu_device_ids() == [0]
+
+    assert "GPU device discovery failed" in caplog.text
+    assert "RuntimeError" in caplog.text
 
 
 def test_gpu_semaphore_for_device_none_returns_global() -> None:

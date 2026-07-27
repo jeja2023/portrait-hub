@@ -47,6 +47,18 @@ def check_docker_files(root: Path, report: DeployReport) -> None:
     )
     report.add("dockerfile_prod_optional_arg", "INSTALL_PROD_OPTIONAL" in dockerfile, None)
     report.add(
+        "dockerfile_package_sources_configurable",
+        dockerfile.count("ARG APT_MIRROR=") == 2
+        and "ARG PIP_INDEX_URL=https://pypi.org/simple" in dockerfile
+        and "ARG PIP_INDEX_URL=https://pypi.org/simple" in cpu_dockerfile
+        and "--index-url \"$PIP_INDEX_URL\"" in dockerfile
+        and "--index-url \"$PIP_INDEX_URL\"" in cpu_dockerfile
+        and "mirrors.tuna.tsinghua.edu.cn" not in dockerfile
+        and "pypi.tuna.tsinghua.edu.cn" not in dockerfile
+        and "pypi.tuna.tsinghua.edu.cn" not in cpu_dockerfile,
+        None,
+    )
+    report.add(
         "cpu_dockerfile_uses_cpu_runtime",
         "FROM python:3.12-slim-bookworm" in cpu_dockerfile
         and "requirements-cpu.txt" in cpu_dockerfile

@@ -431,12 +431,6 @@ onBeforeUnmount(() => {
 .data-table small {
   color: #62706d;
 }
-.load-more {
-  display: flex;
-  justify-content: center;
-  padding: 12px;
-  border-top: 1px solid #d8e0de;
-}
 .job-filters {
   display: flex;
   flex-wrap: wrap;

@@ -11,7 +11,49 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  test-and-verify:
+  lint-type:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pip install -r requirements/dev.txt
+      - name: Run ruff lint
+        run: python -m ruff check app tools tests
+      - name: Run strict type checks
+        run: python tools/type_check.py
+
+  python-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pip install -r requirements/dev.txt
+      - name: Run Python tests with coverage
+        run: python -m pytest -q --cov=app --cov=tools --cov-report=term --cov-report=xml --durations=15
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-xml
+          path: coverage.xml
+          if-no-files-found: ignore
+
+  frontend-e2e:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -23,6 +65,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
+          cache: npm
+          cache-dependency-path: package-lock.json
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
@@ -44,26 +88,45 @@ jobs:
           npm run console:build
           test -f frontend/console-next/dist/index.html
           test -f frontend/console-next/dist/.vite/manifest.json
-      - name: Install browser test engines
-        run: npx playwright install --with-deps chromium firefox webkit
-      - name: Run console browser acceptance
-        run: npm run console:e2e
-      - name: Run ruff lint
-        run: python -m ruff check app tools tests
-      - name: Run Python tests with coverage
-        run: python -m pytest -q --cov=app --cov=tools --cov-report=term --cov-report=xml --durations=15
-      - name: Upload coverage report
-        uses: actions/upload-artifact@v4
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
         with:
-          name: coverage-xml
-          path: coverage.xml
-          if-no-files-found: ignore
-      - name: Run strict type checks
-        run: python tools/type_check.py
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('package-lock.json') }}
+      - name: Install Chromium test engine
+        run: npx playwright install --with-deps chromium
+      - name: Run console Chromium acceptance
+        run: >-
+          npm run console:e2e --
+          --project=chromium-desktop
+          --project=chromium-tablet
+          --project=chromium-mobile
+
+  delivery-gates:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pip install -r requirements/dev.txt
+      - name: Install pinned Node dependencies
+        run: npm ci
       - name: Verify dependency lock policy
         run: python tools/deploy_check.py --json --skip-node
       - name: Run Node SDK contract tests
-        run: npm run check
+        run: node tests/test_node_sdk.js
       - name: Run Python SDK clean-environment smoke
         run: python tools/portrait_sdk_clean_smoke.py --json
       - name: Run deployment contract checks
@@ -73,7 +136,7 @@ jobs:
       - name: Run example model A/B shadow gates
         run: python tools/portrait_model_regression.py --manifest examples/portrait-model-ab-shadow.example.yml --json
       - name: Run production readiness gate
-        # scope=platform 保留模板/数据栈/安全/契约/模型文件检查，跳过需要真实生产模型产物的
+        # scope=platform 保留模板/数据校验、安全/契约/模型文件检查，跳过需要真实生产模型产物的
         # 能力状态检查（CI runner 不携带这些大模型）。任何 strict 失败都会使该步骤非零退出。
         run: python tools/portrait_production_readiness.py --strict --scope platform
       - name: Verify commercial delivery controls

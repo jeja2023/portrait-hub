@@ -4,12 +4,14 @@ import { Code2, ImageUp, Play, RotateCcw } from "@lucide/vue";
 import { ElAlert, ElButton, ElCheckbox, ElInputNumber, ElOption, ElSelect } from "element-plus";
 
 import { apiRequest } from "../../api/client";
+import DataTablePagination from "../../components/DataTablePagination.vue";
 import EmptyState from "../../components/EmptyState.vue";
 import FrameGrid from "../../components/FrameGrid.vue";
 import RawDataDrawer from "../../components/RawDataDrawer.vue";
 import { usePrefsStore } from "../../stores/prefs";
 import { errorBannerMessage } from "../../utils/errors";
 import { modalityLabel } from "../../utils/format";
+import { useTablePagination } from "../../utils/tablePagination";
 
 const prefs = usePrefsStore();
 const endpoint = ref("/v1/infer/persons");
@@ -25,6 +27,7 @@ const errorMessage = ref("");
 const result = ref<Record<string, unknown> | null>(null);
 const showRaw = ref(false);
 const imageArchives = ref<AnalysisArchive[]>([]);
+const imageArchivesPager = useTablePagination(imageArchives, 6);
 const archiveNextCursor = ref<string | null>(null);
 const archiveLoading = ref(false);
 
@@ -127,6 +130,7 @@ function reset(): void {
 
 async function loadImageArchives(append = false): Promise<void> {
   archiveLoading.value = true;
+  if (!append) imageArchivesPager.page = 1;
   try {
     const params = new URLSearchParams({ source_type: "image", limit: "6" });
     if (append && archiveNextCursor.value) params.set("cursor", archiveNextCursor.value);
@@ -234,7 +238,7 @@ onBeforeUnmount(() => {
         description="完成并归档的图片分析结果会显示在这里。"
       />
       <div v-else class="archive-list">
-        <article v-for="archive in imageArchives" :key="archive.archive_id" class="archive-row">
+        <article v-for="archive in imageArchivesPager.items" :key="archive.archive_id" class="archive-row">
           <img v-if="archive.previews[0]?.src" :src="archive.previews[0].src" alt="图片归档预览" />
           <div>
             <strong>{{ archive.mode ? modalityLabel(archive.mode) : "图片分析" }}</strong>
@@ -243,9 +247,16 @@ onBeforeUnmount(() => {
           <span>{{ archive.previews.length }} 张预览</span>
         </article>
       </div>
-      <div v-if="archiveNextCursor" class="load-more">
-        <ElButton :loading="archiveLoading" @click="loadImageArchives(true)">加载更多</ElButton>
-      </div>
+      <DataTablePagination
+        v-if="imageArchives.length"
+        v-model:page="imageArchivesPager.page"
+        v-model:page-size="imageArchivesPager.pageSize"
+        :total="imageArchivesPager.total"
+        :page-sizes="[6, 12, 24]"
+        :has-more="Boolean(archiveNextCursor)"
+        :loading-more="archiveLoading"
+        @load-more="loadImageArchives(true)"
+      />
     </section>
     <RawDataDrawer v-model="showRaw" :data="result" />
   </div>
@@ -393,11 +404,6 @@ onBeforeUnmount(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-.load-more {
-  display: flex;
-  justify-content: center;
-  margin-top: 12px;
 }
 @media (max-width: 900px) {
   .analysis-grid {

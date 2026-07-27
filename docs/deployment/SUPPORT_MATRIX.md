@@ -1,6 +1,6 @@
 # PortraitHub 支持矩阵
 
-产品版本：`0.18.0`；上一稳定版本：`0.17.0`；机器源摘要：`0eb20d2be9ebe57252a9ea144e74bb0196da3942caa9e8e9f0c768da35b1e460`。
+产品版本：`0.18.2`；上一稳定版本：`0.18.1`；机器源摘要：`ed7316a54db5e5cafa5c6f576c8f31cba9795600d8f249b0172eba7454beaf4d`。
 
 > `supported` 表示在列明边界内支持；`limited` 必须完成所列验收后才能进入合同 SLA；`experimental` 仅供试验；`unsupported` 禁止生产使用。
 
@@ -52,7 +52,7 @@ GPU 镜像基线：`nvidia/cuda:12.4.1-cudnn-runtime-ubuntu22.04`；CPU 镜像�
 | `proxy-network` | `limited` | proxy allowlist, certificate trust and image/model retrieval smoke |
 | `air-gapped` | `limited` | offline import, signature verification, install, N-1 upgrade and rollback |
 
-当前正式升级路径为 `0.17.0 -> 0.18.0`。回退必须遵守发布说明的数据边界；回滚窗口内只做 expand，不删除旧表或旧字段。
+当前正式升级路径为 `0.18.1 -> 0.18.2`。回退必须遵守发布说明的数据边界；回滚窗口内只做 expand，不删除旧表或旧字段。
 
 ## 候选硬件
 

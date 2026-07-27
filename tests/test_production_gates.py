@@ -1,6 +1,22 @@
 from app import production_gates, settings
 
 
+def test_production_profile_rejects_invalid_typed_environment_values(monkeypatch) -> None:
+    monkeypatch.setattr(settings, "PORTRAIT_RUNTIME_PROFILE", "production")
+    monkeypatch.setattr(settings, "PRODUCTION_EXTERNAL_SERVICES_REQUIRED", False)
+    monkeypatch.setattr(
+        settings,
+        "invalid_environment_variables",
+        lambda: {"FORCE_CPU": "a boolean", "MAX_IMAGE_BYTES": "an integer"},
+    )
+
+    failures = production_gates.production_externalization_failures()
+
+    assert len(failures) == 1
+    assert "FORCE_CPU (expected a boolean)" in failures[0]
+    assert "MAX_IMAGE_BYTES (expected an integer)" in failures[0]
+
+
 def test_production_profile_requires_external_services(monkeypatch) -> None:
     monkeypatch.setattr(settings, "PORTRAIT_RUNTIME_PROFILE", "production")
     monkeypatch.setattr(settings, "PRODUCTION_EXTERNAL_SERVICES_REQUIRED", True)

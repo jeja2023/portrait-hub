@@ -1,6 +1,6 @@
 # PortraitHub Ubuntu 部署教程
 
-本文档面向当前 PortraitHub 项目，说明如何在 Ubuntu 服务器上通过 Docker Compose 部署 GPU 推理服务。文档按仓库版本 0.18.0、当前 Dockerfile、docker-compose.yml、.env.example、商业数据迁移和生产门禁实现编写。
+本文档面向当前 PortraitHub 项目，说明如何在 Ubuntu 服务器上通过 Docker Compose 部署 GPU 推理服务。文档按仓库版本 0.18.2、当前 Dockerfile、docker-compose.yml、.env.example、商业数据迁移和生产门禁实现编写。
 
 > 项目名称、仓库目录和 Compose 项目名统一为 portrait-hub。
 
@@ -813,7 +813,58 @@ docker compose -p portrait-hub ps
 - Redis 中尚未完成的任务；
 - 当前可用镜像的离线归档。
 
-### 17.1 从 0.17.0 升级到 0.18.0
+### 17.1 从 0.18.1 升级到 0.18.2
+
+0.18.2 是 Console Next 表格与分页一致性补丁，公开 API、OpenAPI、数据库 schema 和持久化数据格式不变，不需要执行数据迁移，也不要求暂停业务写入。
+
+```bash
+cd /opt/portrait-hub
+git fetch origin
+git pull --ff-only origin main
+grep -F 'version = "0.18.2"' pyproject.toml
+
+python -m pytest -q tests/test_release_version.py tests/test_support_matrix.py
+python tools/portrait_support_matrix.py --json
+npm run check
+docker compose -p portrait-hub build
+docker compose -p portrait-hub up -d --remove-orphans
+```
+
+升级后验证 `/health`、`/ready` 与控制台登录，并抽查服务质量、模型注册、图片分析、分析结果和配置中心。移动端配置表应在表格容器内横向滚动，页面本身不得产生横向溢出，分页不得被底部导航遮挡。
+
+0.18.2 没有数据迁移，可以回退到完整归档的 0.18.1 应用和前端镜像。必须成套回退 Console Next 的 HTML、manifest 与哈希静态资源，完整边界见 `docs/releases/0.18.2.md`。
+
+### 17.2 从 0.18.0 升级到 0.18.1
+
+0.18.1 是控制面性能、配置校验和交付可靠性补丁，公开 API 与数据库 schema 不变，不需要执行数据迁移，也不要求因 schema 变更暂停业务写入。升级前仍应完成本章列出的配置、运行状态和镜像备份。
+
+拉取代码后先验证版本和生产配置。整数、浮点和布尔配置的拼写错误现在会使生产启动失败，必须在滚动重建前修正：
+
+```bash
+cd /opt/portrait-hub
+git fetch origin
+git pull --ff-only origin main
+grep -F 'version = "0.18.1"' pyproject.toml
+
+python tools/portrait_support_matrix.py --json
+python tools/openapi_compatibility_check.py
+```
+
+默认构建使用 Ubuntu/PyPI 官方源。国内、代理或隔离网络可按需传入 `APT_MIRROR` 和 `PIP_INDEX_URL`，不要修改并提交 Dockerfile：
+
+```bash
+docker compose -p portrait-hub build --pull \
+  --build-arg APT_MIRROR=https://mirrors.tuna.tsinghua.edu.cn/ubuntu \
+  --build-arg PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
+docker compose -p portrait-hub up -d --remove-orphans
+docker compose -p portrait-hub ps
+```
+
+升级后验证两个 API worker 的 `/health`、`/ready`、控制面读写、GPU 清单、状态持久化和审计写入，再执行平台范围严格门禁。`BLOCKING_IO_THREAD_POOL_SIZE` 可结合单进程并发、PostgreSQL 连接池和磁盘延迟调整；未显式设置时使用运行时默认值。
+
+0.18.1 没有数据格式迁移，可以回退到已归档的 0.18.0 镜像。回退后仍应保留已经修正的环境配置；不要依赖 0.18.0 对非法类型值的静默回退。完整边界见 `docs/releases/0.18.1.md`。
+
+### 17.3 从 0.17.0 升级到 0.18.0
 
 0.18.0 新增商业控制状态、不可变计量、许可证、反馈、模型注册、视频续传和 Webhook 投递状态。升级期间应暂停客户/授权、模型别名、反馈导入、Webhook 配置和行业模板应用写入，并先完成本章列出的 PostgreSQL、Redis、对象存储、运行状态和镜像全量备份。
 
@@ -850,7 +901,7 @@ python tools/portrait_upgrade_traceability.py
 
 回退 0.17.0 时保留所有 0.18.0 新表、索引和字段，不执行破坏性迁移。只要 0.18.0 已产生商业、计量、反馈、模型或投递记录，就不能让 0.17.0 对这些域恢复写入；可用旧镜像只读排障，恢复写入应重新部署 0.18.0，或在负责人明确接受数据丢失后恢复升级前完整快照。完整边界见 `docs/releases/0.18.0.md`。
 
-### 17.2 从 0.16.0 升级到 0.17.0
+### 17.3 从 0.16.0 升级到 0.17.0
 
 0.17.0 新增项目目录、PostgreSQL 访问状态、应用日配额和持久化调用日志。升级期间应暂停租户、项目、应用、Webhook 和模型配置写入，并先完成上面的全量备份。
 
@@ -938,7 +989,7 @@ cd /opt/portrait-hub
 docker compose -p portrait-hub build
 docker compose -p portrait-hub config --images
 
-docker save -o portrait-hub-0.17.0-images.tar \
+docker save -o portrait-hub-0.18.2-images.tar \
   portrait-hub-gpu-worker-0 \
   portrait-hub-gpu-worker-1 \
   portrait-hub-portrait-video-job-worker \
@@ -1107,6 +1158,8 @@ docker exec gpu-worker-0 python -c \
 - [ ] 生产外部服务和 PostgreSQL schema 已配置。
 - [ ] 0.17.0 新增访问状态、日配额和调用日志表存在，默认项目兼容与跨项目拒绝已验证。
 - [ ] 0.18.0 商业控制、计量、许可证、反馈、模型注册、视频续传和 Webhook 投递迁移已完成。
+- [ ] 0.18.1 类型配置校验、控制面增量同步、专用 IO 线程池和 GPU 降级告警已验证。
+- [ ] 0.18.2 控制台全局表格、分页、游标续载和配置中心移动端横向滚动已验证。
 - [ ] 支持矩阵、OpenAPI 兼容、发布前检查、SDK 干净环境烟测和升级追踪结构校验通过。
 - [ ] 商业状态/授权回滚、计量冲正、模型别名回滚、视频续传、Webhook 死信重投和近期认证已验证。
 - [ ] 目标拓扑完成容量、N-1、故障、恢复、备份、升级、回滚和告警演练，并保存真实证据。

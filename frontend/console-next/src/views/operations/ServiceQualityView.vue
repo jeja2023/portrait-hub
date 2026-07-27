@@ -100,6 +100,7 @@ const updateForm = reactive({ status: "investigating", severity: "sev3", owner: 
 
 const filteredIncidents = computed(() => incidents.value.filter((item) => (!incidentFilter.value || item.status === incidentFilter.value) && (!severityFilter.value || item.severity === severityFilter.value)));
 const incidentsPager = useTablePagination(filteredIncidents);
+const slaDefinitionsPager = useTablePagination(slaDefinitions);
 const reportsPager = useTablePagination(slaReports);
 const openIncidents = computed(() => incidents.value.filter((item) => !["resolved", "closed"].includes(String(item.status))).length);
 const latestDefinition = computed(() => [...slaDefinitions.value].sort((a, b) => Number(b.effective_at ?? 0) - Number(a.effective_at ?? 0))[0]);
@@ -226,7 +227,7 @@ onMounted(() => void load());
         </ElTabPane>
         <ElTabPane label="SLA 定义" name="sla">
           <EmptyState v-if="!slaDefinitions.length" title="尚未创建 SLA 定义" description="创建版本化定义后，报告将按该目标计算可用性和错误预算。" :action-label="canWrite ? '新建 SLA' : ''" @action="slaOpen = true" />
-          <div v-else class="table-wrap"><table class="data-table"><thead><tr><th class="sequence-column">序号</th><th>版本</th><th>可用性</th><th>P95 / P99</th><th>窗口</th><th>时区</th><th>生效时间</th></tr></thead><tbody><tr v-for="(item, index) in slaDefinitions" :key="item.sla_definition_id"><td class="sequence-column">{{ index + 1 }}</td><td>v{{ item.definition_version }}</td><td>{{ percentage(item.availability_target) }}</td><td>{{ item.p95_latency_ms }} / {{ item.p99_latency_ms }} ms</td><td>{{ Math.round(Number(item.window_seconds) / 86400) }} 天</td><td>{{ item.timezone }}</td><td>{{ formatTimestamp(item.effective_at) }}</td></tr></tbody></table></div>
+          <template v-else><div class="table-wrap"><table class="data-table"><thead><tr><th class="sequence-column">序号</th><th>版本</th><th>可用性</th><th>P95 / P99</th><th>窗口</th><th>时区</th><th>生效时间</th></tr></thead><tbody><tr v-for="(item, index) in slaDefinitionsPager.items" :key="item.sla_definition_id"><td class="sequence-column">{{ slaDefinitionsPager.startIndex + index + 1 }}</td><td>v{{ item.definition_version }}</td><td>{{ percentage(item.availability_target) }}</td><td>{{ item.p95_latency_ms }} / {{ item.p99_latency_ms }} ms</td><td>{{ Math.round(Number(item.window_seconds) / 86400) }} 天</td><td>{{ item.timezone }}</td><td>{{ formatTimestamp(item.effective_at) }}</td></tr></tbody></table></div><DataTablePagination v-model:page="slaDefinitionsPager.page" v-model:page-size="slaDefinitionsPager.pageSize" :total="slaDefinitionsPager.total" /></template>
         </ElTabPane>
         <ElTabPane :label="`SLA 报告 (${slaReports.length})`" name="reports">
           <EmptyState v-if="!slaReports.length" title="尚未生成 SLA 报告" description="报告保存统计窗口、来源完整性、延迟和错误预算证据。" :action-label="canWrite ? '生成报告' : ''" @action="reportOpen = true" />

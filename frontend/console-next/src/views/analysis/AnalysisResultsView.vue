@@ -5,11 +5,13 @@ import { ElAlert, ElButton, ElDrawer, ElInput, ElRadioButton, ElRadioGroup, ElSk
 import { useRoute, useRouter } from "vue-router";
 
 import { apiRequest } from "../../api/client";
+import DataTablePagination from "../../components/DataTablePagination.vue";
 import EmptyState from "../../components/EmptyState.vue";
 import RawDataDrawer from "../../components/RawDataDrawer.vue";
 import { usePrefsStore } from "../../stores/prefs";
 import { errorBannerMessage } from "../../utils/errors";
 import { artifactLabel, formatTimestamp, modalityLabel } from "../../utils/format";
+import { useTablePagination } from "../../utils/tablePagination";
 
 interface AnalysisPreview {
   artifact_id: string;
@@ -45,6 +47,7 @@ const route = useRoute();
 const router = useRouter();
 const prefs = usePrefsStore();
 const archives = ref<AnalysisArchive[]>([]);
+const archivesPager = useTablePagination(archives, 12);
 const sourceType = ref(typeof route.query.source_type === "string" ? route.query.source_type : "");
 const mode = ref(typeof route.query.mode === "string" ? route.query.mode : "");
 const nextCursor = ref<string | null>(null);
@@ -94,6 +97,7 @@ function resultSummary(item: AnalysisArchive): string {
 async function loadResults(append = false): Promise<void> {
   loading.value = true;
   errorMessage.value = "";
+  if (!append) archivesPager.page = 1;
   try {
     const params = new URLSearchParams({ limit: "24" });
     if (sourceType.value) params.set("source_type", sourceType.value);
@@ -197,7 +201,7 @@ onMounted(async () => {
         description="完成一次图片、视频或视频流解析后，归档会显示在这里。"
       />
       <section v-else class="archive-grid" aria-label="解析结果列表">
-        <article v-for="item in archives" :key="item.archive_id" class="archive-card">
+        <article v-for="item in archivesPager.items" :key="item.archive_id" class="archive-card">
           <button type="button" class="archive-preview" @click="openDetail(item)">
             <img
               v-if="item.previews[0]"
@@ -222,9 +226,16 @@ onMounted(async () => {
         </article>
       </section>
     </ElSkeleton>
-    <div v-if="nextCursor" class="load-more">
-      <ElButton :loading="loading" @click="loadResults(true)">加载更多</ElButton>
-    </div>
+    <DataTablePagination
+      v-if="archives.length"
+      v-model:page="archivesPager.page"
+      v-model:page-size="archivesPager.pageSize"
+      :total="archivesPager.total"
+      :page-sizes="[12, 24, 48]"
+      :has-more="Boolean(nextCursor)"
+      :loading-more="loading"
+      @load-more="loadResults(true)"
+    />
 
     <ElDrawer
       :model-value="Boolean(detail)"
@@ -359,11 +370,6 @@ onMounted(async () => {
 .archive-card > .el-button {
   justify-self: end;
   margin: 0 8px 8px;
-}
-.load-more {
-  display: flex;
-  justify-content: center;
-  padding: 18px;
 }
 .detail-facts {
   display: grid;

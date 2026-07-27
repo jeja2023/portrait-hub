@@ -93,6 +93,15 @@ def test_control_state_backend_conflict_restores_latest_snapshot(monkeypatch) ->
     assert exc_info.value.status_code == 409
     assert state_b["items"] == [{"id": "committed"}]
 
+    with lock_b:
+        state_b["items"].append({"id": "retried"})
+        backend_b.save(actor="writer-b-retry")
+
+    assert shared == {
+        "payload": {"revision": 0, "items": [{"id": "committed"}, {"id": "retried"}]},
+        "revision": 3,
+    }
+
 
 def test_control_state_backend_invalidate_forces_next_refresh(monkeypatch) -> None:
     monkeypatch.setattr(settings, "PORTRAIT_STORAGE_BACKEND", "postgres")

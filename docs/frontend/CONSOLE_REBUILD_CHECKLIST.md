@@ -1,13 +1,17 @@
 # 控制台重建行为对照清单
 
-- 冻结日期：2026-07-26
-- 交付版本：0.18.0
+- 冻结日期：2026-07-27
+- 交付版本：0.18.2
 - 范围：legacy 模板中全部 27 个 data-view 和其写操作
 - 正式入口：/ 登录，认证成功后进入 /console；/console/next 仅保留直达验收
 - 状态定义：实现完成表示代码与自动化链路已落库；观察中表示必须在生产灰度后收集指标，不能以本地测试代替。
 - 通用状态：所有新路由均有加载骨架、空状态、错误横幅、权限路由和直接深链；列表使用服务端数据，不静默回退本地假数据。
 
 
+> 2026-07-27 / 0.18.2：全页面数据表格和分页控件统一；SLA 定义、影子结果和媒体归档补齐全局分页；配置中心所有视口共用标准表格；Vitest 45 tests、Node SDK、ESLint、Vue TypeScript 和 Vite build 通过。
+>
+> 2026-07-27 / 0.18.1：控制台公开契约保持不变；支持工单默认产品版本同步到 0.18.1；Vitest 44 tests、Node SDK、ESLint、Vue TypeScript 和 Vite build 通过。
+>
 > 2026-07-26 / 0.18.0：商业运营、服务质量、合规、模型注册和 Webhook 投递调试已接入；加载/空/错、分页、序号、高风险确认和响应式布局完成；Vitest 44 tests、Playwright 五项目 40 tests、Node SDK、ESLint、Vue TypeScript、Vite build 通过。
 >
 > 2026-07-22 / 0.17.0：会话、HTTP、能力上下文和 WebSocket 已接入项目 ID；OpenAPI TypeScript 类型同步强结构化响应；Console Next 9 files / 36 tests、Node SDK、ESLint、Vue TypeScript、Vite build 通过。
@@ -23,6 +27,24 @@
 > 2026-07-18 / 0.11.2：二次复核补齐流详情深链、meta.nav 导航、aria-live、错误 request_id、值级脱敏、搜索质量分，并同步后端 WS/no-store/CSP 契约和 me/ws-ticket/gallery 回归测试。
 
 > 2026-07-18 / 0.11.1：迁移后补强 deploy_check 与 readiness，确认旧目录、旧灰度变量、旧静态路径、data-view= 属性和 PortraitConsoleModules 不会回归。
+
+## 0.18.2 补丁验收
+
+| 范围 | 完成状态 | 关键入口/契约 |
+| --- | --- | --- |
+| 版本元数据 | 完成 | Console Next 包版本和支持工单默认产品版本统一为 `0.18.2` |
+| 表格规范 | 完成 | 38 个原生表格和 4 个 Element Plus 表格统一使用全局规格 |
+| 分页规范 | 完成 | 44 个全局分页实例；业务页无直接 `ElPagination` 或私有加载更多实现 |
+| 响应式 | 完成 | 配置中心桌面/移动端共用标准表格，窄屏容器内横向滚动 |
+| 自动化 | 完成 | Vitest 45 tests；Node SDK、ESLint、Vue TypeScript 和 Vite build 通过 |
+
+## 0.18.1 补丁验收
+
+| 范围 | 完成状态 | 关键入口/契约 |
+| --- | --- | --- |
+| 版本元数据 | 完成 | Console Next 包版本和支持工单默认产品版本统一为 `0.18.1` |
+| 兼容性 | 完成 | 路由、OpenAPI 类型和业务请求契约与 0.18.0 保持兼容 |
+| 自动化 | 完成 | Vitest 44 tests；Node SDK、ESLint、Vue TypeScript 和 Vite build 通过 |
 
 ## 0.18.0 增量验收
 

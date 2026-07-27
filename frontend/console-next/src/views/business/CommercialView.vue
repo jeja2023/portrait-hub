@@ -207,12 +207,27 @@ const supportForm = reactive({
   description: "",
   severity: "sev3",
   environment: "production",
-  product_version: "0.18.0",
+  product_version: "0.18.2",
   request_ids: "",
   task_ids: "",
 });
 
+const outcomeRows = computed(() => [
+  ...Object.entries(usage.value.outcomes ?? {}).map(([name, count]) => ({ rowKey: `outcome-${name}`, kind: "结果", name, count })),
+  ...Object.entries(usage.value.delivery_kinds ?? {}).map(([name, count]) => ({ rowKey: `delivery-${name}`, kind: "投递", name, count })),
+]);
+const dimensionRows = computed(() => [
+  ...(usage.value.by_model ?? []).map((item) => ({ rowKey: `model-${item.model_version}`, kind: "模型", name: item.model_version, request_count: item.request_count })),
+  ...(usage.value.by_capability ?? []).map((item) => ({ rowKey: `capability-${item.capability}`, kind: "能力", name: item.capability, request_count: item.request_count })),
+]);
+const endpointPager = useTablePagination(() => usage.value.by_endpoint ?? []);
+const quotaPager = useTablePagination(quotaApplications);
+const outcomePager = useTablePagination(outcomeRows);
+const dimensionPager = useTablePagination(dimensionRows);
+const timeseriesPager = useTablePagination(timeseries);
 const entitlementsPager = useTablePagination(entitlements);
+const templatesPager = useTablePagination(templates);
+const templateApplicationsPager = useTablePagination(templateApplications);
 const supportPager = useTablePagination(supportCases);
 const quotaTotal = computed(() => quotaApplications.value.reduce((sum, item) => sum + Number(item.daily_quota ?? 0), 0));
 const quotaRemaining = computed(() => quotaApplications.value.reduce((sum, item) => sum + Number(item.remaining ?? 0), 0));
@@ -549,20 +564,26 @@ onMounted(() => void load());
               <section>
                 <h2>接口用量</h2>
                 <div v-if="!usage.by_endpoint?.length" class="tab-note">当前统计窗口暂无调用</div>
-                <div v-else class="table-wrap">
-                  <table class="data-table"><thead><tr><th class="sequence-column">序号</th><th>接口</th><th>调用次数</th></tr></thead><tbody>
-                    <tr v-for="(item, index) in usage.by_endpoint" :key="item.endpoint"><td class="sequence-column">{{ index + 1 }}</td><td><code>{{ item.endpoint }}</code></td><td>{{ item.request_count }}</td></tr>
-                  </tbody></table>
-                </div>
+                <template v-else>
+                  <div class="table-wrap">
+                    <table class="data-table"><thead><tr><th class="sequence-column">序号</th><th>接口</th><th>调用次数</th></tr></thead><tbody>
+                      <tr v-for="(item, index) in endpointPager.items" :key="item.endpoint"><td class="sequence-column">{{ endpointPager.startIndex + index + 1 }}</td><td><code>{{ item.endpoint }}</code></td><td>{{ item.request_count }}</td></tr>
+                    </tbody></table>
+                  </div>
+                  <DataTablePagination v-model:page="endpointPager.page" v-model:page-size="endpointPager.pageSize" :total="endpointPager.total" />
+                </template>
               </section>
               <section>
                 <h2>应用配额</h2>
                 <div v-if="!quotaApplications.length" class="tab-note">当前项目没有应用配额</div>
-                <div v-else class="table-wrap">
-                  <table class="data-table"><thead><tr><th class="sequence-column">序号</th><th>应用</th><th>已用 / 总量</th><th>利用率</th></tr></thead><tbody>
-                    <tr v-for="(item, index) in quotaApplications" :key="item.application_id"><td class="sequence-column">{{ index + 1 }}</td><td><code>{{ item.application_id }}</code></td><td>{{ item.used ?? 0 }} / {{ item.daily_quota ?? '不限额' }}</td><td>{{ percentage(item.utilization) }}</td></tr>
-                  </tbody></table>
-                </div>
+                <template v-else>
+                  <div class="table-wrap">
+                    <table class="data-table"><thead><tr><th class="sequence-column">序号</th><th>应用</th><th>已用 / 总量</th><th>利用率</th></tr></thead><tbody>
+                      <tr v-for="(item, index) in quotaPager.items" :key="item.application_id"><td class="sequence-column">{{ quotaPager.startIndex + index + 1 }}</td><td><code>{{ item.application_id }}</code></td><td>{{ item.used ?? 0 }} / {{ item.daily_quota ?? '不限额' }}</td><td>{{ percentage(item.utilization) }}</td></tr>
+                    </tbody></table>
+                  </div>
+                  <DataTablePagination v-model:page="quotaPager.page" v-model:page-size="quotaPager.pageSize" :total="quotaPager.total" />
+                </template>
               </section>
             </div>
             <div class="usage-details-grid">
@@ -577,30 +598,39 @@ onMounted(() => void load());
               </section>
               <section>
                 <h2>结果与投递</h2>
-                <div class="table-wrap">
-                  <table class="data-table"><thead><tr><th class="sequence-column">序号</th><th>分类</th><th>数量</th></tr></thead><tbody>
-                    <tr v-for="(count, category, index) in usage.outcomes" :key="`outcome-${category}`"><td class="sequence-column">{{ index + 1 }}</td><td>{{ category }}</td><td>{{ count }}</td></tr>
-                    <tr v-for="(count, kind, index) in usage.delivery_kinds" :key="`delivery-${kind}`"><td class="sequence-column">{{ Object.keys(usage.outcomes ?? {}).length + index + 1 }}</td><td>{{ kind }}</td><td>{{ count }}</td></tr>
-                  </tbody></table>
-                </div>
+                <div v-if="!outcomeRows.length" class="tab-note">当前窗口暂无结果与投递记录</div>
+                <template v-else>
+                  <div class="table-wrap">
+                    <table class="data-table"><thead><tr><th class="sequence-column">序号</th><th>类型</th><th>分类</th><th>数量</th></tr></thead><tbody>
+                      <tr v-for="(item, index) in outcomePager.items" :key="item.rowKey"><td class="sequence-column">{{ outcomePager.startIndex + index + 1 }}</td><td>{{ item.kind }}</td><td>{{ item.name }}</td><td>{{ item.count }}</td></tr>
+                    </tbody></table>
+                  </div>
+                  <DataTablePagination v-model:page="outcomePager.page" v-model:page-size="outcomePager.pageSize" :total="outcomePager.total" />
+                </template>
               </section>
               <section>
                 <h2>模型与能力</h2>
-                <div class="table-wrap">
-                  <table class="data-table"><thead><tr><th class="sequence-column">序号</th><th>维度</th><th>调用</th></tr></thead><tbody>
-                    <tr v-for="(item, index) in usage.by_model" :key="`model-${item.model_version}`"><td class="sequence-column">{{ index + 1 }}</td><td>{{ item.model_version }}</td><td>{{ item.request_count }}</td></tr>
-                    <tr v-for="(item, index) in usage.by_capability" :key="`capability-${item.capability}`"><td class="sequence-column">{{ (usage.by_model?.length ?? 0) + index + 1 }}</td><td>{{ item.capability }}</td><td>{{ item.request_count }}</td></tr>
-                  </tbody></table>
-                </div>
+                <div v-if="!dimensionRows.length" class="tab-note">当前窗口暂无模型与能力统计</div>
+                <template v-else>
+                  <div class="table-wrap">
+                    <table class="data-table"><thead><tr><th class="sequence-column">序号</th><th>维度类型</th><th>维度</th><th>调用</th></tr></thead><tbody>
+                      <tr v-for="(item, index) in dimensionPager.items" :key="item.rowKey"><td class="sequence-column">{{ dimensionPager.startIndex + index + 1 }}</td><td>{{ item.kind }}</td><td>{{ item.name }}</td><td>{{ item.request_count }}</td></tr>
+                    </tbody></table>
+                  </div>
+                  <DataTablePagination v-model:page="dimensionPager.page" v-model:page-size="dimensionPager.pageSize" :total="dimensionPager.total" />
+                </template>
               </section>
               <section>
                 <h2>日趋势</h2>
                 <div v-if="!timeseries.length" class="tab-note">当前窗口暂无计量事件</div>
-                <div v-else class="table-wrap">
-                  <table class="data-table"><thead><tr><th class="sequence-column">序号</th><th>日期</th><th>调用</th><th>成功率</th><th>成本</th></tr></thead><tbody>
-                    <tr v-for="(item, index) in timeseries" :key="String(item.period || item.date)"><td class="sequence-column">{{ index + 1 }}</td><td>{{ item.period || item.date }}</td><td>{{ item.request_count }}</td><td>{{ percentage(item.success_rate) }}</td><td>{{ formatAmount(item.cost, usage.cost?.currency) }}</td></tr>
-                  </tbody></table>
-                </div>
+                <template v-else>
+                  <div class="table-wrap">
+                    <table class="data-table"><thead><tr><th class="sequence-column">序号</th><th>日期</th><th>调用</th><th>成功率</th><th>成本</th></tr></thead><tbody>
+                      <tr v-for="(item, index) in timeseriesPager.items" :key="String(item.period || item.date)"><td class="sequence-column">{{ timeseriesPager.startIndex + index + 1 }}</td><td>{{ item.period || item.date }}</td><td>{{ item.request_count }}</td><td>{{ percentage(item.success_rate) }}</td><td>{{ formatAmount(item.cost, usage.cost?.currency) }}</td></tr>
+                    </tbody></table>
+                  </div>
+                  <DataTablePagination v-model:page="timeseriesPager.page" v-model:page-size="timeseriesPager.pageSize" :total="timeseriesPager.total" />
+                </template>
               </section>
             </div>
           </ElTabPane>
@@ -637,20 +667,25 @@ onMounted(() => void load());
           </ElTabPane>
 
           <ElTabPane :label="`行业模板 (${templates.length})`" name="templates">
-            <div class="template-list">
-              <article v-for="item in templates" :key="item.template_id" class="template-row">
-                <div><strong>{{ item.name }}</strong><span>{{ item.template_id }} · v{{ item.version }}</span></div>
-                <p>{{ item.allowed_capabilities?.join('、') }}</p>
-                <div class="inline-actions"><span class="status-pill" data-status="active">支持回滚</span><ElButton v-if="canWrite" size="small" :loading="actionLoading" @click="previewTemplate(item)">预览并应用</ElButton></div>
-              </article>
-            </div>
+            <div v-if="!templates.length" class="tab-note">当前没有可用行业模板</div>
+            <template v-else>
+              <div class="table-wrap">
+                <table class="data-table template-table"><thead><tr><th class="sequence-column">序号</th><th>模板</th><th>版本</th><th>能力</th><th>风险控制</th><th>回滚</th><th v-if="canWrite">操作</th></tr></thead><tbody>
+                  <tr v-for="(item, index) in templatesPager.items" :key="item.template_id"><td class="sequence-column">{{ templatesPager.startIndex + index + 1 }}</td><td class="template-name"><strong>{{ item.name }}</strong><br /><code>{{ item.template_id }}</code></td><td>v{{ item.version }}</td><td class="capability-cell">{{ item.allowed_capabilities?.join('、') || '--' }}</td><td class="risk-control-cell">{{ item.risk_controls?.join('、') || '--' }}</td><td><span class="status-pill" :data-status="item.rollback_supported ? 'completed' : ''">{{ item.rollback_supported ? '支持' : '不支持' }}</span></td><td v-if="canWrite"><ElButton size="small" :loading="actionLoading" @click="previewTemplate(item)">预览并应用</ElButton></td></tr>
+                </tbody></table>
+              </div>
+              <DataTablePagination v-model:page="templatesPager.page" v-model:page-size="templatesPager.pageSize" :total="templatesPager.total" />
+            </template>
             <h2 class="section-heading">应用历史</h2>
             <div v-if="!templateApplications.length" class="tab-note">当前项目没有模板应用记录</div>
-            <div v-else class="table-wrap">
-              <table class="data-table"><thead><tr><th class="sequence-column">序号</th><th>模板</th><th>状态</th><th>操作人</th><th>应用时间</th><th>操作</th></tr></thead><tbody>
-                <tr v-for="(item, index) in templateApplications" :key="item.template_application_id"><td class="sequence-column">{{ index + 1 }}</td><td>{{ item.template_id }} · v{{ item.template_version }}</td><td><span class="status-pill" :data-status="item.status">{{ item.status }}</span></td><td>{{ item.created_by || '--' }}</td><td>{{ formatTimestamp(item.created_at) }}</td><td><ElButton v-if="canWrite && item.status === 'applied'" :icon="RotateCcw" size="small" :loading="actionLoading" aria-label="回滚行业模板" @click="requestTemplateRollback(item)" /></td></tr>
-              </tbody></table>
-            </div>
+            <template v-else>
+              <div class="table-wrap">
+                <table class="data-table"><thead><tr><th class="sequence-column">序号</th><th>模板</th><th>状态</th><th>操作人</th><th>应用时间</th><th v-if="canWrite">操作</th></tr></thead><tbody>
+                  <tr v-for="(item, index) in templateApplicationsPager.items" :key="item.template_application_id"><td class="sequence-column">{{ templateApplicationsPager.startIndex + index + 1 }}</td><td>{{ item.template_id }} · v{{ item.template_version }}</td><td><span class="status-pill" :data-status="item.status">{{ item.status }}</span></td><td>{{ item.created_by || '--' }}</td><td>{{ formatTimestamp(item.created_at) }}</td><td v-if="canWrite"><ElButton v-if="item.status === 'applied'" :icon="RotateCcw" size="small" :loading="actionLoading" aria-label="回滚行业模板" @click="requestTemplateRollback(item)" /></td></tr>
+                </tbody></table>
+              </div>
+              <DataTablePagination v-model:page="templateApplicationsPager.page" v-model:page-size="templateApplicationsPager.pageSize" :total="templateApplicationsPager.total" />
+            </template>
           </ElTabPane>
 
           <ElTabPane :label="`支持工单 (${supportCases.length})`" name="support">
@@ -747,22 +782,20 @@ onMounted(() => void load());
 .usage-metrics dd { margin: 6px 0 0; font-weight: 600; }
 .tab-note { padding: 44px 16px; color: var(--muted); text-align: center; border: 1px dashed var(--line); }
 .capability-cell { min-width: 220px; }
+.template-table { min-width: 980px; }
+.template-name { min-width: 210px; }
+.risk-control-cell { min-width: 320px; }
 .table-subline { color: var(--muted); font-size: 12px; }
 .profile-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 8px 0 0; border: 1px solid var(--line); }
 .profile-grid div { min-height: 72px; padding: 13px 16px; border-bottom: 1px solid var(--line); }
 .profile-grid div:nth-child(odd) { border-right: 1px solid var(--line); }
 .profile-grid dt { color: var(--muted); font-size: 12px; }
 .profile-grid dd { margin: 6px 0 0; overflow-wrap: anywhere; font-weight: 600; }
-.template-list { display: grid; }
-.template-row { display: grid; grid-template-columns: minmax(220px, 1fr) minmax(260px, 1.4fr) auto; align-items: center; gap: 18px; min-height: 78px; padding: 12px 2px; border-bottom: 1px solid var(--line); }
-.template-row > div:first-child { display: grid; gap: 4px; }
-.template-row span, .template-row p { color: var(--muted); font-size: 12px; }
-.template-row p { margin: 0; }
 .section-heading { margin: 24px 0 12px; font-size: 15px; }
 .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 16px; }
 .form-grid .span-2 { grid-column: 1 / -1; }
 .form-grid :deep(.el-select), .form-grid :deep(.el-input-number) { width: 100%; }
 .dialog-form { margin-top: 16px; }
-@media (max-width: 850px) { .split-grid, .usage-details-grid { grid-template-columns: 1fr; } .template-row { grid-template-columns: 1fr; gap: 8px; } }
+@media (max-width: 850px) { .split-grid, .usage-details-grid { grid-template-columns: 1fr; } }
 @media (max-width: 600px) { .profile-grid, .form-grid { grid-template-columns: 1fr; } .profile-grid div:nth-child(odd) { border-right: 0; } .form-grid .span-2 { grid-column: auto; } }
 </style>

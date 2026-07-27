@@ -14,20 +14,22 @@ RUN npm run console:build
 # 避免 onnxruntime 把 CUDA 误报为可用而重复加载模型。
 FROM python:3.12-slim-bookworm AS builder
 
+ARG PIP_INDEX_URL=https://pypi.org/simple
+
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     TZ=Asia/Shanghai
 
 RUN python -m venv /opt/portrait-hub-venv \
-    && /opt/portrait-hub-venv/bin/python -m pip install --no-cache-dir --upgrade pip setuptools wheel
+    && /opt/portrait-hub-venv/bin/python -m pip install --no-cache-dir --index-url "$PIP_INDEX_URL" --upgrade pip setuptools wheel
 
 COPY requirements-cpu.txt /tmp/requirements-cpu.txt
 COPY requirements/prod-optional.txt /tmp/requirements-prod-optional.txt
 ARG INSTALL_PROD_OPTIONAL=false
-RUN /opt/portrait-hub-venv/bin/python -m pip install --no-cache-dir -r /tmp/requirements-cpu.txt -i https://pypi.tuna.tsinghua.edu.cn/simple \
+RUN /opt/portrait-hub-venv/bin/python -m pip install --no-cache-dir --index-url "$PIP_INDEX_URL" -r /tmp/requirements-cpu.txt \
     && if [ "$INSTALL_PROD_OPTIONAL" = "true" ]; then \
-        /opt/portrait-hub-venv/bin/python -m pip install --no-cache-dir -r /tmp/requirements-prod-optional.txt -i https://pypi.tuna.tsinghua.edu.cn/simple; \
+        /opt/portrait-hub-venv/bin/python -m pip install --no-cache-dir --index-url "$PIP_INDEX_URL" -r /tmp/requirements-prod-optional.txt; \
     fi
 
 FROM python:3.12-slim-bookworm

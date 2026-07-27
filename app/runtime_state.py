@@ -43,8 +43,11 @@ def gpu_device_ids() -> list[int]:
             for device_id in pending_ids & detected_ids:
                 GPU_DEVICE_SEMAPHORES[device_id] = asyncio.Semaphore(max(1, GPU_QUEUE_LIMIT_PER_DEVICE))
                 GPU_DEVICE_QUEUE_WAITERS[device_id] = 0
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning(
+            "GPU device discovery failed; using configured device fallback: %s",
+            type(exc).__name__,
+        )
     return list(GPU_DEVICE_SEMAPHORES.keys()) or [0]
 
 

@@ -627,12 +627,6 @@ watch(
   height: 100%;
   object-fit: cover;
 }
-.load-more {
-  display: flex;
-  justify-content: center;
-  padding: 12px;
-  border-top: 1px solid #d8e0de;
-}
 .person-detail-head {
   display: flex;
   align-items: center;

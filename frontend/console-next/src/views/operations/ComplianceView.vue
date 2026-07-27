@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from "vue";
-import { CheckCircle2, ClipboardCheck, FileArchive, RefreshCw, ShieldAlert, UserRoundCheck } from "@lucide/vue";
+import { computed, onMounted, reactive, ref, watch } from "vue";
+import { CheckCircle2, ClipboardCheck, FileArchive, RefreshCw, UserRoundCheck } from "@lucide/vue";
 import {
   ElAlert,
   ElButton,
@@ -109,6 +109,7 @@ const rightsActionForm = reactive({ status: "", identity_verification: "pending"
 const deletionEvidence = reactive<Record<string, string>>(Object.fromEntries(DELETION_BACKENDS.map((backend) => [backend, ""])));
 
 const filteredControls = computed(() => compliance.value.controls.filter((item) => controlFilter.value === "all" || (controlFilter.value === "approved" ? item.approved : !item.approved)));
+const controlsPager = useTablePagination(filteredControls);
 const rightsPager = useTablePagination(rightsRequests);
 const evidencePager = useTablePagination(evidencePackages);
 const approvedCount = computed(() => compliance.value.controls.filter((item) => item.approved).length);
@@ -117,6 +118,8 @@ const canWrite = computed(() => capabilities.hasPermission("compliance:write"));
 const selectedControlFields = computed(() => CONTROL_REQUIRED_FIELDS[selectedControl.value?.control_id ?? ""] ?? []);
 const rightsNextStatuses = computed(() => RIGHTS_TRANSITIONS[String(selectedRights.value?.status)] ?? []);
 const rightsNeedsBackendEvidence = computed(() => ["deletion", "withdrawal", "restriction"].includes(String(selectedRights.value?.request_type)));
+
+watch(controlFilter, () => { controlsPager.page = 1; });
 
 function splitList(value: string): string[] { return value.split(/[,，\n]/).map((item) => item.trim()).filter(Boolean); }
 function rightsTypeLabel(value: unknown): string { return ({ access: "访问", correction: "更正", deletion: "删除", withdrawal: "撤回", restriction: "限制处理", export: "导出" } as Record<string, string>)[String(value)] ?? String(value || "--"); }
@@ -227,7 +230,16 @@ onMounted(() => void load());
       <section class="tool-surface"><ElTabs v-model="tab" class="page-tabs">
         <ElTabPane label="控制项" name="controls">
           <div class="filter-bar"><ElSelect v-model="controlFilter"><ElOption label="全部控制项" value="all" /><ElOption label="已批准" value="approved" /><ElOption label="待处理" value="blocking" /></ElSelect><span>{{ compliance.blocking_controls.length ? `阻断项：${compliance.blocking_controls.join('、')}` : '发布门禁已通过' }}</span></div>
-          <div class="control-list"><article v-for="item in filteredControls" :key="item.control_id" class="control-row"><div class="control-id" :data-approved="item.approved"><CheckCircle2 v-if="item.approved" :size="18" /><ShieldAlert v-else :size="18" /><strong>{{ item.control_id }}</strong></div><div><strong>{{ CONTROL_TITLES[item.control_id] }}</strong><span>{{ item.record ? `记录 v${item.record.version} · ${item.record.applicability}` : '尚未创建记录' }}</span></div><div><span class="status-pill" :data-status="item.approved ? 'completed' : 'failed'">{{ item.expired ? '已过期' : item.approved ? '已批准' : '待处理' }}</span><ElButton v-if="canWrite" size="small" @click="openControl(item)">{{ item.record ? '更新' : '配置' }}</ElButton></div></article></div>
+          <EmptyState v-if="!filteredControls.length" title="没有符合筛选条件的控制项" description="调整控制项筛选条件后重试。" />
+          <template v-else>
+            <div class="table-wrap">
+              <table class="data-table">
+                <thead><tr><th class="sequence-column">序号</th><th>控制项</th><th>名称</th><th>状态</th><th>适用性</th><th>记录版本</th><th>到期时间</th><th v-if="canWrite">操作</th></tr></thead>
+                <tbody><tr v-for="(item, index) in controlsPager.items" :key="item.control_id"><td class="sequence-column">{{ controlsPager.startIndex + index + 1 }}</td><td><strong>{{ item.control_id }}</strong></td><td class="control-name">{{ CONTROL_TITLES[item.control_id] }}</td><td><span class="status-pill" :data-status="item.approved ? 'completed' : 'failed'">{{ item.expired ? '已过期' : item.approved ? '已批准' : '待处理' }}</span></td><td>{{ item.record?.applicability || '--' }}</td><td>{{ item.record?.version ? `v${item.record.version}` : '--' }}</td><td>{{ item.record?.expires_at ? formatTimestamp(item.record.expires_at) : '长期' }}</td><td v-if="canWrite"><ElButton size="small" @click="openControl(item)">{{ item.record ? '更新' : '配置' }}</ElButton></td></tr></tbody>
+              </table>
+            </div>
+            <DataTablePagination v-model:page="controlsPager.page" v-model:page-size="controlsPager.pageSize" :total="controlsPager.total" />
+          </template>
         </ElTabPane>
         <ElTabPane :label="`主体权利 (${rightsRequests.length})`" name="rights">
           <EmptyState v-if="!rightsRequests.length" title="尚未登记主体权利请求" description="登记后主体原始引用不会保存，系统仅保留哈希用于追踪。" :action-label="canWrite ? '登记请求' : ''" @action="rightsOpen = true" />
@@ -253,17 +265,11 @@ onMounted(() => void load());
 .page-tabs { padding: 0 14px 16px; }
 .filter-bar { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 8px 0 14px; color: var(--muted); font-size: 12px; }
 .filter-bar :deep(.el-select) { width: 190px; }
-.control-list { display: grid; }
-.control-row { display: grid; grid-template-columns: 118px minmax(0, 1fr) auto; align-items: center; gap: 14px; min-height: 72px; padding: 10px 4px; border-bottom: 1px solid var(--line); }
-.control-id { display: flex; align-items: center; gap: 8px; color: var(--danger); }
-.control-id[data-approved="true"] { color: var(--success); }
-.control-row > div:nth-child(2) { display: grid; gap: 4px; }
-.control-row > div:nth-child(2) span { color: var(--muted); font-size: 12px; }
-.control-row > div:last-child { display: flex; align-items: center; gap: 8px; }
+.control-name { min-width: 180px; font-weight: 600; }
 [data-overdue="true"] { color: var(--danger); font-weight: 700; }
 .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 16px; }
 .form-grid .span-2 { grid-column: 1 / -1; }
 .form-grid :deep(.el-select), .form-grid :deep(.el-date-editor), .rights-form :deep(.el-select), .rights-form :deep(.el-date-editor) { width: 100%; }
 .rights-form { margin-top: 16px; }
-@media (max-width: 700px) { .filter-bar { align-items: stretch; flex-direction: column; } .filter-bar :deep(.el-select) { width: 100%; } .control-row { grid-template-columns: 1fr; gap: 6px; } .form-grid { grid-template-columns: 1fr; } .form-grid .span-2 { grid-column: auto; } }
+@media (max-width: 700px) { .filter-bar { align-items: stretch; flex-direction: column; } .filter-bar :deep(.el-select) { width: 100%; } .form-grid { grid-template-columns: 1fr; } .form-grid .span-2 { grid-column: auto; } }
 </style>

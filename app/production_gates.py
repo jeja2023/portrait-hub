@@ -47,10 +47,21 @@ def optional_dependency_available(module_name: str, loaded_module: object | None
 
 
 def production_externalization_failures() -> list[str]:
-    if not production_profile_enabled() or not settings.PRODUCTION_EXTERNAL_SERVICES_REQUIRED:
+    if not production_profile_enabled():
         return []
 
     failures: list[str] = []
+    invalid_environment = settings.invalid_environment_variables()
+    if invalid_environment:
+        failures.append(
+            "生产环境配置包含非法值: "
+            + ", ".join(
+                f"{name} (expected {expected})" for name, expected in sorted(invalid_environment.items())
+            )
+        )
+    if not settings.PRODUCTION_EXTERNAL_SERVICES_REQUIRED:
+        return failures
+
     if not settings.AUTH_REQUIRED:
         failures.append("生产环境中 AUTH_REQUIRED 必须为 true")
     if not (settings.API_TOKEN or settings.RBAC_ENABLED):

@@ -52,6 +52,7 @@ def test_deploy_check_tracks_stream_worker_service() -> None:
     checks = {item["name"]: item for item in report.checks}
     assert checks["compose_stream_worker_service"]["ok"] is True
     assert checks["dockerfile_copies_frontend"]["ok"] is True
+    assert checks["dockerfile_package_sources_configurable"]["ok"] is True
     assert checks["compose_local_auth_env"]["ok"] is True
 
 
@@ -76,6 +77,7 @@ def test_deploy_check_tracks_ci_workflows() -> None:
 
     checks = {item["name"]: item for item in report.checks}
     assert checks["ci_python_node_deploy_checks"]["ok"] is True
+    assert checks["ci_parallel_jobs_and_chromium_cache"]["ok"] is True
     assert checks["ci_security_audit_scheduled"]["ok"] is True
     assert "python tools/openapi_compatibility_check.py --json" in Path(".github/workflows/ci.yml").read_text(
         encoding="utf-8"

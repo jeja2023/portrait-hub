@@ -39,11 +39,43 @@ describe("data table sequence columns", () => {
     const content = readFileSync(resolve(sourceRoot, "views/admin/ConfigurationView.vue"), "utf8");
 
     expect(content).toContain('<ElTable border :data="configurationPager.items"');
+    expect(content).toContain('<div class="table-wrap configuration-table">');
     expect(content).toContain("const categoryOrder");
     expect(content).toContain('left.category.localeCompare(right.category, "zh-CN")');
     expect(content).toContain("const configurationPager = useTablePagination(sortedItems, 20)");
     expect(content).toContain("<DataTablePagination");
     expect(content).toContain("configurationPager.startIndex + $index + 1");
+    expect(content).not.toContain("configuration-mobile-list");
+    expect(content).not.toContain('fixed="left"');
+    expect(content).not.toContain('fixed="right"');
+  });
+
+  it("uses shared table and pagination implementations across every audited view", () => {
+    const viewRoot = resolve(sourceRoot, "views");
+    const viewSources = vueFiles(viewRoot).map((file) => readFileSync(file, "utf8"));
+    const nativeTableTags = viewSources.flatMap((content) => [...content.matchAll(/<table\b[^>]*>/g)]);
+
+    expect(nativeTableTags.length).toBeGreaterThan(0);
+    for (const [tag] of nativeTableTags) expect(tag).toMatch(/class="[^"]*\bdata-table\b[^"]*"/);
+    for (const content of viewSources) expect(content).not.toContain("<ElPagination");
+
+    const serviceQuality = readFileSync(resolve(viewRoot, "operations/ServiceQualityView.vue"), "utf8");
+    expect(serviceQuality).toContain("const slaDefinitionsPager = useTablePagination(slaDefinitions)");
+    expect(serviceQuality).toContain('v-model:page="slaDefinitionsPager.page"');
+    expect(serviceQuality).toContain("slaDefinitionsPager.startIndex + index + 1");
+
+    const modelRegistry = readFileSync(resolve(viewRoot, "admin/ModelRegistryView.vue"), "utf8");
+    expect(modelRegistry).toContain("const shadowPager = useTablePagination(shadowResults)");
+    expect(modelRegistry).toContain('v-model:page="shadowPager.page"');
+    expect(modelRegistry).toContain("shadowPager.startIndex + index + 1");
+
+    for (const path of ["analysis/ImageAnalysisView.vue", "analysis/AnalysisResultsView.vue"]) {
+      const content = readFileSync(resolve(viewRoot, path), "utf8");
+      expect(content).toContain("<DataTablePagination");
+      expect(content).toContain(":has-more=");
+      expect(content).toContain('@load-more="');
+      expect(content).not.toContain('class="load-more"');
+    }
   });
 
 });

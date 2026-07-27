@@ -10,16 +10,22 @@ COPY frontend/console-next /build/frontend/console-next
 RUN npm run console:build
 FROM nvidia/cuda:12.4.1-cudnn-runtime-ubuntu22.04 AS builder
 
+ARG APT_MIRROR=
+ARG PIP_INDEX_URL=https://pypi.org/simple
+
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     TZ=Asia/Shanghai
 
-RUN sed -i \
-        -e 's#http://archive.ubuntu.com/ubuntu/#https://mirrors.tuna.tsinghua.edu.cn/ubuntu/#g' \
-        -e 's#http://security.ubuntu.com/ubuntu/#https://mirrors.tuna.tsinghua.edu.cn/ubuntu/#g' \
-        /etc/apt/sources.list \
+RUN if [ -n "$APT_MIRROR" ]; then \
+        mirror="${APT_MIRROR%/}"; \
+        sed -i \
+          -e "s#http://archive.ubuntu.com/ubuntu/#${mirror}/#g" \
+          -e "s#http://security.ubuntu.com/ubuntu/#${mirror}/#g" \
+          /etc/apt/sources.list; \
+    fi \
     && apt-get update \
     && apt-get install -y --no-install-recommends \
         ca-certificates \
@@ -31,18 +37,20 @@ RUN sed -i \
         python3.12 \
         python3.12-venv \
     && python3.12 -m venv /opt/portrait-hub-venv \
-    && /opt/portrait-hub-venv/bin/python -m pip install --no-cache-dir --upgrade pip setuptools wheel \
+    && /opt/portrait-hub-venv/bin/python -m pip install --no-cache-dir --index-url "$PIP_INDEX_URL" --upgrade pip setuptools wheel \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt /tmp/requirements.txt
 COPY requirements/prod-optional.txt /tmp/requirements-prod-optional.txt
 ARG INSTALL_PROD_OPTIONAL=false
-RUN /opt/portrait-hub-venv/bin/python -m pip install --no-cache-dir -r /tmp/requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple \
+RUN /opt/portrait-hub-venv/bin/python -m pip install --no-cache-dir --index-url "$PIP_INDEX_URL" -r /tmp/requirements.txt \
     && if [ "$INSTALL_PROD_OPTIONAL" = "true" ]; then \
-        /opt/portrait-hub-venv/bin/python -m pip install --no-cache-dir -r /tmp/requirements-prod-optional.txt -i https://pypi.tuna.tsinghua.edu.cn/simple; \
+        /opt/portrait-hub-venv/bin/python -m pip install --no-cache-dir --index-url "$PIP_INDEX_URL" -r /tmp/requirements-prod-optional.txt; \
     fi
 
 FROM nvidia/cuda:12.4.1-cudnn-runtime-ubuntu22.04
+
+ARG APT_MIRROR=
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONDONTWRITEBYTECODE=1 \
@@ -53,10 +61,13 @@ ENV DEBIAN_FRONTEND=noninteractive \
 
 WORKDIR /workspace
 
-RUN sed -i \
-        -e 's#http://archive.ubuntu.com/ubuntu/#https://mirrors.tuna.tsinghua.edu.cn/ubuntu/#g' \
-        -e 's#http://security.ubuntu.com/ubuntu/#https://mirrors.tuna.tsinghua.edu.cn/ubuntu/#g' \
-        /etc/apt/sources.list \
+RUN if [ -n "$APT_MIRROR" ]; then \
+        mirror="${APT_MIRROR%/}"; \
+        sed -i \
+          -e "s#http://archive.ubuntu.com/ubuntu/#${mirror}/#g" \
+          -e "s#http://security.ubuntu.com/ubuntu/#${mirror}/#g" \
+          /etc/apt/sources.list; \
+    fi \
     && apt-get update \
     && apt-get install -y --no-install-recommends \
         ca-certificates \

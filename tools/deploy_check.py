@@ -493,6 +493,11 @@ def check_ci_workflows(root: Path, report: DeployReport) -> None:
     audit_path = root / ".github" / "workflows" / "security-audit.yml"
     ci = read_text(ci_path) if ci_path.is_file() else ""
     audit = read_text(audit_path) if audit_path.is_file() else ""
+    try:
+        ci_payload = yaml.safe_load(ci) or {}
+    except yaml.YAMLError:
+        ci_payload = {}
+    jobs = ci_payload.get("jobs", {}) if isinstance(ci_payload, dict) else {}
     report.add(
         "ci_python_node_deploy_checks",
         all(
@@ -516,6 +521,18 @@ def check_ci_workflows(root: Path, report: DeployReport) -> None:
         )
         and ("node tests/test_node_sdk.js" in ci or "npm run check" in ci),
         {"path": str(ci_path)},
+    )
+    report.add(
+        "ci_parallel_jobs_and_chromium_cache",
+        isinstance(jobs, dict)
+        and {"lint-type", "python-tests", "frontend-e2e", "delivery-gates"}.issubset(jobs)
+        and all(not job.get("needs") for job in jobs.values() if isinstance(job, dict))
+        and "~/.cache/ms-playwright" in ci
+        and "actions/cache@v4" in ci
+        and "playwright install --with-deps chromium" in ci
+        and "--project=chromium-desktop" in ci
+        and "firefox webkit" not in ci,
+        {"jobs": sorted(jobs) if isinstance(jobs, dict) else []},
     )
     report.add(
         "ci_security_audit_scheduled",

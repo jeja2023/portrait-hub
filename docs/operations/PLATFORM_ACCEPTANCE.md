@@ -1,6 +1,6 @@
 # PortraitHub 平台验收
 
-本文档定义 0.18.0 商业产品能力版本的仓库验收范围，并明确区分自动化完成、目标环境观察和人工审批。
+本文档定义 0.18.2 控制台一致性补丁及其继承的 0.18.1 平台优化、0.18.0 商业产品能力验收范围，并明确区分自动化完成、目标环境观察和人工审批。
 
 ## 范围
 
@@ -60,6 +60,25 @@ python tools\portrait_production_readiness.py --strict
 ```
 
 在被排除的真实模型能力完成模型接入，且真实数据与运维验证已在本次受限平台验收之外执行之前，不得将该完整门禁视为完成。
+
+## 0.18.2 验证记录
+
+- Console Next：全量复核 23 个页面、42 个数据表格面；38 个原生表格和 4 个 Element Plus 表格统一使用全局规格。
+- 分页：SLA 定义、影子结果、图片归档和分析结果完成全局分页接入；全项目共有 44 个全局分页实例，业务页无直接 `ElPagination` 或私有加载更多实现。
+- 响应式：配置中心桌面和移动端共用标准表格；1440px 与 390px 浏览器验收通过，移动端页面无横向溢出，分页不与底部导航重叠。
+- 自动化：Vitest `45` 个用例、Node SDK、ESLint、Vue TypeScript、Vite production build、版本一致性和支持矩阵测试通过。
+- 公开 `/v1` API、OpenAPI、数据库 schema 和生产阻塞状态未改变，生产发布决策继续保持阻塞。
+
+## 0.18.1 验证记录
+
+- Python：`759 passed / 6 skipped`；Ruff 全量通过；严格 mypy `215` 个源文件通过。
+- Console Next：Vitest `44` 个用例、Node SDK、ESLint、Vue TypeScript 和 Vite production build 通过。
+- 控制面定向回归覆盖条件 UPSERT、实体投影清理、锁外快照预取、409 冲突刷新后重试和专用 IO 线程池停机。
+- 配置定向回归覆盖整数/有限浮点/布尔白名单、去重 warning、生产 fail-fast 和原始配置值不进入日志。
+- 部署检查返回 `ok=true`，并持续检查 Docker 官方默认源/构建参数和 CI 四 job/Chromium 缓存结构。
+- Python 0.18.1 wheel 在干净虚拟环境完成安装和隔离导入，并与 0.18.1 服务完成健康及 API 兼容烟测。
+- Docker BuildKit 已读取 Dockerfile 定义；本机失效代理 `127.0.0.1:10808` 阻断基础镜像元数据访问，未完成实际镜像构建。
+- 完整严格门禁仍缺少 `appearance`、`face_detection`、`face_embedding`、`gait`、`pose` 五类合法生产制品；外部基础设施演练和人工审批未完成，因此生产发布决策保持阻塞。
 
 ## 0.18.0 验证记录
 

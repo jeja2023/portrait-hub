@@ -2,6 +2,12 @@
 
 This status was refreshed for the 0.18.0 release on 2026-07-26 from the repository audit dated 2026-07-24. It distinguishes implemented repository work from human acceptance, production release, and measured operation. The authoritative machine-readable cards are in `docs/requirements/COMMERCIAL_REQUIREMENTS.json`.
 
+The 0.18.2 Console Next consistency patch updates the current release pointer and repository verification without changing requirement acceptance or production blockers. Its table, pagination and responsive-layout changes are documented in `docs/releases/0.18.2.md`.
+
+The 0.18.1 platform optimization patch updates the current release pointer and repository verification, but does not change any requirement acceptance status or close any production blocker listed below. Its performance, configuration and delivery changes are documented in `docs/releases/0.18.1.md`.
+
+The Python `0.18.1` wheel was built and installed without dependencies in a clean virtual environment; the installed SDK and isolated `0.18.1` service passed live health and compatibility checks. Structural traceability remains valid and the release decision remains `block` because the external evidence below is still unavailable.
+
 ## Current status
 
 | Requirement | Repository outcome | Current status | Acceptance blocker |

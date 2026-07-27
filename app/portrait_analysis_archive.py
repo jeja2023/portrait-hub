@@ -168,6 +168,14 @@ def ensure_local_archive_schema(connection: sqlite3.Connection | None = None) ->
 
 
 def _record_from_sqlite_row(row: sqlite3.Row) -> AnalysisArchiveRecord:
+    try:
+        payload = json.loads(row["payload_json"])
+    except Exception:
+        payload = {}
+    try:
+        raw_artifacts = json.loads(row["artifacts_json"])
+    except Exception:
+        raw_artifacts = []
     return AnalysisArchiveRecord.from_state(
         {
             "tenant_id": row["tenant_id"],
@@ -177,8 +185,8 @@ def _record_from_sqlite_row(row: sqlite3.Row) -> AnalysisArchiveRecord:
             "source_ref": row["source_ref"],
             "mode": row["mode"],
             "endpoint": row["endpoint"],
-            "payload": json.loads(row["payload_json"]),
-            "artifacts": json.loads(row["artifacts_json"]),
+            "payload": payload,
+            "artifacts": raw_artifacts,
             "created_at": float(row["created_at"]),
         }
     )
@@ -512,8 +520,12 @@ def list_analysis_archives(
 
 
 def _preview_data_url(artifact: AnalysisArtifact) -> str | None:
+    if not artifact.preview_object_info:
+        return None
     try:
         data = OBJECT_STORE.get_bytes(artifact.preview_object_info)
+        if not data:
+            return None
     except Exception as exc:
         logger.warning(
             "analysis archive preview read failed: %s", exception_log_summary(exc)
@@ -524,7 +536,7 @@ def _preview_data_url(artifact: AnalysisArtifact) -> str | None:
 
 
 def public_analysis_archive(record: AnalysisArchiveRecord) -> dict[str, Any]:
-    payload = deepcopy(record.payload)
+    payload = deepcopy(record.payload) if isinstance(record.payload, dict) else {}
     previews: list[dict[str, Any]] = []
     preview_by_frame: dict[int, str] = {}
     for artifact in sorted(record.artifacts, key=lambda item: item.frame_index):
@@ -536,12 +548,12 @@ def public_analysis_archive(record: AnalysisArchiveRecord) -> dict[str, Any]:
         preview_by_frame[artifact.frame_index] = source
         previews.append(
             {
-                "artifact_id": artifact.artifact_id,
+                "artifact_id": artifact.artifact_id or "result-image",
                 "name": f"image-{artifact.frame_index + 1}",
                 "label": f"{artifact.frame_index + 1}. image-{artifact.frame_index + 1}",
                 "src": source,
-                "width": artifact.width,
-                "height": artifact.height,
+                "width": max(1, artifact.width),
+                "height": max(1, artifact.height),
                 "content_url": f"/v1/analysis/artifacts/{record.archive_id}/{artifact.artifact_id}",
             }
         )
@@ -552,27 +564,34 @@ def public_analysis_archive(record: AnalysisArchiveRecord) -> dict[str, Any]:
                 frame["thumbnail"] = preview_by_frame[index]
     source_artifacts = [
         {
-            "artifact_id": artifact.artifact_id,
-            "role": artifact.role,
-            "media_type": artifact.media_type,
+            "artifact_id": artifact.artifact_id or "source",
+            "role": artifact.role or "source",
+            "media_type": artifact.media_type or "image/jpeg",
             "content_url": f"/v1/analysis/artifacts/{record.archive_id}/{artifact.artifact_id}",
         }
         for artifact in record.artifacts
         if artifact.role == "source"
     ]
+    raw_source_type = str(record.source_type or "image").lower()
+    source_type = raw_source_type if raw_source_type in {"image", "video", "stream"} else "image"
+    archive_id = str(record.archive_id or "archive-id")
+    request_id = str(record.request_id or archive_id)
+    mode = str(record.mode or "analysis")
+    endpoint = str(record.endpoint or "/v1/analysis/results")
+
     return {
-        "archive_id": record.archive_id,
-        "result_id": record.archive_id,
-        "request_id": record.request_id,
-        "source_type": record.source_type,
-        "source_ref": record.source_ref,
-        "mode": record.mode,
-        "endpoint": record.endpoint,
+        "archive_id": archive_id,
+        "result_id": archive_id,
+        "request_id": request_id,
+        "source_type": source_type,
+        "source_ref": str(record.source_ref or ""),
+        "mode": mode,
+        "endpoint": endpoint,
         "payload": payload,
         "previews": previews,
         "artifact_count": len(record.artifacts),
         "source_artifacts": source_artifacts,
-        "created_at": record.created_at,
+        "created_at": float(record.created_at or 0.0),
     }
 
 

@@ -1,4 +1,5 @@
 import logging
+import math
 import os
 from pathlib import Path
 from typing import Any
@@ -20,6 +21,29 @@ from app.runtime_defaults import (
 
 apply_configuration_overrides()
 
+logger = logging.getLogger(__name__)
+
+_TRUE_ENV_VALUES = {"1", "true", "yes", "on"}
+_FALSE_ENV_VALUES = {"0", "false", "no", "off"}
+_INVALID_ENV_VALUES: dict[str, str] = {}
+
+
+def _record_invalid_env(name: str, expected: str, default: int | float | bool) -> None:
+    if name in _INVALID_ENV_VALUES:
+        return
+    _INVALID_ENV_VALUES[name] = expected
+    logger.warning(
+        "invalid environment variable %s; expected %s; using default %r",
+        name,
+        expected,
+        default,
+    )
+
+
+def invalid_environment_variables() -> dict[str, str]:
+    """Return invalid typed environment variables observed while loading settings."""
+    return dict(_INVALID_ENV_VALUES)
+
 
 def parse_int_env(name: str, default: int) -> int:
     raw = os.getenv(name)
@@ -28,6 +52,7 @@ def parse_int_env(name: str, default: int) -> int:
     try:
         return int(raw)
     except ValueError:
+        _record_invalid_env(name, "an integer", default)
         return default
 
 
@@ -35,7 +60,13 @@ def parse_bool_env(name: str, default: bool) -> bool:
     raw = os.getenv(name)
     if raw is None or raw == "":
         return default
-    return raw.strip().lower() in {"1", "true", "yes", "on"}
+    normalized = raw.strip().lower()
+    if normalized in _TRUE_ENV_VALUES:
+        return True
+    if normalized in _FALSE_ENV_VALUES:
+        return False
+    _record_invalid_env(name, "a boolean (1/0, true/false, yes/no, or on/off)", default)
+    return default
 
 
 def parse_float_env(name: str, default: float) -> float:
@@ -43,16 +74,21 @@ def parse_float_env(name: str, default: float) -> float:
     if raw is None or raw == "":
         return default
     try:
-        return float(raw)
+        value = float(raw)
     except ValueError:
+        _record_invalid_env(name, "a finite number", default)
         return default
+    if not math.isfinite(value):
+        _record_invalid_env(name, "a finite number", default)
+        return default
+    return value
 
 
 def parse_csv_env(name: str, default: str = "") -> list[str]:
     return [item.strip() for item in os.getenv(name, default).split(",") if item.strip()]
 
 
-APP_VERSION = "0.18.0"
+APP_VERSION = "0.18.2"
 PORTRAIT_RUNTIME_PROFILE = (
     os.getenv("PORTRAIT_RUNTIME_PROFILE", os.getenv("APP_ENV", "development")).strip().lower() or "development"
 )

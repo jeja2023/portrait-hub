@@ -389,12 +389,12 @@ onMounted(load);
           </div>
         </div>
 
-        <div class="tool-surface configuration-table">
+        <div class="table-wrap configuration-table">
           <ElTable border :data="configurationPager.items" row-key="key" empty-text="没有匹配的配置">
-            <ElTableColumn label="序号" width="72" fixed="left">
+            <ElTableColumn label="序号" width="72">
               <template #default="{ $index }">{{ configurationPager.startIndex + $index + 1 }}</template>
             </ElTableColumn>
-            <ElTableColumn label="配置项" min-width="230" fixed="left">
+            <ElTableColumn label="配置项" min-width="230">
               <template #default="scope">
                 <div class="config-key">
                   <code>{{ scope.row.key }}</code>
@@ -421,7 +421,7 @@ onMounted(load);
               </template>
             </ElTableColumn>
             <ElTableColumn prop="description" label="说明" min-width="360" show-overflow-tooltip />
-            <ElTableColumn label="操作" width="86" fixed="right">
+            <ElTableColumn label="操作" width="86">
               <template #default="scope">
                 <ElTooltip
                   :content="scope.row.managed_by === 'network_policy' ? '请在网络访问策略中修改' : '修改配置覆盖'"
@@ -445,29 +445,6 @@ onMounted(load);
           v-model:page-size="configurationPager.pageSize"
           :total="configurationPager.total"
         />
-        <div class="configuration-mobile-list">
-          <article v-for="item in configurationPager.items" :key="item.key" class="tool-surface mobile-config-item">
-            <div class="mobile-config-item__header">
-              <code>{{ item.key }}</code>
-              <ElButton
-                link
-                :icon="Pencil"
-                aria-label="修改配置"
-                :disabled="!item.editable"
-                @click="openEdit(item)"
-              />
-            </div>
-            <div class="mobile-config-item__value">{{ displayValue(item) }}</div>
-            <div class="mobile-config-item__meta">
-              <ElTag size="small" type="info">{{ item.category }}</ElTag>
-              <ElTag size="small" :type="item.apply_mode === 'compose_recreate' ? 'warning' : 'info'">
-                {{ applyModeLabel(item) }}
-              </ElTag>
-              <span>{{ sourceLabel(item) }}</span>
-            </div>
-            <p>{{ item.description }}</p>
-          </article>
-        </div>
       </ElTabPane>
     </ElTabs>
 
@@ -634,10 +611,6 @@ onMounted(load);
   overflow-x: auto;
 }
 
-.configuration-mobile-list {
-  display: none;
-}
-
 .configuration-table :deep(.el-table th.el-table__cell) {
   color: #4f5d5a;
 }
@@ -709,66 +682,5 @@ onMounted(load);
     width: 100%;
   }
 
-  .configuration-table {
-    display: none;
-  }
-
-  .configuration-mobile-list {
-    display: grid;
-    gap: 10px;
-  }
-
-  .mobile-config-item {
-    min-width: 0;
-    padding: 12px;
-  }
-
-  .mobile-config-item__header,
-  .mobile-config-item__meta {
-    display: flex;
-    align-items: center;
-  }
-
-  .mobile-config-item__meta :deep(.el-tag--info) {
-    --el-tag-text-color: #4f5d5a;
-  }
-
-  .mobile-config-item__meta :deep(.el-tag--warning) {
-    --el-tag-text-color: #8a4b00;
-  }
-
-  .mobile-config-item__header {
-    justify-content: space-between;
-    gap: 8px;
-  }
-
-  .mobile-config-item__header code {
-    min-width: 0;
-    overflow-wrap: anywhere;
-    color: #263835;
-    font-size: 12px;
-  }
-
-  .mobile-config-item__value {
-    margin-top: 7px;
-    overflow-wrap: anywhere;
-    color: #384945;
-    font-size: 13px;
-  }
-
-  .mobile-config-item__meta {
-    flex-wrap: wrap;
-    gap: 6px;
-    margin-top: 9px;
-    color: var(--muted);
-    font-size: 12px;
-  }
-
-  .mobile-config-item p {
-    margin: 9px 0 0;
-    color: var(--muted);
-    font-size: 12px;
-    line-height: 1.55;
-  }
 }
 </style>

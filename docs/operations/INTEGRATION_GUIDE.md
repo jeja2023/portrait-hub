@@ -33,6 +33,19 @@
 | 调用统计 | `GET /v1/access/call-logs`、`GET /v1/access/call-logs/summary` |
 | Webhook | `GET /v1/access/webhooks`、`POST /v1/access/webhooks`、`PATCH /v1/access/webhooks/{webhook_id}`、`POST /v1/access/webhooks/{webhook_id}/rotate`、`POST /v1/access/webhooks/{webhook_id}/sample` |
 
+## 0.18.2 控制台与 SDK 兼容性
+
+- 公开 `/v1` 路径、请求/响应契约、认证和租户/项目隔离语义与 0.18.1 相同，接入方无需修改业务请求或重新生成客户端。
+- Python/Node/Go/Java SDK 仅同步补丁版本；0.18.1 客户端继续处于兼容版本范围。
+- 本版本只调整 Console Next 的数据表格、分页和响应式呈现，不改变服务端游标、limit、total 或错误码契约。
+
+## 0.18.1 配置与交付兼容性
+
+- 公开 `/v1` 路径和响应契约与 0.18.0 相同，接入方无需修改请求或重新生成客户端。
+- Python/Node/Go/Java SDK 仅同步补丁版本；现有 0.18.0 客户端仍处于兼容版本范围。
+- 生产部署会拒绝非法整数、有限浮点和布尔环境变量。该变化影响服务启动配置，不影响 API 调用载荷。
+- Docker 构建默认恢复官方 apt/PyPI 源；使用代理、国内镜像或隔离仓库时，通过 `APT_MIRROR`、`PIP_INDEX_URL` 构建参数选择源。
+
 ## 0.18.0 商业接入与可靠交付
 
 - 生产接入应先创建独立项目和应用，再为客户关联商业档案与授权版本；调用方不能依据前端展示状态自行推断授权，必须处理服务端稳定错误码。
