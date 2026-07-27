@@ -45,27 +45,37 @@ class ControlStateBackend:
         self.state.update(validated)
         self.revision = max(0, int(revision))
 
-    def refresh(self, *, force: bool = False) -> bool:
-        if not self.postgres_enabled():
-            return False
+    def _load_snapshot(self) -> tuple[dict[str, Any] | None, int]:
         try:
-            payload, revision = load_control_snapshot(self.state_key)
+            return load_control_snapshot(self.state_key)
         except Exception as exc:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail={"code": "control_state_unavailable", "message": "control state is unavailable"},
             ) from exc
+
+    def _apply_snapshot(self, payload: Any, revision: int, *, force: bool = False) -> bool:
         if not force and revision <= self.revision:
             return False
         self._apply(payload, revision)
         return True
 
+    def refresh(self, *, force: bool = False) -> bool:
+        if not self.postgres_enabled():
+            return False
+        payload, revision = self._load_snapshot()
+        return self._apply_snapshot(payload, revision, force=force)
+
     @contextmanager
     def operation(self, *, refresh: bool = True) -> Iterator[None]:
+        # depth 存放在 threading.local 中，只有当前线程访问，可以安全地在锁外读取。
+        depth = int(getattr(self._operation_state, "depth", 0))
+        # 快照读取放在锁外：持锁期间做 Postgres 往返会让所有控制面请求串行等待一次网络 RTT。
+        # 写入路径仍由 save() 的 revision 乐观锁兜底，预取值过期只会触发常规的 409 重试。
+        prefetched = self._load_snapshot() if refresh and depth == 0 and self.postgres_enabled() else None
         with self.lock:
-            depth = int(getattr(self._operation_state, "depth", 0))
-            if refresh and depth == 0:
-                self.refresh()
+            if prefetched is not None:
+                self._apply_snapshot(prefetched[0], prefetched[1])
             self._operation_state.depth = depth + 1
             try:
                 yield

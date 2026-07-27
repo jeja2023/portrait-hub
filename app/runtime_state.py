@@ -1,6 +1,7 @@
 import asyncio
 from collections import OrderedDict
 
+from app.observability import logger
 from app.schemas import ModelBundle
 from app.settings import GPU_DEVICE_IDS, GPU_QUEUE_LIMIT, GPU_QUEUE_LIMIT_PER_DEVICE
 

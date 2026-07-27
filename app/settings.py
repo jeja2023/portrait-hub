@@ -1,3 +1,4 @@
+import logging
 import os
 from pathlib import Path
 from typing import Any
@@ -375,6 +376,13 @@ OTEL_SERVICE_NAME = os.getenv("OTEL_SERVICE_NAME", "portrait-hub")
 OTEL_EXPORTER_OTLP_ENDPOINT = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "")
 CONFIG_HOT_RELOAD_ENABLED = parse_bool_env("CONFIG_HOT_RELOAD_ENABLED", True)
 READY_CHECK_DEPENDENCIES = parse_bool_env("READY_CHECK_DEPENDENCIES", False)
+# 阻塞式 IO（控制面持久化、状态落盘、审计写入）专用线程池大小。与 asyncio 默认线程池分开，
+# 后者留给 ONNX 推理与媒体解码使用。默认按 CPU 核数放大，因为这些任务以等待 IO 为主；
+# 需要与 uvicorn --limit-concurrency 匹配时可显式调大。
+BLOCKING_IO_THREAD_POOL_SIZE = max(
+    4,
+    parse_int_env("BLOCKING_IO_THREAD_POOL_SIZE", min(64, (os.cpu_count() or 1) * 4)),
+)
 
 CPU_PROVIDERS: list[Any] = ["CPUExecutionProvider"]
 CUDA_PROVIDERS: list[Any] = [
