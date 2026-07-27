@@ -1,16 +1,21 @@
 import hashlib
+from collections.abc import Iterator
+from copy import deepcopy
 from pathlib import Path
 
 import pytest
+import yaml
 from fastapi.testclient import TestClient
 from httpx import Response
 
 from app import (
+    model_config,
     model_config_loader,
     model_config_writer,
     portrait_audit,
     portrait_model_registry,
     rollout_audit,
+    routes_portrait_model_registry,
 )
 from app.server import app
 
@@ -27,18 +32,32 @@ def registry_client(
     workspace_tmp_path: Path,
     registry_artifact: Path,
     monkeypatch: pytest.MonkeyPatch,
-) -> TestClient:
+) -> Iterator[TestClient]:
     registry_path = workspace_tmp_path / "model-registry.json"
     config_path = workspace_tmp_path / "models.yml"
-    config_path.write_text(Path("models.yml").read_text(encoding="utf-8"), encoding="utf-8")
+    config = yaml.safe_load(Path("models.yml").read_text(encoding="utf-8"))
+    model_config_entry = config["models"]["portrait_hub/osnet_ibn_x1_0.onnx"]
+    model_config_entry["artifact"]["path"] = registry_artifact.name
+    model_config_entry["artifact"]["sha256"] = hashlib.sha256(registry_artifact.read_bytes()).hexdigest()
+    config_path.write_text(yaml.safe_dump(config, allow_unicode=True, sort_keys=False), encoding="utf-8")
+    previous_configs = deepcopy(model_config.MODEL_CONFIGS)
+    previous_aliases = deepcopy(model_config.MODEL_ALIASES)
     monkeypatch.setattr(portrait_model_registry, "PORTRAIT_MODEL_REGISTRY_STATE_PATH", registry_path)
     monkeypatch.setattr(model_config_writer, "MODEL_CONFIG_PATH", config_path)
     monkeypatch.setattr(model_config_loader, "MODEL_CONFIG_PATH", config_path)
     monkeypatch.setattr(rollout_audit, "ROLLOUT_AUDIT_PATH", workspace_tmp_path / "rollout-audit.jsonl")
     monkeypatch.setattr(portrait_audit, "PORTRAIT_AUDIT_PATH", workspace_tmp_path / "audit.jsonl")
     monkeypatch.setattr(portrait_model_registry, "get_model_path", lambda *_: registry_artifact)
+    monkeypatch.setattr(routes_portrait_model_registry, "get_model_path", lambda *_: registry_artifact)
+    model_config.reload_model_config_state()
     portrait_model_registry.reset_model_registry_state()
-    return TestClient(app)
+    try:
+        yield TestClient(app)
+    finally:
+        model_config.MODEL_CONFIGS.clear()
+        model_config.MODEL_CONFIGS.update(previous_configs)
+        model_config.MODEL_ALIASES.clear()
+        model_config.MODEL_ALIASES.update(previous_aliases)
 
 
 def headers() -> dict[str, str]:
@@ -143,7 +162,16 @@ def test_registry_requires_provenance_and_quality_gate(
 def test_release_preflight_checks_digest_evaluation_and_separation_of_duties(
     registry_client: TestClient,
     registry_artifact: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    async def fake_get_or_load_model(cache_key: str, _model_path: Path) -> tuple[dict[str, object], bool, float]:
+        return {"key": cache_key}, True, 0.0
+
+    async def fake_prewarm_model_bundle(_cache_key: str, _bundle: dict[str, object]) -> dict[str, object]:
+        return {"status": "ready"}
+
+    monkeypatch.setattr(routes_portrait_model_registry, "get_or_load_model", fake_get_or_load_model)
+    monkeypatch.setattr(routes_portrait_model_registry, "prewarm_model_bundle", fake_prewarm_model_bundle)
     version = register_and_evaluate(registry_client, registry_artifact)
     release = {
         "model_version_id": version["model_version_id"],
