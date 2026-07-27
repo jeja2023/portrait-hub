@@ -29,7 +29,7 @@ from app.core import (
 from app.metrics import observe_request_status
 from app.observability import wall_time
 from app.portrait_access import flush_access_call_stats
-from app.portrait_async import run_blocking_io
+from app.portrait_async import run_blocking_io, shutdown_io_executor
 from app.portrait_bootstrap import ensure_portrait_runtime_state_loaded
 from app.portrait_call_logs import application_id_from_api_key, record_call_log
 from app.portrait_errors import PortraitError
@@ -193,6 +193,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             await run_blocking_io(flush_access_call_stats)
         except Exception as exc:
             logger.warning("关闭服务时刷盘接入调用统计失败: %s", exception_log_summary(exc))
+        # IO 线程池最后关闭，确保上面的刷盘写入已经落地。
+        await asyncio.to_thread(shutdown_io_executor)
 
 
 def limit_request_body(request: Request) -> Request:

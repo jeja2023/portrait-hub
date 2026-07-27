@@ -7,6 +7,19 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+
+# 统一控制台与 Git 的交互编码为 UTF-8：Windows PowerShell 5.1 默认按系统 ANSI(GBK)
+# 处理控制台输入，会把手动输入的中文提交说明转成乱码后写进提交对象。
+$Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+$OutputEncoding = $Utf8NoBom
+try {
+    [Console]::InputEncoding = $Utf8NoBom
+    [Console]::OutputEncoding = $Utf8NoBom
+}
+catch {
+    Write-Warning "无法将控制台编码切换为 UTF-8；请确认提交说明回显是否正常，必要时改用 Windows Terminal。"
+}
+
 $RepoRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
 $RepoRootPrefix = $RepoRoot.TrimEnd("\", "/") + [System.IO.Path]::DirectorySeparatorChar
 
@@ -32,6 +45,23 @@ function Invoke-GitCommand {
     & git --no-pager -C $RepoRoot -c core.safecrlf=false @Arguments
     if ($LASTEXITCODE -ne 0) {
         throw "Git 命令执行失败：git $($Arguments -join ' ')"
+    }
+}
+
+function Invoke-GitCommit {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Message
+    )
+
+    # 提交说明经 UTF-8 无 BOM 临时文件传给 git，绕开命令行参数被转成 ANSI 的问题。
+    $messageFile = [System.IO.Path]::GetTempFileName()
+    try {
+        [System.IO.File]::WriteAllText($messageFile, $Message, $Utf8NoBom)
+        Invoke-GitCommand -Arguments @("-c", "i18n.commitEncoding=utf-8", "commit", "--file", $messageFile)
+    }
+    finally {
+        Remove-Item -LiteralPath $messageFile -Force -ErrorAction SilentlyContinue
     }
 }
 
@@ -249,7 +279,8 @@ try {
             if ([string]::IsNullOrWhiteSpace($commitMessage)) {
                 $commitMessage = "更新项目代码"
             }
-            Invoke-GitCommand -Arguments @("commit", "--message", $commitMessage)
+            Write-Host "提交说明：$commitMessage"
+            Invoke-GitCommit -Message $commitMessage
         }
         else {
             throw "无法检查暂存区状态。"

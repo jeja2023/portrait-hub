@@ -98,22 +98,71 @@ def control_entity_rows(state_key: str, payload: dict[str, Any], actor: str) -> 
     return rows
 
 
-def _sync_control_entities(cursor: Any, state_key: str, payload: dict[str, Any], actor: str) -> None:
-    if state_key not in CONTROL_ENTITY_IDS:
-        return
-    cursor.execute("DELETE FROM portrait_control_entities WHERE state_key = %s", (state_key,))
-    rows = control_entity_rows(state_key, payload, actor)
-    if not rows:
-        return
-    cursor.executemany(
-        """
+_MUTABLE_ENTITY_COLUMNS = (
+    "entity_version",
+    "status",
+    "classification",
+    "effective_at",
+    "expires_at",
+    "request_id",
+    "audit_event_id",
+    "created_at",
+    "created_by",
+    "updated_at",
+    "updated_by",
+    "payload",
+)
+
+# 冲突行只在内容确实变化时才写入，避免无谓地重建 GIN 索引。
+_ENTITY_UPSERT_SQL = """
         INSERT INTO portrait_control_entities
           (state_key, collection_name, tenant_id, project_id, entity_id, entity_version,
            status, classification, effective_at, expires_at, request_id, audit_event_id,
            created_at, created_by, updated_at, updated_by, payload)
         VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb)
-        """,
-        rows,
+        ON CONFLICT (state_key, collection_name, tenant_id, project_id, entity_id) DO UPDATE SET
+          {assignments}
+        WHERE ({existing}) IS DISTINCT FROM ({incoming})
+""".format(
+    assignments=",\n          ".join(f"{column} = EXCLUDED.{column}" for column in _MUTABLE_ENTITY_COLUMNS),
+    existing=", ".join(f"portrait_control_entities.{column}" for column in _MUTABLE_ENTITY_COLUMNS),
+    incoming=", ".join(f"EXCLUDED.{column}" for column in _MUTABLE_ENTITY_COLUMNS),
+)
+
+# 只删除本次快照中已消失的实体行；anti-join 通过并行 unnest 传入快照主键集合。
+_ENTITY_PRUNE_SQL = """
+        DELETE FROM portrait_control_entities AS existing
+        WHERE existing.state_key = %s
+          AND NOT EXISTS (
+            SELECT 1
+            FROM unnest(%s::text[], %s::text[], %s::text[], %s::text[])
+              AS incoming(collection_name, tenant_id, project_id, entity_id)
+            WHERE incoming.collection_name = existing.collection_name
+              AND incoming.tenant_id = existing.tenant_id
+              AND incoming.project_id = existing.project_id
+              AND incoming.entity_id = existing.entity_id
+          )
+"""
+
+
+def _sync_control_entities(cursor: Any, state_key: str, payload: dict[str, Any], actor: str) -> None:
+    if state_key not in CONTROL_ENTITY_IDS:
+        return
+    rows = control_entity_rows(state_key, payload, actor)
+    if not rows:
+        cursor.execute("DELETE FROM portrait_control_entities WHERE state_key = %s", (state_key,))
+        return
+    # 增量同步：内容未变的行不产生写入，避免每次控制面写操作重建全部行与 GIN 索引。
+    cursor.executemany(_ENTITY_UPSERT_SQL, rows)
+    cursor.execute(
+        _ENTITY_PRUNE_SQL,
+        (
+            state_key,
+            [row[1] for row in rows],
+            [row[2] for row in rows],
+            [row[3] for row in rows],
+            [row[4] for row in rows],
+        ),
     )
 
 

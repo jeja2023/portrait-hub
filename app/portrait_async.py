@@ -1,10 +1,44 @@
 import asyncio
+import threading
 from collections.abc import Awaitable, Callable, Sequence
+from concurrent.futures import ThreadPoolExecutor
 from typing import ParamSpec, TypeVar, cast
+
+from app.settings import BLOCKING_IO_THREAD_POOL_SIZE
 
 P = ParamSpec("P")
 T = TypeVar("T")
 R = TypeVar("R")
+
+_IO_EXECUTOR: ThreadPoolExecutor | None = None
+_IO_EXECUTOR_LOCK = threading.Lock()
+
+
+def io_executor() -> ThreadPoolExecutor:
+    """阻塞式持久化/网络 IO 专用线程池。
+
+    与 asyncio 默认线程池分开：默认池留给 asyncio.to_thread 承载的 ONNX 推理与媒体解码，
+    避免控制面和存储 IO 把线程占满后，推理请求排队等待。
+    """
+    global _IO_EXECUTOR
+    if _IO_EXECUTOR is None:
+        with _IO_EXECUTOR_LOCK:
+            if _IO_EXECUTOR is None:
+                _IO_EXECUTOR = ThreadPoolExecutor(
+                    max_workers=BLOCKING_IO_THREAD_POOL_SIZE,
+                    thread_name_prefix="portrait-io",
+                )
+    return _IO_EXECUTOR
+
+
+def shutdown_io_executor() -> None:
+    """关闭 IO 线程池；服务停机时调用，等待在途的持久化写入完成。"""
+    global _IO_EXECUTOR
+    with _IO_EXECUTOR_LOCK:
+        executor = _IO_EXECUTOR
+        _IO_EXECUTOR = None
+    if executor is not None:
+        executor.shutdown(wait=True)
 
 
 async def run_blocking_io(func: Callable[P, T], /, *args: P.args, **kwargs: P.kwargs) -> T:
@@ -14,7 +48,7 @@ async def run_blocking_io(func: Callable[P, T], /, *args: P.args, **kwargs: P.kw
         return func(*args, **kwargs)
 
     loop = asyncio.get_running_loop()
-    return await loop.run_in_executor(None, call)
+    return await loop.run_in_executor(io_executor(), call)
 
 
 async def gather_limited(
