@@ -17,8 +17,9 @@ export default defineConfig({
   outputDir: "./test-results",
   timeout: 60_000,
   expect: { timeout: 8_000 },
-  fullyParallel: true,
-  workers: process.env.CI ? 4 : 5,
+  // All projects exercise one server and one runtime-state directory.
+  fullyParallel: false,
+  workers: 1,
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? [["line"], ["html", { open: "never" }]] : "line",

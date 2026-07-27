@@ -91,7 +91,7 @@ def write_local_object_payload(target: Path, payload: dict[str, Any]) -> None:
             json.dump(payload, file, ensure_ascii=False, sort_keys=True)
             file.write("\n")
 
-    temp_path = target.with_name(f".{target.name}.{uuid4().hex}.tmp")
+    temp_path = target.with_name(f".{uuid4().hex[:12]}.tmp")
     try:
         dump(temp_path)
         try:

@@ -16,7 +16,18 @@ from app.server import app
 
 
 @pytest.fixture
-def registry_client(workspace_tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
+def registry_artifact(workspace_tmp_path: Path) -> Path:
+    artifact_path = workspace_tmp_path / "osnet-test.onnx"
+    artifact_path.write_bytes(b"isolated model registry test artifact")
+    return artifact_path
+
+
+@pytest.fixture
+def registry_client(
+    workspace_tmp_path: Path,
+    registry_artifact: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> TestClient:
     registry_path = workspace_tmp_path / "model-registry.json"
     config_path = workspace_tmp_path / "models.yml"
     config_path.write_text(Path("models.yml").read_text(encoding="utf-8"), encoding="utf-8")
@@ -25,6 +36,7 @@ def registry_client(workspace_tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -
     monkeypatch.setattr(model_config_loader, "MODEL_CONFIG_PATH", config_path)
     monkeypatch.setattr(rollout_audit, "ROLLOUT_AUDIT_PATH", workspace_tmp_path / "rollout-audit.jsonl")
     monkeypatch.setattr(portrait_audit, "PORTRAIT_AUDIT_PATH", workspace_tmp_path / "audit.jsonl")
+    monkeypatch.setattr(portrait_model_registry, "get_model_path", lambda *_: registry_artifact)
     portrait_model_registry.reset_model_registry_state()
     return TestClient(app)
 
@@ -40,8 +52,12 @@ def response_data(response: Response) -> dict[str, object]:
     return payload["data"]
 
 
-def osnet_registration_payload(*, sha256: str | None = None, version: str = "1.0.0") -> dict[str, object]:
-    path = Path("models/osnet_ibn_x1_0.onnx")
+def osnet_registration_payload(
+    artifact_path: Path,
+    *,
+    sha256: str | None = None,
+    version: str = "1.0.0",
+) -> dict[str, object]:
     return {
         "name": "osnet-person-reid",
         "capability": "body_embedding",
@@ -49,9 +65,9 @@ def osnet_registration_payload(*, sha256: str | None = None, version: str = "1.0
         "framework": "onnx",
         "runtime": "onnxruntime",
         "model_target": "portrait_hub/osnet_ibn_x1_0.onnx",
-        "sha256": sha256 or hashlib.sha256(path.read_bytes()).hexdigest(),
-        "artifact_size": path.stat().st_size,
-        "artifact_uri": "models/osnet_ibn_x1_0.onnx",
+        "sha256": sha256 or hashlib.sha256(artifact_path.read_bytes()).hexdigest(),
+        "artifact_size": artifact_path.stat().st_size,
+        "artifact_uri": str(artifact_path),
         "license": "verified-commercial-test-license",
         "source": "controlled-model-artifact",
         "redistribution_allowed": True,
@@ -63,12 +79,12 @@ def osnet_registration_payload(*, sha256: str | None = None, version: str = "1.0
     }
 
 
-def register_and_evaluate(registry_client: TestClient) -> dict[str, object]:
+def register_and_evaluate(registry_client: TestClient, registry_artifact: Path) -> dict[str, object]:
     version = response_data(
         registry_client.post(
             "/v1/admin/models/registry",
             headers=headers(),
-            json=osnet_registration_payload(),
+            json=osnet_registration_payload(registry_artifact),
         )
     )["model_version"]
     evaluation = response_data(
@@ -87,8 +103,11 @@ def register_and_evaluate(registry_client: TestClient) -> dict[str, object]:
     return version
 
 
-def test_registry_requires_provenance_and_quality_gate(registry_client: TestClient) -> None:
-    invalid = osnet_registration_payload()
+def test_registry_requires_provenance_and_quality_gate(
+    registry_client: TestClient,
+    registry_artifact: Path,
+) -> None:
+    invalid = osnet_registration_payload(registry_artifact)
     invalid["license"] = ""
     rejected = registry_client.post("/v1/admin/models/registry", headers=headers(), json=invalid)
     assert rejected.status_code == 422
@@ -97,7 +116,7 @@ def test_registry_requires_provenance_and_quality_gate(registry_client: TestClie
         registry_client.post(
             "/v1/admin/models/registry",
             headers=headers(),
-            json=osnet_registration_payload(),
+            json=osnet_registration_payload(registry_artifact),
         )
     )["model_version"]
     failed = response_data(
@@ -123,8 +142,9 @@ def test_registry_requires_provenance_and_quality_gate(registry_client: TestClie
 
 def test_release_preflight_checks_digest_evaluation_and_separation_of_duties(
     registry_client: TestClient,
+    registry_artifact: Path,
 ) -> None:
-    version = register_and_evaluate(registry_client)
+    version = register_and_evaluate(registry_client, registry_artifact)
     release = {
         "model_version_id": version["model_version_id"],
         "alias": "person_reid_default",
@@ -183,12 +203,15 @@ def test_release_preflight_checks_digest_evaluation_and_separation_of_duties(
     assert events[1]["release_event_id"] == applied["release"]["release_event_id"]
 
 
-def test_release_preflight_rejects_artifact_digest_mismatch(registry_client: TestClient) -> None:
+def test_release_preflight_rejects_artifact_digest_mismatch(
+    registry_client: TestClient,
+    registry_artifact: Path,
+) -> None:
     version = response_data(
         registry_client.post(
             "/v1/admin/models/registry",
             headers=headers(),
-            json=osnet_registration_payload(sha256="0" * 64),
+            json=osnet_registration_payload(registry_artifact, sha256="0" * 64),
         )
     )["model_version"]
     portrait_model_registry.create_model_evaluation(
@@ -224,8 +247,11 @@ def test_release_preflight_rejects_artifact_digest_mismatch(registry_client: Tes
     assert "model artifact digest does not match" in preflight["blockers"]
 
 
-def test_registry_lists_logical_models_and_versions(registry_client: TestClient) -> None:
-    version = register_and_evaluate(registry_client)
+def test_registry_lists_logical_models_and_versions(
+    registry_client: TestClient,
+    registry_artifact: Path,
+) -> None:
+    version = register_and_evaluate(registry_client, registry_artifact)
     models = response_data(registry_client.get("/v1/admin/models/registry", headers=headers()))
     assert models["count"] == 1
     assert models["models"][0]["version_count"] == 1

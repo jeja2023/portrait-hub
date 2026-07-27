@@ -36,7 +36,7 @@ TypeScript 与 Vue（63 文件 / 40353 行）、部署清单（Docker / docker-c
 | --- | --- | --- |
 | 配置非法值静默回退 | 已完成 | `parse_int_env`、`parse_float_env` 与 `parse_bool_env` 现对非法值记录去重 WARN 并汇总变量名与期望类型；浮点数同时拒绝 `NaN`/无穷值，布尔值显式区分真、假白名单。开发环境仍按默认值启动，生产 profile 在启动门禁汇总报错并 fail-fast，且不受 `PRODUCTION_EXTERNAL_SERVICES_REQUIRED` 开关绕过。日志不记录原始值，避免误泄露配置内容。 |
 | Dockerfile 硬编码国内镜像源 | 已完成 | GPU 镜像的 apt 源改为可选 `ARG APT_MIRROR`，留空时沿用基础镜像官方源；GPU/CPU 镜像的 pip 源改为 `ARG PIP_INDEX_URL=https://pypi.org/simple`。国内或隔离网络构建可按需传入构建参数，仓库交付门禁同时禁止重新写死清华源。 |
-| CI 单 job 串行 | 已完成 | `ci.yml` 已拆为 `lint-type`、`python-tests`、`frontend-e2e`、`delivery-gates` 四个无依赖并行 job。Playwright 缓存 `~/.cache/ms-playwright`，CI 只安装 Chromium 并运行 desktop/tablet/mobile 三个 Chromium 项目；本地 Playwright 跨浏览器配置保持不变。交付门禁新增结构检查，防止后续退回单 job 或重新安装三套浏览器。 |
+| CI 单 job 串行 | 已完成 | `ci.yml` 已拆为 `lint-type`、`python-tests`、`frontend-e2e`、`delivery-gates` 四个无依赖并行 job。Playwright 缓存 `~/.cache/ms-playwright`，CI 只安装 Chromium 并通过专用脚本运行 desktop/tablet/mobile；单个 E2E job 因共享一个服务和运行时目录而使用单 worker，避免登录态和 JSON 状态互相覆盖。交付门禁同时检查并行 job、项目集合、Console 构建顺序和 E2E 隔离。 |
 
 ## 低优先级与清理
 
@@ -79,15 +79,20 @@ TypeScript 与 Vue（63 文件 / 40353 行）、部署清单（Docker / docker-c
 - 修复 GPU/CPU Dockerfile 复制 `.dockerignore` 已排除 `tools/` 的构建上下文冲突，并将该契约加入部署门禁。
 - Trivy 与 Scorecard 的 SARIF 上传增加文件存在保护，保留构建或扫描步骤的原始失败状态。
 - GitHub 官方 Checkout、Python/Node 设置、缓存、构件上传下载和 CodeQL SARIF Action 升级到当前 Node.js 24 运行时主版本。
+- Python 测试与交付门禁在检查静态产物前执行 Console production build，消除本地遗留 `dist` 掩盖干净检出失败的问题。
+- Playwright 共享状态矩阵改为单 worker，CI 项目写入专用脚本；移动端配置验收同步到 0.18.2 已统一的标准表格 DOM。
+- 模型注册测试改用隔离小构件；对象存储原子临时名缩短，深层 Windows 工作区不再因临时路径超长失败。
+- Trivy 只忽略上游暂无修复版本的漏洞，已有修复方案的 `HIGH/CRITICAL` 条目继续阻断发布。
 
 ## 验证记录
 
 - `python -m ruff check app tools tests`：通过。
 - `python tools/type_check.py`：通过，215 个源文件无问题。
 - 计划指定的控制面回归：39 passed；新增配置、GPU、增量同步与交付检查定向回归合计 47 passed。
-- 完整 Python 测试：759 passed、6 skipped；跳过项为需要外部环境的既有用例。
-- `npm run check`：Node SDK 通过；前端 lint/typecheck/build 通过，Vitest 44 passed。
+- 完整 Python 测试：760 passed、6 skipped，覆盖率 77%；跳过项为需要外部环境的既有用例。
+- `npm run check`：Node SDK 通过；前端 lint/typecheck/build 通过，Vitest 45 passed。
 - `python tools/deploy_check.py --json --skip-node`：通过，包含 Docker 镜像源参数化与 CI 四 job/Chromium 缓存新门禁。
+- `npm run console:e2e:ci`：通过，Chromium 桌面/平板/移动端 `24 passed`，单 worker 无登录态或共享状态竞态。
 - 控制面新增用例覆盖条件 UPSERT SQL、快照实体消失后的投影清理，以及 409 冲突刷新后重试成功。
 - Docker BuildKit `--check` 已尝试，但本机 Docker Desktop 的失效代理 `127.0.0.1:10808` 阻断基础镜像元数据读取，未进入 Dockerfile 构建阶段；需在可访问镜像仓库的 CI/构建机补跑。
 - CI 持续覆盖 ruff、pytest+coverage、mypy strict、OpenAPI 契约兼容、前端 lint/test/typecheck/build、Chromium e2e、SDK 冒烟、部署契约与生产就绪门禁。

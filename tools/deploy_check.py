@@ -492,13 +492,30 @@ def check_models_config(root: Path, report: DeployReport) -> None:
 def check_ci_workflows(root: Path, report: DeployReport) -> None:
     ci_path = root / ".github" / "workflows" / "ci.yml"
     audit_path = root / ".github" / "workflows" / "security-audit.yml"
+    playwright_path = root / "frontend" / "console-next" / "playwright.config.ts"
+    package_path = root / "package.json"
     ci = read_text(ci_path) if ci_path.is_file() else ""
     audit = read_text(audit_path) if audit_path.is_file() else ""
+    playwright = read_text(playwright_path) if playwright_path.is_file() else ""
+    package = read_text(package_path) if package_path.is_file() else ""
     try:
         ci_payload = yaml.safe_load(ci) or {}
     except yaml.YAMLError:
         ci_payload = {}
     jobs = ci_payload.get("jobs", {}) if isinstance(ci_payload, dict) else {}
+    python_steps = jobs.get("python-tests", {}).get("steps", []) if isinstance(jobs, dict) else []
+    delivery_steps = jobs.get("delivery-gates", {}).get("steps", []) if isinstance(jobs, dict) else []
+
+    def step_index(steps: list[object], marker: str) -> int | None:
+        for index, step in enumerate(steps):
+            if isinstance(step, dict) and marker in str(step.get("run", "")):
+                return index
+        return None
+
+    python_build_index = step_index(python_steps, "npm run console:build")
+    python_test_index = step_index(python_steps, "python -m pytest -q")
+    delivery_build_index = step_index(delivery_steps, "npm run console:build")
+    delivery_check_index = step_index(delivery_steps, "python tools/deploy_check.py --json --skip-node")
     report.add(
         "ci_python_node_deploy_checks",
         all(
@@ -531,9 +548,40 @@ def check_ci_workflows(root: Path, report: DeployReport) -> None:
         and "~/.cache/ms-playwright" in ci
         and "actions/cache@v5" in ci
         and "playwright install --with-deps chromium" in ci
-        and "--project=chromium-desktop" in ci
+        and "npm run console:e2e:ci" in ci
         and "firefox webkit" not in ci,
         {"jobs": sorted(jobs) if isinstance(jobs, dict) else []},
+    )
+    report.add(
+        "ci_console_artifacts_built_before_gates",
+        python_build_index is not None
+        and python_test_index is not None
+        and python_build_index < python_test_index
+        and delivery_build_index is not None
+        and delivery_check_index is not None
+        and delivery_build_index < delivery_check_index
+        and any(
+            isinstance(step, dict) and step.get("uses") == "actions/setup-node@v7"
+            for step in python_steps
+        ),
+        {
+            "python_build_step": python_build_index,
+            "python_test_step": python_test_index,
+            "delivery_build_step": delivery_build_index,
+            "delivery_check_step": delivery_check_index,
+        },
+    )
+    report.add(
+        "playwright_shared_state_serialized",
+        "fullyParallel: false" in playwright and re.search(r"(?m)^\s*workers:\s*1,?\s*$", playwright) is not None,
+        {"path": str(playwright_path)},
+    )
+    report.add(
+        "playwright_ci_projects_explicit",
+        '"console:e2e:ci": "playwright test --config=frontend/console-next/playwright.config.ts '
+        '--project=chromium-desktop --project=chromium-tablet --project=chromium-mobile"'
+        in package,
+        {"path": str(package_path)},
     )
     report.add(
         "ci_security_audit_scheduled",
@@ -559,6 +607,13 @@ def check_supply_chain_workflow(root: Path, report: DeployReport) -> None:
         "if: always() && hashFiles('trivy-results.sarif') != ''" in workflow
         and "if: always() && hashFiles('scorecard.sarif') != ''" in workflow
         and "github/codeql-action/upload-sarif@v4" in workflow,
+        {"path": str(workflow_path)},
+    )
+    report.add(
+        "supply_chain_trivy_actionable_gate",
+        "severity: CRITICAL,HIGH" in workflow
+        and "ignore-unfixed: true" in workflow
+        and 'exit-code: "1"' in workflow,
         {"path": str(workflow_path)},
     )
     workflow_files = sorted((root / ".github" / "workflows").glob("*.yml"))

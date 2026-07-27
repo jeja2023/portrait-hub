@@ -257,9 +257,7 @@ test("[E2E-CONFIG-01] manages network CIDRs and exposes the complete configurati
 
   await page.getByRole("tab", { name: "全部配置" }).click();
   await page.getByLabel("搜索配置").fill("GPU_WORKER_0_DEVICE");
-  const configurationEntry = testInfo.project.name.includes("mobile")
-    ? page.locator(".mobile-config-item").filter({ hasText: "GPU_WORKER_0_DEVICE" })
-    : page.getByRole("row").filter({ hasText: "GPU_WORKER_0_DEVICE" });
+  const configurationEntry = page.getByRole("row").filter({ hasText: "GPU_WORKER_0_DEVICE" });
   await expect(configurationEntry).toBeVisible();
   await expect(configurationEntry).toContainText("重建容器");
   await configurationEntry.getByRole("button", { name: "修改配置" }).click();

@@ -17,7 +17,8 @@
     "console:test": "npm run test -w @portrait-hub/console-next",
     "console:typecheck": "npm run typecheck -w @portrait-hub/console-next",
     "console:build": "npm run build -w @portrait-hub/console-next",
-    "console:e2e": "npm run e2e -w @portrait-hub/console-next",
+    "console:e2e": "playwright test --config=frontend/console-next/playwright.config.ts",
+    "console:e2e:ci": "playwright test --config=frontend/console-next/playwright.config.ts --project=chromium-desktop --project=chromium-tablet --project=chromium-mobile",
     "console:check": "npm run console:lint && npm run console:test && npm run console:typecheck && npm run console:build"
   },
   "engines": {

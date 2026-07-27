@@ -79,6 +79,9 @@ def test_deploy_check_tracks_ci_workflows() -> None:
     checks = {item["name"]: item for item in report.checks}
     assert checks["ci_python_node_deploy_checks"]["ok"] is True
     assert checks["ci_parallel_jobs_and_chromium_cache"]["ok"] is True
+    assert checks["ci_console_artifacts_built_before_gates"]["ok"] is True
+    assert checks["playwright_shared_state_serialized"]["ok"] is True
+    assert checks["playwright_ci_projects_explicit"]["ok"] is True
     assert checks["ci_security_audit_scheduled"]["ok"] is True
     assert "python tools/openapi_compatibility_check.py --json" in Path(".github/workflows/ci.yml").read_text(
         encoding="utf-8"
@@ -96,6 +99,7 @@ def test_deploy_check_tracks_supply_chain_workflow() -> None:
     checks = {item["name"]: item for item in report.checks}
     assert checks["docker_context_matches_runtime_copy"]["ok"] is True
     assert checks["supply_chain_sarif_upload_guarded"]["ok"] is True
+    assert checks["supply_chain_trivy_actionable_gate"]["ok"] is True
     assert checks["github_actions_current_runtime_releases"]["ok"] is True
 
 

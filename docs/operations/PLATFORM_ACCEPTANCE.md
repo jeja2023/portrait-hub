@@ -63,9 +63,15 @@ python tools\portrait_production_readiness.py --strict
 
 ## 0.18.3 验证记录
 
+- Python 全量覆盖率回归 `760 passed / 6 skipped`、覆盖率 77%；Ruff 与严格 mypy 215 个源文件通过。
+- Node SDK、Vitest 45 项、ESLint、Vue TypeScript、Vite production build、部署检查和平台范围严格就绪通过；OpenAPI 当前 154 条路径对比 147 条基线无破坏性变更。
 - GPU/CPU Dockerfile 不再复制被 `.dockerignore` 排除的 `tools/`，部署门禁验证构建上下文与运行时复制契约一致。
 - Trivy 与 Scorecard 的 SARIF 上传仅在结果文件存在时执行；CodeQL 上传 Action 已升级到 v4。
 - GitHub 官方 Checkout、Python/Node 设置、缓存和构件上传下载 Action 已升级到当前 Node.js 24 运行时主版本。
+- Python 测试和交付门禁在静态文件检查前完成 Console production build，干净检出不依赖本地 `dist`。
+- Playwright 对共享服务/状态使用单 worker，专用 CI 脚本固定 Chromium 桌面、平板、移动端三个项目；本地验收 `24 passed`。
+- 模型注册测试使用隔离构件；对象存储原子临时文件名适配深层 Windows 工作区。
+- Trivy 继续阻断可修复的高危/严重漏洞，仅忽略上游暂无修复版本的条目。
 - 公开 `/v1` API、OpenAPI、数据库 schema 和生产阻塞状态未改变，生产发布决策继续保持阻塞。
 
 ## 0.18.2 验证记录

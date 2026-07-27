@@ -6,7 +6,7 @@
 - 结论：0.18.3 已同步 Console Next 版本元数据和支持工单默认版本，0.18.2 的表格与分页一致性保持不变；Console Next 继续作为唯一生产入口。目标环境仍需完成真实模型、共享后端、OIDC、镜像回退、集群故障恢复和组织审批。
 
 
-> 2026-07-27 / 0.18.3 验收：Console Next 包版本与支持工单默认产品版本同步到 0.18.3；公开路由、表格、分页和请求契约保持兼容。
+> 2026-07-27 / 0.18.3 验收：Console Next 包版本与支持工单默认产品版本同步到 0.18.3；公开路由、表格、分页和请求契约保持兼容；共享服务矩阵单 worker 运行，Chromium 桌面/平板/移动端 24 tests 通过。
 >
 > 2026-07-27 / 0.18.2 验收：23 个页面的表格与分页实现完成全量复核和统一，配置中心桌面/390px 共用标准表格；包版本与支持工单默认产品版本同步；Vitest 45 tests、Node SDK、ESLint、Vue TypeScript 和 Vite build 通过。
 >
@@ -36,6 +36,7 @@
 | 版本同步 | 完成 | Console Next 包、根 workspace、锁文件和四套 SDK 统一为 `0.18.3` |
 | 工单默认值 | 完成 | 新建支持工单默认产品版本为 `0.18.3`，仍允许填写实际故障版本 |
 | 兼容性 | 完成 | 0.18.2 表格、分页、响应式布局和公开请求契约保持不变 |
+| CI 浏览器验收 | 完成 | 专用 Chromium 三项目脚本、单 worker 共享状态隔离，24 tests 通过 |
 
 ## 0.18.2 补丁验收
 
@@ -121,6 +122,7 @@
 
 | 检查 | 结果 |
 |---|---|
+| 0.18.3 发布验证 | Pytest 760 passed / 6 skipped；严格 mypy 215 sources；Vitest 45 tests；Node SDK、Ruff、ESLint、Vue TypeScript、Vite build、deploy_check、平台 strict readiness、OpenAPI 兼容通过；Playwright Chromium 桌面/平板/移动端 24 passed |
 | 0.18.2 发布验证 | 版本一致性与支持矩阵测试通过；Vitest 45 tests；Node SDK、ESLint、Vue TypeScript、Vite build 和桌面/390px 浏览器验收通过 |
 | 0.18.1 发布验证 | Pytest 759 passed / 6 skipped；严格 mypy 215 sources；Vitest 44 tests；Node SDK、Ruff、ESLint、Vue TypeScript、Vite build、deploy_check、版本一致性和支持矩阵通过 |
 | 0.18.0 发布验证 | Pytest 746 passed / 6 skipped；严格 mypy 215 sources；Vitest 44 tests；Playwright 五项目 40 passed；Node SDK、Ruff、ESLint、Vue TypeScript、Vite build、deploy_check、平台 strict readiness、OpenAPI 兼容、支持矩阵与 diff check 通过 |
@@ -128,7 +130,7 @@
 | 0.14.0 发布验证 | Pytest 567 passed / 4 skipped；Vitest 8 files / 32 tests；Playwright 五项目 15 passed；四种 SDK、GPU/CPU Compose、Vue TypeScript、ESLint、Vite production build、浏览器响应式/Logo 验收和 diff check 通过 |
 | 0.13.0 发布验证 | Pytest 563 passed / 4 skipped；OIDC/本地登录专项 23 passed；Vitest 6 files / 19 tests；Vue TypeScript、ESLint、Vite production build、Compose config、diff check、本机浏览器登录验收和 /ready/deep version=0.13.0 通过 |
 | 0.12.1 发布验证 | Python strict typecheck 177 sources、Ruff、Pytest 549 passed / 4 skipped、npm check、Vitest 6 files / 18 tests、Playwright 15 passed / 0 skipped、deploy_check、平台 strict readiness 与 diff check 均通过 |
-| Python 全量回归 | 759 passed / 6 skipped；Python SDK 0.18.1 干净环境实时烟测通过 |
+| Python 全量回归 | 760 passed / 6 skipped；覆盖率 77% |
 | Node SDK | 通过 |
 | npm test | 通过，Node SDK + console:check 标准入口 |
 | Go SDK | 当前验证机无 Go 可执行文件，未重复运行；版本和项目参数静态契约通过 |
@@ -138,7 +140,7 @@
 | Vue TypeScript | 通过 |
 | Vitest | 45 passed |
 | Vite production build | 通过，随 npm run check 完成 |
-| Playwright | 五个浏览器/视口项目共 40 passed |
+| Playwright | 当前 CI Chromium 桌面/平板/移动端 24 passed；Firefox/WebKit 保留为本地扩展矩阵 |
 | 平台严格 readiness | 通过，strict_failure_count=0 |
 | deploy_check | 通过，--json --import-app ok=true |
 
