@@ -45,6 +45,7 @@ WORKDIR /workspace
 
 # opencv-python-headless 运行所需的系统库（libGL / glib）。
 RUN apt-get update \
+    && apt-get upgrade -y \
     && apt-get install -y --no-install-recommends \
         ca-certificates \
         libglib2.0-0 \

@@ -81,8 +81,8 @@ TypeScript 与 Vue（63 文件 / 40353 行）、部署清单（Docker / docker-c
 - GitHub 官方 Checkout、Python/Node 设置、缓存、构件上传下载和 CodeQL SARIF Action 升级到当前 Node.js 24 运行时主版本。
 - Python 测试与交付门禁在检查静态产物前执行 Console production build，消除本地遗留 `dist` 掩盖干净检出失败的问题。
 - Playwright 共享状态矩阵改为单 worker，CI 项目写入专用脚本；移动端配置验收同步到 0.18.2 已统一的标准表格 DOM。
-- 模型注册测试改用隔离小构件；对象存储原子临时名缩短，深层 Windows 工作区不再因临时路径超长失败。
-- Trivy 只忽略上游暂无修复版本的漏洞，已有修复方案的 `HIGH/CRITICAL` 条目继续阻断发布。
+- 模型注册测试改用绝对路径隔离小构件，兼容 Linux/POSIX 发布应用阶段的构件校验；对象存储原子临时名缩短，深层 Windows 工作区不再因临时路径超长失败。
+- GPU/CPU 最终运行时镜像应用发行版系统安全更新；Trivy Action 升级到 `v0.36.0`，只忽略上游暂无修复版本的漏洞，已有修复方案的 `HIGH/CRITICAL` 条目继续阻断发布。
 
 ## 验证记录
 

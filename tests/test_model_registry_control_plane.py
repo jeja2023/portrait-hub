@@ -17,7 +17,7 @@ from app.server import app
 
 @pytest.fixture
 def registry_artifact(workspace_tmp_path: Path) -> Path:
-    artifact_path = workspace_tmp_path / "osnet-test.onnx"
+    artifact_path = (workspace_tmp_path / "osnet-test.onnx").resolve()
     artifact_path.write_bytes(b"isolated model registry test artifact")
     return artifact_path
 

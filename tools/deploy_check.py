@@ -594,6 +594,7 @@ def check_supply_chain_workflow(root: Path, report: DeployReport) -> None:
     workflow_path = root / ".github" / "workflows" / "supply-chain.yml"
     workflow = read_text(workflow_path) if workflow_path.is_file() else ""
     dockerfiles = [read_text(root / name) for name in ("Dockerfile", "Dockerfile.cpu")]
+    runtime_stages = [dockerfile.rsplit("\nFROM ", 1)[-1] for dockerfile in dockerfiles]
     dockerignore = read_text(root / ".dockerignore") if (root / ".dockerignore").is_file() else ""
     tools_ignored = any(line.strip().rstrip("/") == "tools" for line in dockerignore.splitlines())
     copies_tools = any(re.search(r"(?m)^\s*COPY\s+tools(?:\s|$)", dockerfile) for dockerfile in dockerfiles)
@@ -601,6 +602,11 @@ def check_supply_chain_workflow(root: Path, report: DeployReport) -> None:
         "docker_context_matches_runtime_copy",
         not (tools_ignored and copies_tools),
         {"tools_ignored": tools_ignored, "copies_tools": copies_tools},
+    )
+    report.add(
+        "runtime_images_apply_os_security_updates",
+        all("apt-get upgrade -y" in runtime_stage for runtime_stage in runtime_stages),
+        {"paths": ["Dockerfile", "Dockerfile.cpu"]},
     )
     report.add(
         "supply_chain_sarif_upload_guarded",
@@ -611,7 +617,8 @@ def check_supply_chain_workflow(root: Path, report: DeployReport) -> None:
     )
     report.add(
         "supply_chain_trivy_actionable_gate",
-        "severity: CRITICAL,HIGH" in workflow
+        "aquasecurity/trivy-action@v0.36.0" in workflow
+        and "severity: CRITICAL,HIGH" in workflow
         and "ignore-unfixed: true" in workflow
         and 'exit-code: "1"' in workflow,
         {"path": str(workflow_path)},

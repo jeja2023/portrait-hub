@@ -69,6 +69,7 @@ RUN if [ -n "$APT_MIRROR" ]; then \
           /etc/apt/sources.list; \
     fi \
     && apt-get update \
+    && apt-get upgrade -y \
     && apt-get install -y --no-install-recommends \
         ca-certificates \
         libglib2.0-0 \

@@ -98,6 +98,7 @@ def test_deploy_check_tracks_supply_chain_workflow() -> None:
 
     checks = {item["name"]: item for item in report.checks}
     assert checks["docker_context_matches_runtime_copy"]["ok"] is True
+    assert checks["runtime_images_apply_os_security_updates"]["ok"] is True
     assert checks["supply_chain_sarif_upload_guarded"]["ok"] is True
     assert checks["supply_chain_trivy_actionable_gate"]["ok"] is True
     assert checks["github_actions_current_runtime_releases"]["ok"] is True

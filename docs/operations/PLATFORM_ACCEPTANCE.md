@@ -70,8 +70,8 @@ python tools\portrait_production_readiness.py --strict
 - GitHub 官方 Checkout、Python/Node 设置、缓存和构件上传下载 Action 已升级到当前 Node.js 24 运行时主版本。
 - Python 测试和交付门禁在静态文件检查前完成 Console production build，干净检出不依赖本地 `dist`。
 - Playwright 对共享服务/状态使用单 worker，专用 CI 脚本固定 Chromium 桌面、平板、移动端三个项目；本地验收 `24 passed`。
-- 模型注册测试使用隔离构件；对象存储原子临时文件名适配深层 Windows 工作区。
-- Trivy 继续阻断可修复的高危/严重漏洞，仅忽略上游暂无修复版本的条目。
+- 模型注册测试使用绝对路径隔离构件，Linux/POSIX 发布应用定向回归通过；对象存储原子临时文件名适配深层 Windows 工作区。
+- GPU/CPU 最终运行时镜像应用发行版系统安全更新；Trivy Action 升级至 `v0.36.0`，继续阻断可修复的高危/严重漏洞，仅忽略上游暂无修复版本的条目。
 - 公开 `/v1` API、OpenAPI、数据库 schema 和生产阻塞状态未改变，生产发布决策继续保持阻塞。
 
 ## 0.18.2 验证记录

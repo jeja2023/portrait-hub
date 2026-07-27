@@ -14,9 +14,10 @@
 - Trivy 与 Scorecard 仅在 SARIF 结果文件存在时上传，构建或扫描失败时保留原始错误。
 - GitHub 官方 Checkout、Python/Node 设置、缓存、构件上传下载和 CodeQL SARIF Action 升级到当前主版本。
 - Trivy 保留对可修复 `HIGH/CRITICAL` 漏洞的阻断，忽略上游暂无修复版本的条目并继续上传完整 SARIF。
-- Python 测试与交付门禁在验证 Console 产物前执行干净构建；模型注册测试不再依赖 Git 忽略的生产模型文件。
+- GPU/CPU 最终运行时镜像在安装依赖前应用发行版系统安全更新；Trivy Action 升级到使用 Node.js 24 的 `v0.36.0`。
+- Python 测试与交付门禁在验证 Console 产物前执行干净构建；模型注册测试使用绝对路径隔离构件，不再依赖 Git 忽略的生产模型文件。
 - Playwright 共享服务矩阵使用单 worker，专用 CI 命令只运行 Chromium 桌面/平板/移动端，`24` 项验收通过。
-- 部署门禁持续检查 Docker 上下文、SARIF 上传保护、Action 运行时、Console 构建顺序、Playwright 隔离和 CI 项目集合。
+- 部署门禁持续检查 Docker 上下文、运行时系统安全更新、SARIF 上传保护、Action 运行时、Console 构建顺序、Playwright 隔离和 CI 项目集合。
 - 本版本无公开 API、OpenAPI 或数据库 schema 变更，从 `0.18.2` 升级无需数据迁移。完整说明见 [0.18.3 发布说明](docs/releases/0.18.3.md) 和 [更新日志](更新日志.md)。
 
 ## 0.18.2 Console Next 表格与分页一致性
