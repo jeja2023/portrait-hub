@@ -54,13 +54,27 @@ jobs:
           npm ci
           npm run console:build
       - name: Run Python tests with coverage
-        run: python -m pytest -q --cov=app --cov=tools --cov-report=term --cov-report=xml --durations=15
+        id: python-tests
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          python -m pytest -q --cov=app --cov=tools --cov-report=term --cov-report=xml --durations=15 --tb=short 2>&1 | tee pytest.log
+          test_status=${PIPESTATUS[0]}
+          if [ "$test_status" -ne 0 ]; then
+            summary="$(sed -n '/^= FAILURES =/,$p' pytest.log | tail -n 40 | tr '\n' ' ' | cut -c1-3000)"
+            echo "::error title=Python tests failed::$summary"
+          fi
+          exit "$test_status"
       - name: Upload coverage report
         uses: actions/upload-artifact@v7
         with:
           name: coverage-xml
           path: coverage.xml
           if-no-files-found: ignore
+      - name: Enforce Python test result
+        if: always() && steps.python-tests.outcome == 'failure'
+        run: exit 1
 
   frontend-e2e:
     runs-on: ubuntu-latest
