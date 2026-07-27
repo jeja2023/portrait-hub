@@ -58,6 +58,7 @@ jobs:
         continue-on-error: true
         shell: bash
         run: |
+          set +e
           set -o pipefail
           python -m pytest -q --cov=app --cov=tools --cov-report=term --cov-report=xml --durations=15 --tb=short 2>&1 | tee pytest.log
           test_status=${PIPESTATUS[0]}
@@ -66,7 +67,7 @@ jobs:
             if [ -z "$summary" ]; then
               summary="$(tail -n 20 pytest.log | tr '\n' ' ' | cut -c1-3000)"
             fi
-            echo "::error file=pytest.log,title=Python tests failed::$summary"
+            echo "::error file=.github/workflows/ci.yml,line=1,title=Python tests failed::$summary"
           fi
           exit "$test_status"
       - name: Upload coverage report
