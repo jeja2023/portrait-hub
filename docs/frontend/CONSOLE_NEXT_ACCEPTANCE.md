@@ -1,11 +1,13 @@
 # Console Next 验收报告
 
 - 验收日期：2026-07-27
-- 发布版本：0.18.2
+- 发布版本：0.18.3
 - 验收对象：frontend/console-next 商业运营、服务质量、合规、模型注册、Webhook 投递调试、既有产品路由、响应式布局与版本元数据
-- 结论：0.18.2 仓库内控制台表格与分页一致性优化、版本同步和自动化验收已完成；Console Next 继续作为唯一生产入口。目标环境仍需完成真实模型、共享后端、OIDC、镜像回退、集群故障恢复和组织审批。
+- 结论：0.18.3 已同步 Console Next 版本元数据和支持工单默认版本，0.18.2 的表格与分页一致性保持不变；Console Next 继续作为唯一生产入口。目标环境仍需完成真实模型、共享后端、OIDC、镜像回退、集群故障恢复和组织审批。
 
 
+> 2026-07-27 / 0.18.3 验收：Console Next 包版本与支持工单默认产品版本同步到 0.18.3；公开路由、表格、分页和请求契约保持兼容。
+>
 > 2026-07-27 / 0.18.2 验收：23 个页面的表格与分页实现完成全量复核和统一，配置中心桌面/390px 共用标准表格；包版本与支持工单默认产品版本同步；Vitest 45 tests、Node SDK、ESLint、Vue TypeScript 和 Vite build 通过。
 >
 > 2026-07-27 / 0.18.1 验收：公开控制台契约保持兼容，包版本与支持工单默认产品版本同步；Vitest 44 tests、Node SDK、ESLint、Vue TypeScript 和 Vite build 通过。
@@ -26,6 +28,14 @@
 > 2026-07-18 / 0.11.2 补充验收：二次复核修复 WS query 主凭证回退、`/v1/*` no-store、默认 CSP、流详情深链、meta.nav 导航、aria-live、错误横幅 request_id、值级脱敏与搜索质量分；新增 me auth_kind×3、403、ws-ticket 401/stream/TTL、空库契约测试，并完成 typecheck、ruff、pytest、npm check、Playwright E2E 与 diff check。
 
 > 2026-07-18 / 0.11.1 补充验收：deploy_check --import-app 已新增旧源码目录缺失断言，duplicate /v1 检查改为扫描 frontend/console-next/src；平台 strict readiness 同步阻断旧灰度变量、旧静态路径和旧 DOM 标记回归。
+
+## 0.18.3 补丁验收
+
+| 范围 | 完成状态 | 关键检查 |
+| --- | --- | --- |
+| 版本同步 | 完成 | Console Next 包、根 workspace、锁文件和四套 SDK 统一为 `0.18.3` |
+| 工单默认值 | 完成 | 新建支持工单默认产品版本为 `0.18.3`，仍允许填写实际故障版本 |
+| 兼容性 | 完成 | 0.18.2 表格、分页、响应式布局和公开请求契约保持不变 |
 
 ## 0.18.2 补丁验收
 

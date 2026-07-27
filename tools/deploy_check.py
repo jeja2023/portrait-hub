@@ -218,6 +218,7 @@ def check_required_files(root: Path, report: DeployReport) -> None:
         ".github/workflows/integration-matrix.yml",
         ".github/workflows/console-acceptance.yml",
         ".github/workflows/security-audit.yml",
+        ".github/workflows/supply-chain.yml",
     ]
     missing = [item for item in required if not (root / item).is_file()]
     report.add("required_files", not missing, {"missing": missing})
@@ -528,7 +529,7 @@ def check_ci_workflows(root: Path, report: DeployReport) -> None:
         and {"lint-type", "python-tests", "frontend-e2e", "delivery-gates"}.issubset(jobs)
         and all(not job.get("needs") for job in jobs.values() if isinstance(job, dict))
         and "~/.cache/ms-playwright" in ci
-        and "actions/cache@v4" in ci
+        and "actions/cache@v5" in ci
         and "playwright install --with-deps chromium" in ci
         and "--project=chromium-desktop" in ci
         and "firefox webkit" not in ci,
@@ -538,6 +539,49 @@ def check_ci_workflows(root: Path, report: DeployReport) -> None:
         "ci_security_audit_scheduled",
         "pip-audit" in audit and "python tools/security_audit.py" in audit and "cron:" in audit,
         {"path": str(audit_path)},
+    )
+
+
+def check_supply_chain_workflow(root: Path, report: DeployReport) -> None:
+    workflow_path = root / ".github" / "workflows" / "supply-chain.yml"
+    workflow = read_text(workflow_path) if workflow_path.is_file() else ""
+    dockerfiles = [read_text(root / name) for name in ("Dockerfile", "Dockerfile.cpu")]
+    dockerignore = read_text(root / ".dockerignore") if (root / ".dockerignore").is_file() else ""
+    tools_ignored = any(line.strip().rstrip("/") == "tools" for line in dockerignore.splitlines())
+    copies_tools = any(re.search(r"(?m)^\s*COPY\s+tools(?:\s|$)", dockerfile) for dockerfile in dockerfiles)
+    report.add(
+        "docker_context_matches_runtime_copy",
+        not (tools_ignored and copies_tools),
+        {"tools_ignored": tools_ignored, "copies_tools": copies_tools},
+    )
+    report.add(
+        "supply_chain_sarif_upload_guarded",
+        "if: always() && hashFiles('trivy-results.sarif') != ''" in workflow
+        and "if: always() && hashFiles('scorecard.sarif') != ''" in workflow
+        and "github/codeql-action/upload-sarif@v4" in workflow,
+        {"path": str(workflow_path)},
+    )
+    workflow_files = sorted((root / ".github" / "workflows").glob("*.yml"))
+    workflow_text = "\n".join(read_text(path) for path in workflow_files)
+    current_action_markers = (
+        "actions/checkout@v7",
+        "actions/setup-python@v7",
+        "actions/setup-node@v7",
+        "actions/cache@v5",
+        "actions/upload-artifact@v7",
+        "actions/download-artifact@v8",
+    )
+    report.add(
+        "github_actions_current_runtime_releases",
+        all(marker in workflow_text for marker in current_action_markers)
+        and "actions/checkout@v4" not in workflow_text
+        and "actions/setup-python@v5" not in workflow_text
+        and "actions/setup-node@v4" not in workflow_text
+        and "actions/cache@v4" not in workflow_text
+        and "actions/upload-artifact@v4" not in workflow_text
+        and "actions/download-artifact@v4" not in workflow_text
+        and "github/codeql-action/upload-sarif@v3" not in workflow_text,
+        {"workflow_count": len(workflow_files)},
     )
 
 
@@ -693,6 +737,7 @@ def run_checks(args: argparse.Namespace) -> DeployReport:
     check_models_config(root, report)
     check_docker_files(root, report)
     check_ci_workflows(root, report)
+    check_supply_chain_workflow(root, report)
     check_production_integrations(root, report)
     if not args.skip_node:
         check_node_sdk_tests(root, report)

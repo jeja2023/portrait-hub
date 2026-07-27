@@ -33,6 +33,12 @@
 | 调用统计 | `GET /v1/access/call-logs`、`GET /v1/access/call-logs/summary` |
 | Webhook | `GET /v1/access/webhooks`、`POST /v1/access/webhooks`、`PATCH /v1/access/webhooks/{webhook_id}`、`POST /v1/access/webhooks/{webhook_id}/rotate`、`POST /v1/access/webhooks/{webhook_id}/sample` |
 
+## 0.18.3 CI 交付与 SDK 兼容性
+
+- 公开 `/v1` 路径、请求/响应契约、认证和租户/项目隔离语义与 0.18.2 相同，接入方无需修改业务请求或重新生成客户端。
+- Python/Node/Go/Java SDK 仅同步补丁版本；0.18.2 客户端继续处于兼容版本范围。
+- 本版本修复容器构建上下文和供应链扫描工作流，不改变服务端接口、游标、错误码或数据存储契约。
+
 ## 0.18.2 控制台与 SDK 兼容性
 
 - 公开 `/v1` 路径、请求/响应契约、认证和租户/项目隔离语义与 0.18.1 相同，接入方无需修改业务请求或重新生成客户端。

@@ -2,6 +2,8 @@
 
 This status was refreshed for the 0.18.0 release on 2026-07-26 from the repository audit dated 2026-07-24. It distinguishes implemented repository work from human acceptance, production release, and measured operation. The authoritative machine-readable cards are in `docs/requirements/COMMERCIAL_REQUIREMENTS.json`.
 
+The 0.18.3 CI delivery patch updates the current release pointer and repository verification without changing requirement acceptance or production blockers. Its Docker context, SARIF upload and GitHub Actions runtime fixes are documented in `docs/releases/0.18.3.md`.
+
 The 0.18.2 Console Next consistency patch updates the current release pointer and repository verification without changing requirement acceptance or production blockers. Its table, pagination and responsive-layout changes are documented in `docs/releases/0.18.2.md`.
 
 The 0.18.1 platform optimization patch updates the current release pointer and repository verification, but does not change any requirement acceptance status or close any production blocker listed below. Its performance, configuration and delivery changes are documented in `docs/releases/0.18.1.md`.

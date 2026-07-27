@@ -2,11 +2,19 @@
 
 面向多个业务项目的结构化人像解析服务平台。影鉴通过 FastAPI 提供版本化契约，以租户和项目隔离人像识别、检索、ReID、视频与流式解析数据，并支持 Ubuntu、Docker、NVIDIA GPU 和多 worker 生产部署。
 
-当前版本：0.18.2。本补丁版本统一 Console Next 全页面数据表格与分页控件，补齐 SLA 定义和模型影子结果分页，统一媒体归档游标分页，并让配置中心所有视口共用标准表格。公开 API 和数据库 schema 保持兼容；真实模型、目标集群演练、生产容量观测及法律/产品审批仍是正式生产切换的前置条件。
+当前版本：0.18.3。本补丁版本修复 GPU/CPU 运行时镜像的 Docker 构建上下文冲突，保护 Trivy 与 Scorecard 的 SARIF 上传路径，并将 GitHub Actions 官方运行时升级到当前主版本。公开 API 和数据库 schema 保持兼容；真实模型、目标集群演练、生产容量观测及法律/产品审批仍是正式生产切换的前置条件。
 
 > `0.9.0` 是破坏性升级。旧的 `/v1/vision/results`、`/v1/jobs/video/results` 及有限图片历史实现已删除，不提供兼容回退或旧记录自动迁移；接入方必须切换到统一档案接口。
 
 拆分后的模块映射、维护边界和验证命令见 [大型文件拆分维护指南](docs/maintenance/LARGE_FILE_SPLIT.md)，完整发布记录见 [更新日志](更新日志.md)。
+
+## 0.18.3 CI 构建与供应链扫描修复
+
+- GPU/CPU Dockerfile 不再复制被 `.dockerignore` 排除的 `tools/`，消除构建上下文缺失错误。
+- Trivy 与 Scorecard 仅在 SARIF 结果文件存在时上传，构建或扫描失败时保留原始错误。
+- GitHub 官方 Checkout、Python/Node 设置、缓存、构件上传下载和 CodeQL SARIF Action 升级到当前主版本。
+- 部署门禁持续检查 Docker 上下文、SARIF 上传保护和 Action 运行时版本。
+- 本版本无公开 API、OpenAPI 或数据库 schema 变更，从 `0.18.2` 升级无需数据迁移。完整说明见 [0.18.3 发布说明](docs/releases/0.18.3.md) 和 [更新日志](更新日志.md)。
 
 ## 0.18.2 Console Next 表格与分页一致性
 

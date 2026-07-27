@@ -21,7 +21,7 @@ jobs:
       security-events: write
       id-token: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Build runtime image
         run: docker build --build-arg INSTALL_PROD_OPTIONAL=true -t portrait-hub:${{ github.sha }} .
       - name: Smoke-test runtime image
@@ -46,8 +46,8 @@ jobs:
           severity: CRITICAL,HIGH
           exit-code: "1"
       - name: Upload Trivy SARIF
-        uses: github/codeql-action/upload-sarif@v3
-        if: always()
+        uses: github/codeql-action/upload-sarif@v4
+        if: always() && hashFiles('trivy-results.sarif') != ''
         with:
           sarif_file: trivy-results.sarif
       - name: Install cosign
@@ -55,13 +55,13 @@ jobs:
       - name: Sign image tarball
         run: cosign sign-blob --yes --output-signature portrait-hub-image.tar.sig portrait-hub-image.tar
       - name: Upload SBOM artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: portrait-hub-sbom
           path: sbom.cdx.json
           if-no-files-found: error
       - name: Upload image tarball for provenance
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: portrait-hub-image
           path: portrait-hub-image.tar
@@ -74,7 +74,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Build CPU runtime image
         run: docker build -f Dockerfile.cpu --build-arg INSTALL_PROD_OPTIONAL=true -t portrait-hub-cpu:${{ github.sha }} .
       - name: Smoke-test CPU runtime image
@@ -90,7 +90,7 @@ jobs:
       id-token: write
       security-events: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Run Scorecard
         uses: ossf/scorecard-action@v2.4.0
         with:
@@ -98,7 +98,8 @@ jobs:
           results_format: sarif
           publish_results: false
       - name: Upload Scorecard SARIF
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
+        if: always() && hashFiles('scorecard.sarif') != ''
         with:
           sarif_file: scorecard.sarif
 
@@ -112,11 +113,11 @@ jobs:
       attestations: write
       artifact-metadata: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # 复用 build-sbom-scan 构建的同一镜像 tar，避免重复 docker build 且保证
       # attest 的 subject 与被扫描/签名的产物字节一致。
       - name: Download image tarball
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: portrait-hub-image
       - name: Attest build provenance

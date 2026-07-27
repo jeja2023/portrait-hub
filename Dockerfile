@@ -86,7 +86,6 @@ RUN if [ -n "$APT_MIRROR" ]; then \
 
 COPY --from=builder /opt/portrait-hub-venv /opt/portrait-hub-venv
 COPY app /workspace/app
-COPY tools /workspace/tools
 COPY sdk /workspace/sdk
 COPY --from=console-builder /build/frontend/console-next/dist /workspace/frontend/console-next/dist
 COPY main.py /workspace/main.py

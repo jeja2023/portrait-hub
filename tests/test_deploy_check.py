@@ -7,6 +7,7 @@ from tools.deploy_check import (
     check_docker_files,
     check_import_app,
     check_source_encoding,
+    check_supply_chain_workflow,
     onnxruntime_version,
 )
 
@@ -85,6 +86,17 @@ def test_deploy_check_tracks_ci_workflows() -> None:
     assert "python tools/portrait_sdk_clean_smoke.py --json" in Path(".github/workflows/ci.yml").read_text(
         encoding="utf-8"
     )
+
+
+def test_deploy_check_tracks_supply_chain_workflow() -> None:
+    report = DeployReport()
+
+    check_supply_chain_workflow(Path("."), report)
+
+    checks = {item["name"]: item for item in report.checks}
+    assert checks["docker_context_matches_runtime_copy"]["ok"] is True
+    assert checks["supply_chain_sarif_upload_guarded"]["ok"] is True
+    assert checks["github_actions_current_runtime_releases"]["ok"] is True
 
 
 def test_deploy_check_enforces_cpu_lock_and_runtime_parity() -> None:

@@ -16,12 +16,12 @@ jobs:
       REQUIRE_ENCRYPTION: "false"
       HSTS_ENABLED: "false"
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: pip
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: "22"
       - name: Install service and browser dependencies
@@ -47,7 +47,7 @@ jobs:
           exit 1
       - name: Capture console screenshot
         run: python tools/console_screenshot_acceptance.py --base-url http://127.0.0.1:8000 --output artifacts/console-acceptance.png --json
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: console-acceptance
           path: |

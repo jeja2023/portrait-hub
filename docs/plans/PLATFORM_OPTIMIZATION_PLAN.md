@@ -74,6 +74,12 @@ TypeScript 与 Vue（63 文件 / 40353 行）、部署清单（Docker / docker-c
 | M2（M1 稳定后） | embedding 收敛为单一主存储 | 完成所有兼容消费者盘点，确定 pgvector/序列化兼容边界与分批回填容量 | 双读校验达到约定一致率；检索召回与延迟基线不回退；旧列停止写入并在独立清理窗口删除 |
 | M3（随 M1/M2 实施） | 拆分巨型控制面模块与生成代码评估 | M1 领域边界稳定；IDE/构建数据证明 `generated.ts` 已构成瓶颈 | profile/entitlement/SLA/compliance 所有权边界清晰；仅在有量化收益时按 OpenAPI tag 拆分生成物 |
 
+## 0.18.3 交付回归修复
+
+- 修复 GPU/CPU Dockerfile 复制 `.dockerignore` 已排除 `tools/` 的构建上下文冲突，并将该契约加入部署门禁。
+- Trivy 与 Scorecard 的 SARIF 上传增加文件存在保护，保留构建或扫描步骤的原始失败状态。
+- GitHub 官方 Checkout、Python/Node 设置、缓存、构件上传下载和 CodeQL SARIF Action 升级到当前 Node.js 24 运行时主版本。
+
 ## 验证记录
 
 - `python -m ruff check app tools tests`：通过。

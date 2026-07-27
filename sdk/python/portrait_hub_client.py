@@ -15,7 +15,7 @@ from urllib import request as urllib_request
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlencode
 
-SDK_VERSION = "0.18.2"
+SDK_VERSION = "0.18.3"
 USER_AGENT = f"portrait-hub-sdk-python/{SDK_VERSION}"
 DEFAULT_UPLOAD_CHUNK_SIZE = 8 * 1024 * 1024
 DEFAULT_JOB_TERMINAL_STATUSES = frozenset({"completed", "failed", "cancelled", "paused"})
