@@ -62,8 +62,11 @@ jobs:
           python -m pytest -q --cov=app --cov=tools --cov-report=term --cov-report=xml --durations=15 --tb=short 2>&1 | tee pytest.log
           test_status=${PIPESTATUS[0]}
           if [ "$test_status" -ne 0 ]; then
-            summary="$(sed -n '/^= FAILURES =/,$p' pytest.log | tail -n 40 | tr '\n' ' ' | cut -c1-3000)"
-            echo "::error title=Python tests failed::$summary"
+            summary="$(grep -E '^(FAILED|ERROR) ' pytest.log | tail -n 20 | tr '\n' ' ' | cut -c1-3000)"
+            if [ -z "$summary" ]; then
+              summary="$(tail -n 20 pytest.log | tr '\n' ' ' | cut -c1-3000)"
+            fi
+            echo "::error file=pytest.log,title=Python tests failed::$summary"
           fi
           exit "$test_status"
       - name: Upload coverage report
