@@ -259,7 +259,7 @@ async function loadReference(value: string): Promise<void> {
   }
 }
 
-watch(tab, (value) => void loadReference(value));
+watch(tab, (value) => void loadReference(value), { immediate: true });
 
 async function execute(): Promise<void> {
   if (!canExecute.value) return;

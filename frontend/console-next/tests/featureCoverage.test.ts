@@ -94,7 +94,7 @@ describe("backend feature coverage", () => {
     ],
     [
       "src/views/dev/PlaygroundView.vue",
-      ["/v1/console/openapi", "downloadOpenapiSpecification", "下载完整定义"],
+      ["/v1/console/openapi", "downloadOpenapiSpecification", "下载完整定义", "immediate: true"],
     ],
     [
       "src/views/analysis/ImageAnalysisView.vue",
