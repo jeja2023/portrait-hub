@@ -93,6 +93,10 @@ describe("backend feature coverage", () => {
       ],
     ],
     [
+      "src/views/dev/PlaygroundView.vue",
+      ["/v1/console/openapi", "downloadOpenapiSpecification", "下载完整定义"],
+    ],
+    [
       "src/views/analysis/ImageAnalysisView.vue",
       ["/v1/infer/tracks", "fallback_to_image", "include_embedding"],
     ],

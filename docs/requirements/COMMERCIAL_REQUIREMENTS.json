@@ -2,8 +2,8 @@
   "schema_version": "1.0",
   "plan_path": "docs/plans/COMMERCIAL_PRODUCT_UPGRADE_PLAN.md",
   "audited_at": "2026-07-27T18:02:31+08:00",
-  "current_release_version": "0.18.4",
-  "release_note_path": "docs/releases/0.18.4.md",
+  "current_release_version": "0.18.5",
+  "release_note_path": "docs/releases/0.18.5.md",
   "governance_note": "Repository implementation evidence is not a human acceptance, release, or production observation record.",
   "requirements": [
     {

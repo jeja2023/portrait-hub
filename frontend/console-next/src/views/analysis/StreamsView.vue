@@ -82,6 +82,10 @@ let stopLive: (() => void) | null = null;
 const latestAnalysisEvent = computed(() =>
   [...detailEvents.value].reverse().find((event) => Array.isArray(event.payload.frames)),
 );
+const latestAnalysisArchiveId = computed(() => {
+  const archiveId = latestAnalysisEvent.value?.payload.archive_id;
+  return typeof archiveId === "string" && archiveId ? archiveId : undefined;
+});
 
 async function loadStreams(): Promise<void> {
   loading.value = true;
@@ -451,7 +455,12 @@ onBeforeUnmount(() => {
             </div>
           </dl>
         </section>
-        <FrameGrid v-if="latestAnalysisEvent" :data="latestAnalysisEvent.payload" title="实时解析帧" />
+        <FrameGrid
+          v-if="latestAnalysisEvent"
+          :data="latestAnalysisEvent.payload"
+          :archive-id="latestAnalysisArchiveId"
+          title="实时解析帧"
+        />
         <section class="event-timeline">
           <h3>事件时间线</h3>
           <ol v-if="detailEvents.length" aria-live="polite">

@@ -13,7 +13,7 @@ def test_support_matrix_is_structurally_valid_and_versioned() -> None:
     status = matrix_status(matrix)
 
     assert status["ok"] is True
-    assert status["product_version"] == "0.18.4"
+    assert status["product_version"] == "0.18.5"
     assert len(status["sha256"]) == 64
     assert validate_matrix(matrix) == []
 
@@ -49,5 +49,5 @@ def test_human_support_matrix_includes_machine_digest_and_blockers() -> None:
     assert digest in markdown
     assert "private_standard" in markdown
     assert "Five commercial model artifacts" in markdown
-    assert "0.18.3 -> 0.18.4" in markdown
+    assert "0.18.4 -> 0.18.5" in markdown
     assert (ROOT / "docs" / "deployment" / "SUPPORT_MATRIX.md").read_text(encoding="utf-8") == markdown

@@ -32,6 +32,14 @@ def test_api_docs_can_be_disabled_in_production(monkeypatch) -> None:
     assert client.get("/docs").status_code == 404
     assert client.get("/redoc").status_code == 404
     assert client.get("/openapi.json").status_code == 404
+    console_specification = client.get(
+        "/v1/console/openapi",
+        headers={"X-Tenant-ID": "default"},
+    )
+    assert console_specification.status_code == 200
+    specification = console_specification.json()["data"]["specification"]
+    assert "/v1/models" in specification["paths"]
+    assert "/v1/console/openapi" not in specification["paths"]
     assert client.get("/health").status_code == 200
 
 

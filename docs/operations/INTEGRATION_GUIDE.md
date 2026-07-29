@@ -33,6 +33,12 @@
 | 调用统计 | `GET /v1/access/call-logs`、`GET /v1/access/call-logs/summary` |
 | Webhook | `GET /v1/access/webhooks`、`POST /v1/access/webhooks`、`PATCH /v1/access/webhooks/{webhook_id}`、`POST /v1/access/webhooks/{webhook_id}/rotate`、`POST /v1/access/webhooks/{webhook_id}/sample` |
 
+## 0.18.5 视频结果与控制台定义兼容性
+
+- Python、Node、Go、Java SDK 的版本和 User-Agent 已同步到 `0.18.5`，公开客户端方法与 `/v1` 请求响应契约不变。
+- 视频任务与视频流的持久化状态仍不携带 Base64 图片；Console 会通过分析归档恢复预览，不影响 SDK 返回结构和轮询方式。
+- 生产可继续关闭公开 `/openapi.json`；`/v1/console/openapi` 仅供具备 `access:read` 的控制台读取，并不进入公开 OpenAPI 基线。接入方生成客户端仍应使用发布物中的同版本契约快照或在受控环境临时启用公开文档。
+
 ## 0.18.4 媒体上传与 SDK 兼容性
 
 - Python、Node、Go、Java SDK 的版本和 User-Agent 已同步到 `0.18.4`，公开客户端方法与 `/v1` 请求响应契约不变。

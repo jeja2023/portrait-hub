@@ -425,7 +425,12 @@ onBeforeUnmount(() => {
           </div>
         </dl>
         <ElAlert v-if="detail.job.error" :title="detail.job.error" type="error" :closable="false" show-icon />
-        <FrameGrid v-if="detail.result" :data="detail.result" title="帧结果" />
+        <FrameGrid
+          v-if="detail.result"
+          :data="detail.result"
+          :archive-id="`archive_video_${detail.job.job_id}`"
+          title="帧结果"
+        />
         <div v-else-if="detail.job.status === 'completed'" class="result-empty-note">
           任务已完成，但当前结果没有可展示的帧预览。
         </div>

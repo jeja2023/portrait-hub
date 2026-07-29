@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
-import { Copy, Play } from "@lucide/vue";
+import { Copy, Download, Play } from "@lucide/vue";
 import {
   ElAlert,
   ElButton,
@@ -45,6 +45,10 @@ interface SdkExample {
   title: string;
   language: string;
   code: string;
+}
+interface OpenApiSpecification {
+  paths?: Record<string, Record<string, unknown>>;
+  [key: string]: unknown;
 }
 
 const options: EndpointDefinition[] = [
@@ -101,6 +105,7 @@ const referenceLoading = ref(false);
 const errorCodes = ref<Record<string, unknown>[]>([]);
 const errorCodesPager = useTablePagination(errorCodes);
 const openapiPaths = ref<Array<{ method: string; path: string; summary: string }>>([]);
+const openapiSpecification = ref<OpenApiSpecification | null>(null);
 const openapiPager = useTablePagination(openapiPaths);
 const tab = useRouteTab("debug");
 const filesA = ref<File[]>([]);
@@ -203,6 +208,19 @@ async function copyExample(example: SdkExample): Promise<void> {
   }
 }
 
+function downloadOpenapiSpecification(): void {
+  if (!openapiSpecification.value) return;
+  const blob = new Blob([JSON.stringify(openapiSpecification.value, null, 2)], {
+    type: "application/json",
+  });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = "openapi.json";
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
 async function loadReference(value: string): Promise<void> {
   if (value === "errors" && errorCodes.value.length === 0) {
     referenceLoading.value = true;
@@ -218,9 +236,9 @@ async function loadReference(value: string): Promise<void> {
   if (value === "openapi" && openapiPaths.value.length === 0) {
     referenceLoading.value = true;
     try {
-      const specification = await apiRequest<{ paths?: Record<string, Record<string, unknown>> }>(
-        "/openapi.json",
-      );
+      const payload = await apiRequest<{ specification: OpenApiSpecification }>("/v1/console/openapi");
+      const specification = payload.specification;
+      openapiSpecification.value = specification;
       openapiPaths.value = Object.entries(specification.paths ?? {}).flatMap(([path, methods]) =>
         Object.entries(methods)
           .filter(([method]) => ["get", "post", "put", "patch", "delete"].includes(method))
@@ -475,7 +493,14 @@ async function execute(): Promise<void> {
           <ElSkeleton :loading="referenceLoading" :rows="6" animated>
             <div class="reference-toolbar">
               <span>共 {{ openapiPaths.length }} 个接口操作</span>
-              <a href="/openapi.json" target="_blank" rel="noreferrer">打开完整定义</a>
+              <ElButton
+                text
+                :icon="Download"
+                :disabled="!openapiSpecification"
+                @click="downloadOpenapiSpecification"
+              >
+                下载完整定义
+              </ElButton>
             </div>
             <div class="table-wrap openapi-table">
               <table class="data-table">

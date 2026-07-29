@@ -1,11 +1,13 @@
 # Console Next 验收报告
 
 - 验收日期：2026-07-29
-- 发布版本：0.18.4
+- 发布版本：0.18.5
 - 验收对象：frontend/console-next 商业运营、服务质量、合规、模型注册、Webhook 投递调试、既有产品路由、响应式布局与版本元数据
-- 结论：0.18.4 已完成视频上传兼容、图片预览和配置说明验收，并同步 Console Next 版本元数据；既有表格、分页和公开请求契约保持不变。目标环境仍需完成真实模型、共享后端、OIDC、镜像回退、集群故障恢复和组织审批。
+- 结论：0.18.5 已完成视频任务与视频流归档预览恢复、生产关闭公开 OpenAPI 时的接口定义页验收，并同步 Console Next 版本元数据；既有表格、分页和公开请求契约保持不变。目标环境仍需完成真实模型、共享后端、OIDC、镜像回退、集群故障恢复和组织审批。
 
 
+> 2026-07-29 / 0.18.5 验收：视频任务与视频流详情从分析归档恢复帧预览；接口定义页通过受保护接口加载并下载完整定义；Console 包、根 workspace 和 SDK 版本同步，Vitest 48 tests、ESLint、Vue TypeScript 和 Vite build 通过。
+>
 > 2026-07-29 / 0.18.4 验收：1 GiB 视频选择、MP4 上传、任务完成、图片归档预览和配置中心说明展示通过；Console 包、根 workspace 和 SDK 版本同步，Vitest 45 tests、ESLint、Vue TypeScript 和 Vite build 通过。
 >
 > 2026-07-27 / 0.18.3 验收：Console Next 包版本与支持工单默认产品版本同步到 0.18.3；公开路由、表格、分页和请求契约保持兼容；共享服务矩阵单 worker 运行，Chromium 桌面/平板/移动端 24 tests 通过。
@@ -30,6 +32,15 @@
 > 2026-07-18 / 0.11.2 补充验收：二次复核修复 WS query 主凭证回退、`/v1/*` no-store、默认 CSP、流详情深链、meta.nav 导航、aria-live、错误横幅 request_id、值级脱敏与搜索质量分；新增 me auth_kind×3、403、ws-ticket 401/stream/TTL、空库契约测试，并完成 typecheck、ruff、pytest、npm check、Playwright E2E 与 diff check。
 
 > 2026-07-18 / 0.11.1 补充验收：deploy_check --import-app 已新增旧源码目录缺失断言，duplicate /v1 检查改为扫描 frontend/console-next/src；平台 strict readiness 同步阻断旧灰度变量、旧静态路径和旧 DOM 标记回归。
+
+## 0.18.5 补丁验收
+
+| 范围 | 完成状态 | 关键检查 |
+| --- | --- | --- |
+| 视频任务预览 | 完成 | 持久化任务结果按 `archive_video_{job_id}` 恢复归档缩略图 |
+| 视频流预览 | 完成 | 最新解析完成事件的 `archive_id` 恢复实时解析帧 |
+| 接口定义 | 完成 | 生产关闭公开 OpenAPI 时，受保护控制台接口仍返回 154 条路径、180 个操作 |
+| 版本与回归 | 完成 | Console、根 workspace 和 SDK 统一为 `0.18.5`；Vitest 48 tests 通过 |
 
 ## 0.18.4 补丁验收
 

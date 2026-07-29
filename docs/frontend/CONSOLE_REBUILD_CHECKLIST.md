@@ -1,13 +1,15 @@
 # 控制台重建行为对照清单
 
 - 冻结日期：2026-07-29
-- 交付版本：0.18.4
+- 交付版本：0.18.5
 - 范围：legacy 模板中全部 27 个 data-view 和其写操作
 - 正式入口：/ 登录，认证成功后进入 /console；/console/next 仅保留直达验收
 - 状态定义：实现完成表示代码与自动化链路已落库；观察中表示必须在生产灰度后收集指标，不能以本地测试代替。
 - 通用状态：所有新路由均有加载骨架、空状态、错误横幅、权限路由和直接深链；列表使用服务端数据，不静默回退本地假数据。
 
 
+> 2026-07-29 / 0.18.5：视频任务与视频流详情恢复持久化归档图片；接口定义页改用受保护控制台接口；Console Next 版本元数据同步。
+>
 > 2026-07-29 / 0.18.4：视频上传支持 1 GiB 和常用扩展名，图片分析返回归档预览，配置中心 240 项说明完整；Console Next 版本元数据同步。
 >
 > 2026-07-27 / 0.18.3：Console Next 版本元数据与支持工单默认版本同步；0.18.2 的全局表格、分页和响应式契约保持不变。
@@ -31,6 +33,15 @@
 > 2026-07-18 / 0.11.2：二次复核补齐流详情深链、meta.nav 导航、aria-live、错误 request_id、值级脱敏、搜索质量分，并同步后端 WS/no-store/CSP 契约和 me/ws-ticket/gallery 回归测试。
 
 > 2026-07-18 / 0.11.1：迁移后补强 deploy_check 与 readiness，确认旧目录、旧灰度变量、旧静态路径、data-view= 属性和 PortraitConsoleModules 不会回归。
+
+## 0.18.5 补丁验收
+
+| 范围 | 完成状态 | 关键入口/契约 |
+| --- | --- | --- |
+| 视频任务 | 完成 | `/analysis/video/{job_id}` 使用确定性归档 ID 恢复帧缩略图 |
+| 视频流 | 完成 | `/analysis/stream/{stream_id}` 使用解析事件 `archive_id` 恢复帧缩略图 |
+| 接口定义 | 完成 | `/dev/playground?tab=openapi` 调用 `/v1/console/openapi` 并下载完整定义 |
+| 版本元数据 | 完成 | Console Next 包版本、根 workspace 和四套 SDK 统一为 `0.18.5` |
 
 ## 0.18.4 补丁验收
 
@@ -121,7 +132,7 @@
 | 6 | streams | /analysis/stream；流列表、注册、启动/停止 | GET/POST /v1/streams；POST /v1/streams/{id}/start、stop | streams:read、streams | 保留并重做；完成 | E2E-ROUTES-02 |
 | 7 | access-credentials | /dev/access 应用页签；创建、编辑、启停、轮换、配额/用量与一次性密钥 | GET/POST /v1/access/applications；PATCH；POST rotate | access:read、access:write | 合并为接入配置；完成 | E2E-ROUTES-02 |
 | 8 | sdk-examples | /dev/playground SDK 示例页签；异步批量/视频示例与复制 | Python/Node search_batch、compareBatch、createVideoJob、jobResult | infer | 并入调试台；完成 | E2E-ROUTES-02；console unit |
-| 9 | openapi-docs | /dev/playground OpenAPI 页签；操作表与完整定义链接 | GET /openapi.json；paths | access:read | 并入调试台；完成 | E2E-ROUTES-02 |
+| 9 | openapi-docs | /dev/playground OpenAPI 页签；操作表与完整定义下载 | GET /v1/console/openapi；specification.paths | access:read | 并入调试台；完成 | E2E-ROUTES-02 |
 | 10 | api-playground | /dev/playground；GET、multipart、JSON 请求构造与脱敏诊断 | models、thresholds、批量检索/比对、streams、stream events | 按目标接口 | 保留并重做；完成 | E2E-ROUTES-02；readiness strict |
 | 11 | call-logs | /dev/logs；时间、应用、接口、状态、错误码筛选 | GET /v1/access/call-logs；request_id、created_since、created_until | access:read | 保留并重做；完成 | E2E-ROUTES-02 |
 | 12 | error-codes | /dev/playground 错误码页签；说明与处置建议表 | GET /v1/access/error-codes；code、retryable、operator_action | access:read | 并入调试台；完成 | E2E-ROUTES-02 |

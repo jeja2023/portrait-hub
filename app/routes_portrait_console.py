@@ -130,6 +130,20 @@ async def portrait_console_me(
 
 
 @router.get(
+    "/v1/console/openapi",
+    dependencies=[Depends(require_api_token), Depends(permission_dependency("access:read"))],
+    include_in_schema=False,
+)
+async def portrait_console_openapi(
+    request: Request,
+    response: Response,
+    ctx: PortraitRequestContext = Depends(portrait_request_context),
+) -> dict[str, object]:
+    response.headers["Cache-Control"] = "no-store"
+    return portrait_success(ctx.request_id, {"specification": request.app.openapi()})
+
+
+@router.get(
     "/v1/admin/identity",
     dependencies=[Depends(require_api_token), Depends(permission_dependency("admin:identity"))],
 )

@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref, watch } from "vue";
 import { ImageOff } from "@lucide/vue";
 
+import { apiRequest } from "../api/client";
 import { artifactLabel } from "../utils/format";
 
 interface FrameGridItem {
@@ -16,8 +17,37 @@ const props = withDefaults(
     data: unknown;
     title?: string;
     limit?: number;
+    archiveId?: string;
   }>(),
-  { title: "结果证据", limit: 24 },
+  { title: "结果证据", limit: 24, archiveId: undefined },
+);
+
+const archivedData = ref<unknown>(null);
+let archiveRequestSequence = 0;
+
+interface AnalysisArchiveDetail {
+  result: {
+    payload: unknown;
+  };
+}
+
+watch(
+  () => props.archiveId,
+  (archiveId) => {
+    const requestSequence = ++archiveRequestSequence;
+    archivedData.value = null;
+    if (!archiveId) return;
+    void apiRequest<AnalysisArchiveDetail>(
+      `/v1/analysis/results/${encodeURIComponent(archiveId)}`,
+    )
+      .then((payload) => {
+        if (requestSequence === archiveRequestSequence) archivedData.value = payload.result.payload;
+      })
+      .catch(() => {
+        // The original result can still contain an in-memory preview when the archive is unavailable.
+      });
+  },
+  { immediate: true },
 );
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -81,13 +111,19 @@ function buildPreviewItems(previews: Record<string, unknown>[]): FrameGridItem[]
   }));
 }
 
-const items = computed(() => {
-  const root = asRecord(props.data);
+function buildItems(data: unknown): FrameGridItem[] {
+  const root = asRecord(data);
   const nestedResult = asRecord(root.result);
   const payload = Object.keys(nestedResult).length ? nestedResult : root;
   const frames = buildFrameItems(asArray(payload.frames));
   const previews = buildPreviewItems(asArray(payload.previews));
-  return [...frames, ...previews].slice(0, props.limit);
+  return [...frames, ...previews];
+}
+
+const items = computed(() => {
+  const archivedItems = buildItems(archivedData.value);
+  const visibleItems = archivedItems.some((item) => item.src) ? archivedItems : buildItems(props.data);
+  return visibleItems.slice(0, props.limit);
 });
 </script>
 

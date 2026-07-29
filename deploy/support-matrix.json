@@ -2,8 +2,8 @@
   "schema_version": "1.0",
   "product": {
     "name": "PortraitHub",
-    "version": "0.18.4",
-    "previous_stable_version": "0.18.3",
+    "version": "0.18.5",
+    "previous_stable_version": "0.18.4",
     "support_policy": "N and N-1 upgrade path",
     "published_on": "2026-07-29"
   },
@@ -280,6 +280,13 @@
     }
   ],
   "upgrade_paths": [
+    {
+      "from": "0.18.4",
+      "to": "0.18.5",
+      "support_level": "limited",
+      "rollback_window": "No data migration; restore the complete 0.18.4 API, worker and frontend image set",
+      "evidence_required": "backup, version synchronization, video and stream archive preview recovery, protected console OpenAPI access, CPU/GPU image smoke, and rollback"
+    },
     {
       "from": "0.18.3",
       "to": "0.18.4",
