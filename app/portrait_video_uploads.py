@@ -16,7 +16,12 @@ from app.settings import (
     VIDEO_UPLOAD_SESSION_STATE_PATH,
     VIDEO_UPLOAD_SESSION_TTL_SECONDS,
 )
-from app.video_io import resolve_video_job_input, validate_video_content, validate_video_filename
+from app.video_io import (
+    VIDEO_CONTAINER_SNIFF_BYTES,
+    resolve_video_job_input,
+    validate_video_content,
+    validate_video_filename,
+)
 
 _LOCK = threading.RLock()
 _STATE: dict[str, Any] = {"version": 1, "sessions": []}
@@ -284,8 +289,8 @@ def complete_upload_session(upload_id: str, tenant_id: str, job_id: str) -> tupl
                     with part_path.open("rb") as source:
                         for chunk in iter(lambda: source.read(1024 * 1024), b""):
                             digest.update(chunk)
-                            if len(prefix) < 64:
-                                prefix.extend(chunk[: 64 - len(prefix)])
+                            if len(prefix) < VIDEO_CONTAINER_SNIFF_BYTES:
+                                prefix.extend(chunk[: VIDEO_CONTAINER_SNIFF_BYTES - len(prefix)])
                             output.write(chunk)
                 output.flush()
                 os.fsync(output.fileno())

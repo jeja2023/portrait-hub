@@ -1,6 +1,6 @@
 {
   "name": "portrait-hub",
-  "version": "0.18.3",
+  "version": "0.18.4",
   "private": true,
   "type": "commonjs",
   "description": "PortraitHub GPU 推理与人像智能服务",
@@ -19,9 +19,21 @@
     "console:build": "npm run build -w @portrait-hub/console-next",
     "console:e2e": "playwright test --config=frontend/console-next/playwright.config.ts",
     "console:e2e:ci": "playwright test --config=frontend/console-next/playwright.config.ts --project=chromium-desktop --project=chromium-tablet --project=chromium-mobile",
-    "console:check": "npm run console:lint && npm run console:test && npm run console:typecheck && npm run console:build"
+    "console:check": "npm run console:lint && npm run console:test && npm run console:typecheck && npm run console:build",
+    "postinstall": "node tools/patch_openapi_core.js"
+  },
+  "devDependencies": {
+    "@vue/test-utils": "2.4.11",
+    "openapi-typescript": "7.13.0"
   },
   "engines": {
-    "node": ">=22.12 <23"
+    "node": ">=22.22.2 <23"
+  },
+  "overrides": {
+    "js-beautify": "2.0.3",
+    "@redocly/openapi-core": {
+      "js-yaml": "5.2.2",
+      "minimatch": "10.2.6"
+    }
   }
 }

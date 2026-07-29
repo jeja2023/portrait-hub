@@ -72,7 +72,8 @@ x-worker-environment: &worker-environment
   RATE_LIMIT_BURST: ${RATE_LIMIT_BURST:-240}
   RATE_LIMIT_MAX_BUCKETS: ${RATE_LIMIT_MAX_BUCKETS:-10000}
   RATE_LIMIT_BUCKET_TTL_SECONDS: ${RATE_LIMIT_BUCKET_TTL_SECONDS:-3600}
-  MAX_REQUEST_BODY_BYTES: ${MAX_REQUEST_BODY_BYTES:-117440512}
+  MAX_VIDEO_BYTES: ${MAX_VIDEO_BYTES:-1073741824}
+  MAX_REQUEST_BODY_BYTES: ${MAX_REQUEST_BODY_BYTES:-1090519040}
   CPU_FALLBACK_ENABLED: ${CPU_FALLBACK_ENABLED:-true}
   SECURITY_HEADERS_ENABLED: ${SECURITY_HEADERS_ENABLED:-true}
   CONTENT_SECURITY_POLICY: ${CONTENT_SECURITY_POLICY:-default-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'}
@@ -232,6 +233,6 @@ services:
 
 networks:
   gpu-bridge:
-    # 业务容器加入这个 external network 后，可通过 http://gpu-worker-0:8000 调用推理服务。
-    name: gpu-bridge
+    # 业务容器加入同名网络后，可通过 http://gpu-worker-0:8000 调用推理服务。
+    name: ${GPU_BRIDGE_NETWORK:-gpu-bridge}
     driver: bridge

@@ -1,9 +1,10 @@
-FROM node:22.14.0-bookworm-slim AS console-builder
+FROM node:22.22.2-bookworm-slim AS console-builder
 
 WORKDIR /build
 
 COPY package.json package-lock.json ./
 COPY frontend/console-next/package.json /build/frontend/console-next/package.json
+COPY tools/patch_openapi_core.js /build/tools/patch_openapi_core.js
 RUN npm ci
 
 COPY frontend/console-next /build/frontend/console-next

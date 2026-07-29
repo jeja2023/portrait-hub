@@ -41,6 +41,8 @@ def test_configuration_catalog_covers_template_and_redacts_sensitive_values(monk
     assert items["API_TOKEN"]["value"] is None
     assert items["STREAM_ALLOWED_CIDRS"]["managed_by"] == "network_policy"
     assert items["GPU_WORKER_0_DEVICE"]["apply_mode"] == "compose_recreate"
+    assert all(item["description"].strip() for item in items.values())
+    assert "本地管理员登录用户名" in items["LOCAL_AUTH_USERNAME"]["description"]
 
 
 def test_configuration_update_stages_restart_value_without_returning_secret(monkeypatch, workspace_tmp_path) -> None:

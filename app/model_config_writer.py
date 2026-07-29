@@ -168,8 +168,14 @@ def write_raw_model_config(raw: dict[str, Any]) -> None:
     try:
         MODEL_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
         temp_path = MODEL_CONFIG_PATH.with_name(f".{MODEL_CONFIG_PATH.name}.{uuid4().hex}.tmp")
-        with temp_path.open("w", encoding="utf-8") as file:
-            yaml.safe_dump(raw, file, allow_unicode=True, sort_keys=False)
+        try:
+            with temp_path.open("w", encoding="utf-8") as file:
+                yaml.safe_dump(raw, file, allow_unicode=True, sort_keys=False)
+        except PermissionError:
+            # A writable bind-mounted file may have a read-only container parent.
+            with MODEL_CONFIG_PATH.open("w", encoding="utf-8") as file:
+                yaml.safe_dump(raw, file, allow_unicode=True, sort_keys=False)
+            return
         try:
             os.replace(temp_path, MODEL_CONFIG_PATH)
         except OSError:

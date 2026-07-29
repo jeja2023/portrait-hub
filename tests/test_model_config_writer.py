@@ -212,6 +212,29 @@ def test_model_config_writer_file_failure_logs_are_redacted(monkeypatch, workspa
         assert secret not in str(write_exc.value.detail)
 
 
+def test_model_config_writer_falls_back_when_bind_mount_parent_is_not_writable(
+    monkeypatch, workspace_tmp_path: Path
+) -> None:
+    config_path = workspace_tmp_path / "models.yml"
+    config_path.write_text("models: {}\n", encoding="utf-8")
+    monkeypatch.setattr(model_config_writer, "MODEL_CONFIG_PATH", config_path)
+
+    original_open = type(config_path).open
+
+    def deny_temp_file(self, *args, **kwargs):
+        if self.parent == config_path.parent and self.name.startswith(f".{config_path.name}."):
+            raise PermissionError("bind mount parent is not writable")
+        return original_open(self, *args, **kwargs)
+
+    monkeypatch.setattr(type(config_path), "open", deny_temp_file)
+
+    updated = {"models": {"project/model.onnx": {"task": "detection"}}}
+    model_config_writer.write_raw_model_config(updated)
+
+    assert yaml.safe_load(config_path.read_text(encoding="utf-8")) == updated
+    assert not list(config_path.parent.glob(f".{config_path.name}.*.tmp"))
+
+
 def test_alias_switch_rollback_failure_is_redacted(monkeypatch, workspace_tmp_path: Path, caplog) -> None:
     caplog.set_level("WARNING")
     case_root = workspace_tmp_path / "audit_rollback_failure_case"

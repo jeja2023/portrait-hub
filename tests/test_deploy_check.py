@@ -111,6 +111,7 @@ def test_deploy_check_enforces_cpu_lock_and_runtime_parity() -> None:
     check_dependency_lock(Path("."), report)
 
     checks = {item["name"]: item for item in report.checks}
+    assert checks["windows_timezone_database_dependency"]["ok"] is True
     assert checks["cpu_dependency_lock_exact"]["ok"] is True
     assert checks["cpu_gpu_runtime_parity"]["ok"] is True
     detail = checks["cpu_gpu_runtime_parity"]["detail"]

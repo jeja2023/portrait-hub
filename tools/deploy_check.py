@@ -421,6 +421,16 @@ def check_dependency_lock(root: Path, report: DeployReport) -> None:
         "cryptography>=48.0.1,<49.0.0" in base_in,
         None,
     )
+    windows_tzdata_pin = 'tzdata==2026.3; sys_platform == "win32"'
+    report.add(
+        "windows_timezone_database_dependency",
+        all(
+            windows_tzdata_pin in manifest
+            for manifest in [requirements, base_lock, requirements_lock, requirements_cpu, requirements_cpu_lock]
+        )
+        and 'tzdata>=2026.3,<2027.0; sys_platform == "win32"' in base_in,
+        None,
+    )
     # CPU-only 部署清单与其锁文件同样必须全量精确钉版（无任何版本范围）。
     report.add(
         "cpu_dependency_lock_exact",

@@ -1,6 +1,6 @@
 # PortraitHub 平台验收
 
-本文档定义 0.18.3 CI 交付补丁及其继承的 0.18.2 控制台一致性、0.18.1 平台优化和 0.18.0 商业产品能力验收范围，并明确区分自动化完成、目标环境观察和人工审批。
+本文档定义 0.18.4 安全依赖、Docker/GPU 与媒体兼容补丁及其继承的既有平台和商业产品能力验收范围，并明确区分自动化完成、目标环境观察和人工审批。
 
 ## 范围
 
@@ -60,6 +60,15 @@ python tools\portrait_production_readiness.py --strict
 ```
 
 在被排除的真实模型能力完成模型接入，且真实数据与运维验证已在本次受限平台验收之外执行之前，不得将该完整门禁视为完成。
+
+## 0.18.4 验证记录
+
+- Python 全量回归 `763 passed / 6 skipped`，严格 mypy 215 个源文件和 CI 范围 Ruff 检查通过；Console Next Vitest 45 项、ESLint、TypeScript 和 production build 通过。
+- 根 npm workspace 的 8 个开发工具链高危项完成清理，Node.js 构建基线统一为 22.22.2；Windows Python 依赖增加时区数据库锁定。
+- 模型配置 bind mount 写入、图片归档预览、1 GiB 视频上传和 ISO-BMFF 兼容完成定向回归。
+- 本地 Docker GPU API 和独立视频 worker 运行；YOLOv8、OSNet 使用 CUDAExecutionProvider，真实 MP4 测试任务完成。
+- 配置中心 240 项配置说明全部非空，浏览器搜索、表格显示和控制台错误检查通过。
+- 公开 `/v1` API、OpenAPI、数据库 schema 和生产阻塞状态未改变；生产发布决策继续保持阻塞。
 
 ## 0.18.3 验证记录
 

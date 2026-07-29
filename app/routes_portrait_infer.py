@@ -11,7 +11,7 @@ from app.api_contracts import (
     InferPoseResponse,
 )
 from app.media.image_decode import decode_upload_images
-from app.portrait_analysis_archive import create_analysis_archive
+from app.portrait_analysis_archive import create_analysis_archive, public_analysis_archive
 from app.portrait_async import run_blocking_io
 from app.portrait_auth import permission_dependency
 from app.portrait_embeddings import (
@@ -42,7 +42,7 @@ async def archive_image_response(
     payload: dict[str, Any],
     decoded: list[Any],
 ) -> dict[str, Any]:
-    await run_blocking_io(
+    archive = await run_blocking_io(
         create_analysis_archive,
         tenant_id=ctx.scope_id,
         request_id=ctx.request_id,
@@ -53,6 +53,11 @@ async def archive_image_response(
         payload=payload,
         images=[item.image for item in decoded],
     )
+    if archive is not None:
+        public_archive = await run_blocking_io(public_analysis_archive, archive)
+        archived_payload = public_archive.get("payload")
+        if isinstance(archived_payload, dict):
+            payload = archived_payload
     return portrait_success(ctx.request_id, payload)
 
 

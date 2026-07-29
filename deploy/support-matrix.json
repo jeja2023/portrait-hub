@@ -2,17 +2,17 @@
   "schema_version": "1.0",
   "product": {
     "name": "PortraitHub",
-    "version": "0.18.3",
-    "previous_stable_version": "0.18.2",
+    "version": "0.18.4",
+    "previous_stable_version": "0.18.3",
     "support_policy": "N and N-1 upgrade path",
-    "published_on": "2026-07-27"
+    "published_on": "2026-07-29"
   },
   "runtime": {
     "python": ">=3.12,<3.13",
-    "node_build": ">=22.12,<23",
+    "node_build": ">=22.22.2,<23",
     "gpu_image": "nvidia/cuda:12.4.1-cudnn-runtime-ubuntu22.04",
     "cpu_image": "python:3.12-slim-bookworm",
-    "frontend_builder": "node:22.14.0-bookworm-slim",
+    "frontend_builder": "node:22.22.2-bookworm-slim",
     "container_architecture": "linux/amd64"
   },
   "operating_systems": [
@@ -280,6 +280,13 @@
     }
   ],
   "upgrade_paths": [
+    {
+      "from": "0.18.3",
+      "to": "0.18.4",
+      "support_level": "limited",
+      "rollback_window": "No data migration; restore the complete 0.18.3 API, worker and frontend image set",
+      "evidence_required": "backup, version synchronization, dependency audit, CPU/GPU image smoke, media upload, configuration catalog, and rollback"
+    },
     {
       "from": "0.18.2",
       "to": "0.18.3",

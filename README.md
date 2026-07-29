@@ -2,11 +2,21 @@
 
 面向多个业务项目的结构化人像解析服务平台。影鉴通过 FastAPI 提供版本化契约，以租户和项目隔离人像识别、检索、ReID、视频与流式解析数据，并支持 Ubuntu、Docker、NVIDIA GPU 和多 worker 生产部署。
 
-当前版本：0.18.3。本补丁版本修复 GPU/CPU 运行时镜像的 Docker 构建上下文冲突，保护 Trivy 与 Scorecard 的 SARIF 上传路径，并将 GitHub Actions 官方运行时升级到当前主版本。公开 API 和数据库 schema 保持兼容；真实模型、目标集群演练、生产容量观测及法律/产品审批仍是正式生产切换的前置条件。
+当前版本：0.18.4。本补丁版本清理前端开发工具链高危依赖，修复 Docker/GPU 模型配置、图片分析预览和 MP4 上传兼容问题，将离线视频上限提升到 1 GiB，并补齐配置中心全部 240 项说明。公开 API 和数据库 schema 保持兼容；真实模型、目标集群演练、生产容量观测及法律/产品审批仍是正式生产切换的前置条件。
 
 > `0.9.0` 是破坏性升级。旧的 `/v1/vision/results`、`/v1/jobs/video/results` 及有限图片历史实现已删除，不提供兼容回退或旧记录自动迁移；接入方必须切换到统一档案接口。
 
 拆分后的模块映射、维护边界和验证命令见 [大型文件拆分维护指南](docs/maintenance/LARGE_FILE_SPLIT.md)，完整发布记录见 [更新日志](更新日志.md)。
+
+## 0.18.4 安全依赖、GPU 联调与媒体兼容修复
+
+- 根 npm workspace 升级 Node.js 22.22.2 构建基线，通过精确依赖、overrides 和 Redocly 兼容补丁清理 8 个开发工具链高危项。
+- Windows 开发环境补充 `tzdata`，GPU/CPU Docker 构建同步 postinstall 补丁和部署门禁，避免干净构建与本地运行差异。
+- 模型配置写入兼容“文件可写、挂载父目录只读”的 Docker 场景，修复控制台切换模型 GPU 设备时的 500 错误；GPU 视频 worker 已验证 YOLOv8 和 OSNet 使用 CUDAExecutionProvider。
+- 图片分析响应返回归档后的公开预览字段，结果卡片可以立即显示缩略图，同时持久化数据库不嵌入 Base64 原图。
+- 离线视频上限提升到 1 GiB，全局 multipart 请求体增加 16 MiB 余量；MP4/ISO-BMFF 检测支持前置 `free` 等合法 box，前端按扩展名校验并将上传超时提高到 30 分钟。
+- 配置中心为原先缺失说明的 62 项配置补齐逐项中文文档，并增加 240 项配置说明非空的回归门禁。
+- 本版本无公开 API、OpenAPI 或数据库 schema 变更，从 `0.18.3` 升级无需数据迁移。完整说明见 [0.18.4 发布说明](docs/releases/0.18.4.md) 和 [更新日志](更新日志.md)。
 
 ## 0.18.3 CI 构建与供应链扫描修复
 
@@ -268,7 +278,7 @@ v1 已加入的生产加固：
 - `MODEL_CONFIG_READ_FAIL_CLOSED` 会让缺失、不可读或格式错误的 `models.yml` 在启动/重载时默认失败关闭，而不是静默以空配置运行。
 - `RATE_LIMIT_PER_MINUTE` 和 `RATE_LIMIT_BURST` 开启按租户/路径的令牌桶限流；Docker Compose 默认每分钟 `120`，突发 `240`。
 - `RATE_LIMIT_MAX_BUCKETS` 和 `RATE_LIMIT_BUCKET_TTL_SECONDS` 限定本地限流桶内存。
-- `MAX_REQUEST_BODY_BYTES` 在路由处理器解析 JSON 或 multipart 之前就应用全局 HTTP 请求体上限；Docker Compose 默认 `117440512` 字节（112 MiB）。生产配置必须处于 `MAX_VIDEO_BYTES + 1 MiB` 到 `MAX_VIDEO_BYTES + 16 MiB` 之间。
+- `MAX_REQUEST_BODY_BYTES` 在路由处理器解析 JSON 或 multipart 之前就应用全局 HTTP 请求体上限；Docker Compose 默认 `1090519040` 字节（1 GiB 视频 + 16 MiB multipart 余量）。生产配置必须处于 `MAX_VIDEO_BYTES + 1 MiB` 到 `MAX_VIDEO_BYTES + 16 MiB` 之间。
 - `STATE_READ_FAIL_CLOSED` 会让现有本地 JSON 状态读取或结构失败默认失败关闭，而不是静默丢弃已持久化状态。
 - `STATE_WRITE_FAIL_CLOSED` 会让本地 JSON 状态写入默认失败关闭。
 - `SECURITY_HEADERS_ENABLED`、`CONTENT_SECURITY_POLICY` 和 `HSTS_*` 会加入加固后的默认 HTTP 响应头、CSP、跨域隔离头以及生产 HSTS。
@@ -934,7 +944,7 @@ http://gpu-worker-1:8000/predict
 - `MAX_PERSON_FRAMES`: `/v1/vision/infer` 单次请求图片数量上限，默认 `16`。
 - `MAX_EMBEDDING_IMAGES`: `/v1/vision/infer` 单次请求图片数量上限，默认 `64`。
 - `MAX_PIPELINE_FRAMES`: `/v1/infer/tracks` 单次请求帧数量上限，默认 `16`。
-- `MAX_VIDEO_BYTES`: `/v1/jobs/video` 单个视频文件大小上限，默认 `104857600`。
+- `MAX_VIDEO_BYTES`: `/v1/jobs/video` 单个视频文件大小上限，默认 `1073741824`（1 GiB）。
 - `VIDEO_SAMPLE_INTERVAL_SECONDS`: 离线视频按媒体时间轴采样的秒间隔，默认 `1.0`。
 - `VIDEO_INFERENCE_BATCH_SIZE`: 离线视频每批推理帧数，默认 `16`；仅控制单批推理内存，不截断视频。
 - `VIDEO_UPLOAD_CHUNK_BYTES` / `VIDEO_JOB_INPUT_DIR`: 视频上传分块大小和私有暂存目录；API 与独立视频 worker 必须共享该目录。
@@ -945,7 +955,7 @@ http://gpu-worker-1:8000/predict
 - `STREAM_WORKER_GPU_DEVICES`: 流 worker 可见的 GPU 编号列表；启用 GPU 时需同时设置 `STREAM_WORKER_FORCE_CPU=false`。
 - `ACCESS_STATS_FLUSH_INTERVAL_SECONDS`: 应用调用统计批量落盘周期；配置变更和服务关闭仍会立即刷新。
 - `MAX_VIDEO_FRAME_UPLOADS`: 图片帧序列上传接口的单次文件数限制，默认 `64`。
-- `MAX_REQUEST_BODY_BYTES`: 全局 HTTP 请求体大小上限，默认 `117440512`（112 MiB）；本地可设为 `0` 关闭，生产环境必须比 `MAX_VIDEO_BYTES` 多 `1` 至 `16 MiB`。
+- `MAX_REQUEST_BODY_BYTES`: 全局 HTTP 请求体大小上限，默认 `1090519040`（1 GiB 视频 + 16 MiB multipart 余量）；本地可设为 `0` 关闭，生产环境必须比 `MAX_VIDEO_BYTES` 多 `1` 至 `16 MiB`。
 - `STREAM_SAMPLE_INTERVAL_SECONDS`: 视频流按媒体时间轴采样的秒间隔，默认 `1.0`。
 - `STREAM_INFERENCE_BATCH_SIZE`: 视频流 rolling batch 的每批推理帧数，默认 `8`。
 - `STREAM_READ_TIMEOUT_SECONDS`: 视频流单次读取软超时，默认 `10`。

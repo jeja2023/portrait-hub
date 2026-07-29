@@ -356,9 +356,11 @@ def check_api_limits_and_tenant(root: Path) -> list[dict[str, Any]]:
                 and 'request.headers.get("content-length")' in server
                 and "request.receive" in server
                 and "HTTPException(status_code=413" in server
-                and "MAX_REQUEST_BODY_BYTES: ${MAX_REQUEST_BODY_BYTES:-117440512}"
+                and "MAX_VIDEO_BYTES: ${MAX_VIDEO_BYTES:-1073741824}" in compose
+                and "MAX_REQUEST_BODY_BYTES: ${MAX_REQUEST_BODY_BYTES:-1090519040}"
                 in compose
-                and "MAX_REQUEST_BODY_BYTES=117440512" in env_example
+                and "MAX_VIDEO_BYTES=1073741824" in env_example
+                and "MAX_REQUEST_BODY_BYTES=1090519040" in env_example
                 and 'CPU_FALLBACK_ENABLED = parse_bool_env("CPU_FALLBACK_ENABLED", True)'
                 in settings
                 and "CPU_FALLBACK_ENABLED: ${CPU_FALLBACK_ENABLED:-true}" in compose

@@ -23,7 +23,8 @@ requirements/base.in
 requirements/base.lock
 requirements/dev.txt
 tests/
-tools/
+tools/*
+!tools/patch_openapi_core.js
 runtime-state/
 rollout-audit*.jsonl
 shared-models/

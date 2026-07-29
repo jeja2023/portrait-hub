@@ -67,6 +67,9 @@ const cancelOpen = computed({
 });
 let refreshTimer: number | null = null;
 let stopLive: (() => void) | null = null;
+const MAX_VIDEO_BYTES = 1024 ** 3;
+const VIDEO_FILE_ACCEPT = "video/*,.mp4,.mov,.m4v,.avi,.mkv,.webm";
+const SUPPORTED_VIDEO_EXTENSIONS = new Set(["mp4", "mov", "m4v", "avi", "mkv", "webm"]);
 
 async function loadJobs(append = false): Promise<void> {
   loading.value = !append;
@@ -87,7 +90,27 @@ async function loadJobs(append = false): Promise<void> {
 }
 
 function selectedCreateFile(event: Event): void {
-  createFile.value = (event.target as HTMLInputElement).files?.[0] ?? null;
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0] ?? null;
+  errorMessage.value = "";
+  if (!file) {
+    createFile.value = null;
+    return;
+  }
+  const extension = file.name.split(".").pop()?.toLowerCase() ?? "";
+  if (!SUPPORTED_VIDEO_EXTENSIONS.has(extension)) {
+    createFile.value = null;
+    input.value = "";
+    errorMessage.value = "不支持的视频扩展名";
+    return;
+  }
+  if (file.size > MAX_VIDEO_BYTES) {
+    createFile.value = null;
+    input.value = "";
+    errorMessage.value = "视频文件不能超过 1 GiB";
+    return;
+  }
+  createFile.value = file;
 }
 
 async function createJob(): Promise<void> {
@@ -109,7 +132,7 @@ async function createJob(): Promise<void> {
     const payload = await apiRequest<{ job: JobSummary }>(
       "/v1/jobs/video",
       { method: "POST", body },
-      120_000,
+      30 * 60_000,
     );
     createOpen.value = false;
     createFile.value = null;
@@ -326,7 +349,7 @@ onBeforeUnmount(() => {
     >
       <div class="create-form">
         <label class="file-field"
-          ><span>视频文件</span><input type="file" accept="video/*" @change="selectedCreateFile"
+          ><span>视频文件</span><input type="file" :accept="VIDEO_FILE_ACCEPT" @change="selectedCreateFile"
         /></label>
         <details>
           <summary>高级参数</summary>

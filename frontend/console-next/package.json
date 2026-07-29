@@ -1,6 +1,6 @@
 {
   "name": "@portrait-hub/console-next",
-  "version": "0.18.3",
+  "version": "0.18.4",
   "private": true,
   "type": "module",
   "scripts": {
@@ -39,6 +39,6 @@
     "vue-tsc": "3.3.7"
   },
   "engines": {
-    "node": ">=22.12 <23"
+    "node": ">=22.22.2 <23"
   }
 }

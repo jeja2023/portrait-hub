@@ -142,6 +142,13 @@ def test_video_validation_accepts_iso_bmff_for_mp4() -> None:
     assert validate_video_content(mp4_bytes, "sample.mp4") == "iso_bmff"
 
 
+def test_video_validation_accepts_iso_bmff_with_leading_padding_box() -> None:
+    free_box = b"\x00\x00\x00\x10free" + b"\x00" * 8
+    ftyp_box = b"\x00\x00\x00\x18ftypisom" + b"\x00" * 12
+
+    assert validate_video_content(free_box + ftyp_box, "sample.mp4") == "iso_bmff"
+
+
 def test_video_frame_timestamp_prefers_media_timeline_over_nominal_fps() -> None:
     class FakeCapture:
         def get(self, prop):

@@ -33,6 +33,12 @@
 | 调用统计 | `GET /v1/access/call-logs`、`GET /v1/access/call-logs/summary` |
 | Webhook | `GET /v1/access/webhooks`、`POST /v1/access/webhooks`、`PATCH /v1/access/webhooks/{webhook_id}`、`POST /v1/access/webhooks/{webhook_id}/rotate`、`POST /v1/access/webhooks/{webhook_id}/sample` |
 
+## 0.18.4 媒体上传与 SDK 兼容性
+
+- Python、Node、Go、Java SDK 的版本和 User-Agent 已同步到 `0.18.4`，公开客户端方法与 `/v1` 请求响应契约不变。
+- SDK 上传 MP4 时无需手工设置特殊 MIME；服务端会根据文件扩展名和 ISO-BMFF 容器结构校验。单文件最大 1 GiB，调用方超时应覆盖实际网络上传时间。
+- 从 `0.18.3` 升级不需要数据迁移；服务端镜像、Console 静态资源和 SDK 版本建议成套发布。
+
 ## 0.18.3 CI 交付与 SDK 兼容性
 
 - 公开 `/v1` 路径、请求/响应契约、认证和租户/项目隔离语义与 0.18.2 相同，接入方无需修改业务请求或重新生成客户端。

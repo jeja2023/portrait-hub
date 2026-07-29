@@ -88,7 +88,7 @@ def parse_csv_env(name: str, default: str = "") -> list[str]:
     return [item.strip() for item in os.getenv(name, default).split(",") if item.strip()]
 
 
-APP_VERSION = "0.18.3"
+APP_VERSION = "0.18.4"
 PORTRAIT_RUNTIME_PROFILE = (
     os.getenv("PORTRAIT_RUNTIME_PROFILE", os.getenv("APP_ENV", "development")).strip().lower() or "development"
 )
@@ -102,7 +102,7 @@ MAX_IMAGE_PIXELS = parse_int_env("MAX_IMAGE_PIXELS", 25_000_000)
 MAX_PERSON_FRAMES = parse_int_env("MAX_PERSON_FRAMES", 16)
 MAX_EMBEDDING_IMAGES = parse_int_env("MAX_EMBEDDING_IMAGES", 64)
 MAX_PIPELINE_FRAMES = parse_int_env("MAX_PIPELINE_FRAMES", 16)
-MAX_VIDEO_BYTES = parse_int_env("MAX_VIDEO_BYTES", 100 * 1024 * 1024)
+MAX_VIDEO_BYTES = parse_int_env("MAX_VIDEO_BYTES", 1024 * 1024 * 1024)
 VIDEO_UPLOAD_CHUNK_BYTES = parse_int_env("VIDEO_UPLOAD_CHUNK_BYTES", 1024 * 1024)
 VIDEO_UPLOAD_SESSION_TTL_SECONDS = max(3600.0, parse_float_env("VIDEO_UPLOAD_SESSION_TTL_SECONDS", 7 * 24 * 3600.0))
 INFERENCE_BATCH_SIZE_LIMIT = 256

@@ -52,6 +52,7 @@ sympy==1.13.1
 typer==0.16.0
 typing_extensions==4.15.0
 typing-inspection==0.4.2
+tzdata==2026.3; sys_platform == "win32"
 ujson==5.13.0
 uvicorn[standard]==0.51.0
 watchfiles==1.0.4

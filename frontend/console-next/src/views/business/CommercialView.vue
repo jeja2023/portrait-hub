@@ -207,7 +207,7 @@ const supportForm = reactive({
   description: "",
   severity: "sev3",
   environment: "production",
-  product_version: "0.18.3",
+  product_version: "0.18.4",
   request_ids: "",
   task_ids: "",
 });

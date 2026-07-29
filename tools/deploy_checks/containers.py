@@ -26,7 +26,7 @@ def check_docker_files(root: Path, report: DeployReport) -> None:
         all(
             marker in dockerfile and marker in cpu_dockerfile
             for marker in [
-                "FROM node:22.14.0-bookworm-slim AS console-builder",
+                "FROM node:22.22.2-bookworm-slim AS console-builder",
                 "RUN npm ci",
                 "RUN npm run console:build",
                 "COPY --from=console-builder /build/frontend/console-next/dist /workspace/frontend/console-next/dist",
@@ -338,7 +338,9 @@ def check_docker_files(root: Path, report: DeployReport) -> None:
     )
     report.add(
         "compose_request_body_limit_default",
-        "MAX_REQUEST_BODY_BYTES: ${MAX_REQUEST_BODY_BYTES:-117440512}" in read_text(root / "docker-compose.yml"),
+        "MAX_VIDEO_BYTES: ${MAX_VIDEO_BYTES:-1073741824}" in read_text(root / "docker-compose.yml")
+        and "MAX_REQUEST_BODY_BYTES: ${MAX_REQUEST_BODY_BYTES:-1090519040}"
+        in read_text(root / "docker-compose.yml"),
         None,
     )
     report.add(

@@ -25,6 +25,7 @@ from app.observability import logger, now
 from app.settings import MAX_VIDEO_BYTES, VIDEO_JOB_INPUT_DIR, VIDEO_UPLOAD_CHUNK_BYTES
 
 SUPPORTED_VIDEO_EXTENSIONS = {".mp4", ".avi", ".mov", ".mkv", ".webm", ".m4v"}
+VIDEO_CONTAINER_SNIFF_BYTES = 64 * 1024
 SENSITIVE_VIDEO_METADATA_KEYS = {"filename", "video_bytes", "frame_fingerprints"}
 VIDEO_EXTENSION_CONTAINERS = {
     ".mp4": {"iso_bmff"},
@@ -61,10 +62,34 @@ def validate_video_filename(filename: str | None) -> str | None:
 def sniff_video_container(data: bytes) -> str | None:
     if len(data) >= 12 and data[:4] == b"RIFF" and data[8:12] == b"AVI ":
         return "avi"
-    if len(data) >= 8 and data[4:8] == b"ftyp":
-        return "iso_bmff"
     if data.startswith(b"\x1a\x45\xdf\xa3"):
         return "matroska"
+
+    # ISO-BMFF permits top-level padding/compatibility boxes before `ftyp`, and
+    # fragmented or legacy files can begin with another identifying media box.
+    offset = 0
+    identifying_boxes = {b"ftyp", b"styp", b"moov", b"mdat", b"moof"}
+    while offset + 8 <= len(data):
+        size = int.from_bytes(data[offset : offset + 4], "big")
+        box_type = data[offset + 4 : offset + 8]
+        header_size = 8
+        if size == 1:
+            if offset + 16 > len(data):
+                break
+            size = int.from_bytes(data[offset + 8 : offset + 16], "big")
+            header_size = 16
+        if size == 0:
+            return "iso_bmff" if box_type in identifying_boxes else None
+        if size < header_size:
+            break
+        if box_type == b"ftyp" and size >= header_size + 4:
+            return "iso_bmff"
+        if box_type in identifying_boxes - {b"ftyp"}:
+            return "iso_bmff"
+        next_offset = offset + size
+        if next_offset > len(data):
+            break
+        offset = next_offset
     return None
 
 
@@ -132,8 +157,8 @@ def _copy_video_upload(source: BinaryIO, target: Path) -> tuple[int, bytes]:
                     status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
                     detail=f"上传视频过大：最大 {MAX_VIDEO_BYTES} 字节",
                 )
-            if len(prefix) < 64:
-                prefix.extend(chunk[: 64 - len(prefix)])
+            if len(prefix) < VIDEO_CONTAINER_SNIFF_BYTES:
+                prefix.extend(chunk[: VIDEO_CONTAINER_SNIFF_BYTES - len(prefix)])
             output.write(chunk)
         output.flush()
         os.fsync(output.fileno())
@@ -807,6 +832,7 @@ async def extract_video_frames_from_upload(
 __all__ = [
     "SENSITIVE_VIDEO_METADATA_KEYS",
     "SUPPORTED_VIDEO_EXTENSIONS",
+    "VIDEO_CONTAINER_SNIFF_BYTES",
     "VIDEO_EXTENSION_CONTAINERS",
     "aiter_video_frame_batches",
     "candidate_analysis_image",
